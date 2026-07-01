@@ -39,7 +39,7 @@ dependencies:
   image_picker: ^1.2.1
   napaxi_flutter:
     path: ../../packages/flutter
-  package_info_plus: ^8.3.1
+  package_info_plus: ^9.0.1
   path_provider: ^2.1.5
   share_plus: ^10.1.4
   shared_preferences: ^2.3.5
