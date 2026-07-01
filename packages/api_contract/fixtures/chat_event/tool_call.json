@@ -1,0 +1,6 @@
+{
+  "type": "tool_call",
+  "call_id": "call-fixture-001",
+  "name": "home_light_set",
+  "arguments": "{\"room\":\"kitchen\",\"on\":true}"
+}

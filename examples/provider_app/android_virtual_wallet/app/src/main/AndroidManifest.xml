@@ -1,0 +1,44 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <intent>
+            <action android:name="agent.host.action.TRIGGER_AGENT" />
+        </intent>
+        <intent>
+            <action android:name="agent.host.action.INSTALL_PROVIDER_AGENT" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="Virtual Wallet Provider"
+        android:resizeableActivity="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:name=".AgentActionActivity"
+            android:exported="true"
+            android:theme="@style/ActionRouterTheme">
+            <intent-filter>
+                <action android:name="agent.provider.action.HANDLE_PROPOSAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".AgentInstallActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="agent.provider.action.INSTALL_AGENT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

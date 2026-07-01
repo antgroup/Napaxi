@@ -1,0 +1,77 @@
+version: 1
+capabilities:
+  engine_lifecycle:
+    status: stable
+    flutter: supported
+    ios: supported
+    android: supported
+  chat_sessions:
+    status: stable
+    flutter: supported
+    ios: supported
+    android: supported
+  multi_agent:
+    status: stable
+    flutter: supported
+    ios: supported
+    android: supported
+  groups:
+    status: experimental
+    flutter: supported
+    ios: supported
+    android: supported
+  workspace_memory:
+    status: stable
+    flutter: supported
+    ios: supported
+    android: supported
+  skills:
+    status: stable
+    flutter: supported
+    ios: supported
+    android: supported
+  mcp:
+    status: stable
+    flutter: supported
+    ios: supported
+    android: supported
+  automation:
+    status: experimental
+    flutter: supported
+    ios: supported
+    android: supported
+  background_execution:
+    status: platform
+    flutter: supported
+    ios: platform_limited
+    android: supported
+  browser_tools:
+    status: experimental
+    flutter: supported
+    ios: supported
+    android: planned
+  platform_tools:
+    status: platform
+    flutter: supported
+    ios: partial
+    android: supported
+  file_bridge:
+    status: stable
+    flutter: supported
+    ios: supported
+    android: supported
+  apk_install:
+    status: platform
+    flutter: android_only
+    ios: unsupported
+    android: supported
+  agent_provider:
+    status: experimental
+    flutter: supported
+    ios: partial
+    android: supported
+  a2a_local_transport:
+    status: experimental
+    flutter: supported
+    ios: supported
+    android: supported

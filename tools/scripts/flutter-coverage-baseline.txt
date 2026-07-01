@@ -1,0 +1,12 @@
+# Flutter SDK coverage floor baseline. See tools/scripts/flutter-coverage-floor.sh.
+#
+# Minimum line-coverage percentage for packages/flutter/lib (overall aggregate
+# from `flutter test --coverage`). Regression catcher, not a quality target;
+# may only go UP.
+#
+# Measured 2026-06-11 against init/napaxi-open-source-structure: 36%
+# (3091/8539 lines). The api/*.dart FFI wrappers sit near 0% (integration-only,
+# not unit-tested) and pull the aggregate down; the model/codec/convenience
+# layers carry the coverage. Set to 35 (one point below measured) so a real
+# regression trips it without flapping on rounding.
+FLUTTER_SDK_MIN_LINES=35

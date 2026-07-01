@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "error": {
+    "code": "invalid_argument",
+    "message": "path must not be empty",
+    "details": {
+      "field": "path"
+    }
+  }
+}

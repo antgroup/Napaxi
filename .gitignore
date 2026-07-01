@@ -1,0 +1,90 @@
+
+.env
+.env.local
+.env.*
+!.env.example
+
+# Claude Code worktrees and lock files
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+CLAUDE.local.md
+
+# Sidecar tool data
+.sidecar/
+.todos/
+
+target/
+packages/*/build/
+packages/*/local.properties
+examples/*/build/
+.dart_tool/
+**/.dart_tool/
+**/.gradle/
+**/android/local.properties
+**/ios/Pods/
+**/ios/Podfile.lock
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+
+# Python
+__pycache__/
+*.pyc
+/tests/e2e/.venv/
+
+# Benchmark results (local runs, not committed)
+bench-results/
+
+# Coverage reports (local runs, not committed)
+/coverage/
+coverage/
+lcov.info
+**/coverage/lcov.info
+/target
+/.claude
+.idea
+Cargo.lock
+
+# Security module build artifacts
+/src/security/*/target
+/tmp
+.*.orig
+.*.rej
+.*.swp
+.*~
+
+# WASM build artifacts (loaded from disk, not bundled)
+*.wasm
+
+# Traces
+trace_*.json
+
+# Local Claude Code settings (machine-specific, should not be committed)
+.claude/settings.local.json
+.worktrees/
+
+# Python cache
+*.pyo
+*.pyd
+engine_trace_*.json
+.vscode
+/cargo-target
+/tools-src/*/.cargo
+/channels-src
+/channels-src/*/.cargo
+/channels-src/*/target
+/tests/e2e/__pycache__
+/tests/e2e/scenarios/__pycache__
+**/__pycache__
+src/cli/snapshots
+.sandbox-sdk/
+**.DS_Store
+# Security verification reports
+docs/security_doc/report/
+pkgroot
+
+.agents
+libnapaxi_api_bridge.a
+libnapaxi_api_bridge.so
+packages/flutter/ios/Frameworks/
+packages/ios/Frameworks/
+packages/flutter/android/jniLibs/*/libnapaxi_api_bridge.so

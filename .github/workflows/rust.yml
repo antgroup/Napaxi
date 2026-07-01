@@ -1,0 +1,70 @@
+name: rust
+
+on:
+  push:
+    branches: [master, init/napaxi-open-source-structure]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: dtolnay/rust-toolchain@1.92
+        with:
+          components: clippy
+
+      # rustfmt.toml enables `imports_granularity` / `group_imports`, which are
+      # nightly-only rustfmt options. Run the format check on nightly rustfmt so
+      # it actually honors that config; stable would silently ignore the options
+      # and report spurious diffs. Build/lint/test still pin to 1.92 below.
+      # Pin to a specific nightly date to avoid day-to-day formatting drift.
+      - uses: dtolnay/rust-toolchain@nightly-2025-06-01
+        with:
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: cargo fmt
+        run: cargo +nightly fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo check
+        run: cargo check --workspace
+
+      - name: cargo test
+        run: cargo test --workspace --no-fail-fast
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: dtolnay/rust-toolchain@1.92
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      # Generated rustdoc is the published API reference. Treat any rustdoc
+      # diagnostic — broken intra-doc links, ambiguous paths, undocumented
+      # public items flagged by `missing_docs` — as a build failure so doc rot
+      # cannot accumulate silently between releases.
+      - name: cargo doc (deny warnings)
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps --workspace

@@ -1,0 +1,16 @@
+{
+  "definition": {
+    "id": "napaxi.tool.custom_host",
+    "kind": "tool",
+    "version": "1",
+    "platforms": ["all"],
+    "config_schema": {},
+    "risk": "medium",
+    "requirements": ["host_tool_dispatcher"],
+    "default_enabled": false,
+    "activation": "host"
+  },
+  "registered": true,
+  "available": true,
+  "enabled": true
+}

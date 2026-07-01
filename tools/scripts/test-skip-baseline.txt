@@ -1,0 +1,18 @@
+# Test-stability ratchet baseline. See tools/scripts/check-test-stability.sh.
+#
+# These are the maximum allowed skip/ignore counts in FIRST-PARTY test code
+# (vendor/ is excluded). check-test-stability.sh fails CI if the live count
+# exceeds any value here. The counts may only go DOWN over time: when you
+# re-enable a skipped/ignored test, lower the matching number here in the same
+# change to lock in the improvement.
+#
+# Do NOT raise a number to make CI green. If a skip is genuinely unavoidable,
+# justify it in code review before bumping the baseline.
+
+# Rust `#[ignore]` attributes across crates/ and packages/ tests.
+# Current site: crates/features/evolution/src/tools/tests.rs
+#   ("ActionExecutor::validate_frontmatter is not public")
+RUST_IGNORE=1
+
+# Dart/flutter_test `skip:` arguments across *_test.dart.
+DART_SKIP=0

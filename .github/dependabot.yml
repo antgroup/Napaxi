@@ -1,0 +1,47 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - rust
+    groups:
+      tokio:
+        patterns:
+          - "tokio*"
+      tracing:
+        patterns:
+          - "tracing*"
+      serde:
+        patterns:
+          - "serde*"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - ci
+
+  - package-ecosystem: pub
+    directory: "/packages/flutter"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - flutter
+
+  - package-ecosystem: pub
+    directory: "/examples/flutter"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - flutter

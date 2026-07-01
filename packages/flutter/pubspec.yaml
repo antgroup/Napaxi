@@ -1,0 +1,46 @@
+name: napaxi_flutter
+description: napaxi AI Agent Engine SDK for Flutter. Provides full agent capabilities without UI.
+version: 0.1.1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_rust_bridge: ^2.8.0
+  url_launcher: ^6.3.0
+  device_info_plus: ^11.0.0
+  geolocator: ^13.0.0
+  flutter_local_notifications: ^18.0.0
+  flutter_contacts: ^2.0.0
+  device_calendar: ^4.3.3
+  image_picker: ^1.1.2
+  record: ^6.1.0
+  android_intent_plus: ^5.1.0
+  crypto: ^3.0.7
+  path: ^1.9.0
+  shared_preferences: ^2.3.5
+  flutter_secure_storage: ^9.2.4
+  meta: ^1.15.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  test: ^1.29.0
+  flutter_lints: ^5.0.0
+  integration_test:
+    sdk: flutter
+  ffigen: ^9.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.napaxi.flutter
+        ffiPlugin: true
+        pluginClass: NapaxiFlutterPlugin
+      ios:
+        ffiPlugin: true
+        pluginClass: NapaxiFlutterPlugin

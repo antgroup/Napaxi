@@ -1,0 +1,36 @@
+Napaxi
+Copyright 2026 Napaxi Contributors
+
+This product includes software developed by the Napaxi project
+contributors and may include software developed by third parties.
+
+------------------------------------------------------------------------
+Third-party components
+------------------------------------------------------------------------
+
+This repository vendors a patched copy of `libsql` under `vendor/libsql-patched/`
+to enable mobile build and runtime compatibility. `libsql` is distributed under
+the MIT License. See `vendor/libsql-patched/` for the upstream license and
+notice files.
+
+The Napaxi mobile SDK redistributes prebuilt, unmodified third-party native
+binaries that provide its on-device Linux sandbox:
+
+- PRoot (`libproot.so`) — GPL-2.0-only.
+- Samba talloc (`libtalloc.so.2`) — LGPL-3.0-or-later.
+- musl libc loader (`libldmusl.so`) — MIT.
+- An Alpine Linux minirootfs image (`alpine-rootfs.bin`) — mixed per-package
+  licenses.
+
+On iOS, the SDK statically links the `iSHCore` user-mode Linux emulator
+(`iSHCore 0.3.0`), which is GPL-licensed, and ships an Alpine Linux rootfs
+archive for the native Swift Package.
+
+These components are governed by their own licenses, not by the Apache-2.0
+license of Napaxi itself. Provenance, integrity, and source-code availability
+for the bundled binaries are documented in `THIRD-PARTY-LICENSES.md` and
+`packages/flutter/android/jniLibs/THIRD-PARTY.md` or
+`packages/ios/Vendor/iSHCore/THIRD-PARTY.md`.
+
+Runtime dependencies are declared in `Cargo.toml` and `pubspec.yaml` files
+throughout the repository. Each dependency is governed by its own license.

@@ -1,0 +1,22 @@
+{
+  "runId": "run-fixture-001",
+  "status": "succeeded",
+  "agentId": "napaxi",
+  "sessionKey": "{\"channel_type\":\"app\",\"account_id\":\"user\",\"thread_id\":\"thread-fixture-001\"}",
+  "threadId": "thread-fixture-001",
+  "startedAt": 1717800000000,
+  "completedAt": 1717800002500,
+  "durationMs": 2500,
+  "evidenceKind": "tool_observed",
+  "verification": "verified",
+  "toolCallCount": 1,
+  "evidence": [
+    {
+      "kind": "tool_observed",
+      "source": "home_light_set",
+      "isError": false
+    }
+  ],
+  "summary": "Turned on the kitchen light.",
+  "childRunIds": []
+}

@@ -1,0 +1,329 @@
+[
+  {
+    "description": "Open a URL in the device's default browser or app.",
+    "effect": "external",
+    "name": "open_url",
+    "parameters": {
+      "properties": {
+        "url": {
+          "description": "The URL to open",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Open the phone dialer with a pre-filled number. The user must confirm to dial.",
+    "effect": "external",
+    "name": "make_call",
+    "parameters": {
+      "properties": {
+        "phone_number": {
+          "description": "Phone number to call",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phone_number"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Open the SMS app with a pre-filled recipient and optional message body.",
+    "effect": "external",
+    "name": "send_sms",
+    "parameters": {
+      "properties": {
+        "body": {
+          "description": "Pre-filled message body (optional)",
+          "type": "string"
+        },
+        "phone_number": {
+          "description": "Phone number to send SMS to",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phone_number"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Read the current text content from the device clipboard.",
+    "effect": "external",
+    "name": "get_clipboard",
+    "parameters": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "description": "Copy text to the device clipboard.",
+    "effect": "external",
+    "name": "set_clipboard",
+    "parameters": {
+      "properties": {
+        "text": {
+          "description": "Text to copy to clipboard",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Get device hardware and OS information (brand, model, OS version, etc.).",
+    "effect": "external",
+    "name": "get_device_info",
+    "parameters": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "description": "Get the device's current GPS location (latitude, longitude, altitude, accuracy). Requests location permission if not yet granted.",
+    "effect": "external",
+    "name": "get_location",
+    "parameters": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "description": "Send a local notification to the device. Requests notification permission if not yet granted.",
+    "effect": "external",
+    "name": "send_notification",
+    "parameters": {
+      "properties": {
+        "body": {
+          "description": "Notification body text",
+          "type": "string"
+        },
+        "title": {
+          "description": "Notification title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Search or list contacts from the device address book. Requests contacts permission if not yet granted.",
+    "effect": "external",
+    "name": "get_contacts",
+    "parameters": {
+      "properties": {
+        "limit": {
+          "description": "Maximum number of contacts to return (default 20)",
+          "type": "integer"
+        },
+        "query": {
+          "description": "Search keyword to filter contacts by name (optional)",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "description": "Create a new event in the device calendar. Requests calendar permission if not yet granted.",
+    "effect": "external",
+    "name": "create_calendar_event",
+    "parameters": {
+      "properties": {
+        "description": {
+          "description": "Event description (optional)",
+          "type": "string"
+        },
+        "end": {
+          "description": "End time in ISO 8601 format (e.g. 2026-04-28T11:00:00)",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start time in ISO 8601 format (e.g. 2026-04-28T10:00:00)",
+          "type": "string"
+        },
+        "title": {
+          "description": "Event title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "start",
+        "end"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "List events from the device calendar within a date range. Requests calendar permission if not yet granted.",
+    "effect": "external",
+    "name": "list_calendar_events",
+    "parameters": {
+      "properties": {
+        "end": {
+          "description": "End date in ISO 8601 format (e.g. 2026-04-29)",
+          "type": "string"
+        },
+        "start": {
+          "description": "Start date in ISO 8601 format (e.g. 2026-04-28)",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Open the device camera to take a photo. Returns the saved photo path in the sandbox.",
+    "effect": "external",
+    "name": "take_photo",
+    "parameters": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "description": "Access the device media library with explicit user or host authorization. Use status to inspect permission, search to list authorized media metadata, import to copy selected assets into sandbox artifacts, or pick as a manual picker fallback.",
+    "effect": "external",
+    "name": "media_library",
+    "parameters": {
+      "properties": {
+        "action": {
+          "description": "Media library operation to perform.",
+          "enum": [
+            "status",
+            "search",
+            "import",
+            "pick"
+          ],
+          "type": "string"
+        },
+        "asset_ids": {
+          "description": "Asset identifiers returned by search to import.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "end_ms": {
+          "description": "Optional exclusive creation timestamp upper bound in Unix milliseconds.",
+          "type": "integer"
+        },
+        "limit": {
+          "description": "Maximum number of media items. Default 20 for search/import and 9 for pick. Max 50.",
+          "type": "integer"
+        },
+        "media_types": {
+          "description": "Optional media types to include. Defaults to images.",
+          "items": {
+            "enum": [
+              "image",
+              "video"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "request_permission": {
+          "description": "Whether the host may show a system permission prompt if needed. Default true for search/import.",
+          "type": "boolean"
+        },
+        "start_ms": {
+          "description": "Optional inclusive creation timestamp lower bound in Unix milliseconds.",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Record audio from the device microphone for a specified duration. Requests microphone permission if not yet granted.",
+    "effect": "external",
+    "name": "record_audio",
+    "parameters": {
+      "properties": {
+        "duration_seconds": {
+          "description": "Recording duration in seconds (default 10, max 60)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "description": "Schedule an alarm notification at a specified time. Uses the device notification system.",
+    "effect": "external",
+    "name": "set_alarm",
+    "parameters": {
+      "properties": {
+        "message": {
+          "description": "Alarm message",
+          "type": "string"
+        },
+        "repeat_days": {
+          "description": "Optional weekdays for a repeating alarm. Omit for a one-time alarm. Use lowercase weekday names such as monday, tuesday, or all seven days for daily.",
+          "items": {
+            "enum": [
+              "sunday",
+              "monday",
+              "tuesday",
+              "wednesday",
+              "thursday",
+              "friday",
+              "saturday"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "time": {
+          "description": "Alarm time in HH:mm format (e.g. \"07:30\") or ISO 8601",
+          "type": "string"
+        }
+      },
+      "required": [
+        "time",
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Install an Android APK from a sandbox or local file path. If installing unknown apps is not allowed yet, opens the Android permission screen first. The user must confirm the installation in the system package installer.",
+    "effect": "external",
+    "name": "install_apk",
+    "parameters": {
+      "properties": {
+        "apk_path": {
+          "description": "APK file path. Prefer sandbox paths such as /workspace/app.apk; absolute local paths are also accepted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "apk_path"
+      ],
+      "type": "object"
+    }
+  }
+]

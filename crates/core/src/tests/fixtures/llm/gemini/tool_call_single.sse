@@ -1,0 +1,1 @@
+data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"lookup","args":{"query":"napaxi"}}}],"role":"model"},"finishReason":"STOP","index":0}]}

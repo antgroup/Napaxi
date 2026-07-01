@@ -1,0 +1,16 @@
+# Coverage floor baseline. See tools/scripts/coverage-floor.sh.
+#
+# Two regression-catcher floors (not quality targets); both may only go UP:
+#
+# CORE_API_MIN_LINES — the core public API boundary (crates/core/src/api/).
+#   Measured 2026-06-09: 99% (797/798 lines); all production API boundary code
+#   is covered (the one uncovered line is a defensive test match arm).
+#
+# CORE_SRC_MIN_LINES — the whole napaxi-core src (crates/core/src/). Catches the
+#   execution layer behind the api facade (turn / llm / mcp / group), which
+#   sits well below the boundary number. Measured 2026-06-11: 77%
+#   (35589/46204 lines). Set one point below so a real regression trips it
+#   without flapping on rounding.
+CORE_API_MIN_LINES=99
+CORE_SRC_MIN_LINES=76
+
