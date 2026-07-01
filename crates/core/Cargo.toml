@@ -112,7 +112,7 @@ regex = "1"
 
 # Android-specific dependencies
 [target.'cfg(target_os = "android")'.dependencies]
-jni = "0.21"
+jni = "0.22"
 
 # ============================================================================
 # Dev dependencies (for tests)
