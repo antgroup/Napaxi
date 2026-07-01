@@ -41,7 +41,7 @@ parking_lot = { version = "0.12" }
 
 # Optional (catalog feature)
 futures = { version = "0.3", optional = true }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-tls-native-roots"], optional = true }
 urlencoding = { version = "2", optional = true }
 
 # Optional (registry feature — tempfile needed for dev-dep in tests, but also
