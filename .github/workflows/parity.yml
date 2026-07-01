@@ -1,0 +1,59 @@
+name: parity
+
+# Gates the SDK public surface staying in sync across the Flutter, Android, and
+# iOS adapters. The parity scripts diff `packages/flutter/lib` against
+# `packages/android`, `packages/ios`, and `packages/agent_provider`, so this
+# workflow must trigger on any of those adapter trees — and on the scripts
+# themselves. It lived in `native.yml` before, but that workflow only triggers
+# on `crates/**` / `packages/api_bridge/**`, so an adapter-only change (a
+# removed Kotlin method, an edited Swift type, a Dart surface tweak) silently
+# skipped the gate — exactly the "silent adapter gap" AGENTS.md forbids.
+#
+# Pure Node, no native toolchain, so it stays cheap and runs on ubuntu.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'packages/flutter/lib/**'
+      - 'packages/android/**'
+      - 'packages/ios/**'
+      - 'packages/agent_provider/**'
+      - 'tools/scripts/check-android-flutter-parity.js'
+      - 'tools/scripts/check-ios-flutter-parity.js'
+      - 'tools/scripts/build.sh'
+      - '.github/workflows/parity.yml'
+  pull_request:
+    paths:
+      - 'packages/flutter/lib/**'
+      - 'packages/android/**'
+      - 'packages/ios/**'
+      - 'packages/agent_provider/**'
+      - 'tools/scripts/check-android-flutter-parity.js'
+      - 'tools/scripts/check-ios-flutter-parity.js'
+      - 'tools/scripts/build.sh'
+      - '.github/workflows/parity.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.0
+
+      - uses: actions/setup-node@v6.4.0
+        with:
+          node-version: '24'
+
+      - name: check-android-parity
+        run: ./tools/scripts/build.sh check-android-parity
+
+      - name: check-ios-parity
+        run: ./tools/scripts/build.sh check-ios-parity

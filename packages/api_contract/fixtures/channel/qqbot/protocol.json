@@ -1,0 +1,263 @@
+{
+  "endpoints": [
+    {
+      "expected": "/v2/groups/g1/messages",
+      "peer_id": "g1",
+      "peer_kind": "group"
+    },
+    {
+      "expected": "/channels/c1/messages",
+      "peer_id": "c1",
+      "peer_kind": "room"
+    },
+    {
+      "expected": "/v2/users/u1/messages",
+      "peer_id": "u1",
+      "peer_kind": "direct"
+    },
+    {
+      "expected": "/v2/users/x1/messages",
+      "peer_id": "x1",
+      "peer_kind": "thread"
+    }
+  ],
+  "inbound": [
+    {
+      "data": {
+        "author": {
+          "user_openid": "user-1",
+          "username": "Alice"
+        },
+        "content": "hi bot",
+        "group_openid": "group-1",
+        "id": "evt-1"
+      },
+      "event_type": "GROUP_AT_MESSAGE_CREATE",
+      "expected": {
+        "peer": {
+          "id": "group-1",
+          "kind": "group"
+        },
+        "platform_message_id": "evt-1",
+        "sender": {
+          "display_name": "Alice",
+          "id": "user-1",
+          "is_bot": false
+        },
+        "text": "hi bot",
+        "thread_id": "group-1"
+      },
+      "name": "group"
+    },
+    {
+      "data": {
+        "author": {
+          "id": "author-id",
+          "nick": "Bob"
+        },
+        "content": "ping",
+        "openid": "dm-user"
+      },
+      "event_type": "C2C_MESSAGE_CREATE",
+      "expected": {
+        "peer": {
+          "display_name": "Bob",
+          "id": "dm-user",
+          "kind": "direct"
+        },
+        "sender": {
+          "display_name": "Bob",
+          "id": "author-id",
+          "is_bot": false
+        },
+        "text": "ping"
+      },
+      "name": "direct"
+    },
+    {
+      "data": {
+        "author": {
+          "id": "u9"
+        },
+        "channel_id": "chan-1",
+        "channel_name": "general",
+        "content": "@bot hi"
+      },
+      "event_type": "AT_MESSAGE_CREATE",
+      "expected": {
+        "peer": {
+          "display_name": "general",
+          "id": "chan-1",
+          "kind": "room"
+        },
+        "sender": {
+          "id": "u9",
+          "is_bot": false
+        },
+        "text": "@bot hi",
+        "thread_id": "chan-1"
+      },
+      "name": "room"
+    }
+  ],
+  "markdown_fallback": [
+    {
+      "expected": true,
+      "status": 400
+    },
+    {
+      "expected": true,
+      "status": 415
+    },
+    {
+      "expected": false,
+      "status": 429
+    },
+    {
+      "expected": false,
+      "status": 500
+    },
+    {
+      "expected": false,
+      "status": 200
+    }
+  ],
+  "outbound": [
+    {
+      "expected": {
+        "body": {
+          "markdown": {
+            "content": "**hello**"
+          },
+          "msg_id": "msg-a",
+          "msg_type": 2
+        },
+        "content_format": "markdown",
+        "used_markdown": true
+      },
+      "force_plain_text": false,
+      "markdown_endpoint_kinds": null,
+      "message": {
+        "format": "markdown",
+        "peer": {
+          "id": "openid-a",
+          "kind": "direct"
+        },
+        "reply_to_message_id": "msg-a",
+        "text": "**hello**"
+      },
+      "name": "direct_markdown"
+    },
+    {
+      "expected": {
+        "body": {
+          "markdown": {
+            "content": "**hi group**"
+          },
+          "msg_type": 2
+        },
+        "content_format": "markdown",
+        "used_markdown": true
+      },
+      "force_plain_text": false,
+      "markdown_endpoint_kinds": null,
+      "message": {
+        "format": "markdown",
+        "peer": {
+          "id": "group-1",
+          "kind": "group"
+        },
+        "text": "**hi group**"
+      },
+      "name": "group_markdown"
+    },
+    {
+      "expected": {
+        "body": {
+          "content": "**hello**",
+          "msg_type": 0
+        },
+        "content_format": "plain_text",
+        "used_markdown": false
+      },
+      "force_plain_text": false,
+      "markdown_endpoint_kinds": null,
+      "message": {
+        "format": "markdown",
+        "peer": {
+          "id": "channel-a",
+          "kind": "room"
+        },
+        "text": "**hello**"
+      },
+      "name": "room_markdown_falls_back_plain"
+    },
+    {
+      "expected": {
+        "body": {
+          "markdown": {
+            "content": "**hello**"
+          },
+          "msg_type": 2
+        },
+        "content_format": "markdown",
+        "used_markdown": true
+      },
+      "force_plain_text": false,
+      "markdown_endpoint_kinds": [
+        "room"
+      ],
+      "message": {
+        "format": "markdown",
+        "peer": {
+          "id": "channel-a",
+          "kind": "room"
+        },
+        "text": "**hello**"
+      },
+      "name": "room_markdown_when_enabled"
+    },
+    {
+      "expected": {
+        "body": {
+          "content": "plain hi",
+          "msg_type": 0
+        },
+        "content_format": "plain_text",
+        "used_markdown": false
+      },
+      "force_plain_text": false,
+      "markdown_endpoint_kinds": null,
+      "message": {
+        "format": "plain_text",
+        "peer": {
+          "id": "openid-a",
+          "kind": "direct"
+        },
+        "text": "plain hi"
+      },
+      "name": "direct_plain"
+    },
+    {
+      "expected": {
+        "body": {
+          "content": "**md**",
+          "msg_type": 0
+        },
+        "content_format": "plain_text",
+        "used_markdown": false
+      },
+      "force_plain_text": true,
+      "markdown_endpoint_kinds": null,
+      "message": {
+        "format": "markdown",
+        "peer": {
+          "id": "openid-a",
+          "kind": "direct"
+        },
+        "text": "**md**"
+      },
+      "name": "direct_forced_plain"
+    }
+  ]
+}

@@ -1,0 +1,296 @@
+{
+  "lifecycle": [
+    {
+      "actions": [
+        {
+          "frame": {
+            "d": {
+              "intents": 33554432,
+              "properties": {
+                "$browser": "napaxi",
+                "$device": "napaxi_flutter_sdk",
+                "$os": "ios"
+              },
+              "shard": [
+                0,
+                1
+              ],
+              "token": "QQBot tok-123"
+            },
+            "op": 2
+          },
+          "type": "send_frame"
+        },
+        {
+          "interval_ms": 40000,
+          "type": "start_heartbeat"
+        }
+      ],
+      "event": {
+        "text": "{\"d\":{\"heartbeat_interval\":40000},\"op\":10}",
+        "type": "frame"
+      },
+      "state_in": {
+        "identify": {
+          "device": "napaxi_flutter_sdk",
+          "intents": 33554432,
+          "os": "ios",
+          "shard_count": 1,
+          "token": "tok-123"
+        }
+      },
+      "state_out": {
+        "connected": false,
+        "heartbeat_ack_count": 0,
+        "heartbeat_interval_ms": 40000,
+        "identify": {
+          "browser": "",
+          "device": "napaxi_flutter_sdk",
+          "intents": 33554432,
+          "os": "ios",
+          "shard_count": 1,
+          "token": "tok-123"
+        },
+        "last_opcode": 10,
+        "phase": "identify_sent"
+      }
+    },
+    {
+      "actions": [
+        {
+          "frame": {
+            "d": 1,
+            "op": 1
+          },
+          "type": "send_frame"
+        },
+        {
+          "type": "mark_ready"
+        }
+      ],
+      "event": {
+        "text": "{\"d\":{\"session_id\":\"sx\"},\"op\":0,\"s\":1,\"t\":\"READY\"}",
+        "type": "frame"
+      },
+      "state_in": {
+        "heartbeat_interval_ms": 40000,
+        "phase": "identify_sent"
+      },
+      "state_out": {
+        "connected": true,
+        "heartbeat_ack_count": 0,
+        "heartbeat_interval_ms": 40000,
+        "identify": {
+          "browser": "",
+          "device": "",
+          "intents": 0,
+          "os": "",
+          "shard_count": 0,
+          "token": ""
+        },
+        "last_event_type": "READY",
+        "last_opcode": 0,
+        "phase": "ready",
+        "seq": 1,
+        "session_id": "sx"
+      }
+    },
+    {
+      "actions": [
+        {
+          "frame": {
+            "d": 1,
+            "op": 1
+          },
+          "type": "send_frame"
+        }
+      ],
+      "event": {
+        "type": "heartbeat_due"
+      },
+      "state_in": {
+        "connected": true,
+        "seq": 1
+      },
+      "state_out": {
+        "connected": true,
+        "heartbeat_ack_count": 0,
+        "identify": {
+          "browser": "",
+          "device": "",
+          "intents": 0,
+          "os": "",
+          "shard_count": 0,
+          "token": ""
+        },
+        "phase": "",
+        "seq": 1
+      }
+    },
+    {
+      "actions": [
+        {
+          "event_type": "GROUP_AT_MESSAGE_CREATE",
+          "inbound": {
+            "peer": {
+              "id": "g1",
+              "kind": "group"
+            },
+            "sender": {
+              "id": "u1",
+              "is_bot": false
+            },
+            "text": "yo",
+            "thread_id": "g1"
+          },
+          "raw": {
+            "author": {
+              "user_openid": "u1"
+            },
+            "content": "yo",
+            "group_openid": "g1"
+          },
+          "type": "submit_inbound"
+        }
+      ],
+      "event": {
+        "text": "{\"d\":{\"author\":{\"user_openid\":\"u1\"},\"content\":\"yo\",\"group_openid\":\"g1\"},\"op\":0,\"s\":2,\"t\":\"GROUP_AT_MESSAGE_CREATE\"}",
+        "type": "frame"
+      },
+      "state_in": {
+        "connected": true,
+        "seq": 1
+      },
+      "state_out": {
+        "connected": true,
+        "heartbeat_ack_count": 0,
+        "identify": {
+          "browser": "",
+          "device": "",
+          "intents": 0,
+          "os": "",
+          "shard_count": 0,
+          "token": ""
+        },
+        "last_event_type": "GROUP_AT_MESSAGE_CREATE",
+        "last_opcode": 0,
+        "phase": "frame_received",
+        "seq": 2
+      }
+    },
+    {
+      "actions": [
+        {
+          "resume": true,
+          "type": "reconnect"
+        }
+      ],
+      "event": {
+        "text": "{\"op\":7}",
+        "type": "frame"
+      },
+      "state_in": {
+        "connected": true
+      },
+      "state_out": {
+        "connected": false,
+        "heartbeat_ack_count": 0,
+        "identify": {
+          "browser": "",
+          "device": "",
+          "intents": 0,
+          "os": "",
+          "shard_count": 0,
+          "token": ""
+        },
+        "last_error": "QQBot Gateway requested reconnect.",
+        "last_opcode": 7,
+        "phase": "reconnect_requested",
+        "resume_requested": true
+      }
+    },
+    {
+      "actions": [
+        {
+          "frame": {
+            "d": {
+              "seq": 2,
+              "session_id": "sx",
+              "token": "QQBot tok-123"
+            },
+            "op": 6
+          },
+          "type": "send_frame"
+        },
+        {
+          "interval_ms": 40000,
+          "type": "start_heartbeat"
+        }
+      ],
+      "event": {
+        "text": "{\"d\":{\"heartbeat_interval\":40000},\"op\":10}",
+        "type": "frame"
+      },
+      "state_in": {
+        "identify": {
+          "device": "napaxi_flutter_sdk",
+          "intents": 33554432,
+          "os": "ios",
+          "shard_count": 1,
+          "token": "tok-123"
+        },
+        "resume_requested": true,
+        "seq": 2,
+        "session_id": "sx"
+      },
+      "state_out": {
+        "connected": false,
+        "heartbeat_ack_count": 0,
+        "heartbeat_interval_ms": 40000,
+        "identify": {
+          "browser": "",
+          "device": "napaxi_flutter_sdk",
+          "intents": 33554432,
+          "os": "ios",
+          "shard_count": 1,
+          "token": "tok-123"
+        },
+        "last_opcode": 10,
+        "phase": "resume_sent",
+        "resume_requested": true,
+        "seq": 2,
+        "session_id": "sx"
+      }
+    },
+    {
+      "actions": [
+        {
+          "resume": false,
+          "type": "reconnect"
+        }
+      ],
+      "event": {
+        "text": "{\"d\":false,\"op\":9}",
+        "type": "frame"
+      },
+      "state_in": {
+        "connected": true
+      },
+      "state_out": {
+        "connected": false,
+        "heartbeat_ack_count": 0,
+        "identify": {
+          "browser": "",
+          "device": "",
+          "intents": 0,
+          "os": "",
+          "shard_count": 0,
+          "token": ""
+        },
+        "last_error": "QQBot Gateway invalid session (resumable=false).",
+        "last_opcode": 9,
+        "phase": "invalid_session"
+      }
+    }
+  ]
+}

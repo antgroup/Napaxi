@@ -1,0 +1,819 @@
+{
+  "version": 1,
+  "namespace": "workspace",
+  "status": "stable",
+  "goal": "First executable contract vertical slice for cross-adapter SDK consistency.",
+  "resultEnvelope": "packages/api_contract/errors.yaml#result_envelope",
+  "defaults": {
+    "account_id": "default",
+    "agent_id": "napaxi"
+  },
+  "methods": [
+    {
+      "name": "read_file",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "read_file"
+      },
+      "flutter": {
+        "facade": "readFile"
+      },
+      "ios": {
+        "facade": "readFile",
+        "raw": "readFileJSON"
+      },
+      "android": {
+        "facade": "readFile",
+        "bridgeKey": "workspace.read"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id",
+          "path"
+        ]
+      },
+      "response": {
+        "model": "WorkspaceFile",
+        "nullable": true
+      },
+      "legacyErrorSentinel": "null-or-error-json"
+    },
+    {
+      "name": "write_file",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "write_file"
+      },
+      "flutter": {
+        "facade": "writeFile"
+      },
+      "ios": {
+        "facade": "writeFile",
+        "raw": "writeFileJSON"
+      },
+      "android": {
+        "facade": "writeFile",
+        "bridgeKey": "workspace.write"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id",
+          "path",
+          "content"
+        ]
+      },
+      "response": {
+        "type": "boolean"
+      },
+      "legacyErrorSentinel": "false"
+    },
+    {
+      "name": "append_file",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "append_file"
+      },
+      "flutter": {
+        "facade": "appendFile"
+      },
+      "ios": {
+        "facade": "appendFile",
+        "raw": "appendFileJSON"
+      },
+      "android": {
+        "facade": "appendFile",
+        "bridgeKey": "workspace.append"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id",
+          "path",
+          "content"
+        ]
+      },
+      "response": {
+        "type": "boolean"
+      },
+      "legacyErrorSentinel": "false"
+    },
+    {
+      "name": "delete_file",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "delete_file"
+      },
+      "flutter": {
+        "facade": "deleteFile"
+      },
+      "ios": {
+        "facade": "deleteFile",
+        "raw": "deleteFileJSON"
+      },
+      "android": {
+        "facade": "deleteFile",
+        "bridgeKey": "workspace.delete"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id",
+          "path"
+        ]
+      },
+      "response": {
+        "type": "boolean"
+      },
+      "legacyErrorSentinel": "false"
+    },
+    {
+      "name": "list_files",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "list_files"
+      },
+      "flutter": {
+        "facade": "listFiles"
+      },
+      "ios": {
+        "facade": "listFiles",
+        "raw": "listFilesJSON"
+      },
+      "android": {
+        "facade": "listFiles",
+        "bridgeKey": "workspace.list"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id"
+        ],
+        "optional": [
+          "directory"
+        ]
+      },
+      "response": {
+        "envelopeField": "entries",
+        "items": "WorkspaceEntry"
+      }
+    },
+    {
+      "name": "search_memory",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "search_memory"
+      },
+      "flutter": {
+        "facade": "search"
+      },
+      "ios": {
+        "facade": "searchMemory",
+        "raw": "searchMemoryJSON"
+      },
+      "android": {
+        "facade": "search",
+        "bridgeKey": "workspace.search_memory"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id",
+          "query"
+        ],
+        "optional": [
+          "limit"
+        ],
+        "limit": {
+          "min": 1,
+          "max": 20,
+          "default": 5
+        }
+      },
+      "response": {
+        "envelopeField": "results",
+        "items": "MemorySearchResult"
+      }
+    },
+    {
+      "name": "recall_sessions",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "recall_sessions"
+      },
+      "flutter": {
+        "facade": "recallSessions"
+      },
+      "ios": {
+        "facade": "recallSessions",
+        "raw": "recallSessionsJSON"
+      },
+      "android": {
+        "facade": "recallSessions",
+        "bridgeKey": "workspace.recall_sessions"
+      },
+      "request": {
+        "required": [
+          "config_json",
+          "account_id",
+          "agent_id",
+          "current_thread_id",
+          "query"
+        ],
+        "optional": [
+          "limit"
+        ],
+        "limit": {
+          "min": 1,
+          "max": 5,
+          "default": 3
+        }
+      },
+      "response": {
+        "envelopeField": "sessions",
+        "items": "MemoryRecallSession"
+      }
+    },
+    {
+      "name": "rebuild_recall_index",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "rebuild_recall_index"
+      },
+      "flutter": {
+        "facade": "rebuildRecallIndex"
+      },
+      "ios": {
+        "facade": "rebuildRecallIndex",
+        "raw": "rebuildRecallIndexJSON"
+      },
+      "android": {
+        "facade": "rebuildRecallIndex",
+        "bridgeKey": "workspace.rebuild_recall_index"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id"
+        ]
+      },
+      "response": {
+        "model": "RecallIndexStats"
+      }
+    },
+    {
+      "name": "recall_index_stats",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "recall_index_stats"
+      },
+      "flutter": {
+        "facade": "recallIndexStats"
+      },
+      "ios": {
+        "facade": "recallIndexStats",
+        "raw": "recallIndexStatsJSON"
+      },
+      "android": {
+        "facade": "recallIndexStats",
+        "bridgeKey": "workspace.recall_index_stats"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id"
+        ]
+      },
+      "response": {
+        "model": "RecallIndexStats"
+      }
+    },
+    {
+      "name": "list_journal_days",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "list_journal_days"
+      },
+      "flutter": {
+        "facade": "listJournalDays"
+      },
+      "ios": {
+        "facade": "listJournalDays",
+        "raw": "listJournalDaysJSON"
+      },
+      "android": {
+        "facade": "listJournalDays",
+        "bridgeKey": "workspace.list_journal_days"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id"
+        ]
+      },
+      "response": {
+        "envelopeField": "days",
+        "items": "JournalDay"
+      }
+    },
+    {
+      "name": "read_journal_day",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "read_journal_day"
+      },
+      "flutter": {
+        "facade": "readJournalDay"
+      },
+      "ios": {
+        "facade": "readJournalDay",
+        "raw": "readJournalDayJSON"
+      },
+      "android": {
+        "facade": "readJournalDay",
+        "bridgeKey": "workspace.read_journal_day"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id",
+          "date"
+        ]
+      },
+      "response": {
+        "envelopeField": "turns",
+        "items": "JournalTurnRecord"
+      }
+    },
+    {
+      "name": "system_prompt",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "system_prompt"
+      },
+      "flutter": {
+        "facade": "systemPrompt"
+      },
+      "ios": {
+        "facade": "systemPrompt",
+        "raw": "systemPromptJSON"
+      },
+      "android": {
+        "facade": "systemPrompt",
+        "bridgeKey": "workspace.system_prompt"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id"
+        ]
+      },
+      "response": {
+        "type": "string"
+      }
+    },
+    {
+      "name": "reseed",
+      "status": "stable",
+      "bridge": {
+        "namespace": "workspace",
+        "method": "reseed"
+      },
+      "flutter": {
+        "facade": "reseed"
+      },
+      "ios": {
+        "facade": "reseed",
+        "raw": "reseedJSON"
+      },
+      "android": {
+        "facade": "reseed",
+        "bridgeKey": "workspace.reseed"
+      },
+      "request": {
+        "required": [
+          "account_id",
+          "agent_id"
+        ]
+      },
+      "response": {
+        "envelopeField": "count",
+        "type": "integer"
+      }
+    }
+  ],
+  "models": {
+    "WorkspaceFile": {
+      "required": [
+        "path",
+        "content"
+      ],
+      "optional": [
+        "updatedAt",
+        "updated_at"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "path": "string",
+        "content": "string",
+        "updatedAt": "datetime",
+        "updated_at": "datetime"
+      }
+    },
+    "WorkspaceEntry": {
+      "required": [
+        "path"
+      ],
+      "optional": [
+        "isDirectory",
+        "is_directory",
+        "updatedAt",
+        "updated_at",
+        "preview"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "path": "string",
+        "isDirectory": "boolean",
+        "is_directory": "boolean",
+        "updatedAt": "datetime",
+        "updated_at": "datetime",
+        "preview": "string"
+      }
+    },
+    "MemorySearchResult": {
+      "required": [
+        "source",
+        "path",
+        "content"
+      ],
+      "optional": [
+        "score",
+        "isHybridMatch",
+        "is_hybrid_match",
+        "updatedAt",
+        "updated_at",
+        "threadId",
+        "thread_id",
+        "turnId",
+        "turn_id",
+        "createdAt",
+        "created_at"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "source": "string",
+        "path": "string",
+        "content": "string",
+        "score": "number",
+        "isHybridMatch": "boolean",
+        "is_hybrid_match": "boolean",
+        "updatedAt": "datetime",
+        "updated_at": "datetime",
+        "threadId": "string",
+        "thread_id": "string",
+        "turnId": "string",
+        "turn_id": "string",
+        "createdAt": "datetime",
+        "created_at": "datetime"
+      }
+    },
+    "MemoryRecallSnippet": {
+      "required": [
+        "source",
+        "path",
+        "content"
+      ],
+      "optional": [
+        "score",
+        "turnId",
+        "turn_id",
+        "createdAt",
+        "created_at"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "source": "string",
+        "path": "string",
+        "content": "string",
+        "score": "number",
+        "turnId": "string",
+        "turn_id": "string",
+        "createdAt": "datetime",
+        "created_at": "datetime"
+      }
+    },
+    "MemoryRecallSession": {
+      "required": [
+        "title",
+        "summary"
+      ],
+      "optional": [
+        "snippets",
+        "score",
+        "source",
+        "startedAt",
+        "started_at",
+        "lastActiveAt",
+        "last_active_at",
+        "cached",
+        "fallback",
+        "sourceDocIds",
+        "source_doc_ids",
+        "systemNote",
+        "system_note"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "threadId": "string",
+        "thread_id": "string",
+        "title": "string",
+        "summary": "string",
+        "snippets": "array<MemoryRecallSnippet>",
+        "score": "number",
+        "source": "string",
+        "startedAt": "datetime",
+        "started_at": "datetime",
+        "lastActiveAt": "datetime",
+        "last_active_at": "datetime",
+        "cached": "boolean",
+        "fallback": "boolean",
+        "sourceDocIds": "array<string>",
+        "source_doc_ids": "array<string>",
+        "systemNote": "string",
+        "system_note": "string"
+      },
+      "requiredAny": [
+        [
+          "threadId",
+          "thread_id"
+        ]
+      ]
+    },
+    "RecallIndexStats": {
+      "required": [
+        "status"
+      ],
+      "optional": [
+        "dbPath",
+        "db_path",
+        "schemaVersion",
+        "schema_version",
+        "indexedDocs",
+        "indexed_docs",
+        "memoryDocs",
+        "memory_docs",
+        "journalDocs",
+        "journal_docs",
+        "legacyDailyDocs",
+        "legacy_daily_docs",
+        "cachedSummaries",
+        "cached_summaries",
+        "lastRebuildAt",
+        "last_rebuild_at"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "status": "string",
+        "dbPath": "string",
+        "db_path": "string",
+        "schemaVersion": "integer",
+        "schema_version": "integer",
+        "indexedDocs": "integer",
+        "indexed_docs": "integer",
+        "memoryDocs": "integer",
+        "memory_docs": "integer",
+        "journalDocs": "integer",
+        "journal_docs": "integer",
+        "legacyDailyDocs": "integer",
+        "legacy_daily_docs": "integer",
+        "cachedSummaries": "integer",
+        "cached_summaries": "integer",
+        "lastRebuildAt": "datetime",
+        "last_rebuild_at": "datetime"
+      }
+    },
+    "JournalDay": {
+      "required": [
+        "date",
+        "path"
+      ],
+      "optional": [
+        "turnCount",
+        "turn_count",
+        "updatedAt",
+        "updated_at",
+        "legacy"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "date": "date",
+        "path": "string",
+        "turnCount": "integer",
+        "turn_count": "integer",
+        "updatedAt": "datetime",
+        "updated_at": "datetime",
+        "legacy": "boolean"
+      }
+    },
+    "JournalTurnRecord": {
+      "required": [],
+      "optional": [
+        "createdAt",
+        "created_at",
+        "agentId",
+        "agent_id",
+        "threadId",
+        "thread_id",
+        "user",
+        "assistant",
+        "kind"
+      ],
+      "unknownFields": "preserve",
+      "fields": {
+        "turnId": "string",
+        "turn_id": "string",
+        "createdAt": "datetime",
+        "created_at": "datetime",
+        "agentId": "string",
+        "agent_id": "string",
+        "threadId": "string",
+        "thread_id": "string",
+        "user": "string",
+        "assistant": "string",
+        "kind": "string"
+      },
+      "requiredAny": [
+        [
+          "turnId",
+          "turn_id"
+        ]
+      ]
+    }
+  },
+  "fixtures": [
+    "fixtures/workspace/workspace_file.json",
+    "fixtures/workspace/list_files_result.json",
+    "fixtures/workspace/search_memory_result.json",
+    "fixtures/workspace/recall_sessions_result.json",
+    "fixtures/workspace/recall_index_stats.json",
+    "fixtures/workspace/journal_result.json",
+    "fixtures/workspace/result_envelope_success.json",
+    "fixtures/workspace/result_envelope_error.json"
+  ],
+  "fixtureBindings": [
+    {
+      "path": "fixtures/workspace/workspace_file.json",
+      "model": "WorkspaceFile",
+      "responseOf": [
+        "read_file"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/list_files_result.json",
+      "envelopeField": "entries",
+      "items": "WorkspaceEntry",
+      "responseOf": [
+        "list_files"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/search_memory_result.json",
+      "envelopeField": "results",
+      "items": "MemorySearchResult",
+      "responseOf": [
+        "search_memory"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/recall_sessions_result.json",
+      "envelopeField": "sessions",
+      "items": "MemoryRecallSession",
+      "responseOf": [
+        "recall_sessions"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/recall_index_stats.json",
+      "model": "RecallIndexStats",
+      "responseOf": [
+        "rebuild_recall_index",
+        "recall_index_stats"
+      ]
+    },
+    {
+      "path": "fixtures/workspace/journal_result.json",
+      "composites": [
+        {
+          "envelopeField": "days",
+          "items": "JournalDay",
+          "responseOf": [
+            "list_journal_days"
+          ]
+        },
+        {
+          "envelopeField": "turns",
+          "items": "JournalTurnRecord",
+          "responseOf": [
+            "read_journal_day"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/result_envelope_success.json",
+      "envelope": "success"
+    },
+    {
+      "path": "fixtures/workspace/result_envelope_error.json",
+      "envelope": "error"
+    }
+  ],
+  "fixtureCoverage": [
+    {
+      "path": "fixtures/workspace/workspace_file.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/list_files_result.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/search_memory_result.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/recall_sessions_result.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/recall_index_stats.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/journal_result.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/result_envelope_success.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    },
+    {
+      "path": "fixtures/workspace/result_envelope_error.json",
+      "consumers": [
+        {
+          "package": "flutter",
+          "test": "packages/flutter/test/workspace_contract_fixture_test.dart"
+        }
+      ]
+    }
+  ]
+}

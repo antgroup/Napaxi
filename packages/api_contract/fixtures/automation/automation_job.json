@@ -1,0 +1,30 @@
+{
+  "id": "job-fixture-001",
+  "name": "Morning briefing",
+  "enabled": true,
+  "accountId": "user",
+  "agentId": "napaxi",
+  "trigger": {
+    "kind": "localTime",
+    "hour": 8,
+    "minute": 30,
+    "timezone": "America/New_York",
+    "daysOfWeek": [1, 2, 3, 4, 5]
+  },
+  "payload": {
+    "kind": "agentTurn",
+    "message": "Give me my morning briefing.",
+    "sessionMode": "isolated",
+    "maxIterations": 4
+  },
+  "policy": {
+    "requiresUserVisibleNotification": true,
+    "allowHighRiskTools": false,
+    "maxRunDurationMs": 120000,
+    "maxRetries": 2,
+    "retryBackoffMs": [1000, 5000]
+  },
+  "state": {},
+  "createdAt": 1717800000000,
+  "updatedAt": 1717800000000
+}

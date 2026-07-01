@@ -1,0 +1,16 @@
+{
+  "description": "Cross-adapter local A2A pairing invite wire shape. The decoded JSON object that a `napaxi-a2a-invite:` QR/text payload base64url-encodes. Field names, the QR prefix, and the schema version are pinned in Rust core at napaxi_core::api::a2a::local_pairing_contract and must match on every adapter (Flutter/Android/iOS). See docs/sdk-adapter-parity.md.",
+  "qrPrefix": "napaxi-a2a-invite:",
+  "invite": {
+    "v": 1,
+    "peerId": "peer-fixture-001",
+    "agentId": "agent.fixture",
+    "displayName": "Fixture Phone",
+    "publicKey": "pubkey-fixture-abc123",
+    "pairingSecret": "secret-fixture-xyz789",
+    "endpoint": "lan://192.168.1.20:7100",
+    "transport": "lan_tcp_jsonl",
+    "createdAt": "2026-06-08T00:00:00Z"
+  },
+  "requiredIdentityFields": ["peerId", "publicKey", "pairingSecret"]
+}

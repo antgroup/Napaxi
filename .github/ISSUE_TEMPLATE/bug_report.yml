@@ -1,0 +1,90 @@
+name: Bug report
+description: Report a defect in Napaxi runtime, SDK, or demo behavior.
+title: "[bug] <short description>"
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        **Do not** use this form for security vulnerabilities — see
+        [`SECURITY.md`](../SECURITY.md) for the private disclosure process.
+  - type: input
+    id: version
+    attributes:
+      label: Napaxi version / commit
+      description: Output of `git rev-parse HEAD` or the release tag.
+      placeholder: "ed26111 or v0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected component
+      multiple: true
+      options:
+        - Core (crates/core)
+        - Feature crate (crates/features)
+        - Bridge (packages/api_bridge)
+        - Flutter SDK (packages/flutter)
+        - Agent Provider (packages/agent_provider)
+        - Demo (examples/flutter)
+        - Build / scripts
+        - Docs
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform where the issue reproduces
+      multiple: true
+      options:
+        - Android
+        - iOS
+        - Host dev machine (cargo / flutter analyze)
+        - Other / not platform-specific
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: |
+        Steps to reproduce. Include exact commands, sample input, and any
+        relevant config. The smaller the repro, the faster the triage.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traces
+      description: Paste tracing output, panic backtraces, or Flutter analyze output.
+      render: shell
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        - Rust toolchain (`rustc --version`)
+        - Flutter version (`flutter --version`) if applicable
+        - Android NDK / Xcode version if applicable
+        - OS and architecture
+      render: shell

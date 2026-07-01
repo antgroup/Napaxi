@@ -1,0 +1,7 @@
+{
+  "type": "tool_result",
+  "call_id": "call-fixture-001",
+  "name": "home_light_set",
+  "output": "{\"ok\":true}",
+  "is_error": false
+}

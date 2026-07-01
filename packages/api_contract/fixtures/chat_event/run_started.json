@@ -1,0 +1,6 @@
+{
+  "type": "run_started",
+  "run_id": "run-fixture-001",
+  "session_key": "{\"channel_type\":\"app\",\"account_id\":\"user\",\"thread_id\":\"thread-fixture-001\"}",
+  "agent_id": "napaxi"
+}

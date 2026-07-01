@@ -1,0 +1,432 @@
+version: 1
+namespaces:
+  engine:
+    status: stable
+    adapters: [flutter, ios, android]
+    contract: typed facade plus raw JSON escape hatch
+    methods:
+      create_engine:
+        params: [config_json]
+        return: EngineHandle (i64)
+      update_config:
+        params: [config_json]
+        return: bool
+      get_config:
+        params: []
+        return: json
+      dispose_engine:
+        params: []
+        return: bool
+      ensure_agent_ready:
+        params: [agent_id, account_id]
+        return: bool
+  chat:
+    status: stable
+    adapters: [flutter, ios, android]
+    contract: stream events should preserve terminal error envelope
+    methods:
+      send_message:
+        params: [message, agent_id, account_id, attachments, max_iterations]
+        return: Stream<ChatEvent>
+      send_to_session:
+        params: [session_key, message, agent_id, attachments, max_iterations, sandbox_paths]
+        return: Stream<ChatEvent>
+      cancel_session:
+        params: [session_key, agent_id]
+        return: bool
+      inject_message:
+        params: [session_key, message, agent_id, attachments]
+        return: bool
+      retract_injected_message:
+        params: [session_key, message]
+        return: bool
+      answer_human_request:
+        params: [request_id, response]
+        return: bool
+  sessions:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      create_session:
+        params: [agent_id, account_id, channel_type, thread_id]
+        return: SessionKey
+      list_sessions:
+        params: [agent_id, account_id]
+        return: List<SessionInfo>
+      clear_session:
+        params: [session_key, agent_id]
+        return: bool
+      delete_session:
+        params: [session_key, agent_id]
+        return: bool
+      get_history:
+        params: [thread_id, agent_id]
+        return: List<ChatMessage>
+      get_history_page:
+        params: [thread_id, agent_id, before, limit]
+        return: HistoryPage
+      compact_context:
+        params: [session_key, agent_id, focus]
+        return: ContextStatus
+      context_status:
+        params: [thread_id, agent_id]
+        return: ContextStatus
+  session_runs:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      list:
+        params: [agent_id, thread_id, status, limit, offset]
+        return: List<SessionRunRecord>
+      get:
+        params: [run_id]
+        return: SessionRunRecord?
+      active:
+        params: []
+        return: List<SessionRunRecord>
+  agents:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      get_or_create_agent:
+        params: [agent_id, account_id]
+        return: json
+      list_agents:
+        params: []
+        return: List<String>
+      delete_agent:
+        params: [agent_id]
+        return: bool
+      create_definition:
+        params: [definition]
+        return: AgentDefinition
+      list_definitions:
+        params: []
+        return: List<AgentDefinition>
+      delete_definition:
+        params: [def_id]
+        return: bool
+      import_markdown:
+        params: [content]
+        return: AgentDefinition
+  groups:
+    status: experimental
+    adapters: [flutter, ios, android]
+    methods:
+      create_group:
+        params: [name, member_agent_ids]
+        return: group_id (String)
+      delete_group:
+        params: [group_id]
+        return: bool
+      list_groups:
+        params: []
+        return: List<GroupInfo>
+      get_group:
+        params: [group_id]
+        return: GroupInfo?
+      rename_group:
+        params: [group_id, new_name]
+        return: bool
+      update_members:
+        params: [group_id, member_agent_ids]
+        return: bool
+      send_to_group:
+        params: [group_id, message, max_iterations]
+        return: Stream<ChatEvent>
+      export_state:
+        params: []
+        return: json
+      import_state:
+        params: [state_json]
+        return: bool
+  workspace:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      read_file:
+        params: [path, account_id, agent_id]
+        return: WorkspaceFile?
+      write_file:
+        params: [path, content, account_id, agent_id]
+        return: bool
+      append_file:
+        params: [path, content, account_id, agent_id]
+        return: bool
+      delete_file:
+        params: [path, account_id, agent_id]
+        return: bool
+      list_files:
+        params: [directory, account_id, agent_id]
+        return: List<WorkspaceEntry>
+      search_memory:
+        params: [query, limit, account_id, agent_id]
+        return: List<MemorySearchResult>
+      recall_sessions:
+        params: [query, limit, account_id, agent_id, current_thread_id]
+        return: List<MemoryRecallSession>
+      get_system_prompt:
+        params: [account_id, agent_id]
+        return: String
+  skills:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      list_skills:
+        params: [agent_id]
+        return: List<SkillInfo>
+      get_skill:
+        params: [skill_name, agent_id]
+        return: SkillInfo?
+      skill_status:
+        params: [agent_id]
+        return: SkillStatusReport
+      install_skill:
+        params: [skill, agent_id]
+        return: SkillInstallResult
+      remove_skill:
+        params: [skill_name, agent_id]
+        return: bool
+      reload_skills:
+        params: [agent_id]
+        return: List<String>
+      set_skill_enabled:
+        params: [skill_name, agent_id, enabled]
+        return: String
+      search_catalog:
+        params: [query]
+        return: json
+      list_catalog_packages:
+        params: [limit, cursor]
+        return: CatalogPackagePage
+  mcp:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      add_server:
+        params: [name, url, headers, transport, user_id]
+        return: McpServerActionResult
+      remove_server:
+        params: [name, user_id]
+        return: bool
+      list_servers:
+        params: [user_id]
+        return: List<McpServerInfo>
+      activate_server:
+        params: [name, user_id]
+        return: McpServerActionResult
+      deactivate_server:
+        params: [name, user_id]
+        return: bool
+      list_tools:
+        params: [server_name, user_id]
+        return: List<McpToolInfo>
+      start_oauth:
+        params: [name, user_id, redirect_uri, client_id, client_secret, authorization_url, token_url, scopes, use_pkce, extra_params, resource]
+        return: McpOAuthStartResult
+      finish_oauth:
+        params: [name, user_id, code, state]
+        return: McpServerActionResult
+  automation:
+    status: experimental
+    adapters: [flutter, ios, android]
+    methods:
+      create_automation_job:
+        params: [job]
+        return: AutomationJob
+      update_automation_job:
+        params: [job_id, patch]
+        return: AutomationJob
+      delete_automation_job:
+        params: [job_id]
+        return: bool
+      list_automation_jobs:
+        params: [account_id, agent_id, enabled]
+        return: List<AutomationJob>
+      get_automation_job:
+        params: [job_id]
+        return: AutomationJob?
+      run_automation_job:
+        params: [job_id, mode]
+        return: AutomationRun
+      list_automation_runs:
+        params: [job_id, limit, offset]
+        return: List<AutomationRun>
+      get_next_automation_wake:
+        params: []
+        return: AutomationWake?
+  background:
+    status: platform
+    adapters: [flutter, ios, android]
+    notes: >
+      Platform lifecycle differs; shared runtime semantics stay in core.
+      iOS has platform_limited background execution; see capability_matrix.
+    methods:
+      start_service:
+        params: []
+        return: void
+      stop_service:
+        params: []
+        return: void
+      update_config:
+        params: [config]
+        return: void
+  platform_tools:
+    status: platform
+    adapters: [flutter, ios, android]
+    notes: >
+      Host capability selection must describe unsupported native UI flows.
+      iOS has partial platform_tools support; see capability_matrix.
+    methods:
+      list_platform_tools:
+        params: []
+        return: List<ToolInfo>
+  browser:
+    status: experimental
+    adapters: [flutter, ios]
+    notes: Host supplies concrete WebView/browser behavior.
+    methods:
+      list_browser_tools:
+        params: []
+        return: List<ToolInfo>
+  agent_app:
+    status: experimental
+    adapters: [flutter, ios, android]
+    methods:
+      register_package:
+        params: [package]
+        return: AgentAppPackage
+      list_packages:
+        params: []
+        return: List<AgentAppPackage>
+      get_package:
+        params: [agent_id]
+        return: AgentAppPackage?
+      delete_package:
+        params: [agent_id]
+        return: bool
+      submit_result:
+        params: [result]
+        return: AgentAppActionRecord
+      list_proposals:
+        params: [agent_id]
+        return: List<AgentAppActionRecord>
+  agent_provider:
+    status: experimental
+    adapters: [flutter, ios, android]
+    methods:
+      discover_providers:
+        params: []
+        return: List<AgentProviderDescriptor>
+      build_install_request:
+        params: []
+        return: json
+      request_install:
+        params: [descriptor, request]
+        return: PendingAgentProviderInstall
+      consume_pending_trigger:
+        params: [intent]
+        return: AgentProviderTrigger?
+      accept_trigger:
+        params: [trigger]
+        return: bool
+      clear_pending_trigger:
+        params: [context]
+        return: void
+  a2a:
+    status: experimental
+    adapters: [flutter, ios, android]
+    methods:
+      agent_card:
+        params: [agent_id]
+        return: A2AAgentCard
+      create_peer_invite:
+        params: [agent_id, options]
+        return: A2APeerInvite
+      accept_peer_invite:
+        params: [envelope]
+        return: A2APeer
+      list_peers:
+        params: [agent_id]
+        return: List<A2APeer>
+      delete_peer:
+        params: [peer_id]
+        return: bool
+      open_peer_session:
+        params: [peer, transport, endpoint]
+        return: A2APeerSession
+      start_local_transport:
+        params: [peer_id, agent_id, display_name, public_key]
+        return: A2ALocalTransportStatus
+      discover_local_peers:
+        params: [timeout_ms]
+        return: List<A2ALocalPeerAdvertisement>
+      accept_deep_link:
+        params: [envelope, source]
+        return: A2ATaskRecord
+      run_task:
+        params: [task_id, mode]
+        return: A2ATaskRecord
+  file_bridge:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      init_file_bridge:
+        params: [account_id, agent_id]
+        return: bool
+      sandbox_to_real:
+        params: [sandbox_path, account_id, agent_id]
+        return: String?
+      real_to_sandbox:
+        params: [real_path, account_id, agent_id]
+        return: String?
+      save_message_attachments:
+        params: [thread_id, user_message_index, attachments]
+        return: bool
+      load_thread_attachments:
+        params: [thread_id]
+        return: json
+      list_files:
+        params: [subdir, recursive]
+        return: List<WorkspaceFileInfo>
+      workspace_size:
+        params: [account_id, agent_id]
+        return: i64
+  capabilities:
+    status: stable
+    adapters: [flutter, ios, android]
+    methods:
+      list_definitions:
+        params: []
+        return: List<CapabilityDefinition>
+      list_statuses:
+        params: [profile, selection]
+        return: List<CapabilityStatus>
+      list_scenario_packs:
+        params: []
+        return: List<ScenarioPack>
+      install_scenario_pack:
+        params: [pack]
+        return: ScenarioPackInstallResult?
+      remove_scenario_pack:
+        params: [scenario_id]
+        return: ScenarioPackRemovalResult?
+  evolution:
+    status: experimental
+    adapters: [flutter, ios, android]
+    methods:
+      list_pending:
+        params: []
+        return: List<EvolutionPending>
+      apply_pending:
+        params: [pending_id]
+        return: json
+      reject_pending:
+        params: [pending_id]
+        return: json
+      list_runs:
+        params: [run_ids]
+        return: List<EvolutionRun>
+      list_diagnostics:
+        params: []
+        return: List<EvolutionDiagnostic>

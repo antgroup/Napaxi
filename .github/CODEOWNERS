@@ -1,0 +1,40 @@
+# CODEOWNERS — auto-assign reviewers by path
+# These lines assign the Napaxi maintainers as default reviewers.
+# Update the team/user references when the project adds more maintainers.
+
+# Default — all changes
+* @napaxi/maintainers
+
+# Rust core runtime
+/crates/core/ @napaxi/core-maintainers
+
+# Feature crates
+/crates/features/ @napaxi/core-maintainers
+
+# Rust FFI bridge
+/packages/api_bridge/ @napaxi/core-maintainers
+
+# API contract
+/packages/api_contract/ @napaxi/core-maintainers
+
+# Flutter SDK
+/packages/flutter/ @napaxi/flutter-maintainers
+
+# Android SDK
+/packages/android/ @napaxi/android-maintainers
+
+# iOS SDK
+/packages/ios/ @napaxi/ios-maintainers
+
+# Agent Provider SDK
+/packages/agent_provider/ @napaxi/core-maintainers
+
+# Demo app
+/examples/ @napaxi/flutter-maintainers
+
+# CI/CD and tooling
+/.github/ @napaxi/core-maintainers
+/tools/ @napaxi/core-maintainers
+
+# Documentation
+/docs/ @napaxi/core-maintainers

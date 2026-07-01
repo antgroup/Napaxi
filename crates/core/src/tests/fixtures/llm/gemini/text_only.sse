@@ -1,0 +1,7 @@
+data: {"candidates":[{"content":{"parts":[{"text":"Hello"}],"role":"model"},"finishReason":null,"index":0}]}
+
+data: {"candidates":[{"content":{"parts":[{"text":", "}],"role":"model"},"index":0}]}
+
+data: {"candidates":[{"content":{"parts":[{"text":"world!"}],"role":"model"},"index":0}]}
+
+data: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"},"finishReason":"STOP","index":0}]}

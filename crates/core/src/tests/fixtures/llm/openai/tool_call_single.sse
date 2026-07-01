@@ -1,0 +1,9 @@
+data: {"id":"chatcmpl-2","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_lookup_1","type":"function","function":{"name":"lookup","arguments":""}}]}}]}
+
+data: {"id":"chatcmpl-2","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"query\":"}}]}}]}
+
+data: {"id":"chatcmpl-2","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"napaxi\"}"}}]}}]}
+
+data: {"id":"chatcmpl-2","choices":[{"delta":{},"finish_reason":"tool_calls"}]}
+
+data: [DONE]

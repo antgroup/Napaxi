@@ -1,0 +1,94 @@
+{
+  "$schema": "agent_provider_parity_fixtures",
+  "description": "Shared behavioural fixtures for Agent Provider validation parity tests. Both iOS (Swift) and Android (Kotlin) adapter tests should consume this file to verify identical validation behaviour for install proposals, trusted proposals, and trigger requests.",
+  "fixtures": [
+    {
+      "id": "valid_proposal",
+      "description": "A valid install proposal that should pass basic validation",
+      "url": "napaxi://agent-provider/install?provider_id=com.napaxi.smartdesk&agent_id=desk-agent&action_id=adjust_height&nonce=abc123&idempotency_key=key1&expires_at=4102444800",
+      "expected_provider_id": "com.napaxi.smartdesk",
+      "expected_agent_id": "desk-agent",
+      "should_pass": true,
+      "failure_reason": null
+    },
+    {
+      "id": "wrong_provider",
+      "description": "Proposal with mismatched provider_id should fail",
+      "url": "napaxi://agent-provider/install?provider_id=com.napaxi.smartdesk&agent_id=desk-agent&action_id=adjust_height&nonce=abc123&idempotency_key=key1&expires_at=4102444800",
+      "expected_provider_id": "com.napaxi.wrongprovider",
+      "expected_agent_id": "desk-agent",
+      "should_pass": false,
+      "failure_reason": "provider_id_mismatch"
+    },
+    {
+      "id": "wrong_agent",
+      "description": "Proposal with mismatched agent_id should fail",
+      "url": "napaxi://agent-provider/install?provider_id=com.napaxi.smartdesk&agent_id=desk-agent&action_id=adjust_height&nonce=abc123&idempotency_key=key1&expires_at=4102444800",
+      "expected_provider_id": "com.napaxi.smartdesk",
+      "expected_agent_id": "wrong-agent",
+      "should_pass": false,
+      "failure_reason": "agent_id_mismatch"
+    },
+    {
+      "id": "missing_nonce",
+      "description": "Proposal without a nonce should fail",
+      "url": "napaxi://agent-provider/install?provider_id=com.napaxi.smartdesk&agent_id=desk-agent&action_id=adjust_height&idempotency_key=key1&expires_at=4102444800",
+      "expected_provider_id": "com.napaxi.smartdesk",
+      "expected_agent_id": "desk-agent",
+      "should_pass": false,
+      "failure_reason": "missing_nonce"
+    },
+    {
+      "id": "missing_idempotency_key",
+      "description": "Proposal without an idempotency_key should fail",
+      "url": "napaxi://agent-provider/install?provider_id=com.napaxi.smartdesk&agent_id=desk-agent&action_id=adjust_height&nonce=abc123&expires_at=4102444800",
+      "expected_provider_id": "com.napaxi.smartdesk",
+      "expected_agent_id": "desk-agent",
+      "should_pass": false,
+      "failure_reason": "missing_idempotency_key"
+    },
+    {
+      "id": "expired_proposal",
+      "description": "Proposal with past expiry should fail",
+      "url": "napaxi://agent-provider/install?provider_id=com.napaxi.smartdesk&agent_id=desk-agent&action_id=adjust_height&nonce=abc123&idempotency_key=key1&expires_at=1000000000",
+      "expected_provider_id": "com.napaxi.smartdesk",
+      "expected_agent_id": "desk-agent",
+      "should_pass": false,
+      "failure_reason": "expired"
+    },
+    {
+      "id": "valid_trigger",
+      "description": "A valid trigger request with all required fields",
+      "provider_id": "com.napaxi.smartdesk",
+      "agent_id": "desk-agent",
+      "action_id": "adjust_height",
+      "request_id": "req-001",
+      "input": {"height": 120},
+      "should_pass": true,
+      "failure_reason": null
+    },
+    {
+      "id": "trigger_missing_request_id",
+      "description": "Trigger without request_id should fail",
+      "provider_id": "com.napaxi.smartdesk",
+      "agent_id": "desk-agent",
+      "action_id": "adjust_height",
+      "request_id": null,
+      "input": {"height": 120},
+      "should_pass": false,
+      "failure_reason": "missing_request_id"
+    },
+    {
+      "id": "trigger_replay",
+      "description": "Trigger with already-consumed request_id should fail replay detection",
+      "provider_id": "com.napaxi.smartdesk",
+      "agent_id": "desk-agent",
+      "action_id": "adjust_height",
+      "request_id": "req-replay",
+      "input": {"height": 120},
+      "pre_consume": true,
+      "should_pass": false,
+      "failure_reason": "replay_detected"
+    }
+  ]
+}

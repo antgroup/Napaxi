@@ -1,0 +1,13 @@
+data: {"id":"chatcmpl-4","choices":[{"delta":{"role":"assistant","reasoning_content":"Let me "}}]}
+
+data: {"id":"chatcmpl-4","choices":[{"delta":{"reasoning_content":"think step by step."}}]}
+
+data: {"id":"chatcmpl-4","choices":[{"delta":{"content":"The "}}]}
+
+data: {"id":"chatcmpl-4","choices":[{"delta":{"content":"answer "}}]}
+
+data: {"id":"chatcmpl-4","choices":[{"delta":{"content":"is 42."}}]}
+
+data: {"id":"chatcmpl-4","choices":[{"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]

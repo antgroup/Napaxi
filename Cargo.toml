@@ -1,0 +1,57 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/features/evolution",
+    "crates/features/skills",
+    "packages/api_bridge",
+]
+resolver = "2"
+
+# Workspace-wide lint policy. `cargo clippy --workspace --all-targets -- -D
+# warnings` is a hard CI gate (see .github/workflows/rust.yml), so the few
+# lint classes that flag deliberate design rather than fixable defects are
+# allowed here, once, with rationale — instead of scattering `#[allow]`
+# attributes across dozens of hot files. Everything else stays a hard error.
+[workspace.lints.rust]
+# Flutter Rust Bridge codegen probes this cfg; it is never set in normal builds.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+[workspace.lints.clippy]
+# Runtime/FFI entrypoints thread many independent parameters (engine handle,
+# files dir, ids, config json, sinks, callbacks). Bundling them into structs
+# is a churny, behavior-neutral refactor and impossible for the `extern "C"`
+# bridge signatures — not worth gating CI on.
+too_many_arguments = "allow"
+# The `let mut x = T::default(); x.field = ...;` form is intentional and
+# readable, especially in test setup where it dominates.
+field_reassign_with_default = "allow"
+# Trait-object map/return signatures whose "complexity" is inherent to the
+# abstraction; a type alias would not improve clarity here.
+type_complexity = "allow"
+# Variant names intentionally share a suffix (e.g. `*Delta`, `*File`);
+# renaming them would churn matchers without improving the API.
+enum_variant_names = "allow"
+# A `tests` submodule inside a `job`/`registry` module is conventional layout
+# for the split-file pattern this crate uses.
+module_inception = "allow"
+# One pub(super) enum carries a large terminal-run variant; boxing it would
+# add indirection to a hot construction path for no real memory win.
+large_enum_variant = "allow"
+
+[patch.crates-io]
+libsql = { path = "vendor/libsql-patched" }
+libsql-sqlite3-parser = { path = "vendor/libsql-sqlite3-parser-patched" }
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.fast-release]
+inherits = "release"
+opt-level = 1
+lto = false
+codegen-units = 16
+incremental = true

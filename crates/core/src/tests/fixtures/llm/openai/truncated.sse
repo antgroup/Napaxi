@@ -1,0 +1,4 @@
+data: {"id":"chatcmpl-5","choices":[{"delta":{"role":"assistant","content":"Partial "}}]}
+
+data: {"id":"chatcmpl-5","choices":[{"delta":{"content":"response"}}]}
+
