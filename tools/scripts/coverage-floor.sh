@@ -8,33 +8,26 @@
 # This script parses an lcov file (produced by `cargo llvm-cov --lcov`),
 # computes the line-coverage percentage for files under
 # `crates/core/src/api/`, ALWAYS prints it, and fails if it is below the
-# floor recorded in tools/scripts/coverage-baseline.txt.
+# checked-in floors defined in this script.
 #
 # The floor starts deliberately conservative: it is a regression catcher
 # (e.g. "someone deleted the API tests"), not a quality target. Once CI
-# reports the real number, raise CORE_API_MIN_LINES in the baseline file to
-# lock in the actual coverage. The number may only go UP.
+# reports the real number, raise the checked-in minimums here to lock in the
+# actual coverage. The numbers may only go UP.
 #
 # Usage: coverage-floor.sh <lcov-file>
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BASELINE_FILE="$SCRIPT_DIR/coverage-baseline.txt"
-
 info() { printf '[INFO] %s\n' "$*"; }
 err()  { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
+
+CORE_API_MIN_LINES=99
+CORE_SRC_MIN_LINES=76
 
 LCOV_FILE="${1:-}"
 [ -n "$LCOV_FILE" ] || err "Usage: coverage-floor.sh <lcov-file>"
 [ -f "$LCOV_FILE" ] || err "lcov file not found: $LCOV_FILE"
-[ -f "$BASELINE_FILE" ] || err "Missing baseline file: $BASELINE_FILE"
-
-FLOOR="$(grep -E '^CORE_API_MIN_LINES=' "$BASELINE_FILE" | head -1 | cut -d= -f2 | tr -d '[:space:]')"
-[ -n "$FLOOR" ] || err "Baseline missing CORE_API_MIN_LINES= line in $BASELINE_FILE"
-
-SRC_FLOOR="$(grep -E '^CORE_SRC_MIN_LINES=' "$BASELINE_FILE" | head -1 | cut -d= -f2 | tr -d '[:space:]')"
-[ -n "$SRC_FLOOR" ] || err "Baseline missing CORE_SRC_MIN_LINES= line in $BASELINE_FILE"
 
 # Sum DA: (line-hit) records for files matching a path substring.
 # lcov format: `SF:<path>` opens a file section; `DA:<line>,<hits>` per line;
@@ -71,14 +64,14 @@ fi
 # Integer percentage (floored) to avoid bc/float dependency.
 PCT=$(( COVERED * 100 / TOTAL ))
 
-info "Core API boundary line coverage: ${PCT}% (${COVERED}/${TOTAL} lines) — floor ${FLOOR}%"
+info "Core API boundary line coverage: ${PCT}% (${COVERED}/${TOTAL} lines) — floor ${CORE_API_MIN_LINES}%"
 
-if [ "$PCT" -lt "$FLOOR" ]; then
-    err "Core API coverage ${PCT}% is below the floor of ${FLOOR}%. Add tests for crates/core/src/api/, or justify lowering the floor in review."
+if [ "$PCT" -lt "$CORE_API_MIN_LINES" ]; then
+    err "Core API coverage ${PCT}% is below the floor of ${CORE_API_MIN_LINES}%. Add tests for crates/core/src/api/, or justify lowering the floor in review."
 fi
 
-if [ "$PCT" -gt "$FLOOR" ]; then
-    info "Coverage exceeds the floor — raise CORE_API_MIN_LINES in $BASELINE_FILE to ${PCT} to lock it in."
+if [ "$PCT" -gt "$CORE_API_MIN_LINES" ]; then
+    info "Coverage exceeds the floor — raise CORE_API_MIN_LINES in tools/scripts/coverage-floor.sh to ${PCT} to lock it in."
 fi
 
 # --- Floor 2: the whole napaxi-core src (catches the execution layer) ---------
@@ -92,14 +85,14 @@ fi
 
 SRC_PCT=$(( SRC_COVERED * 100 / SRC_TOTAL ))
 
-info "napaxi-core/src line coverage: ${SRC_PCT}% (${SRC_COVERED}/${SRC_TOTAL} lines) — floor ${SRC_FLOOR}%"
+info "napaxi-core/src line coverage: ${SRC_PCT}% (${SRC_COVERED}/${SRC_TOTAL} lines) — floor ${CORE_SRC_MIN_LINES}%"
 
-if [ "$SRC_PCT" -lt "$SRC_FLOOR" ]; then
-    err "napaxi-core/src coverage ${SRC_PCT}% is below the floor of ${SRC_FLOOR}%. The core execution layer (turn/llm/mcp/...) regressed; add tests or justify lowering the floor in review."
+if [ "$SRC_PCT" -lt "$CORE_SRC_MIN_LINES" ]; then
+    err "napaxi-core/src coverage ${SRC_PCT}% is below the floor of ${CORE_SRC_MIN_LINES}%. The core execution layer (turn/llm/mcp/...) regressed; add tests or justify lowering the floor in review."
 fi
 
-if [ "$SRC_PCT" -gt "$SRC_FLOOR" ]; then
-    info "Whole-src coverage exceeds the floor — raise CORE_SRC_MIN_LINES in $BASELINE_FILE to ${SRC_PCT} to lock it in."
+if [ "$SRC_PCT" -gt "$CORE_SRC_MIN_LINES" ]; then
+    info "Whole-src coverage exceeds the floor — raise CORE_SRC_MIN_LINES in tools/scripts/coverage-floor.sh to ${SRC_PCT} to lock it in."
 fi
 
 info "Core coverage floors passed"

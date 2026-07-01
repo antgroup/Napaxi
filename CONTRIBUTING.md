@@ -165,17 +165,19 @@ cd packages/flutter && flutter test --coverage   # writes coverage/lcov.info
 Two regression-catcher coverage floors are enforced in CI (`coverage.yml`):
 
 - `tools/scripts/coverage-floor.sh lcov.info` — the core public API boundary
-  (`crates/core/src/api/`), baseline `CORE_API_MIN_LINES` in
-  `tools/scripts/coverage-baseline.txt`.
+  (`crates/core/src/api/`), with `CORE_API_MIN_LINES` and
+  `CORE_SRC_MIN_LINES` maintained directly in
+  `tools/scripts/coverage-floor.sh`.
 - `tools/scripts/flutter-coverage-floor.sh packages/flutter/coverage/lcov.info`
-  — the Flutter SDK lib aggregate, baseline `FLUTTER_SDK_MIN_LINES` in
-  `tools/scripts/flutter-coverage-baseline.txt`.
+  — the Flutter SDK lib aggregate, with `FLUTTER_SDK_MIN_LINES` maintained
+  directly in `tools/scripts/flutter-coverage-floor.sh`.
 
-Both floors may only be raised: when CI reports a higher real percentage, bump
-the matching baseline to lock it in. (The Rust floor scopes to `napaxi-core`
-rather than `--workspace` because the vendored `libsql-sqlite3-parser` build
-script breaks under `cargo llvm-cov`'s instrumented target dir, and the api
-boundary lives entirely in `napaxi-core`.)
+Both floors may only be raised: when CI reports a higher real percentage,
+update the matching checked-in minimum in the script to lock it in. (The Rust
+floor scopes to `napaxi-core` rather than `--workspace` because the vendored
+`libsql-sqlite3-parser` build script breaks under `cargo llvm-cov`'s
+instrumented target dir, and the api boundary lives entirely in
+`napaxi-core`.)
 
 ## Pull Request Expectations
 
