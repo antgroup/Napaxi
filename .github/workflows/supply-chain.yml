@@ -16,6 +16,7 @@ on:
       - '.github/workflows/supply-chain.yml'
   schedule:
     - cron: '17 4 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

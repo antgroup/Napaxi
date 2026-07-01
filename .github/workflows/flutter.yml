@@ -14,6 +14,7 @@ on:
       - 'examples/flutter/**'
       - 'packages/api_bridge/**'
       - '.github/workflows/flutter.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

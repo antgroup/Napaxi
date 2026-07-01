@@ -33,6 +33,7 @@ on:
       - 'tools/scripts/check-ios-flutter-parity.js'
       - 'tools/scripts/build.sh'
       - '.github/workflows/parity.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

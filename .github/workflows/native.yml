@@ -25,6 +25,7 @@ on:
       - 'Cargo.lock'
       - 'tools/scripts/build.sh'
       - '.github/workflows/native.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
