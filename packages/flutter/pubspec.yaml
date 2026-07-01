@@ -17,7 +17,7 @@ dependencies:
   flutter_contacts: ^2.0.0
   device_calendar: ^4.3.3
   image_picker: ^1.1.2
-  record: ^6.1.0
+  record: ">=6.1.0 <8.0.0"
   android_intent_plus: ^5.1.0
   crypto: ^3.0.7
   path: ^1.9.0
