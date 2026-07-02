@@ -196,6 +196,9 @@ class AppStrings {
     required this.updateUnknownError,
     required this.updateNoticeClose,
     required this.openInstallPage,
+    required this.openReleasePage,
+    required this.updateReleasePagePrompt,
+    required this.releasePageOpenFailed,
     required this.feedbackTitle,
     required this.feedbackContentLabel,
     required this.feedbackContentHint,
@@ -523,6 +526,9 @@ class AppStrings {
   final String updateUnknownError;
   final String updateNoticeClose;
   final String openInstallPage;
+  final String openReleasePage;
+  final String updateReleasePagePrompt;
+  final String releasePageOpenFailed;
   final String feedbackTitle;
   final String feedbackContentLabel;
   final String feedbackContentHint;
@@ -878,6 +884,10 @@ class AppStrings {
     updateUnknownError: 'Unknown error',
     updateNoticeClose: 'Got it',
     openInstallPage: 'Open Pgyer page',
+    openReleasePage: 'Open GitHub Releases',
+    updateReleasePagePrompt:
+        'This build does not support automatic in-app updates. Open GitHub Releases to download the latest package manually?',
+    releasePageOpenFailed: 'Could not open the GitHub Releases page.',
     feedbackTitle: 'Feedback',
     feedbackContentLabel: 'Issue',
     feedbackContentHint: 'Tell us what happened.',
@@ -1224,6 +1234,10 @@ class AppStrings {
     updateUnknownError: '未知错误',
     updateNoticeClose: '知道了',
     openInstallPage: '打开蒲公英页面',
+    openReleasePage: '打开 GitHub 发布页',
+    updateReleasePagePrompt:
+        '当前构建不支持自动应用内更新，是否前往 GitHub 发布页手动下载最新安装包？',
+    releasePageOpenFailed: '无法打开 GitHub 发布页。',
     feedbackTitle: '问题反馈',
     feedbackContentLabel: '问题描述',
     feedbackContentHint: '请描述遇到的问题。',

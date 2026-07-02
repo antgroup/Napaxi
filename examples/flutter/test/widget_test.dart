@@ -5799,6 +5799,34 @@ void main() {
     expect(find.text('Update available'), findsOneWidget);
   });
 
+  testWidgets('manual update check offers GitHub releases for self-built app', (
+    tester,
+  ) async {
+    final updates = FakeDemoUpdateService(
+      supportsExternalUpdatePage: true,
+      unconfigured: true,
+    );
+
+    await tester.pumpWidget(_testApp(updateService: updates));
+    await tester.pumpAndSettle();
+
+    await openAbout(tester);
+    await tester.tap(find.byKey(const Key('about_check_update_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'This build does not support automatic in-app updates. Open GitHub Releases to download the latest package manually?',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('confirm_open_release_page_button')));
+    await tester.pumpAndSettle();
+
+    expect(updates.openExternalPageCount, 1);
+  });
+
   testWidgets('update install keeps status visible until acknowledged', (
     tester,
   ) async {
@@ -5842,6 +5870,67 @@ void main() {
     expect(find.text('Update available'), findsOneWidget);
     expect(find.text('This update is required.'), findsOneWidget);
     expect(find.byKey(const Key('update_later_button')), findsNothing);
+  });
+
+  testWidgets('failed install can fall back to GitHub releases', (tester) async {
+    final updates = FakeDemoUpdateService(
+      supportsExternalUpdatePage: true,
+      installResult: const DemoUpdateInstallResult(
+        success: false,
+        message: 'Download failed.',
+      ),
+      update: const DemoUpdateInfo(
+        buildKey: 'build-6',
+        buildVersion: '0.0.6',
+        buildVersionNo: '6',
+        buildBuildVersion: 6,
+        needForceUpdate: false,
+        downloadUrl: 'https://example.com/app.apk',
+        appUrl: '',
+        updateDescription: 'Bug fixes and polish.',
+        fileSizeBytes: 12345678,
+      ),
+    );
+
+    await tester.pumpWidget(_testApp(updateService: updates));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('install_update_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('open_release_page_button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('open_release_page_button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'This build does not support automatic in-app updates. Open GitHub Releases to download the latest package manually?',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('failed install shows both Pgyer and GitHub fallback actions', (
+    tester,
+  ) async {
+    final updates = FakeDemoUpdateService(
+      supportsExternalUpdatePage: true,
+      installResult: const DemoUpdateInstallResult(
+        success: false,
+        message: 'Download failed.',
+      ),
+      update: demoUpdate,
+    );
+
+    await tester.pumpWidget(_testApp(updateService: updates));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('install_update_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('open_pgyer_install_page_button')), findsOneWidget);
+    expect(find.byKey(const Key('open_release_page_button')), findsOneWidget);
   });
 
   testWidgets('favorites and unfavorites chat attachments from the side menu', (
