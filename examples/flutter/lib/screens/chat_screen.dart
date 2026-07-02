@@ -1305,7 +1305,7 @@ class _ChatScreenState extends State<ChatScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(MaterialLocalizations.of(context).cancelButtonLabel),
+              child: Text(strings.cancel),
             ),
             FilledButton(
               key: const Key('confirm_open_release_page_button'),
