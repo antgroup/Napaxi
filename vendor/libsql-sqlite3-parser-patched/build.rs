@@ -15,32 +15,34 @@ fn main() -> Result<()> {
     let lemon_src_dir = Path::new("third_party").join("lemon");
     let rlemon_src = lemon_src_dir.join("lemon.c");
 
-    // compile rlemon:
+    let sql_parser = "src/parser/parse.y";
+    let mut generated_parser = false;
+
+    // Compile and run rlemon when the host toolchain supports it. Mobile
+    // release builds can run in constrained environments, so keep the vendored
+    // prebuilt parser as a deterministic fallback.
+    if let Ok(status) = Build::new()
+        .target(&env::var("HOST").unwrap())
+        .get_compiler()
+        .to_command()
+        .arg("-o")
+        .arg(rlemon.clone())
+        .arg(rlemon_src)
+        .status()
     {
-        assert!(Build::new()
-            .target(&env::var("HOST").unwrap())
-            .get_compiler()
-            .to_command()
-            .arg("-o")
-            .arg(rlemon.clone())
-            .arg(rlemon_src)
-            .status()?
-            .success());
+        if status.success() {
+            let status = Command::new(rlemon)
+                .arg("-DSQLITE_ENABLE_UPDATE_DELETE_LIMIT")
+                .arg("-Tthird_party/lemon/lempar.rs")
+                .arg(format!("-d{out_dir}"))
+                .arg(sql_parser)
+                .status()?;
+            generated_parser = status.success();
+        }
     }
 
-    let sql_parser = "src/parser/parse.y";
-    // run rlemon / generate parser:
-    {
-        let status = Command::new(rlemon)
-            .arg("-DSQLITE_ENABLE_UPDATE_DELETE_LIMIT")
-            .arg("-Tthird_party/lemon/lempar.rs")
-            .arg(format!("-d{out_dir}"))
-            .arg(sql_parser)
-            .status()?;
-        if !status.success() {
-            copy_prebuilt_parser(out_path)?;
-        }
-        // TODO ./rlemon -m -Tthird_party/lemon/lempar.rs examples/simple.y
+    if !generated_parser {
+        copy_prebuilt_parser(out_path)?;
     }
 
     let keywords = out_path.join("keywords.rs");
@@ -215,8 +217,6 @@ fn main() -> Result<()> {
 
 fn copy_prebuilt_parser(out_path: &Path) -> Result<()> {
     let generated_dir = Path::new("generated");
-    for file_name in ["parse.rs", "parse.h"] {
-        fs::copy(generated_dir.join(file_name), out_path.join(file_name))?;
-    }
+    fs::copy(generated_dir.join("parse.rs"), out_path.join("parse.rs"))?;
     Ok(())
 }

@@ -32,9 +32,11 @@ without it, the `libsql` patch would not compile.
 
 ### Cargo.toml / build system
 
-- **No** source-level deviations from upstream. The `Cargo.toml` is the
-  cargo-normalized form; `Cargo.toml.orig` is the original.
-- The `CMakeLists.txt` and `build.rs` are present as distributed by upstream.
+- `Cargo.toml` is the cargo-normalized form; `Cargo.toml.orig` is the original.
+- `build.rs` keeps the upstream lemon generation path, but falls back to the
+  vendored `generated/parse.rs` when the host-side lemon compiler cannot be
+  built or executed. This keeps mobile SDK release builds deterministic on
+  constrained macOS/CI hosts.
 
 If a future mobile-specific source patch becomes necessary, add a numbered
 entry here in the same shape as the `libsql-patched/NAPAXI-PATCH.md` convention
