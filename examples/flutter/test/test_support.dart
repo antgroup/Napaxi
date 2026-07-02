@@ -1855,6 +1855,12 @@ class FakeDemoUpdateService implements DemoUpdateService {
     this.update,
     this.noUpdateMessage,
     this.supportsUpdateCheck = true,
+    this.supportsExternalUpdatePage = false,
+    this.unconfigured = false,
+    this.installResult = const DemoUpdateInstallResult(
+      success: true,
+      installerOpened: true,
+    ),
   });
 
   DemoAppVersion version;
@@ -1862,11 +1868,16 @@ class FakeDemoUpdateService implements DemoUpdateService {
   String? noUpdateMessage;
   @override
   final bool supportsUpdateCheck;
+  @override
+  final bool supportsExternalUpdatePage;
+  final bool unconfigured;
+  DemoUpdateInstallResult installResult;
   String? skippedIdentity;
   var checkCount = 0;
   var skipCount = 0;
   var installCount = 0;
   var openPageCount = 0;
+  var openExternalPageCount = 0;
   final respectSkippedValues = <bool>[];
 
   @override
@@ -1883,6 +1894,7 @@ class FakeDemoUpdateService implements DemoUpdateService {
       return DemoUpdateCheckResult(
         currentVersion: version,
         message: noUpdateMessage,
+        unconfigured: unconfigured,
       );
     }
     if (respectSkippedVersion &&
@@ -1913,12 +1925,18 @@ class FakeDemoUpdateService implements DemoUpdateService {
   }) async {
     installCount += 1;
     onProgress?.call(100, 100);
-    return const DemoUpdateInstallResult(success: true, installerOpened: true);
+    return installResult;
   }
 
   @override
   Future<bool> openInstallPage(DemoUpdateInfo update) async {
     openPageCount += 1;
+    return true;
+  }
+
+  @override
+  Future<bool> openExternalUpdatePage() async {
+    openExternalPageCount += 1;
     return true;
   }
 }

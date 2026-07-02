@@ -113,6 +113,7 @@ class DemoUpdateInstallResult {
 
 abstract class DemoUpdateService {
   bool get supportsUpdateCheck;
+  bool get supportsExternalUpdatePage;
 
   Future<DemoAppVersion> currentVersion();
 
@@ -128,6 +129,7 @@ abstract class DemoUpdateService {
   });
 
   Future<bool> openInstallPage(DemoUpdateInfo update);
+  Future<bool> openExternalUpdatePage();
 }
 
 class PgyerDemoUpdateService implements DemoUpdateService {
@@ -139,6 +141,10 @@ class PgyerDemoUpdateService implements DemoUpdateService {
   static const _appKey = String.fromEnvironment('PGYER_APP_KEY');
   static const _channelKey = String.fromEnvironment('PGYER_CHANNEL_KEY');
   static const _buildPassword = String.fromEnvironment('PGYER_BUILD_PASSWORD');
+  static const _githubReleasesUrl = String.fromEnvironment(
+    'GITHUB_RELEASES_URL',
+    defaultValue: 'https://github.com/antgroup/Napaxi/releases',
+  );
   static const _skippedBuildKey = 'napaxi.pgyer.skipped_build_key.v1';
   static const _requestTimeout = Duration(seconds: 15);
   static const _downloadChunkTimeout = Duration(seconds: 15);
@@ -152,6 +158,10 @@ class PgyerDemoUpdateService implements DemoUpdateService {
 
   @override
   bool get supportsUpdateCheck => Platform.isAndroid;
+
+  @override
+  bool get supportsExternalUpdatePage =>
+      Platform.isAndroid && _externalUpdateUri != null;
 
   @override
   Future<DemoAppVersion> currentVersion() async {
@@ -168,22 +178,22 @@ class PgyerDemoUpdateService implements DemoUpdateService {
   Future<DemoUpdateCheckResult> checkForUpdate({
     required bool respectSkippedVersion,
   }) async {
+    final version = await currentVersion();
     if (!Platform.isAndroid) {
-      return const DemoUpdateCheckResult(
-        currentVersion: DemoAppVersion(version: 'unknown', buildNumber: ''),
+      return DemoUpdateCheckResult(
+        currentVersion: version,
         unsupported: true,
         message: 'Update checking is only supported on Android.',
       );
     }
     if (!_isConfigured) {
-      return const DemoUpdateCheckResult(
-        currentVersion: DemoAppVersion(version: 'unknown', buildNumber: ''),
+      return DemoUpdateCheckResult(
+        currentVersion: version,
         unconfigured: true,
         message: 'Pgyer update checking is not configured.',
       );
     }
 
-    final version = await currentVersion();
     final buildNumber = int.tryParse(version.buildNumber);
     final body = <String, String>{
       '_api_key': _apiKey,
@@ -327,6 +337,17 @@ class PgyerDemoUpdateService implements DemoUpdateService {
     }
   }
 
+  @override
+  Future<bool> openExternalUpdatePage() async {
+    final uri = _externalUpdateUri;
+    if (uri == null) return false;
+    try {
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<String?> _loadSkippedBuildKey() async {
     final preferences = await _loadPreferences();
     return preferences.getString(_skippedBuildKey);
@@ -356,5 +377,11 @@ class PgyerDemoUpdateService implements DemoUpdateService {
           },
         )
         .toString();
+  }
+
+  Uri? get _externalUpdateUri {
+    final trimmed = _githubReleasesUrl.trim();
+    if (trimmed.isEmpty) return null;
+    return Uri.tryParse(trimmed);
   }
 }
