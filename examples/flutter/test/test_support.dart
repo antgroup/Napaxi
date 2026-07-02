@@ -1851,7 +1851,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
 
 class FakeDemoUpdateService implements DemoUpdateService {
   FakeDemoUpdateService({
-    this.version = const DemoAppVersion(version: '0.0.13', buildNumber: '13'),
+    this.version = const DemoAppVersion(version: '0.1.0', buildNumber: '14'),
     this.update,
     this.noUpdateMessage,
     this.supportsUpdateCheck = true,

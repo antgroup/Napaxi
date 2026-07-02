@@ -5665,7 +5665,7 @@ void main() {
     expect(find.text('About'), findsOneWidget);
     expect(find.text('Current version'), findsOneWidget);
     expect(find.byKey(const Key('about_current_version')), findsOneWidget);
-    expect(find.text('0.0.13+13'), findsOneWidget);
+    expect(find.text('0.1.0+14'), findsOneWidget);
     expect(find.byKey(const Key('about_check_update_button')), findsOneWidget);
   });
 
@@ -5681,7 +5681,7 @@ void main() {
 
     expect(find.text('About'), findsOneWidget);
     expect(find.text('Current version'), findsOneWidget);
-    expect(find.text('0.0.13+13'), findsOneWidget);
+    expect(find.text('0.1.0+14'), findsOneWidget);
     expect(find.byKey(const Key('about_check_update_button')), findsNothing);
   });
 
@@ -5736,7 +5736,7 @@ void main() {
       'The update installer page was confusing.',
     );
     expect(feedback.submittedRequest?.contact, 'tester@example.com');
-    expect(feedback.submittedRequest?.appVersion.display, '0.0.13+13');
+    expect(feedback.submittedRequest?.appVersion.display, '0.1.0+14');
     expect(find.text('Feedback submitted.'), findsOneWidget);
   });
 
