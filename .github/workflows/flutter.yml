@@ -1,0 +1,65 @@
+name: flutter
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'packages/flutter/**'
+      - 'examples/flutter/**'
+      - 'packages/api_bridge/**'
+      - '.github/workflows/flutter.yml'
+  pull_request:
+    paths:
+      - 'packages/flutter/**'
+      - 'examples/flutter/**'
+      - 'packages/api_bridge/**'
+      - '.github/workflows/flutter.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.41.x'
+          channel: stable
+          cache: true
+
+      - name: flutter analyze (packages/flutter)
+        working-directory: packages/flutter
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: flutter test (packages/flutter)
+        working-directory: packages/flutter
+        run: flutter test
+
+  demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.41.x'
+          channel: stable
+          cache: true
+
+      - name: flutter analyze (examples/flutter)
+        working-directory: examples/flutter
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: flutter test (examples/flutter)
+        working-directory: examples/flutter
+        run: flutter test

@@ -1,0 +1,53 @@
+[package]
+name = "napaxi_evolution"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.92"
+authors = ["Napaxi Contributors"]
+description = "Skill and memory evolution module for Napaxi."
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/napaxi/napaxi"
+repository = "https://github.com/napaxi/napaxi"
+readme = "../../../README.md"
+keywords = ["napaxi", "agent", "skill", "memory", "evolution"]
+categories = ["api-bindings"]
+
+[package.metadata.dist]
+dist = false
+
+[features]
+default = ["registry"]
+registry = ["napaxi_skills/registry"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# Napaxi internal dependency
+napaxi_skills = { package = "napaxi_skills", path = "../skills", default-features = false }
+
+# 异步
+async-trait = "0.1"
+tokio = { version = "1", features = ["sync", "time", "fs", "rt-multi-thread", "io-util", "macros"] }
+
+# 序列化
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+schemars = "0.8"
+
+# 安全
+sha2 = "0.10"
+
+# 工具
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+regex = "1"
+thiserror = "1.0"
+tracing = "0.1"
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3.9"
+tokio-test = "0.4"
+mockall = "0.12"

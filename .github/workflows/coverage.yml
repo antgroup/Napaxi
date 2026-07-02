@@ -1,0 +1,81 @@
+name: coverage
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.92
+        with:
+          components: llvm-tools-preview
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov --locked
+
+      # Coverage scoped to napaxi-core, where both floors (api boundary + whole
+      # src) live. cargo-llvm-cov still compiles the full dependency graph,
+      # including the vendored libsql-sqlite3-parser whose build script compiles
+      # and runs a generated `rlemon` tool. If that build ever fails under
+      # instrumentation on the runner, the fix is to exclude libsql from
+      # instrumentation (e.g. CARGO_LLVM_COV ignore flags), not to drop the gate.
+      - name: cargo llvm-cov (napaxi-core, lcov)
+        run: cargo llvm-cov --package napaxi-core --no-fail-fast --lcov --output-path lcov.info
+
+      - name: Enforce core coverage floors (api boundary + whole src)
+        run: ./tools/scripts/coverage-floor.sh lcov.info
+
+      - name: cargo llvm-cov summary
+        run: cargo llvm-cov --package napaxi-core report
+
+      - name: Upload Rust lcov
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-lcov
+          path: lcov.info
+
+  flutter-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.41.x'
+          channel: stable
+          cache: true
+
+      - name: flutter test --coverage (packages/flutter)
+        working-directory: packages/flutter
+        run: flutter test --coverage
+
+      - name: Enforce Flutter SDK coverage floor
+        run: ./tools/scripts/flutter-coverage-floor.sh packages/flutter/coverage/lcov.info
+
+      - name: Upload Flutter lcov
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-lcov
+          path: packages/flutter/coverage/lcov.info

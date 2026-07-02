@@ -1,0 +1,46 @@
+version: 1
+result_envelope:
+  success:
+    shape:
+      ok: true
+      data: any
+  failure:
+    shape:
+      ok: false
+      error:
+        code: string
+        message: string
+        details: object_optional
+  notes:
+    - New bridge methods should return this envelope or a stream of events that
+      carries the same error object when a terminal failure occurs.
+    - Legacy bridge methods may keep bool, zero-handle, empty-string, or raw JSON
+      fallbacks only when labelled compat.
+    - Typed SDK facades should convert this envelope into platform-native result
+      or exception types without losing error.code.
+error_codes:
+  invalid_handle:
+    meaning: Engine or resource handle is missing, disposed, or unknown.
+  invalid_argument:
+    meaning: Payload failed validation before reaching runtime behavior.
+  config_error:
+    meaning: LLM or engine configuration is invalid or incomplete.
+  storage_error:
+    meaning: Workspace, DB, or persisted resource operation failed.
+  capability_denied:
+    meaning: Capability admission rejected a tool, provider, or platform action.
+  unsupported_platform:
+    meaning: Adapter or host platform cannot provide the requested capability.
+  cancelled:
+    meaning: Operation was cancelled by caller, host, or runtime policy.
+  provider_rate_limit:
+    meaning: >
+      Provider returned HTTP 429 or equivalent rate-limit signal.
+      Transient; retry after backoff.
+  provider_quota_exhausted:
+    meaning: >
+      Provider rejected the request due to exhausted quota, billing issue,
+      or invalid subscription. User action required (top up balance, check
+      API key, verify subscription).
+  internal_error:
+    meaning: Unexpected bridge or core failure; should be logged with context.

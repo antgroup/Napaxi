@@ -1,0 +1,105 @@
+name: docs-publish
+
+# Builds the browsable API reference — rustdoc for `napaxi-core` plus dartdoc for
+# the Flutter SDK. It publishes to GitHub Pages from `main`/`master` once the
+# repository Pages source is configured for GitHub Actions. Pull requests always
+# build only.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'packages/flutter/**'
+      - '.github/workflows/docs-publish.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.92
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.41.x'
+          channel: stable
+          cache: true
+
+      # rustdoc -> site/core/
+      - name: Build rustdoc
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --no-deps -p napaxi-core
+
+      # dartdoc -> site/flutter/
+      - name: Build dartdoc
+        working-directory: packages/flutter
+        run: |
+          flutter pub get
+          dart doc --output ../../target/dartdoc
+
+      - name: Assemble Pages site
+        run: |
+          mkdir -p site/core site/flutter
+          cp -r target/doc/* site/core/
+          cp -r target/dartdoc/* site/flutter/
+          # Landing page links the two API references.
+          cat > site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Napaxi API Reference</title>
+            <style>
+              body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.6; }
+              a { color: #2563eb; }
+              li { margin: .5rem 0; }
+            </style>
+          </head>
+          <body>
+            <h1>Napaxi API Reference</h1>
+            <p>Generated API documentation for the Napaxi mobile-native agent SDK.</p>
+            <ul>
+              <li><a href="core/napaxi_core/index.html">Rust core (<code>napaxi-core</code>) — rustdoc</a></li>
+              <li><a href="flutter/index.html">Flutter SDK — dartdoc</a></li>
+            </ul>
+          </body>
+          </html>
+          HTML
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5.0.0

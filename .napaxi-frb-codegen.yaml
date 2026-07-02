@@ -1,0 +1,8 @@
+rust_input: crate::bridge
+rust_root: packages/api_bridge
+rust_output: packages/api_bridge/src/generated/frb_generated.rs
+dart_output: packages/flutter/lib/generated
+c_output: packages/flutter/ios/Classes/frb_generated.h
+dart_format: false
+dart_fix: false
+rust_format: false

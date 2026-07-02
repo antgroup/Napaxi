@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "path": "MEMORY.md",
+      "isDirectory": false,
+      "updatedAt": "2026-06-04T10:15:30Z",
+      "preview": "User prefers concise status summaries.",
+      "adapter_unknown": "preserve-me"
+    },
+    {
+      "path": "daily",
+      "is_directory": true,
+      "updated_at": "2026-06-04T09:00:00Z",
+      "adapter_unknown": "preserve-me-too"
+    }
+  ]
+}

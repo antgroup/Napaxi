@@ -1,0 +1,18 @@
+[advisories]
+ignore = [
+    # Dev-only test dependency: httpmock -> async-object-pool -> async-std.
+    # It is not linked into runtime or release artifacts. Replace the mock
+    # server dependency before removing this exception.
+    "RUSTSEC-2025-0052",
+
+    # Vendored libsql 0.6 dependency chain. Napaxi currently carries a patched
+    # libsql fork for local recall storage; upstream still pins bincode 1 and
+    # the older rustls 0.22 TLS stack. Revisit when libsql is updated or
+    # replaced.
+    "RUSTSEC-2025-0141",
+    "RUSTSEC-2025-0134",
+    "RUSTSEC-2026-0049",
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+]

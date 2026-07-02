@@ -1,0 +1,243 @@
+[
+  {
+    "description": "Only open an absolute http:// or https:// URL in the persistent visible in-app browser session. Defaults to mobile browser mode, using the app WebView's normal mobile profile. Reuses the current page when the URL and browser mode already match unless force_reload is true. Never use this for file:// URLs, local filesystem paths, workspace paths, sandbox paths, generated HTML files, or files you just created; use file tools or the generated attachment instead.",
+    "effect": "external",
+    "name": "browser_open",
+    "parameters": {
+      "properties": {
+        "force_reload": {
+          "description": "Reload even when the current URL already matches.",
+          "type": "boolean"
+        },
+        "mode": {
+          "description": "Browser rendering profile. Defaults to mobile. Use desktop only when the user asks for a desktop page or a mobile page is blocked/limited.",
+          "enum": [
+            "desktop",
+            "mobile"
+          ],
+          "type": "string"
+        },
+        "url": {
+          "description": "Absolute http:// or https:// URL to open. Do not pass file:// URLs, local paths, workspace paths, sandbox paths, generated HTML files, or files you just created.",
+          "pattern": "^https?://",
+          "type": "string"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Read the current visible browser page state. Returns browser_mode, user_agent, page_state, viewport_map, page_change_token, backend_capabilities, optional screenshot metadata, and last_action_effect. Use viewport_map when DOM text is incomplete: it contains visible text blocks, clickable element positions, overlays, bbox, center points, nearby text, action hints, and diagnostics. If screenshot metadata is present and image_analyze is available, analyze the screenshot for visual understanding; otherwise use the JSON state and do not claim visual inspection.",
+    "effect": "read",
+    "name": "browser_snapshot",
+    "parameters": {
+      "properties": {
+        "screenshot_mode": {
+          "description": "Optional screenshot capture preference. Defaults to auto. Screenshots are an optional visual aid; the JSON viewport_map is the non-visual fallback.",
+          "enum": [
+            "auto",
+            "never",
+            "always"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "description": "Click an element in the current browser page. Prefer element_id from the latest browser_snapshot page_state. Legacy index, CSS selector, visible text, and accessibility label are still accepted; text/label clicks may use a visible text ancestor fallback for dynamic JavaScript components. For high-confidence viewport_map targets, click_point may be used as a coordinate fallback. The host verifies the click effect and may perform one safe recovery retry; failures include structured failure_code values such as no_effect_after_click, obscured, site_restricted, login_required, and target_unstable.",
+    "effect": "external",
+    "name": "browser_click",
+    "parameters": {
+      "properties": {
+        "click_point": {
+          "description": "High-confidence viewport coordinate fallback from viewport_map center/clickable_point. Prefer element_id when possible.",
+          "properties": {
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        "element_id": {
+          "description": "Stable element id from browser_snapshot page_state.elements. Preferred target.",
+          "type": "string"
+        },
+        "index": {
+          "description": "Legacy element index from browser_snapshot interactive elements.",
+          "type": "integer"
+        },
+        "label": {
+          "description": "Accessible label, aria-label, placeholder, or title for the element to click.",
+          "type": "string"
+        },
+        "selector": {
+          "description": "CSS selector for the element to click.",
+          "type": "string"
+        },
+        "text": {
+          "description": "Visible text contained by the element to click.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "description": "Type text into an input or editable element in the current browser page. Prefer element_id from the latest browser_snapshot page_state.",
+    "effect": "external",
+    "name": "browser_type",
+    "parameters": {
+      "properties": {
+        "clear_first": {
+          "description": "Clear existing field value before typing. Defaults to true.",
+          "type": "boolean"
+        },
+        "element_id": {
+          "description": "Stable element id from browser_snapshot page_state.elements. Preferred target.",
+          "type": "string"
+        },
+        "index": {
+          "description": "Legacy element index from browser_snapshot interactive elements.",
+          "type": "integer"
+        },
+        "label": {
+          "description": "Accessible label, aria-label, placeholder, or title for the editable element.",
+          "type": "string"
+        },
+        "selector": {
+          "description": "CSS selector for the editable element.",
+          "type": "string"
+        },
+        "submit": {
+          "description": "Submit/press Enter after typing. Requires approval for high-risk flows.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "Text to enter.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Scroll the current browser page.",
+    "effect": "external",
+    "name": "browser_scroll",
+    "parameters": {
+      "properties": {
+        "amount": {
+          "description": "Approximate scroll amount in pixels. Defaults to 700.",
+          "type": "integer"
+        },
+        "direction": {
+          "description": "Scroll direction. Defaults to down.",
+          "enum": [
+            "up",
+            "down",
+            "left",
+            "right"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "description": "Wait for the browser page to load, settle, or contain expected text. When scroll_to_text is true, the host may scroll the text into view.",
+    "effect": "read",
+    "name": "browser_wait",
+    "parameters": {
+      "properties": {
+        "milliseconds": {
+          "description": "Maximum wait duration in milliseconds. Defaults to 1000.",
+          "maximum": 30000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scroll_to_text": {
+          "description": "If text is provided, scroll the first matching text into view when possible.",
+          "type": "boolean"
+        },
+        "text": {
+          "description": "Optional visible text to wait for.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "description": "Find visible text on the current page and scroll the first match into view.",
+    "effect": "read",
+    "name": "browser_find_text",
+    "parameters": {
+      "properties": {
+        "text": {
+          "description": "Text to find and bring into view.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Send simple keyboard keys to the focused browser element. Supported keys are Enter, Escape, Tab, ArrowUp, ArrowDown, ArrowLeft, and ArrowRight.",
+    "effect": "external",
+    "name": "browser_keys",
+    "parameters": {
+      "properties": {
+        "keys": {
+          "description": "Key name or plus-separated key sequence such as Enter, Escape, Tab, ArrowDown.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "keys"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "description": "Navigate the persistent browser session back if possible.",
+    "effect": "external",
+    "name": "browser_back",
+    "parameters": {
+      "properties": {},
+      "type": "object"
+    }
+  },
+  {
+    "description": "Close or clear the persistent browser session. Hiding the UI does not call this tool.",
+    "effect": "external",
+    "name": "browser_close",
+    "parameters": {
+      "properties": {
+        "clear_storage": {
+          "description": "Clear browser cookies and local storage for this app WebView session.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  }
+]

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Allow cleartext HTTP only to the local loopback so the in-app WebView can
+     reach servers (e.g. `python3 -m http.server`) started inside the sandbox,
+     which shares the app's network namespace. Cleartext remains denied for all
+     other hosts (the Android 9+ default). -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

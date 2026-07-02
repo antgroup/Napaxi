@@ -1,0 +1,97 @@
+// Napaxi SDK - Android build configuration
+// Uses cargo-ndk to cross-compile Rust code for Android targets.
+
+group 'com.napaxi.flutter'
+version '1.0'
+
+apply plugin: 'com.android.library'
+// Built-in Kotlin migration (supporting Flutter < 3.44): apply KGP only on
+// AGP < 9, where Kotlin support is not yet built in. On AGP 9.0+ the Kotlin
+// plugin is provided automatically, so applying it would fail.
+def agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.tokenize('.')[0] as int
+if (agpMajor < 9) {
+    apply plugin: 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.napaxi.flutter'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 26
+        targetSdk 35
+    }
+
+    buildFeatures {
+        aidl true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src/main/kotlin']
+            aidl.srcDirs = ['src/main/aidl']
+            res.srcDirs = ['res']
+            assets.srcDirs = ['assets']
+            jniLibs.srcDirs = ['jniLibs']
+        }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    compileOnly 'androidx.core:core:1.13.0'
+}
+
+task verifySdkNativeInputs {
+    doLast {
+        def androidMain = file("${project.projectDir}")
+        def requiredFiles = [
+            file("${androidMain}/assets/alpine-rootfs.bin"),
+            file("${androidMain}/assets/libtalloc.so.2"),
+            file("${androidMain}/jniLibs/arm64-v8a/libproot.so"),
+            file("${androidMain}/jniLibs/arm64-v8a/libldmusl.so"),
+            file("${androidMain}/jniLibs/arm64-v8a/libloader.so"),
+        ]
+        requiredFiles.each { requiredFile ->
+            if (!requiredFile.exists()) {
+                throw new GradleException("Missing Napaxi SDK platform runtime asset: ${requiredFile}")
+            }
+        }
+    }
+}
+
+// Rust cross-compilation task
+// Builds libnapaxi_api_bridge.so for Android targets using the repository build script.
+// Skipped when pre-built .so already exists; run tools/scripts/build.sh to rebuild.
+task buildRust(type: Exec) {
+    def soFile = file("${project.projectDir}/jniLibs/arm64-v8a/libnapaxi_api_bridge.so")
+    onlyIf { !soFile.exists() }
+    dependsOn verifySdkNativeInputs
+    def repoRoot = file("${project.projectDir}/../../..")
+    workingDir repoRoot
+    commandLine "${repoRoot}/tools/scripts/build.sh", "fast", "android"
+}
+
+task verifySdkNativeOutputs {
+    dependsOn buildRust
+    doLast {
+        def soFile = file("${project.projectDir}/jniLibs/arm64-v8a/libnapaxi_api_bridge.so")
+        if (!soFile.exists()) {
+            throw new GradleException("Missing Napaxi SDK Android library: ${soFile}")
+        }
+    }
+}
+
+// Hook into Android build
+preBuild.dependsOn verifySdkNativeOutputs

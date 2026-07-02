@@ -1,0 +1,6 @@
+# flutter_rust_bridge v2 configuration
+rust_input: crate::bridge
+rust_root: packages/api_bridge
+rust_output: packages/api_bridge/generated/frb_generated.rs
+dart_output: packages/flutter/lib/generated
+c_output: packages/flutter/ios/Classes/frb_generated.h

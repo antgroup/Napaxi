@@ -1,0 +1,9 @@
+data: {"id":"chatcmpl-3","choices":[{"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_search_1","type":"function","function":{"name":"search","arguments":""}},{"index":1,"id":"call_fetch_2","type":"function","function":{"name":"fetch","arguments":""}}]}}]}
+
+data: {"id":"chatcmpl-3","choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"q\":\"a\"}"}}]}}]}
+
+data: {"id":"chatcmpl-3","choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"{\"u\":\"b\"}"}}]}}]}
+
+data: {"id":"chatcmpl-3","choices":[{"delta":{},"finish_reason":"tool_calls"}]}
+
+data: [DONE]

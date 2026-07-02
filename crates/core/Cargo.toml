@@ -1,0 +1,130 @@
+[package]
+name = "napaxi-core"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.92"
+authors = ["Napaxi Contributors"]
+description = "Mobile-native runtime kernel and adapter-facing API for the Napaxi agent SDK."
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/napaxi/napaxi"
+repository = "https://github.com/napaxi/napaxi"
+readme = "../../README.md"
+keywords = ["napaxi", "agent", "mobile", "sdk", "llm"]
+categories = ["api-bindings", "asynchronous"]
+
+[package.metadata.dist]
+dist = false
+
+[lib]
+name = "napaxi_core"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+# 使用 features 来控制可选功能
+[features]
+default = ["mobile-api", "libsql"]
+libsql = ["dep:libsql"]
+mobile-api = []
+
+[lints]
+workspace = true
+
+[dependencies]
+# ============================================================================
+# Async runtime
+# ============================================================================
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+futures = "0.3"
+bytes = "1"
+async-trait = "0.1"
+napaxi_skills = { package = "napaxi_skills", path = "../features/skills" }
+
+# ============================================================================
+# HTTP client
+# ============================================================================
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls", "stream", "gzip", "brotli", "deflate"] }
+
+# ============================================================================
+# Event stream (for LLM)
+# ============================================================================
+eventsource-stream = "0.2"
+
+# ============================================================================
+# Serialization
+# ============================================================================
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+yaml_serde = "0.10"
+
+# ============================================================================
+# Embedded database
+# ============================================================================
+libsql = { version = "0.6", optional = true, default-features = false, features = ["core", "replication", "remote", "tls"] }
+
+# ============================================================================
+# Error handling & Logging
+# ============================================================================
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+log = { version = "0.4"}
+
+# ============================================================================
+# Core types
+# ============================================================================
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+
+# ============================================================================
+# Napaxi internal crates
+# ============================================================================
+napaxi_evolution = { package = "napaxi_evolution", path = "../features/evolution", default-features = false }
+
+# ============================================================================
+# URL encoding
+# ============================================================================
+urlencoding = "2"
+
+# ============================================================================
+# Cryptography
+# ============================================================================
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+ring = "0.17.14"
+# Constant-time equality for HMAC signature verification. Already in the tree
+# transitively (via rustls); declared directly so the audited primitive backs
+# `crate::crypto::constant_time_eq` instead of a hand-rolled loop.
+subtle = "2"
+
+# ============================================================================
+# Document extraction
+# ============================================================================
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = "0.4"
+
+# ============================================================================
+# Utilities
+# ============================================================================
+regex = "1"
+
+# Android-specific dependencies
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+# ============================================================================
+# Dev dependencies (for tests)
+# ============================================================================
+[dev-dependencies]
+tempfile = "3"
+tokio-test = "0.4"
+tracing-test = "0.2"
+httpmock = "0.7"
+proptest = "1"
+criterion = { version = "0.5", default-features = false, features = ["html_reports"] }
+
+[[bench]]
+name = "core_hot_path"
+harness = false

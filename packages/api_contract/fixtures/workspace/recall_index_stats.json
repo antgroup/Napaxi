@@ -1,0 +1,12 @@
+{
+  "status": "ready",
+  "db_path": "/workspace/.napaxi/recall.db",
+  "schema_version": 1,
+  "indexed_docs": 12,
+  "memory_docs": 3,
+  "journal_docs": 8,
+  "legacy_daily_docs": 1,
+  "cached_summaries": 2,
+  "last_rebuild_at": "2026-06-04T10:20:00Z",
+  "adapter_unknown": "preserve-stats"
+}

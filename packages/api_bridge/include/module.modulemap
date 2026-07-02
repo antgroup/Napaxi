@@ -1,0 +1,4 @@
+module NapaxiApiBridge {
+  header "napaxi_api_bridge.h"
+  export *
+}

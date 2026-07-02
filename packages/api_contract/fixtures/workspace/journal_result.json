@@ -1,0 +1,24 @@
+{
+  "days": [
+    {
+      "date": "2026-06-04",
+      "path": "daily/2026-06-04.md",
+      "turn_count": 4,
+      "updated_at": "2026-06-04T10:20:00Z",
+      "legacy": false,
+      "adapter_unknown": "preserve-day"
+    }
+  ],
+  "turns": [
+    {
+      "turn_id": "turn-456",
+      "created_at": "2026-06-04T09:30:00Z",
+      "agent_id": "napaxi",
+      "thread_id": "thread-123",
+      "user": "Set a packages goal.",
+      "assistant": "Use contract-first workspace vertical slice.",
+      "kind": "turn",
+      "adapter_unknown": "preserve-turn"
+    }
+  ]
+}

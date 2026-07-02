@@ -1,0 +1,15 @@
+{
+  "results": [
+    {
+      "source": "memory",
+      "path": "MEMORY.md",
+      "content": "User prefers concise status summaries.",
+      "score": 0.92,
+      "is_hybrid_match": true,
+      "thread_id": "thread-123",
+      "turn_id": "turn-456",
+      "created_at": "2026-06-04T09:30:00Z",
+      "adapter_unknown": "preserve-search"
+    }
+  ]
+}

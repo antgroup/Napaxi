@@ -1,0 +1,138 @@
+name: native
+
+# Cross-compiles the Napaxi native SDK for the mobile targets so a break in the
+# Android (.so) or iOS (xcframework) build surfaces in CI instead of only on a
+# developer's machine. Scope is "does the native artifact compile and link" —
+# we do not assemble an APK, code-sign, or boot a simulator here.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'crates/**'
+      - 'packages/api_bridge/**'
+      - 'packages/android/**'
+      - 'packages/agent_provider/android/**'
+      - 'vendor/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools/scripts/build.sh'
+      - '.github/workflows/native.yml'
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'packages/api_bridge/**'
+      - 'packages/android/**'
+      - 'packages/agent_provider/android/**'
+      - 'vendor/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'tools/scripts/build.sh'
+      - '.github/workflows/native.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # The Android sandbox runtime assets (alpine rootfs, PRoot, musl loader)
+      # are committed via Git LFS; build.sh asserts they exist, so the checkout
+      # must materialize them.
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - uses: dtolnay/rust-toolchain@1.92
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install Android Rust target
+        run: rustup target add aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      # Provides $ANDROID_NDK_HOME, which detect_android_ndk() picks up.
+      - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - name: Build Android SDK (.so)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: ./tools/scripts/build.sh fast android
+
+      - name: Assert .so artifact
+        run: test -f packages/flutter/android/jniLibs/arm64-v8a/libnapaxi_api_bridge.so
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14.3
+
+      # Run the Android adapter JVM unit tests (src/test, junit). Keep this job
+      # focused on the native adapter and the freshly-built .so; repository-wide
+      # Flutter/demo parity guards live in the dedicated parity/check jobs.
+      - name: Android adapter unit tests
+        working-directory: packages/android
+        run: |
+          gradle testDebugUnitTest --no-daemon --stacktrace \
+            --tests com.napaxi.android.A2APairingTest \
+            --tests com.napaxi.android.AgentProviderHostProtocolTest \
+            --tests com.napaxi.android.BackgroundTest \
+            --tests com.napaxi.android.ChatEventContractTest \
+            --tests com.napaxi.android.ConfigStoreTest \
+            --tests com.napaxi.android.ModelsTest \
+            --tests com.napaxi.android.RuntimeContractTest \
+            --tests com.napaxi.android.ToolingTest
+
+  # iOS needs xcodebuild, so it runs on a macOS runner. The workflow-level path
+  # filters keep it scoped to native changes while still validating main/master
+  # pushes, pull requests, and manual dispatches.
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.92
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+
+      - name: Install iOS Rust targets
+        run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Build iOS SDK (xcframework)
+        run: ./tools/scripts/build.sh fast ios
+
+      - name: Assert xcframework artifact
+        run: test -d packages/flutter/ios/Frameworks/napaxi_api_bridge.xcframework
+
+      # Compile the iOS Swift adapter tests against the freshly-built
+      # xcframework. The cross-compiled iOS triple cannot execute on the runner
+      # (no booted simulator here), but `swift build --build-tests` type-checks
+      # the 27 XCTest cases, catching adapter API breaks and codec/contract
+      # drift (e.g. NapaxiA2AInvite) that the parity script can't see.
+      - name: iOS adapter test build (type-check)
+        run: ./tools/scripts/build.sh check-ios-native

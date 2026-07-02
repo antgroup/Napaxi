@@ -1,0 +1,60 @@
+// Stable Napaxi Flutter adapter API.
+//
+// Provides full AI Agent capabilities without UI convenience storage.
+// See NapaxiEngine for the main entry point.
+
+export 'engine.dart';
+export 'platform_context.dart';
+export 'agent_engine.dart';
+export 'mcp.dart';
+export 'apk_installer.dart';
+export 'browser_controller.dart';
+export 'browser_surface.dart';
+export 'api/agent_api.dart';
+export 'api/a2a_api.dart';
+export 'api/a2a_invite.dart';
+export 'api/a2a_local_pairing_session.dart';
+export 'api/a2a_local_pairing_store.dart';
+export 'api/automation_api.dart';
+export 'api/background_api.dart';
+export 'api/capability_api.dart';
+export 'api/channel_api.dart';
+export 'api/channel_agent_bridge.dart';
+export 'api/channel_provider_host.dart';
+export 'convenience/channel_bluetooth_headset_provider.dart';
+export 'convenience/channel_qqbot_provider.dart';
+export 'api/chat_api.dart';
+export 'api/evolution_api.dart';
+export 'api/group_api.dart';
+export 'api/session_api.dart';
+export 'api/session_run_api.dart';
+export 'api/skill_api.dart';
+export 'api/agent_app_api.dart';
+export 'api/agent_provider_install_api.dart';
+export 'api/agent_provider_trigger_api.dart';
+export 'api/tool_api.dart';
+export 'api/workspace_api.dart';
+export 'models/agent.dart';
+export 'models/a2a.dart';
+export 'models/automation.dart';
+export 'models/background.dart';
+export 'models/capability.dart';
+export 'models/channel.dart';
+export 'models/channel_provider.dart';
+export 'models/chat_event.dart';
+export 'models/config.dart';
+export 'models/custom_tool.dart';
+export 'models/evolution.dart';
+export 'models/group.dart';
+export 'models/mcp.dart';
+export 'models/session.dart';
+export 'models/session_run.dart';
+export 'models/skill.dart';
+export 'models/agent_app.dart';
+export 'models/agent_provider_install.dart';
+export 'models/agent_provider_trigger.dart';
+export 'models/workspace.dart';
+export 'tool_executor.dart';
+export 'background/background_controller.dart';
+export 'background/background_permissions.dart';
+export 'background/automation_scheduler.dart';

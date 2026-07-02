@@ -1,0 +1,71 @@
+[package]
+name = "napaxi_api_bridge"
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.92"
+authors = ["Napaxi Contributors"]
+description = "Flutter Rust Bridge / FFI binding layer over napaxi_core::api."
+license = "GPL-3.0-or-later"
+homepage = "https://github.com/napaxi/napaxi"
+repository = "https://github.com/napaxi/napaxi"
+readme = "../../README.md"
+keywords = ["napaxi", "ffi", "flutter-rust-bridge", "mobile", "agent"]
+categories = ["api-bindings", "external-ffi-bindings"]
+publish = false
+
+[package.metadata.dist]
+dist = false
+
+[lib]
+name = "napaxi_api_bridge"
+path = "lib.rs"
+# `cdylib`/`staticlib` are the mobile FFI artifacts the Android (.so) and iOS
+# (xcframework) builds consume. `lib` (rlib) is added so the crate is linkable
+# by an in-tree integration test under `tests/`, which exercises the exported
+# `#[no_mangle]` C ABI symbols the way a host app does. The native build
+# overrides crate-type on the CLI (`cargo rustc --crate-type staticlib`), so the
+# extra rlib never reaches a shipped mobile artifact.
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+default = []
+
+[lints]
+workspace = true
+
+[dependencies]
+# Napaxi 核心引擎 (path dependency, 仅启用移动端需要的 features)
+napaxi_core = { package = "napaxi-core", path = "../../crates/core", default-features = false, features = ["libsql", "mobile-api"] }
+
+# flutter_rust_bridge FFI 绑定
+flutter_rust_bridge = "=2.12.0"
+
+# 序列化 (ChatEvent → JSON → Dart)
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+
+# 错误处理
+anyhow = "1"
+
+# 日志
+tracing = "0.1"
+
+# 类型（与 napaxi-core 一致）
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4" }
+
+# Base64 编解码（附件数据）
+base64 = "0.22"
+
+# HTTP 请求（ClawHub API）
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+[dev-dependencies]
+# Hermetic temp `files_dir` for the FFI lifecycle integration test.
+tempfile = "3"

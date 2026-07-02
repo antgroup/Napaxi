@@ -1,0 +1,65 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <queries>
+        <intent>
+            <action android:name="agent.host.action.START_AGENT_TURN" />
+        </intent>
+        <intent>
+            <action android:name="agent.host.action.INSTALL_PROVIDER_AGENT" />
+        </intent>
+        <intent>
+            <action android:name="agent.host.action.TRIGGER_AGENT" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".SmartHomeApplication"
+        android:allowBackup="false"
+        android:label="Smart Home Agent"
+        android:resizeableActivity="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:name=".AgentActionActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="agent.provider.action.HANDLE_PROPOSAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".AgentInstallActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="agent.provider.action.INSTALL_AGENT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".YeelightMatrixActivity"
+            android:exported="false" />
+
+        <service
+            android:name=".MijiaNotificationBridgeService"
+            android:exported="true"
+            android:label="米家事件桥接"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

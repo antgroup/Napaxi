@@ -1,0 +1,82 @@
+# cargo-deny policy
+#
+# See https://embarkstudios.github.io/cargo-deny/ for schema docs.
+# Run locally with: cargo deny check
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+ignore = [
+    # Dev-only test dependency: httpmock -> async-object-pool -> async-std.
+    # It is not linked into runtime or release artifacts. Replace the mock
+    # server dependency before removing this exception.
+    "RUSTSEC-2025-0052",
+
+    # Vendored libsql 0.6 dependency chain. Napaxi currently carries a patched
+    # libsql fork for local recall storage; upstream still pins bincode 1 and
+    # the older rustls 0.22 TLS stack. Revisit when libsql is updated or
+    # replaced.
+    "RUSTSEC-2025-0141",
+    "RUSTSEC-2025-0134",
+    "RUSTSEC-2026-0049",
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    "RUSTSEC-2026-0104",
+]
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "GPL-3.0-or-later",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+    "Unicode-3.0",
+    "Zlib",
+    # webpki-roots distributes Mozilla root certificate data under CDLA
+    # Permissive 2.0. It is data used by the Rust TLS stack, not executable
+    # code, and requires preserving the license text when sharing the data.
+    "CDLA-Permissive-2.0",
+    # MPL-2.0 is a weak copyleft license: modification requires source
+    # redistribution, but mere linking (as in a static mobile SDK) does not.
+    # Allowed because no vendored crates are modified; remove if a vendored
+    # MPL-2.0 crate is patched, as that would trigger copyleft obligations.
+    "MPL-2.0",
+    # CC0-1.0 is a public domain dedication. In some jurisdictions it is not
+    # legally effective, but the crates using it in this workspace are indirect
+    # dependencies that do not distribute modified sources.
+    "CC0-1.0",
+    # OpenSSL is allowed for the `ring` crate's build dependency. Ring statically
+    # links BoringSSL (ISC-licensed), not OpenSSL itself. If a direct OpenSSL
+    # dependency is introduced, add a crate-specific exception here instead.
+    "OpenSSL",
+]
+confidence-threshold = 0.8
+exceptions = []
+
+[bans]
+# Kept at "warn", not "deny", on purpose. The dependency graph carries ~90
+# duplicated crate versions, the large majority pulled in by the vendored
+# `libsql` (see vendor/libsql-patched/NAPAXI-PATCH.md) and its older transitive
+# tree, which we do not control. Flipping this to "deny" would turn CI red over
+# duplicates that cannot be resolved until libsql is unvendored, blocking
+# unrelated PRs for no security benefit. Revisit when the libsql vendor is
+# removed; until then "warn" keeps the duplicates visible without gating.
+multiple-versions = "warn"
+wildcards = "warn"
+highlight = "all"
+workspace-default-features = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
