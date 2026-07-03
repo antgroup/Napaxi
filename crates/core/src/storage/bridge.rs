@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::error::StorageError;
 
@@ -76,18 +76,24 @@ impl FileBridge {
     }
 
     pub fn sandbox_to_real(&self, sandbox_path: &str) -> Option<String> {
-        if sandbox_path == "/workspace" || sandbox_path.starts_with("/workspace/") {
-            return Some(join_mapped(&self.workspace_dir, sandbox_path, "/workspace"));
+        if is_sandbox_root_or_child(sandbox_path, "/workspace") {
+            return join_mapped(&self.workspace_dir, sandbox_path, "/workspace")
+                .ok()
+                .map(|path| path.display().to_string());
         }
-        if sandbox_path == "/skills" || sandbox_path.starts_with("/skills/") {
-            return Some(join_mapped(&self.skills_dir, sandbox_path, "/skills"));
+        if is_sandbox_root_or_child(sandbox_path, "/skills") {
+            return join_mapped(&self.skills_dir, sandbox_path, "/skills")
+                .ok()
+                .map(|path| path.display().to_string());
         }
         if ROOTFS_PREFIXES
             .iter()
-            .any(|prefix| sandbox_path.starts_with(prefix))
+            .any(|prefix| is_sandbox_root_or_child(sandbox_path, prefix))
         {
             let rest = sandbox_path.strip_prefix('/').unwrap_or(sandbox_path);
-            return Some(self.rootfs_dir.join(rest).display().to_string());
+            return join_validated(&self.rootfs_dir, rest, sandbox_path)
+                .ok()
+                .map(|path| path.display().to_string());
         }
         None
     }
@@ -111,16 +117,40 @@ impl FileBridge {
     }
 }
 
-fn join_mapped(base: &Path, sandbox_path: &str, prefix: &str) -> String {
+fn is_sandbox_root_or_child(sandbox_path: &str, root: &str) -> bool {
+    sandbox_path == root
+        || sandbox_path
+            .strip_prefix(root)
+            .is_some_and(|rest| rest.starts_with('/'))
+}
+
+fn join_mapped(base: &Path, sandbox_path: &str, prefix: &str) -> Result<PathBuf, StorageError> {
     let rest = sandbox_path
         .strip_prefix(prefix)
         .unwrap_or("")
         .strip_prefix('/')
         .unwrap_or("");
-    if rest.is_empty() {
-        base.display().to_string()
+    join_validated(base, rest, sandbox_path)
+}
+
+fn join_validated(
+    base: &Path,
+    relative_path: &str,
+    sandbox_path: &str,
+) -> Result<PathBuf, StorageError> {
+    let relative_path = Path::new(relative_path);
+    if relative_path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::CurDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return Err(StorageError::OutsideSandbox(sandbox_path.to_string()));
+    }
+    if relative_path.as_os_str().is_empty() {
+        Ok(base.to_path_buf())
     } else {
-        base.join(rest).display().to_string()
+        Ok(base.join(relative_path))
     }
 }
 
@@ -177,17 +207,65 @@ pub(crate) fn delete_sandbox_file_with_bridge_inner(
     bridge: &FileBridge,
     sandbox_path: &str,
 ) -> Result<(), StorageError> {
-    let Some(real) = bridge.sandbox_to_real(sandbox_path) else {
+    let Some((path, base)) = delete_target(bridge, sandbox_path)? else {
         return Ok(());
     };
-    let path = Path::new(&real);
-    if !path.exists() {
-        return Ok(());
-    }
-    if path.is_dir() {
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    ensure_delete_target_inside_base(&path, &base, &metadata, sandbox_path)?;
+    if metadata.file_type().is_symlink() {
+        fs::remove_file(path)?;
+    } else if metadata.is_dir() {
         fs::remove_dir_all(path)?;
     } else {
         fs::remove_file(path)?;
     }
     Ok(())
+}
+
+fn delete_target(
+    bridge: &FileBridge,
+    sandbox_path: &str,
+) -> Result<Option<(PathBuf, PathBuf)>, StorageError> {
+    if is_sandbox_root_or_child(sandbox_path, "/workspace") {
+        return join_mapped(&bridge.workspace_dir, sandbox_path, "/workspace")
+            .map(|path| Some((path, bridge.workspace_dir.clone())));
+    }
+    if is_sandbox_root_or_child(sandbox_path, "/skills") {
+        return Err(StorageError::OutsideSandbox(sandbox_path.to_string()));
+    }
+    if ROOTFS_PREFIXES
+        .iter()
+        .any(|prefix| is_sandbox_root_or_child(sandbox_path, prefix))
+    {
+        let rest = sandbox_path.strip_prefix('/').unwrap_or(sandbox_path);
+        return join_validated(&bridge.rootfs_dir, rest, sandbox_path)
+            .map(|path| Some((path, bridge.rootfs_dir.clone())));
+    }
+    Ok(None)
+}
+
+fn ensure_delete_target_inside_base(
+    path: &Path,
+    base: &Path,
+    metadata: &fs::Metadata,
+    sandbox_path: &str,
+) -> Result<(), StorageError> {
+    let canonical_base = base.canonicalize()?;
+    let canonical_guard = if metadata.file_type().is_symlink() {
+        path.parent()
+            .unwrap_or(base)
+            .canonicalize()
+            .map_err(StorageError::from)?
+    } else {
+        path.canonicalize()?
+    };
+    if canonical_guard == canonical_base || canonical_guard.starts_with(&canonical_base) {
+        Ok(())
+    } else {
+        Err(StorageError::OutsideSandbox(sandbox_path.to_string()))
+    }
 }

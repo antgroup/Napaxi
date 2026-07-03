@@ -75,6 +75,11 @@ fn maps_sandbox_paths_to_mobile_filesystem() {
     let tmp = bridge.sandbox_to_real("/tmp/a.txt").unwrap();
     assert!(tmp.ends_with("linux-env/rootfs/tmp/a.txt"));
     assert_eq!(bridge.real_to_sandbox(&tmp).as_deref(), Some("/tmp/a.txt"));
+
+    assert!(bridge.sandbox_to_real("/workspace/../escape.txt").is_none());
+    assert!(bridge.sandbox_to_real("/workspace//escape.txt").is_none());
+    assert!(bridge.sandbox_to_real("/tmp/../escape.txt").is_none());
+    assert!(bridge.sandbox_to_real("/tmpfile/a.txt").is_none());
 }
 
 #[test]
@@ -321,6 +326,39 @@ fn imports_lists_detects_sizes_and_deletes_workspace_files() {
     assert!(delete_sandbox_file(&files_dir, &sandbox_path));
     assert!(!Path::new(&real_path).exists());
     assert_eq!(workspace_size(&files_dir), 0);
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn delete_sandbox_file_rejects_workspace_path_escape() {
+    let dir = temp_dir("delete_escape");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+    fs::create_dir_all(bridge.workspace_dir()).unwrap();
+    fs::create_dir_all(&dir).unwrap();
+    let outside = dir.join("outside.txt");
+    fs::write(&outside, "keep me").unwrap();
+
+    assert!(!delete_sandbox_file(
+        &files_dir,
+        "/workspace/../../outside.txt"
+    ));
+    assert_eq!(fs::read_to_string(&outside).unwrap(), "keep me");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn delete_sandbox_file_keeps_skills_read_only() {
+    let dir = temp_dir("delete_skills");
+    let files_dir = dir.to_string_lossy().to_string();
+    let skill_file = dir.join("prompt_skills/demo/SKILL.md");
+    fs::create_dir_all(skill_file.parent().unwrap()).unwrap();
+    fs::write(&skill_file, "skill").unwrap();
+
+    assert!(!delete_sandbox_file(&files_dir, "/skills/demo/SKILL.md"));
+    assert_eq!(fs::read_to_string(&skill_file).unwrap(), "skill");
 
     let _ = fs::remove_dir_all(dir);
 }
