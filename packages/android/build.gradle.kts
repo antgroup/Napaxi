@@ -39,6 +39,89 @@ kotlin {
     }
 }
 
+fun Project.resolveWindowsBashPath(): String {
+    val candidates = linkedSetOf<String>()
+
+    fun addCandidate(path: String?) {
+        if (!path.isNullOrBlank()) {
+            candidates += path.trim()
+        }
+    }
+
+    fun collectWhereResults(executable: String) {
+        try {
+            val output = java.io.ByteArrayOutputStream()
+            exec {
+                commandLine("where.exe", executable)
+                standardOutput = output
+                errorOutput = java.io.ByteArrayOutputStream()
+                isIgnoreExitValue = true
+            }
+            output.toString(Charsets.UTF_8.name())
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .forEach(::addCandidate)
+        } catch (_: Exception) {
+        }
+    }
+
+    addCandidate(System.getenv("NAPAXI_BASH"))
+    collectWhereResults("bash")
+
+    try {
+        val output = java.io.ByteArrayOutputStream()
+        exec {
+            commandLine("where.exe", "git")
+            standardOutput = output
+            errorOutput = java.io.ByteArrayOutputStream()
+            isIgnoreExitValue = true
+        }
+        output.toString(Charsets.UTF_8.name())
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .forEach { gitPath ->
+                val gitExe = file(gitPath)
+                val gitRoot = gitExe.parentFile?.parentFile
+                if (gitRoot != null) {
+                    addCandidate(java.io.File(gitRoot, "bin/bash.exe").path)
+                    addCandidate(java.io.File(gitRoot, "usr/bin/bash.exe").path)
+                }
+            }
+    } catch (_: Exception) {
+    }
+
+    listOf("ProgramFiles", "ProgramFiles(x86)")
+        .mapNotNull { System.getenv(it) }
+        .filter { it.isNotBlank() }
+        .forEach { root ->
+            addCandidate(java.io.File(root, "Git/bin/bash.exe").path)
+            addCandidate(java.io.File(root, "Git/usr/bin/bash.exe").path)
+        }
+
+    System.getenv("LocalAppData")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { localAppData ->
+            addCandidate(java.io.File(localAppData, "Programs/Git/bin/bash.exe").path)
+            addCandidate(java.io.File(localAppData, "Programs/Git/usr/bin/bash.exe").path)
+        }
+
+    val windowsBash = file("${System.getenv("WINDIR") ?: "C:/Windows"}/System32/bash.exe")
+    val windowsBashPath = windowsBash.takeIf { it.exists() }?.canonicalPath
+
+    val bashPath = candidates
+        .map { file(it) }
+        .firstOrNull { candidate ->
+            candidate.exists() &&
+                candidate.name.equals("bash.exe", ignoreCase = true) &&
+                (windowsBashPath == null || !candidate.canonicalPath.equals(windowsBashPath, ignoreCase = true))
+        }
+
+    return bashPath?.absolutePath
+        ?: throw GradleException("No usable Git Bash executable found for tools/scripts/build.sh. Set NAPAXI_BASH to your Git Bash path.")
+}
+
 val flutterAndroidDir = file("../flutter/android")
 val repoRoot = file("../..")
 
@@ -64,7 +147,14 @@ tasks.register<Exec>("buildRust") {
     onlyIf { !soFile.exists() }
     dependsOn("verifySdkNativeInputs")
     workingDir = repoRoot
-    commandLine("${repoRoot}/tools/scripts/build.sh", "fast", "android")
+    val buildScript = file("${repoRoot}/tools/scripts/build.sh")
+    if (org.gradle.internal.os.OperatingSystem.current().isWindows) {
+        doFirst {
+            commandLine(resolveWindowsBashPath(), buildScript.absolutePath, "fast", "android")
+        }
+    } else {
+        commandLine(buildScript.absolutePath, "fast", "android")
+    }
 }
 
 tasks.register("verifySdkNativeOutputs") {
