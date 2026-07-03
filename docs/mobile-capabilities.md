@@ -459,4 +459,4 @@ For capability changes:
 - Add Dart model/API tests when public Flutter models change.
 - Run `./tools/scripts/build.sh check-boundary` for core or bridge changes.
 - Run focused Flutter tests first, then full `cd packages/flutter &&
-  flutter analyze && flutter test` before broad SDK handoff.
+  flutter analyze --no-fatal-infos && flutter test` before broad SDK handoff.

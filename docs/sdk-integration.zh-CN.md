@@ -50,7 +50,7 @@ iOS Swift Package (`packages/ios`) 拥有自己的 iSH bridge source、vendored 
 ./tools/scripts/build.sh check-ios-device
 IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
 ./tools/scripts/build.sh check-ios-parity
-cd packages/flutter && flutter analyze && flutter test
+cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
 cd examples/flutter && flutter analyze && flutter test
 ```
 

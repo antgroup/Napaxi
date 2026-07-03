@@ -112,7 +112,7 @@ This file provides project instructions for AI coding agents working on Napaxi.
 ## Verification
 
 - For bridge/core changes, run `./tools/scripts/build.sh check-boundary`.
-- For SDK changes, run `cd packages/flutter && flutter analyze && flutter test`.
+- For SDK changes, run `cd packages/flutter && flutter analyze --no-fatal-infos && flutter test`.
 - For SDK public surface or wire-model changes, run the relevant adapter parity
   checks such as `./tools/scripts/build.sh check-android-parity` and the iOS
   parity/native checks described in `docs/sdk-adapter-parity.md`.
@@ -124,6 +124,9 @@ This file provides project instructions for AI coding agents working on Napaxi.
 - Do not rerun full `flutter analyze` and full `flutter test` after every small
   edit by default. Use full Flutter validation for broader changes, before
   handoff, or when focused checks fail to give enough confidence.
+- The Flutter SDK package currently keeps public API documentation coverage as
+  info-level guidance, so use `--no-fatal-infos` for `packages/flutter`
+  analysis until that advisory baseline is retired.
 - Use `flutter test --no-pub` only when `pubspec.yaml` and `pubspec.lock` are
   unchanged and dependencies are already resolved for that package directory.
   If dependencies changed, were cleaned, or have not been fetched in the

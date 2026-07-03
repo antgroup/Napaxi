@@ -43,7 +43,7 @@ SDK-facing 变更至少应包含以下一种证据：
 ./tools/scripts/build.sh check-boundary
 ./tools/scripts/build.sh check-android-parity
 ./tools/scripts/build.sh check-ios-parity
-cd packages/flutter && flutter analyze && flutter test
+cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
 ```
 
 iOS native 检查见 [`sdk-integration.zh-CN.md`](sdk-integration.zh-CN.md)。

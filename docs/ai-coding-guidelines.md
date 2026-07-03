@@ -192,7 +192,9 @@ after every small edit.
   another narrow check that directly exercises the change.
 - Use full `flutter analyze` and full `flutter test` when the change spans
   multiple areas, touches shared SDK behavior, changes public contracts, or is
-  about to be handed off.
+  about to be handed off. For `packages/flutter`, run
+  `flutter analyze --no-fatal-infos` so the current info-level public API docs
+  baseline remains advisory while warnings and errors still fail analysis.
 - If a focused check fails in a way that suggests wider breakage, escalate to
   broader Flutter validation.
 - Summarize what was actually run. Do not imply that a full Flutter suite was
