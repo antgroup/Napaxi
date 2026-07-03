@@ -29,8 +29,8 @@ with * are required. See CONTRIBUTING.md for the full PR expectations.
 - [ ] `./tools/scripts/build.sh check-boundary`
 - [ ] `cargo check --workspace`
 - [ ] `cargo test --workspace` (if behavior changed)
-- [ ] `cd packages/flutter && flutter analyze --no-fatal-infos --no-fatal-warnings && flutter test` (if Flutter SDK changed)
-- [ ] `cd examples/flutter && flutter analyze --no-fatal-infos --no-fatal-warnings && flutter test` (if demo changed)
+- [ ] `cd packages/flutter && flutter analyze --no-fatal-infos && flutter test` (if Flutter SDK changed)
+- [ ] `cd examples/flutter && flutter analyze --no-fatal-infos && flutter test` (if demo changed)
 
 ## Contributor License Agreement *
 

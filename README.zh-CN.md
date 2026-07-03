@@ -218,12 +218,12 @@ cargo test --manifest-path crates/core/Cargo.toml -- --quiet
 
 # Flutter SDK
 cd packages/flutter
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 
 # Flutter demo
 cd examples/flutter
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 ```
 

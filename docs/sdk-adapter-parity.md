@@ -47,7 +47,7 @@ When adding or changing a public SDK surface:
 ./tools/scripts/build.sh check-boundary
 ./tools/scripts/build.sh check-android-parity
 ./tools/scripts/build.sh check-ios-parity
-cd packages/flutter && flutter analyze && flutter test
+cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
 ```
 
 Native iOS checks are documented in [`sdk-integration.md`](sdk-integration.md).

@@ -559,7 +559,7 @@ flutter_rust_bridge_codegen generate --no-dart-format --no-dart-fix --no-rust-fo
 ```bash
 cargo check -p napaxi_flutter
 
-flutter analyze --no-pub
+flutter analyze --no-pub --no-fatal-infos
 ```
 
 ## 发布仓库同步
@@ -613,7 +613,7 @@ git push origin v0.0.9
 cd /path/to/napaxi_flutter_release_repo
 
 flutter pub get
-flutter analyze --no-pub
+flutter analyze --no-pub --no-fatal-infos
 pod ipc spec ios/napaxi_flutter.podspec
 ```
 

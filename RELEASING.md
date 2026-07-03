@@ -36,8 +36,8 @@ cargo test --workspace --no-fail-fast
 NAPAXI_RELEASE=1 ./tools/scripts/build.sh check-hygiene    # placeholder check enforced
 cargo deny check
 cargo audit
-( cd packages/flutter && flutter analyze && flutter test )
-( cd examples/flutter && flutter analyze && flutter test )
+( cd packages/flutter && flutter analyze --no-fatal-infos && flutter test )
+( cd examples/flutter && flutter analyze --no-fatal-infos && flutter test )
 cargo bench --workspace -- --quick                       # eyeball against baseline
 ```
 

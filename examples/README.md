@@ -35,7 +35,7 @@ flutter run
 ### Validation
 
 ```sh
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 dart run tool/check_a2a_user_contract.dart
 ```
