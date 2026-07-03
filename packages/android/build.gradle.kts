@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     id("com.android.library") version "8.11.1"
     id("org.jetbrains.kotlin.android") version "2.2.20"
@@ -48,63 +50,50 @@ fun Project.resolveWindowsBashPath(): String {
         }
     }
 
-    fun collectWhereResults(executable: String) {
-        try {
-            val output = java.io.ByteArrayOutputStream()
-            exec {
-                commandLine("where.exe", executable)
-                standardOutput = output
-                errorOutput = java.io.ByteArrayOutputStream()
-                isIgnoreExitValue = true
-            }
-            output.toString(Charsets.UTF_8.name())
-                .lineSequence()
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .forEach(::addCandidate)
-        } catch (_: Exception) {
+    fun addGitRoot(root: String?) {
+        if (!root.isNullOrBlank()) {
+            addCandidate("$root/bin/bash.exe")
+            addCandidate("$root/usr/bin/bash.exe")
         }
     }
 
     addCandidate(System.getenv("NAPAXI_BASH"))
-    collectWhereResults("bash")
 
-    try {
-        val output = java.io.ByteArrayOutputStream()
-        exec {
-            commandLine("where.exe", "git")
-            standardOutput = output
-            errorOutput = java.io.ByteArrayOutputStream()
-            isIgnoreExitValue = true
-        }
-        output.toString(Charsets.UTF_8.name())
-            .lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .forEach { gitPath ->
-                val gitExe = file(gitPath)
-                val gitRoot = gitExe.parentFile?.parentFile
-                if (gitRoot != null) {
-                    addCandidate(java.io.File(gitRoot, "bin/bash.exe").path)
-                    addCandidate(java.io.File(gitRoot, "usr/bin/bash.exe").path)
-                }
+    val pathEntries: List<String> = (System.getenv("PATH") ?: "")
+        .split(File.pathSeparatorChar)
+        .map { pathEntry: String -> pathEntry.trim() }
+        .filter { pathEntry: String -> pathEntry.isNotEmpty() }
+
+    pathEntries.forEach { entry: String ->
+        addCandidate("$entry/bash.exe")
+
+        val entryDir = file(entry)
+        val entryName = entryDir.name.lowercase()
+        if (entryName == "cmd") {
+            addGitRoot(entryDir.parentFile?.path)
+        } else if (entryName == "bin") {
+            val parent = entryDir.parentFile
+            if (parent?.name.equals("usr", ignoreCase = true)) {
+                addGitRoot(parent?.parentFile?.path)
+            } else {
+                addGitRoot(parent?.path)
             }
-    } catch (_: Exception) {
+        } else if (entryName == "usr") {
+            addGitRoot(entryDir.parentFile?.path)
+        }
     }
 
     listOf("ProgramFiles", "ProgramFiles(x86)")
         .mapNotNull { System.getenv(it) }
         .filter { it.isNotBlank() }
         .forEach { root ->
-            addCandidate(java.io.File(root, "Git/bin/bash.exe").path)
-            addCandidate(java.io.File(root, "Git/usr/bin/bash.exe").path)
+            addGitRoot("$root/Git")
         }
 
     System.getenv("LocalAppData")
         ?.takeIf { it.isNotBlank() }
         ?.let { localAppData ->
-            addCandidate(java.io.File(localAppData, "Programs/Git/bin/bash.exe").path)
-            addCandidate(java.io.File(localAppData, "Programs/Git/usr/bin/bash.exe").path)
+            addGitRoot("$localAppData/Programs/Git")
         }
 
     val windowsBash = file("${System.getenv("WINDIR") ?: "C:/Windows"}/System32/bash.exe")
