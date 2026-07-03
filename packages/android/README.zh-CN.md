@@ -96,4 +96,8 @@ gradle testDebugUnitTest
 ./tools/scripts/build.sh check-android-integration-device
 ```
 
+在 Windows 上手动执行 `build.sh` 时，请使用 Git Bash。Android Gradle
+构建会自动探测 Git Bash；如果探测失败，请把 `NAPAXI_BASH` 设置为 Git Bash
+的 `bash.exe` 完整路径。
+
 SDK-facing 变更请参考 [`../../docs/sdk-adapter-parity.zh-CN.md`](../../docs/sdk-adapter-parity.zh-CN.md)。

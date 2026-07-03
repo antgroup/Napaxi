@@ -337,3 +337,7 @@ If the native bridge library is missing or stale, run the repository Android nat
 ```sh
 ./tools/scripts/build.sh fast android
 ```
+
+On Windows, run direct `build.sh` commands from Git Bash. Android Gradle builds
+auto-detect Git Bash for this script; if detection fails, set `NAPAXI_BASH` to
+the full path of your Git Bash `bash.exe`.

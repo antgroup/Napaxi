@@ -24,6 +24,10 @@ dependencies:
 ./tools/scripts/build.sh fast ios-all
 ```
 
+在 Windows 上手动执行 `build.sh` 时，请使用 Git Bash。Android Gradle
+构建会自动探测 Git Bash；如果探测失败，请把 `NAPAXI_BASH` 设置为 Git Bash
+的 `bash.exe` 完整路径。
+
 生成产物默认被 git 忽略：
 
 - `packages/flutter/android/jniLibs/*/libnapaxi_api_bridge.so`

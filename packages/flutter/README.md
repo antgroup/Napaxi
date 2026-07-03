@@ -550,6 +550,10 @@ flutter_rust_bridge_codegen generate --no-dart-format --no-dart-fix --no-rust-fo
 ../../tools/scripts/build.sh release all
 ```
 
+在 Windows 上手动执行 `build.sh` 时，请使用 Git Bash。Android Gradle
+构建会自动探测 Git Bash；如果探测失败，请把 `NAPAXI_BASH` 设置为 Git Bash
+的 `bash.exe` 完整路径。
+
 常用检查：
 
 ```bash
@@ -570,6 +574,9 @@ cd /path/to/napaxi/packages/flutter
 ../../tools/scripts/build.sh fast android
 ../../tools/scripts/build.sh fast ios
 ```
+
+Windows contributors should also use Git Bash when running these commands
+manually.
 
 同步构建产物到独立发布仓库：
 

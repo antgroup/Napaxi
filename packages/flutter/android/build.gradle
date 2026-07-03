@@ -55,9 +55,16 @@ dependencies {
 
 def resolveWindowsBashPath(Project project) {
     def candidates = []
+    def normalizeCandidatePath = { String path ->
+        def normalized = path.trim()
+        if (normalized.length() >= 2 && normalized.startsWith('"') && normalized.endsWith('"')) {
+            return normalized.substring(1, normalized.length() - 1)
+        }
+        normalized
+    }
     def addCandidate = { String path ->
         if (path != null && !path.trim().isEmpty()) {
-            candidates << path.trim()
+            candidates << normalizeCandidatePath(path)
         }
     }
 

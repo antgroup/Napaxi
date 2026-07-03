@@ -89,6 +89,9 @@ To embed Napaxi in your own app:
    or the Swift Package (iOS) to your project.
 2. Build the native library: `./tools/scripts/build.sh fast android` or
    `fast ios`.
+   On Windows, run direct `build.sh` commands from Git Bash. Android Gradle
+   builds auto-detect Git Bash for this script; if detection fails, set
+   `NAPAXI_BASH` to the full path of your Git Bash `bash.exe`.
 3. Create an engine with your LLM config and a workspace directory.
 4. Open a chat session and stream events.
 5. Optionally register custom tools and handle tool dispatch callbacks.

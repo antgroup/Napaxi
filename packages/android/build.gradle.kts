@@ -44,9 +44,13 @@ kotlin {
 fun Project.resolveWindowsBashPath(): String {
     val candidates = linkedSetOf<String>()
 
+    fun normalizeCandidatePath(path: String): String {
+        return path.trim().removeSurrounding("\"")
+    }
+
     fun addCandidate(path: String?) {
         if (!path.isNullOrBlank()) {
-            candidates += path.trim()
+            candidates += normalizeCandidatePath(path)
         }
     }
 
@@ -61,7 +65,7 @@ fun Project.resolveWindowsBashPath(): String {
 
     val pathEntries: List<String> = (System.getenv("PATH") ?: "")
         .split(File.pathSeparatorChar)
-        .map { pathEntry: String -> pathEntry.trim() }
+        .map { pathEntry: String -> normalizeCandidatePath(pathEntry) }
         .filter { pathEntry: String -> pathEntry.isNotEmpty() }
 
     pathEntries.forEach { entry: String ->

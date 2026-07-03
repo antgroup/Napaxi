@@ -20,6 +20,10 @@ Build native artifacts from the repository root:
 ./tools/scripts/build.sh fast ios-all
 ```
 
+On Windows, run direct `build.sh` commands from Git Bash. Android Gradle builds
+auto-detect Git Bash for this script; if detection fails, set `NAPAXI_BASH` to
+the full path of your Git Bash `bash.exe`.
+
 Generated bridge outputs are intentionally ignored by git:
 
 - `packages/flutter/android/jniLibs/*/libnapaxi_api_bridge.so`

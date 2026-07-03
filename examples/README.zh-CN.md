@@ -58,6 +58,9 @@ provider app examples 展示 Agent Provider protocol 的 provider 侧能力：
 
 1. 在项目中添加 `napaxi_flutter`、Android SDK dependency 或 Swift Package。
 2. 构建 native library：`./tools/scripts/build.sh fast android` 或 `fast ios`。
+   在 Windows 上手动执行 `build.sh` 时，请使用 Git Bash。Android Gradle
+   构建会自动探测 Git Bash；如果探测失败，请把 `NAPAXI_BASH` 设置为 Git Bash
+   的 `bash.exe` 完整路径。
 3. 使用 LLM config 和 workspace directory 创建 engine。
 4. 打开 chat session 并处理 stream events。
 5. 按需注册 custom tools 和 provider actions。
