@@ -53,6 +53,95 @@ dependencies {
     compileOnly 'androidx.core:core:1.13.0'
 }
 
+def resolveWindowsBashPath(Project project) {
+    def candidates = []
+    def addCandidate = { String path ->
+        if (path != null && !path.trim().isEmpty()) {
+            candidates << path.trim()
+        }
+    }
+
+    addCandidate(System.getenv("NAPAXI_BASH"))
+
+    def collectWhereResults = { String executable ->
+        try {
+            def output = new ByteArrayOutputStream()
+            project.exec {
+                commandLine "where.exe", executable
+                standardOutput = output
+                errorOutput = new ByteArrayOutputStream()
+                ignoreExitValue = true
+            }
+            output.toString("UTF-8")
+                .readLines()
+                .collect { it.trim() }
+                .findAll { !it.isEmpty() }
+                .each(addCandidate)
+        } catch (Exception ignored) {
+        }
+    }
+
+    collectWhereResults("bash")
+
+    def gitPaths = []
+    try {
+        def output = new ByteArrayOutputStream()
+        project.exec {
+            commandLine "where.exe", "git"
+            standardOutput = output
+            errorOutput = new ByteArrayOutputStream()
+            ignoreExitValue = true
+        }
+        gitPaths = output.toString("UTF-8")
+            .readLines()
+            .collect { it.trim() }
+            .findAll { !it.isEmpty() }
+    } catch (Exception ignored) {
+    }
+
+    gitPaths.each { gitPath ->
+        def gitExe = project.file(gitPath)
+        def gitRoot = gitExe.parentFile?.parentFile
+        if (gitRoot != null) {
+            addCandidate(new File(gitRoot, "bin/bash.exe").path)
+            addCandidate(new File(gitRoot, "usr/bin/bash.exe").path)
+        }
+    }
+
+    [
+        System.getenv("ProgramFiles"),
+        System.getenv("ProgramFiles(x86)")
+    ].findAll { it != null && !it.trim().isEmpty() }
+        .each { root ->
+            addCandidate(new File(root, "Git/bin/bash.exe").path)
+            addCandidate(new File(root, "Git/usr/bin/bash.exe").path)
+        }
+
+    def localAppData = System.getenv("LocalAppData")
+    if (localAppData != null && !localAppData.trim().isEmpty()) {
+        addCandidate(new File(localAppData, "Programs/Git/bin/bash.exe").path)
+        addCandidate(new File(localAppData, "Programs/Git/usr/bin/bash.exe").path)
+    }
+
+    def windowsDir = System.getenv("WINDIR") ?: "C:/Windows"
+    def windowsBash = project.file("${windowsDir}/System32/bash.exe")
+    def windowsBashPath = windowsBash.exists() ? windowsBash.canonicalPath : null
+
+    def bashPath = candidates
+        .collect { project.file(it) }
+        .find { candidate ->
+            candidate.exists() &&
+                candidate.name.equalsIgnoreCase("bash.exe") &&
+                (windowsBashPath == null || !candidate.canonicalPath.equalsIgnoreCase(windowsBashPath))
+        }
+
+    if (bashPath == null) {
+        throw new GradleException("No usable Git Bash executable found for tools/scripts/build.sh. Set NAPAXI_BASH to your Git Bash path.")
+    }
+
+    bashPath.absolutePath
+}
+
 task verifySdkNativeInputs {
     doLast {
         def androidMain = file("${project.projectDir}")
@@ -80,7 +169,14 @@ task buildRust(type: Exec) {
     dependsOn verifySdkNativeInputs
     def repoRoot = file("${project.projectDir}/../../..")
     workingDir repoRoot
-    commandLine "${repoRoot}/tools/scripts/build.sh", "fast", "android"
+    def buildScript = file("${repoRoot}/tools/scripts/build.sh")
+    if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+        doFirst {
+            commandLine resolveWindowsBashPath(project), buildScript.absolutePath, "fast", "android"
+        }
+    } else {
+        commandLine buildScript.absolutePath, "fast", "android"
+    }
 }
 
 task verifySdkNativeOutputs {
