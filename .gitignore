@@ -21,6 +21,7 @@ examples/*/build/
 **/.dart_tool/
 **/.gradle/
 **/android/local.properties
+**/ios/build/
 **/ios/Pods/
 **/ios/Podfile.lock
 **/ios/Flutter/Generated.xcconfig

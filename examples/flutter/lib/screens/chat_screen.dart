@@ -823,6 +823,12 @@ class _ChatScreenState extends State<ChatScreen>
         return;
       }
       if (!result.hasUpdate) {
+        if (!automatic &&
+            result.unconfigured &&
+            widget.updateService.supportsExternalUpdatePage) {
+          await _showReleasePageDialog();
+          return;
+        }
         final message =
             result.message ??
             (result.unconfigured || result.unsupported
@@ -963,6 +969,15 @@ class _ChatScreenState extends State<ChatScreen>
                         unawaited(widget.updateService.openInstallPage(update));
                       },
                       child: Text(strings.openInstallPage),
+                    ),
+                  if (stage == _UpdateInstallStage.failed &&
+                      widget.updateService.supportsExternalUpdatePage)
+                    TextButton(
+                      key: const Key('open_release_page_button'),
+                      onPressed: () {
+                        unawaited(_showReleasePageDialog());
+                      },
+                      child: Text(strings.openReleasePage),
                     ),
                   if (stage == _UpdateInstallStage.installerOpened ||
                       stage == _UpdateInstallStage.permissionRequired)
@@ -1277,6 +1292,34 @@ class _ChatScreenState extends State<ChatScreen>
         );
       },
     );
+  }
+
+  Future<void> _showReleasePageDialog() async {
+    final strings = AppStrings.of(context);
+    final shouldOpen = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(strings.checkForUpdates),
+          content: Text(strings.updateReleasePagePrompt),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(strings.cancel),
+            ),
+            FilledButton(
+              key: const Key('confirm_open_release_page_button'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(strings.openReleasePage),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldOpen != true || !mounted) return;
+    final opened = await widget.updateService.openExternalUpdatePage();
+    if (!mounted || opened) return;
+    await _showUpdateNoticeDialog(strings.releasePageOpenFailed);
   }
 
   Future<void> _loadSessionHistory(String sessionId) async {
@@ -1742,6 +1785,7 @@ class _ChatScreenState extends State<ChatScreen>
     return run != null && !run.isTerminal;
   }
 
+  @override
   bool get _usesInjectedChatClient => widget.chatClientFactory != null;
 
   void _handleConfigChanged(LlmConfigState config) {
