@@ -50,7 +50,7 @@ match that minimum deployment target.
 IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
 ./tools/scripts/build.sh check-ios-parity
 cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
-cd examples/flutter && flutter analyze && flutter test
+cd examples/flutter && flutter analyze --no-fatal-infos && flutter test
 ```
 
 When `HTTP_PROXY` or `HTTPS_PROXY` is set, make sure `NO_PROXY` includes

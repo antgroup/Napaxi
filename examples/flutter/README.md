@@ -53,7 +53,7 @@ download the latest build manually.
 Validate it with:
 
 ```sh
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 dart run tool/check_a2a_user_contract.dart
 ```

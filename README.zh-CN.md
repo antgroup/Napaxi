@@ -223,7 +223,7 @@ flutter test
 
 # Flutter demo
 cd examples/flutter
-flutter analyze
+flutter analyze --no-fatal-infos
 flutter test
 ```
 

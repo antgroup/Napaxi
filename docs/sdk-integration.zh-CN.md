@@ -51,7 +51,7 @@ iOS Swift Package (`packages/ios`) 拥有自己的 iSH bridge source、vendored 
 IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
 ./tools/scripts/build.sh check-ios-parity
 cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
-cd examples/flutter && flutter analyze && flutter test
+cd examples/flutter && flutter analyze --no-fatal-infos && flutter test
 ```
 
 如果设置了 `HTTP_PROXY` 或 `HTTPS_PROXY`，运行 Flutter tests 前请确保 `NO_PROXY` 包含 `localhost`、`127.0.0.1` 和 `::1`。
