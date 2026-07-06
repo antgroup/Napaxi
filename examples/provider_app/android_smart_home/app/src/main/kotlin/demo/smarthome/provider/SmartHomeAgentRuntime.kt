@@ -60,6 +60,7 @@ object SmartHomeAgentRuntime {
     private const val TOOL_HOME_LIGHT_SET = "home_light_set"
     private const val TOOL_HOME_LIGHTS_SET_ALL = "home_lights_set_all"
     private const val TOOL_HOME_LIGHT_MATRIX_PRESET = "home_light_matrix_preset_show"
+    private const val TOOL_HOME_LIGHT_MATRIX_ANIMATION = "home_light_matrix_animation_show"
     private const val TOOL_HOME_LIGHT_MATRIX_DRAW = "home_light_matrix_draw_20x5"
     private const val TOOL_REQUEST_COLLABORATION = "request_napaxi_collaboration"
 
@@ -286,6 +287,7 @@ object SmartHomeAgentRuntime {
                 homeLightToolDef(),
                 homeAllLightsToolDef(),
                 homeMatrixPresetToolDef(),
+                homeMatrixAnimationToolDef(),
                 homeMatrixDrawToolDef(),
                 collaborationToolDef(),
             ),
@@ -408,6 +410,7 @@ object SmartHomeAgentRuntime {
                     TOOL_HOME_LIGHT_SET -> applySingleLight(context, paramsJson).toResultJson()
                     TOOL_HOME_LIGHTS_SET_ALL -> applyAllLights(context, paramsJson).toResultJson()
                     TOOL_HOME_LIGHT_MATRIX_PRESET -> showMatrixPreset(context, paramsJson).toResultJson()
+                    TOOL_HOME_LIGHT_MATRIX_ANIMATION -> showMatrixAnimation(context, paramsJson).toResultJson()
                     TOOL_HOME_LIGHT_MATRIX_DRAW -> drawMatrix(context, paramsJson).toResultJson()
                     TOOL_REQUEST_COLLABORATION -> requestCollaboration(paramsJson)
                     else -> error("Unsupported smart home tool: $toolName")
@@ -503,6 +506,26 @@ object SmartHomeAgentRuntime {
         )
     }
 
+    private fun showMatrixAnimation(context: Context, paramsJson: String): VirtualHomeState {
+        val args = JSONObject(paramsJson)
+        val animation = args.optString("animation")
+        check(animation.isNotBlank()) { "animation is required" }
+        YeelightLanClient.playAnimation(
+            context = context,
+            animation = animation,
+            color = args.optString("color").takeIf { it.isNotBlank() },
+            backgroundColor = args.optString("background_color").takeIf { it.isNotBlank() },
+            accentColor = args.optString("accent_color").takeIf { it.isNotBlank() },
+            loops = args.optInt("loops").takeIf { it > 0 },
+            frameDelayMs = args.optInt("frame_delay_ms").takeIf { it > 0 },
+        )
+        return VirtualHomeStore.recordAgentNote(
+            context,
+            "Yeelight Cube",
+            "已播放点阵动画：$animation。",
+        )
+    }
+
     private fun validatedLightParameters(rawJson: String): String {
         val args = runCatching { JSONObject(rawJson) }.getOrElse { JSONObject() }
         val room = args.optString("room")
@@ -535,9 +558,19 @@ object SmartHomeAgentRuntime {
         CustomToolDef(
             name = TOOL_HOME_LIGHT_MATRIX_PRESET,
             description = "Show one named Yeelight Cube preset. Prefer this for common symbols, " +
-                "hearts, smiley faces, arrows, checks, crosses, warnings, rainbows, waves, all-on, and clear/off. " +
+                "emoji-like stickers, arrows, trophies, AI signs, animals, trees, UFOs, cars, skylines, and quick visual scenes. " +
                 "Available presets: ${MatrixPresetLibrary.summaryJoined()}",
             parameters = JSONObject(LightCatalog.matrixPresetParamsSchemaJson()),
+            effect = "write",
+        )
+
+    private fun homeMatrixAnimationToolDef(): CustomToolDef =
+        CustomToolDef(
+            name = TOOL_HOME_LIGHT_MATRIX_ANIMATION,
+            description = "Play one named Yeelight Cube animation. Prefer this for expo demos, celebration, " +
+                "direction guidance, radar, scanning beams, equalizers, pulsing hearts, and sparkle loops. " +
+                "Available animations: ${MatrixAnimationLibrary.summaryJoined()}",
+            parameters = JSONObject(LightCatalog.matrixAnimationParamsSchemaJson()),
             effect = "write",
         )
 
@@ -581,15 +614,19 @@ object SmartHomeAgentRuntime {
         - $TOOL_HOME_LIGHT_SET: control exactly one supported light.
         - $TOOL_HOME_LIGHTS_SET_ALL: control all supported lights at once.
         - $TOOL_HOME_LIGHT_MATRIX_PRESET: show one named Yeelight Cube preset.
+        - $TOOL_HOME_LIGHT_MATRIX_ANIMATION: play one named Yeelight Cube animation loop.
         - $TOOL_HOME_LIGHT_MATRIX_DRAW: draw a 20 x 5 RGB pixel pattern on the bound Yeelight Cube light.
         - $TOOL_REQUEST_COLLABORATION: hand off to an external Napaxi Agent.
         Supported lights:
         ${LightCatalog.promptLines()}
         Available Yeelight presets:
         ${MatrixPresetLibrary.promptLines()}
+        Available Yeelight animations:
+        ${MatrixAnimationLibrary.promptLines()}
         When the user asks to turn on/off all lights, every light, 全部灯, or 所有灯, call $TOOL_HOME_LIGHTS_SET_ALL.
         When the user asks to control one supported light, call $TOOL_HOME_LIGHT_SET.
-        When the user asks for a common icon, symbol, arrow, mood pattern, emoji-like display, or quick status board, prefer $TOOL_HOME_LIGHT_MATRIX_PRESET.
+        When the user asks for a common icon, symbol, arrow, mood pattern, emoji-like display, sticker-style picture, or quick status board, prefer $TOOL_HOME_LIGHT_MATRIX_PRESET.
+        When the user asks for a dynamic effect, stage demo, animated cue, celebration loop, direction guide, scanner, equalizer, radar, or sparkle effect, prefer $TOOL_HOME_LIGHT_MATRIX_ANIMATION.
         Only use $TOOL_HOME_LIGHT_MATRIX_DRAW when the user explicitly needs a custom pixel pattern or exact per-pixel control.
         For matrix drawing, the pixel order starts from the bottom row left-to-right, then moves upward row by row.
         For unsupported devices such as air conditioner, curtains, speakers, appliances, or fridge, or for cross-device
@@ -609,6 +646,7 @@ object SmartHomeAgentRuntime {
         - $TOOL_HOME_LIGHT_SET：控制单个灯
         - $TOOL_HOME_LIGHTS_SET_ALL：控制全部灯
         - $TOOL_HOME_LIGHT_MATRIX_PRESET：显示预制点阵图案
+        - $TOOL_HOME_LIGHT_MATRIX_ANIMATION：播放预制点阵动画
         - $TOOL_HOME_LIGHT_MATRIX_DRAW：向 Yeelight Cube 发送 20 x 5 图案
         - $TOOL_REQUEST_COLLABORATION：交给外部 Napaxi Agent
 
