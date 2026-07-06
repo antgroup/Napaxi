@@ -6459,11 +6459,6 @@ $candidate
     debugPrint(
       '[$logTag] activateRuntime scenario=${runtimeProfile.scenarioId} engine=${runtimeProfile.activeEngineId} agent=${runtimeProfile.agentId} restore=$restoreSessions',
     );
-    for (final run in _sessionRuns.values) {
-      await run.subscription.cancel();
-    }
-    _sessionRuns.clear();
-
     final now = DateTime.now();
     final sessionId = _newSessionId();
     setState(() {
@@ -6617,11 +6612,6 @@ $candidate
   Future<void> _selectAgent(String agentId) async {
     if (!_activeRuntimeProfile.supportsAgents) return;
     if (_activeAgentId == agentId) return;
-    for (final run in _sessionRuns.values) {
-      await run.subscription.cancel();
-    }
-    _sessionRuns.clear();
-
     // CLI engines use a different session restoration mechanism
     if (_isCliAgent(agentId)) {
       await _restoreCliEngineSession(agentId);
