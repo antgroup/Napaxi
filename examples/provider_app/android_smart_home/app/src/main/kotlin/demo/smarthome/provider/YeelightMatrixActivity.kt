@@ -135,24 +135,18 @@ class YeelightMatrixActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(8), dp(2), 0)
         }
-        row.addView(actionPill("全亮") {
-            pixels = MutableList(MATRIX_PIXEL_COUNT) { selectedColor }
-            matrixView.colors = pixels
-        })
-        row.addView(actionPill("棋盘") {
-            pixels = MutableList(MATRIX_PIXEL_COUNT) { index ->
-                if (index % 2 == 0) Color.rgb(0x00, 0xFF, 0x00) else Color.rgb(0x00, 0x00, 0xFF)
-            }
-            matrixView.colors = pixels
-        })
-        row.addView(actionPill("上排") {
-            pixels = topRowPixels()
-            matrixView.colors = pixels
-        })
-        row.addView(actionPill("清空") {
-            pixels = MutableList(MATRIX_PIXEL_COUNT) { Color.BLACK }
-            matrixView.colors = pixels
-        })
+        MatrixPresetLibrary.presets.forEach { preset ->
+            row.addView(actionPill(preset.label) {
+                pixels = MatrixPresetLibrary.renderPreset(
+                    presetId = preset.id,
+                    colorHex = toHexColor(selectedColor),
+                    backgroundHex = "#000000",
+                    accentHex = toHexColor(Color.rgb(0x00, 0xD8, 0xFF)),
+                ).toMutableList()
+                matrixView.colors = pixels
+                statusText.text = "已载入预设：${preset.label}"
+            })
+        }
         return HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             addView(row)
@@ -234,20 +228,15 @@ class YeelightMatrixActivity : Activity() {
             Color.BLACK,
         )
 
-    private fun topRowPixels(): MutableList<Int> {
-        val next = MutableList(MATRIX_PIXEL_COUNT) { Color.BLACK }
-        for (index in 80 until 100) {
-            next[index] = selectedColor
-        }
-        return next
-    }
-
     private fun dp(value: Int): Int =
         TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP,
             value.toFloat(),
             resources.displayMetrics,
         ).toInt()
+
+    private fun toHexColor(color: Int): String =
+        String.format("#%06X", 0xFFFFFF and color)
 }
 
 private class PixelMatrixView(context: android.content.Context) : View(context) {

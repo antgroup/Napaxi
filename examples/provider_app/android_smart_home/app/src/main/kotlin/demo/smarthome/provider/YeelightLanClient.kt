@@ -35,6 +35,14 @@ object SmartHomeActionRunner {
     ): VirtualHomeState {
         when (actionId) {
             SmartHomePackage.ACTION_LIGHT_SET -> YeelightLanClient.applyLightIfMapped(context, argsJson)
+            SmartHomePackage.ACTION_LIGHT_MATRIX_PRESET -> {
+                val result = YeelightLanClient.drawPresetFromArgs(context, argsJson)
+                return VirtualHomeStore.recordAgentNote(
+                    context,
+                    "Yeelight Cube",
+                    "已执行点阵预设：${result.optString("preset", "preset")}。",
+                )
+            }
             SmartHomePackage.ACTION_LIGHT_MATRIX_DRAW -> {
                 val result = YeelightLanClient.drawMatrixFromArgs(context, argsJson)
                 return VirtualHomeStore.recordAgentNote(
@@ -136,15 +144,35 @@ object YeelightLanClient {
         return response ?: JSONObject().put("status", "connected_without_response")
     }
 
-    fun drawPreset(context: Context, preset: String): JSONObject {
-        val colors = when (preset) {
-            "checker" -> List(MATRIX_PIXEL_COUNT) { index ->
-                if (index % 2 == 0) 0x00FF00 else 0x0000FF
-            }
-            "off" -> List(MATRIX_PIXEL_COUNT) { 0x000000 }
-            else -> List(MATRIX_PIXEL_COUNT) { 0xFF0000 }
-        }
-        return drawMatrix100(context, colors)
+    fun drawPreset(
+        context: Context,
+        preset: String,
+        color: String? = null,
+        backgroundColor: String? = null,
+        accentColor: String? = null,
+    ): JSONObject {
+        val colors = MatrixPresetLibrary.renderPreset(
+            presetId = preset,
+            colorHex = color,
+            backgroundHex = backgroundColor,
+            accentHex = accentColor,
+        )
+        val result = drawMatrix100(context, colors)
+        result.put("preset", preset)
+        return result
+    }
+
+    fun drawPresetFromArgs(context: Context, argsJson: String): JSONObject {
+        val args = JSONObject(argsJson)
+        val preset = args.optString("preset")
+        check(preset.isNotBlank()) { "preset is required" }
+        return drawPreset(
+            context = context,
+            preset = preset,
+            color = args.optString("color").takeIf { it.isNotBlank() },
+            backgroundColor = args.optString("background_color").takeIf { it.isNotBlank() },
+            accentColor = args.optString("accent_color").takeIf { it.isNotBlank() },
+        )
     }
 
     fun drawMatrix100(context: Context, colors: List<Int>): JSONObject {

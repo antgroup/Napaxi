@@ -59,6 +59,7 @@ object SmartHomeAgentRuntime {
     private const val LOCAL_AGENT_ID = "demo.smart_home.local_agent"
     private const val TOOL_HOME_LIGHT_SET = "home_light_set"
     private const val TOOL_HOME_LIGHTS_SET_ALL = "home_lights_set_all"
+    private const val TOOL_HOME_LIGHT_MATRIX_PRESET = "home_light_matrix_preset_show"
     private const val TOOL_HOME_LIGHT_MATRIX_DRAW = "home_light_matrix_draw_20x5"
     private const val TOOL_REQUEST_COLLABORATION = "request_napaxi_collaboration"
 
@@ -284,6 +285,7 @@ object SmartHomeAgentRuntime {
             listOf(
                 homeLightToolDef(),
                 homeAllLightsToolDef(),
+                homeMatrixPresetToolDef(),
                 homeMatrixDrawToolDef(),
                 collaborationToolDef(),
             ),
@@ -405,6 +407,7 @@ object SmartHomeAgentRuntime {
                 when (toolName) {
                     TOOL_HOME_LIGHT_SET -> applySingleLight(context, paramsJson).toResultJson()
                     TOOL_HOME_LIGHTS_SET_ALL -> applyAllLights(context, paramsJson).toResultJson()
+                    TOOL_HOME_LIGHT_MATRIX_PRESET -> showMatrixPreset(context, paramsJson).toResultJson()
                     TOOL_HOME_LIGHT_MATRIX_DRAW -> drawMatrix(context, paramsJson).toResultJson()
                     TOOL_REQUEST_COLLABORATION -> requestCollaboration(paramsJson)
                     else -> error("Unsupported smart home tool: $toolName")
@@ -482,6 +485,24 @@ object SmartHomeAgentRuntime {
         )
     }
 
+    private fun showMatrixPreset(context: Context, paramsJson: String): VirtualHomeState {
+        val args = JSONObject(paramsJson)
+        val preset = args.optString("preset")
+        check(preset.isNotBlank()) { "preset is required" }
+        YeelightLanClient.drawPreset(
+            context = context,
+            preset = preset,
+            color = args.optString("color").takeIf { it.isNotBlank() },
+            backgroundColor = args.optString("background_color").takeIf { it.isNotBlank() },
+            accentColor = args.optString("accent_color").takeIf { it.isNotBlank() },
+        )
+        return VirtualHomeStore.recordAgentNote(
+            context,
+            "Yeelight Cube",
+            "已显示点阵预设：$preset。",
+        )
+    }
+
     private fun validatedLightParameters(rawJson: String): String {
         val args = runCatching { JSONObject(rawJson) }.getOrElse { JSONObject() }
         val room = args.optString("room")
@@ -507,6 +528,16 @@ object SmartHomeAgentRuntime {
             description = "Control every supported virtual light in the Smart Home app at once: " +
                 "${LightCatalog.labelsJoined()}. Use this when the user says all lights, every light, 全部灯, or 所有灯.",
             parameters = JSONObject(LightCatalog.allLightsParamsSchemaJson()),
+            effect = "write",
+        )
+
+    private fun homeMatrixPresetToolDef(): CustomToolDef =
+        CustomToolDef(
+            name = TOOL_HOME_LIGHT_MATRIX_PRESET,
+            description = "Show one named Yeelight Cube preset. Prefer this for common symbols, " +
+                "hearts, smiley faces, arrows, checks, crosses, warnings, rainbows, waves, all-on, and clear/off. " +
+                "Available presets: ${MatrixPresetLibrary.summaryJoined()}",
+            parameters = JSONObject(LightCatalog.matrixPresetParamsSchemaJson()),
             effect = "write",
         )
 
@@ -549,13 +580,17 @@ object SmartHomeAgentRuntime {
         You have permission to call these Smart Home app tools:
         - $TOOL_HOME_LIGHT_SET: control exactly one supported light.
         - $TOOL_HOME_LIGHTS_SET_ALL: control all supported lights at once.
+        - $TOOL_HOME_LIGHT_MATRIX_PRESET: show one named Yeelight Cube preset.
         - $TOOL_HOME_LIGHT_MATRIX_DRAW: draw a 20 x 5 RGB pixel pattern on the bound Yeelight Cube light.
         - $TOOL_REQUEST_COLLABORATION: hand off to an external Napaxi Agent.
         Supported lights:
         ${LightCatalog.promptLines()}
+        Available Yeelight presets:
+        ${MatrixPresetLibrary.promptLines()}
         When the user asks to turn on/off all lights, every light, 全部灯, or 所有灯, call $TOOL_HOME_LIGHTS_SET_ALL.
         When the user asks to control one supported light, call $TOOL_HOME_LIGHT_SET.
-        When the user explicitly asks to draw a simple pixel/matrix pattern, call $TOOL_HOME_LIGHT_MATRIX_DRAW with exactly ${LightCatalog.MATRIX_PIXEL_COUNT} #RRGGBB values.
+        When the user asks for a common icon, symbol, arrow, mood pattern, emoji-like display, or quick status board, prefer $TOOL_HOME_LIGHT_MATRIX_PRESET.
+        Only use $TOOL_HOME_LIGHT_MATRIX_DRAW when the user explicitly needs a custom pixel pattern or exact per-pixel control.
         For matrix drawing, the pixel order starts from the bottom row left-to-right, then moves upward row by row.
         For unsupported devices such as air conditioner, curtains, speakers, appliances, or fridge, or for cross-device
         automation and judgement beyond the local light tools, call $TOOL_REQUEST_COLLABORATION instead of refusing.
@@ -573,6 +608,7 @@ object SmartHomeAgentRuntime {
         本地 HomeAgent 已注册工具：
         - $TOOL_HOME_LIGHT_SET：控制单个灯
         - $TOOL_HOME_LIGHTS_SET_ALL：控制全部灯
+        - $TOOL_HOME_LIGHT_MATRIX_PRESET：显示预制点阵图案
         - $TOOL_HOME_LIGHT_MATRIX_DRAW：向 Yeelight Cube 发送 20 x 5 图案
         - $TOOL_REQUEST_COLLABORATION：交给外部 Napaxi Agent
 

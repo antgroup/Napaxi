@@ -219,11 +219,20 @@ class AgentActionActivity : Activity() {
 
     private fun actionTitle(proposal: ActionProposal): String =
         when (proposal.actionId) {
+            SmartHomePackage.ACTION_LIGHT_MATRIX_PRESET -> "外部 Agent 请求显示点阵预设"
             SmartHomePackage.ACTION_LIGHT_MATRIX_DRAW -> "外部 Agent 请求绘制点阵灯"
             else -> "外部 Agent 请求控制灯光"
         }
 
     private fun proposalArgumentsSummary(proposal: ActionProposal): String {
+        if (proposal.actionId == SmartHomePackage.ACTION_LIGHT_MATRIX_PRESET) {
+            val args = runCatching { JSONObject(proposal.argumentsJson) }.getOrNull()
+                ?: return proposal.argumentsJson.take(240)
+            val preset = args.optString("preset").ifBlank { "unknown" }
+            val color = args.optString("color").ifBlank { "default" }
+            val accent = args.optString("accent_color").ifBlank { "default" }
+            return "20 x 5 Yeelight 预设：$preset，主色 $color，强调色 $accent"
+        }
         if (proposal.actionId != SmartHomePackage.ACTION_LIGHT_MATRIX_DRAW) {
             return proposal.argumentsJson
         }
