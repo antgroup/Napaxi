@@ -121,7 +121,7 @@ jni = "0.21"
 tempfile = "3"
 tokio-test = "0.4"
 tracing-test = "0.2"
-httpmock = "0.7"
+httpmock = "0.8"
 proptest = "1"
 criterion = { version = "0.5", default-features = false, features = ["html_reports"] }
 
