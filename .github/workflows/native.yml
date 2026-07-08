@@ -50,7 +50,7 @@ jobs:
       # The Android sandbox runtime assets (alpine rootfs, PRoot, musl loader)
       # are committed via Git LFS; build.sh asserts they exist, so the checkout
       # must materialize them.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: true
 
@@ -112,7 +112,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@1.92
         with:
