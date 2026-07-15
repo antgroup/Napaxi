@@ -29,7 +29,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   test: ^1.29.0
-  flutter_lints: ^5.0.0
+  flutter_lints: ">=5.0.0 <7.0.0"
   integration_test:
     sdk: flutter
   ffigen: ^9.0.0
