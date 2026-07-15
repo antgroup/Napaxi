@@ -54,7 +54,7 @@ jobs:
         with:
           lfs: true
 
-      - uses: dtolnay/rust-toolchain@1.92
+      - uses: dtolnay/rust-toolchain@1.100
         with:
           targets: aarch64-linux-android
 
@@ -114,7 +114,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@1.92
+      - uses: dtolnay/rust-toolchain@1.100
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
 
