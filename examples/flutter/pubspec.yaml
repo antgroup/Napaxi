@@ -48,7 +48,7 @@ dependencies:
   video_player: ^2.11.1
   webview_flutter: ^4.13.1
   qr_flutter: ^4.1.0
-  mobile_scanner: ^7.2.0
+  mobile_scanner: ^7.4.0
   xterm: ^4.0.0
 
 dev_dependencies:
