@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bake a curated set of Alpine packages into the Android sandbox rootfs
 # (packages/flutter/android/assets/alpine-rootfs.bin) so the sandbox ships
-# common dev tools (python3, nodejs, npm, curl, bash, zip, OpenJDK 17,
+# common dev tools (python3, nodejs, npm, curl, bash, zip, git, OpenJDK 17,
 # qemu-x86_64, the minimal Android APK build-tools/platform jar, and the
 # x86_64 runtime library closure required by aapt2/zipalign) offline instead of
 # installing them on demand from the environment panel.
@@ -34,7 +34,7 @@ SDK_DIR="$ROOT_DIR/packages/flutter"
 
 # Packages to bake in. Add or remove here; the script picks up changes on the
 # next run. Mirrors the general-purpose part of the old iOS iSH rootfs toolset
-# (python3, node, npm, curl, bash, zip) that the clean Android base lacks.
+# (python3, node, npm, curl, bash, zip, git) that the clean Android base lacks.
 # OpenJDK and qemu support the offline Android APK build pipeline.
 readonly BAKE_PACKAGES=(
     python3
@@ -45,6 +45,7 @@ readonly BAKE_PACKAGES=(
     bash
     zip
     unzip
+    git
     qemu-x86_64
     gcompat
     libstdc++
@@ -74,6 +75,7 @@ readonly EXPECTED_BINARIES=(
     ./bin/bash
     ./usr/bin/zip
     ./usr/bin/unzip
+    ./usr/bin/git
     ./usr/bin/java
     ./usr/bin/javac
     ./usr/bin/keytool
@@ -98,7 +100,6 @@ readonly EXPECTED_BINARIES=(
 )
 
 readonly EXPECTED_ABSENT_PREFIXES=(
-    ./usr/bin/git
     ./usr/lib/jvm/java-17-openjdk/jmods
     ./usr/lib/jvm/java-17-openjdk/bin/jlink
     ./usr/lib/jvm/java-17-openjdk/bin/jmod
@@ -235,22 +236,6 @@ docker run --rm --platform linux/arm64 \
     /sbin/apk --root /rootfs --cache-dir /apk-cache \
         --cache-packages --cache-predownload --no-scripts --no-progress \
         add "$OPENJDK_PACKAGE"
-
-# The default input is the previously baked asset, so removing a package from
-# BAKE_PACKAGES alone would leave it in subsequent outputs. Explicitly prune
-# Git while retaining curl and unzip as general-purpose sandbox tools.
-info "Removing Git from the rootfs..."
-docker run --rm --platform linux/arm64 \
-    -v "$ROOTFS:/rootfs" \
-    -v "$APK_CACHE_DIR:/apk-cache" \
-    "alpine:$TAG" \
-    sh -eu -c '
-        if /sbin/apk --root /rootfs info -e git >/dev/null 2>&1; then
-            /sbin/apk --root /rootfs --cache-dir /apk-cache \
-                --no-scripts --no-progress del git
-        fi
-        test ! -e /rootfs/usr/bin/git
-    '
 
 JAVA_HOME="$ROOTFS/usr/lib/jvm/java-17-openjdk"
 [ -x "$JAVA_HOME/bin/java" ] || err "OpenJDK install did not produce $JAVA_HOME/bin/java"
@@ -484,6 +469,7 @@ docker run --rm --platform linux/arm64 \
         npm --version
         curl --version >/dev/null
         unzip -v >/dev/null
+        git --version
         java -version
         javac -version
         keytool -help >/dev/null 2>&1
