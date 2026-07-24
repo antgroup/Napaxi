@@ -13,6 +13,9 @@ CLAUDE.local.md
 .sidecar/
 .todos/
 
+# Local generated artifacts, screenshots, APKs, and exported device data
+/outputs/
+
 target/
 packages/*/build/
 packages/*/local.properties
