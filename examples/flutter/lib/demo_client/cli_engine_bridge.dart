@@ -64,6 +64,88 @@ class _PendingCliHumanRequest {
   final String questionId;
 }
 
+/// Host-side implementation of Napaxi core's generic external-agent engine
+/// executor for the demo's CLI engines.
+///
+/// The Rust core owns engine selection, turn event recording, tool brokerage,
+/// capability checks, and policy gates. This class only adapts a selected
+/// external profile (currently Codex) onto the existing sandbox PTY process.
+class _CliAgentEngineExecutor implements sdk.AgentEngineExecutor {
+  const _CliAgentEngineExecutor({required this.bridgeForEngine});
+
+  final _CliEngineBridge Function(String engineId) bridgeForEngine;
+
+  @override
+  Future<sdk.AgentEngineTurnResult> startTurn(
+    sdk.AgentEngineTurnRequest request,
+    sdk.AgentEngineToolBroker tools,
+  ) async {
+    final cliEngineId = _cliEngineIdFor(request);
+    if (cliEngineId == null) {
+      return sdk.AgentEngineTurnResult.error(
+        'Unsupported external agent engine profile: '
+        'engineId=${request.engineId}, profile=${request.engineProfileId}',
+      );
+    }
+
+    final threadId = _threadIdFromSessionKey(request.sessionKeyJson);
+    if (threadId.trim().isEmpty) {
+      return sdk.AgentEngineTurnResult.error(
+        'External agent engine request is missing a session thread id',
+      );
+    }
+
+    final events = <sdk.ChatEvent>[];
+    await for (final event in bridgeForEngine(
+      cliEngineId,
+    ).send(threadId, request.message)) {
+      events.add(event);
+    }
+    return sdk.AgentEngineTurnResult.fromEvents(events);
+  }
+
+  @override
+  Future<sdk.AgentEngineTurnResult> resume(
+    sdk.AgentEngineTurnRequest request,
+    sdk.AgentEngineToolBroker tools,
+  ) {
+    return startTurn(request, tools);
+  }
+
+  @override
+  Future<bool> cancel({
+    required String runId,
+    required String sessionKeyJson,
+  }) async {
+    final threadId = _threadIdFromSessionKey(sessionKeyJson);
+    for (final engineId in const ['codex']) {
+      final bridge = bridgeForEngine(engineId);
+      if (bridge.isAttachedToThread(threadId)) {
+        bridge.sendInterrupt();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  String? _cliEngineIdFor(sdk.AgentEngineTurnRequest request) {
+    final kind = request.engineConfig['kind']?.toString().trim().toLowerCase();
+    final profile = request.engineProfileId.trim().toLowerCase();
+    if (kind == 'codex' || profile == 'codex') return 'codex';
+    return null;
+  }
+
+  String _threadIdFromSessionKey(String sessionKeyJson) {
+    try {
+      final decoded = jsonDecode(sessionKeyJson);
+      if (decoded is Map) {
+        return decoded['thread_id']?.toString() ?? '';
+      }
+    } catch (_) {}
+    return '';
+  }
+}
+
 /// Bridges a CLI engine running in the sandbox PTY to the chat event stream.
 ///
 /// For Codex: speaks JSON-RPC 2.0 directly to `codex app-server` — no node needed.
@@ -143,6 +225,16 @@ class _CliEngineBridge {
     _pendingHumanRequests.clear();
   }
 
+  bool isAttachedToThread(String uiThreadId) {
+    final normalized = uiThreadId.trim();
+    if (normalized.isEmpty) return _activeController != null;
+    return _attachedThreadId == normalized || _threadId == normalized;
+  }
+
+  Future<void> recordNativeThreadId(String uiThreadId, String nativeThreadId) {
+    return _saveNativeId(uiThreadId, nativeThreadId);
+  }
+
   Stream<sdk.ChatEvent> send(
     String uiThreadId,
     String message, {
@@ -177,12 +269,19 @@ class _CliEngineBridge {
         _lineBuf.clear();
         _startTimeout(controller);
         if (spec.id == 'codex') {
-          // Codex: the UI thread id IS the codex thread id directly. For a
-          // brand-new conversation it's a temporary placeholder that codex
-          // doesn't know — thread/resume fails and we fall back to a fresh
-          // thread, whose real id is reported back via [onNativeThreadId].
+          // Codex usually uses its native thread id as the UI session id. When
+          // core dispatches Codex through the generic external-host engine,
+          // however, the UI callback that migrates a brand-new placeholder id
+          // may not be present. Keep a sidecar mapping so future core-routed
+          // turns still resume the same native Codex thread.
+          final remembered = await _nativeIdFor(uiThreadId);
           _onNativeThreadId = onNativeThreadId;
-          _sendTurn(message, uiThreadId);
+          _sendTurn(
+            message,
+            remembered != null && remembered.isNotEmpty
+                ? remembered
+                : uiThreadId,
+          );
         } else {
           final remembered = await _nativeIdFor(uiThreadId);
           _onNativeThreadId = null;
@@ -279,6 +378,12 @@ class _CliEngineBridge {
       final cmd = StringBuffer()
         ..write('mkdir -p ${spec.workspacePath} && ')
         ..write('stty raw -echo -icanon -ixon -ixoff 2>/dev/null; ')
+        // Codex may be installed with npm's user prefix by the environment
+        // panel, which puts the binary under $HOME/.local/bin instead of a
+        // system PATH directory. Launch with that prefix explicitly because
+        // this non-login PTY command does not necessarily source ~/.profile.
+        // Keep HOME aligned with writeCodexConfig(), which writes /root/.codex.
+        ..write('export HOME=/root PATH="/root/.local/bin:\$PATH"; ')
         ..write('exec codex app-server 2>/dev/null\n');
       await _writeToPty(cmd.toString());
 
@@ -286,7 +391,11 @@ class _CliEngineBridge {
       await Future<void>.delayed(const Duration(milliseconds: 800));
       if (!readyCompleter.isCompleted) {
         _writeRpcRequest('initialize', {
-          'clientInfo': {'name': 'napaxi', 'title': 'Napaxi', 'version': '1.0.0'},
+          'clientInfo': {
+            'name': 'napaxi',
+            'title': 'Napaxi',
+            'version': '1.0.0',
+          },
           'capabilities': {'experimentalApi': true},
         });
       }
@@ -407,7 +516,7 @@ class _CliEngineBridge {
               // attach this thread so future turns append to it.
               final attached = _attachedThreadId;
               if (attached != null && attached != _threadId) {
-                _attachedThreadId = _threadId;
+                unawaited(_saveNativeId(attached, _threadId!));
                 _onNativeThreadId?.call(_threadId!);
               }
               _startTurnInThread(prompt);
@@ -1972,7 +2081,9 @@ class _CliEngineBridge {
         final m = <String, dynamic>{
           'role': 'tool_calls',
           'content': _jsonString({
-            'narrative': query.isEmpty ? 'Searched the web' : 'Searched: $query',
+            'narrative': query.isEmpty
+                ? 'Searched the web'
+                : 'Searched: $query',
             'calls': [call],
           }),
         };

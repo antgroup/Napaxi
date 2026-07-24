@@ -1518,12 +1518,27 @@ test -f /opt/x86root/sysroot/lib64/ld-linux-x86-64.so.2
 echo 22.04
 ''';
 
-// Installs Node.js + npm via apk, then installs the Codex CLI globally through
-// npm. Both steps run under `set -e`, so a failure in either aborts the run.
-const String _installCodexCliCommand = '''
+// Installs the Codex CLI into the sandbox user's npm prefix. Avoid `apk add`
+// here: mobile/proot sandboxes may not have permission to write apk's system
+// package database. Node.js/npm are managed separately by the System packages
+// section, while this tool keeps its global npm writes under $HOME/.local.
+const String _installCodexCliCommand = r'''
 set -e
-apk add --no-cache nodejs npm
+export HOME=/root
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "Node.js and npm are required before installing Codex; Codex install will not run apk add." >&2
+  exit 1
+fi
+mkdir -p "$HOME/.local/bin"
+npm config set prefix "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+if [ -f "$HOME/.profile" ]; then
+  grep -qs '\.local/bin' "$HOME/.profile" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.profile"
+else
+  printf 'export PATH="$HOME/.local/bin:$PATH"\n' > "$HOME/.profile"
+fi
 npm install -g @openai/codex
+codex --version
 ''';
 
 // Installs Node.js + npm via apk, then installs the Claude Agent SDK globally
@@ -1547,7 +1562,8 @@ List<DemoEnvironmentTool> _defaultEnvironmentTools() {
       name: 'Codex',
       category: 'Coding agents',
       targetVersion: 'latest',
-      checkCommand: 'codex --version 2>&1',
+      checkCommand:
+          r'HOME=/root PATH="/root/.local/bin:$PATH" codex --version 2>&1',
       installCommand: _installCodexCliCommand,
       timeoutSeconds: 600,
     ),

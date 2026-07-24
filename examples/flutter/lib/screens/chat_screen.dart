@@ -1283,17 +1283,16 @@ class _ChatScreenState extends State<ChatScreen>
     // state 里没有现成 branch，点击时跑一次 git 取当前分支。
     final workspaceDir = await _resolveWorkspaceDir();
     final runner = DemoGitRunner.defaultFor(Directory(workspaceDir));
-    final result = await runner.runGit(
-      ['rev-parse', '--abbrev-ref', 'HEAD'],
-      workingDirectory: runner.workspacePath(workspaceDir),
-    );
+    final result = await runner.runGit([
+      'rev-parse',
+      '--abbrev-ref',
+      'HEAD',
+    ], workingDirectory: runner.workspacePath(workspaceDir));
     if (!mounted) return;
     final exitCode = result['exitCode'] as int? ?? -1;
     final branch = (result['stdout'] ?? '').toString().trim();
     // detached HEAD 时 `--abbrev-ref` 返回 "HEAD"，不算真正的分支名。
-    final resolved = exitCode == 0 &&
-            branch.isNotEmpty &&
-            branch != 'HEAD'
+    final resolved = exitCode == 0 && branch.isNotEmpty && branch != 'HEAD'
         ? branch
         : null;
     if (resolved != null) {
@@ -3369,8 +3368,8 @@ class _ChatScreenState extends State<ChatScreen>
         await _prepareBackgroundRunFeedback(client);
       }
       final sdk.SessionKey session;
-      if (isCliEngine) {
-        // CLI bridges (CC/Codex) manage their own sessions through PTY.
+      if (agentId == 'engine.cc') {
+        // CC still owns sessions directly through its PTY bridge.
         // Create a synthetic SessionKey so downstream fields are type-correct.
         session = sdk.SessionKey(
           channelType: 'cli',
@@ -3378,6 +3377,9 @@ class _ChatScreenState extends State<ChatScreen>
           threadId: activeSession.id,
         );
       } else {
+        // Codex now routes through Rust core's external_host engine, so it must
+        // use a core-created UUID session. The Codex native thread id is kept
+        // as a sidecar mapping by the bridge instead of becoming the UI/core id.
         session = await _getSdkSession(client, activeSession.id, agentId);
         if (!mounted) return;
         sessionId = _migrateLiveSessionId(
@@ -3390,26 +3392,9 @@ class _ChatScreenState extends State<ChatScreen>
       final sdkAttachments = await _toSdkAttachments(attachments);
       if (!mounted) return;
 
-      // Codex only knows the real thread id once thread/start responds. For a
-      // brand-new conversation the UI sent a placeholder id; migrate it to the
-      // real id (and move the live run with it) the moment codex reports it.
+      // Codex native thread ids are now sidecar bridge state. Do not migrate
+      // the UI/core session id away from the UUID that Rust storage requires.
       void Function(String)? onNativeThreadId;
-      if (isCliEngine && agentId == 'engine.codex') {
-        onNativeThreadId = (String nativeThreadId) {
-          if (!mounted) return;
-          final newKey = sdk.SessionKey(
-            channelType: 'cli',
-            accountId: agentId,
-            threadId: nativeThreadId,
-          );
-          sessionId = _migrateLiveSessionId(
-            agentId: agentId,
-            oldSessionId: sessionId,
-            sessionKey: newKey,
-          );
-          unawaited(_refreshContextStatusForSession(agentId, sessionId));
-        };
-      }
 
       var currentAssistantMessageId = assistantMessageId;
       var sawResponseDelta = false;

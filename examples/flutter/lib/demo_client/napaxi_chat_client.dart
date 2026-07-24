@@ -1437,6 +1437,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
         'napaxi.tool.custom_host',
         _localA2AToolCapabilityId,
         _DemoAutomationToolExecutor.gitCapabilityId,
+        'napaxi.agent_engine.external_host',
         'napaxi.tool.agent_app_action',
         'napaxi.platform_tool.*',
         'napaxi.tool.browser',
@@ -1495,6 +1496,9 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       config: effectiveConfig,
       toolExecutor: _automationToolExecutor,
       toolResultObserver: _automationToolExecutor.observeToolResult,
+      agentEngineExecutor: _CliAgentEngineExecutor(
+        bridgeForEngine: _getOrCreateBridge,
+      ),
       agentAppActionExecutor: _DemoAgentAppActionExecutor(
         androidExecutor: Platform.isAndroid
             ? sdk.AndroidAgentProviderActionExecutor()
@@ -3878,6 +3882,9 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       provider: existing.provider,
       model: existing.model,
       modelProfileId: modelProfileId?.trim(),
+      engineId: existing.engineId,
+      engineProfileId: existing.engineProfileId,
+      engineConfig: existing.engineConfig,
       toolFilter: existing.toolFilter,
       toolList: existing.toolList,
       icon: existing.icon,
@@ -3903,12 +3910,22 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     required String agentId,
   }) async {
     await _ensureAgent(agentId);
-    return _requireEngine().createSession(
+    final session = await _requireEngine().createSession(
       channelType: 'app',
       accountId: _activeAccountId,
       threadId: threadId,
       agentId: agentId,
     );
+    if (agentId == 'engine.codex' &&
+        threadId.trim().isNotEmpty &&
+        threadId != session.threadId) {
+      unawaited(
+        _getOrCreateBridge(
+          'codex',
+        ).recordNativeThreadId(session.threadId, threadId),
+      );
+    }
+    return session;
   }
 
   @override
@@ -3923,14 +3940,9 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (agentId == 'engine.cc') {
       return _sendToCliBridge('cc', session.threadId, message);
     }
-    if (agentId == 'engine.codex') {
-      return _sendToCliBridge(
-        'codex',
-        session.threadId,
-        message,
-        onNativeThreadId: onNativeThreadId,
-      );
-    }
+    // Codex is intentionally routed through Napaxi core as an external-host
+    // agent engine. Core now owns turn dispatch, event recording, the tool
+    // broker boundary, and policy gates; Flutter only hosts the sandbox PTY.
     _automationToolExecutor.setCurrentSession(session, agentId: agentId);
     return _requireEngine().sendToSession(
       session,
@@ -4039,10 +4051,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   }) {
     if (agentId == 'engine.cc') {
       _ccBridge?.sendInterrupt();
-      return Future.value(true);
-    }
-    if (agentId == 'engine.codex') {
-      _codexBridge?.sendInterrupt();
       return Future.value(true);
     }
     return _requireEngine().cancelSession(session, agentId: agentId);
@@ -5474,7 +5482,9 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       );
       await file.writeAsString(jsonEncode(artifact.toJson()));
     } catch (error) {
-      debugPrint('[napaxiToolTrace] local A2A blob index persist failed=$error');
+      debugPrint(
+        '[napaxiToolTrace] local A2A blob index persist failed=$error',
+      );
     }
   }
 
@@ -6453,24 +6463,56 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     await engine.getOrCreateAgent(agentId);
   }
 
+  sdk.AgentDefinition _runtimeAgentDefinition(
+    DemoScenarioRuntimeProfile runtimeProfile,
+  ) {
+    final isCodex = runtimeProfile.agentId == 'engine.codex';
+    return sdk.AgentDefinition(
+      id: runtimeProfile.agentId,
+      name: runtimeProfile.activeEngine.label,
+      description: isCodex
+          ? 'Codex CLI engine runtime hosted by the external agent engine boundary.'
+          : 'Focused mobile development engine runtime.',
+      systemPrompt:
+          'You are a focused mobile development engine. Prioritize concise project-aware coding help, use dedicated Git/project tools when available, and avoid multi-agent delegation unless the host explicitly exposes it.',
+      engineId: isCodex
+          ? sdk.externalHostAgentEngineId
+          : sdk.napaxiCoreAgentEngineId,
+      engineProfileId: isCodex ? 'codex' : '',
+      engineConfig: isCodex ? const {'kind': 'codex'} : const {},
+      icon: 'terminal',
+    );
+  }
+
+  bool _runtimeAgentDefinitionNeedsUpdate(
+    sdk.AgentDefinition existing,
+    sdk.AgentDefinition desired,
+  ) {
+    return existing.name != desired.name ||
+        existing.description != desired.description ||
+        existing.systemPrompt != desired.systemPrompt ||
+        existing.engineId != desired.engineId ||
+        existing.engineProfileId != desired.engineProfileId ||
+        jsonEncode(existing.engineConfig) != jsonEncode(desired.engineConfig) ||
+        existing.icon != desired.icon;
+  }
+
   Future<void> _ensureRuntimeAgent(sdk.NapaxiEngine engine) async {
     final runtimeProfile = _activeRuntimeProfile;
     if (runtimeProfile.supportsAgents) {
       engine.ensureAgent();
       return;
     }
+    final desiredDefinition = _runtimeAgentDefinition(runtimeProfile);
     final existing = await engine.getAgentDefinition(runtimeProfile.agentId);
     if (existing == null) {
-      await engine.createAgentDefinition(
-        sdk.AgentDefinition(
-          id: runtimeProfile.agentId,
-          name: runtimeProfile.activeEngine.label,
-          description: 'Focused mobile development engine runtime.',
-          systemPrompt:
-              'You are a focused mobile development engine. Prioritize concise project-aware coding help, use dedicated Git/project tools when available, and avoid multi-agent delegation unless the host explicitly exposes it.',
-          icon: 'terminal',
-        ),
-      );
+      await engine.createAgentDefinition(desiredDefinition);
+    } else if (_runtimeAgentDefinitionNeedsUpdate(
+      existing,
+      desiredDefinition,
+    )) {
+      await engine.updateAgentDefinition(desiredDefinition);
+      engine.deleteAgent(runtimeProfile.agentId);
     }
     final created = await engine.createAgentFromDefinition(
       runtimeProfile.agentId,
@@ -10460,7 +10502,9 @@ echo "build/app.apk"
         return _a2aPeerWithFreshEndpoint(peer, candidate);
       }
     } catch (error) {
-      debugPrint('[napaxiToolTrace] local A2A peer send refresh failed: $error');
+      debugPrint(
+        '[napaxiToolTrace] local A2A peer send refresh failed: $error',
+      );
     }
     return null;
   }

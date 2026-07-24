@@ -1,7 +1,8 @@
 part of '../main.dart';
 
 const String _generalScenarioId = 'napaxi.scenario.general';
-const String _mobileDevelopmentScenarioId = 'napaxi.scenario.mobile_development';
+const String _mobileDevelopmentScenarioId =
+    'napaxi.scenario.mobile_development';
 const Set<String> _demoScenarioIds = {
   _generalScenarioId,
   _mobileDevelopmentScenarioId,
@@ -1188,6 +1189,7 @@ List<String> _scenarioEnabledCapabilities(String scenarioId) {
     _mobileDevelopmentScenarioId => <String>[
       'napaxi.service.scenario_registry',
       'napaxi.agent_engine.napaxi_core',
+      'napaxi.agent_engine.external_host',
       'napaxi.service.developer_workbench',
       'napaxi.tool.file',
       'napaxi.tool.ask_human',
