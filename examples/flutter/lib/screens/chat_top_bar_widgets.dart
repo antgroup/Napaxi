@@ -10,10 +10,10 @@ class _ChatInputShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final radius = roundedBottom ? 24.0 : 0.0;
     return ColoredBox(
-      color: roundedBottom ? Colors.black : Colors.white,
+      color: roundedBottom ? Colors.black : _appSurfaceColor,
       child: ClipRRect(
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(radius)),
-        child: ColoredBox(color: Colors.white, child: child),
+        child: ColoredBox(color: _appSurfaceColor, child: child),
       ),
     );
   }

@@ -150,6 +150,72 @@ String _channelBridgeDisplayTitle(DemoChannelBridgeEvent event) {
   return event.displayTitle;
 }
 
+double _sessionDrawerWidth(BuildContext context) {
+  return math.min(MediaQuery.sizeOf(context).width * 0.82, 390);
+}
+
+class _SessionMenuPageShift extends StatelessWidget {
+  const _SessionMenuPageShift({
+    required this.animation,
+    required this.distance,
+    required this.onDismiss,
+    required this.onHorizontalDragUpdate,
+    required this.onHorizontalDragEnd,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final double distance;
+  final VoidCallback onDismiss;
+  final GestureDragUpdateCallback onHorizontalDragUpdate;
+  final GestureDragEndCallback onHorizontalDragEnd;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final value = animation.value;
+        final progress = Curves.easeOutCubic.transform(value);
+
+        return Transform.translate(
+          offset: Offset(distance * progress, 0),
+          child: PhysicalModel(
+            key: const Key('chat_primary_surface'),
+            color: _appSurfaceColor,
+            elevation: 20 * progress,
+            shadowColor: Colors.black.withValues(alpha: 0.22),
+            borderRadius: BorderRadius.circular(32 * progress),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              fit: StackFit.passthrough,
+              children: [
+                Opacity(
+                  key: const Key('chat_primary_content'),
+                  opacity: 1 - (0.58 * progress),
+                  child: child!,
+                ),
+                if (value > 0)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onDismiss,
+                      onHorizontalDragUpdate: onHorizontalDragUpdate,
+                      onHorizontalDragEnd: onHorizontalDragEnd,
+                      child: const ColoredBox(color: Colors.transparent),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
@@ -7060,7 +7126,7 @@ $candidate
     if (_sessionMenuController.value == 0 && delta <= 0) return;
 
     _dismissKeyboard();
-    final width = MediaQuery.sizeOf(context).width;
+    final width = _sessionDrawerWidth(context);
     _sessionMenuController.value =
         (_sessionMenuController.value + delta / width).clamp(0.0, 1.0);
   }
@@ -7150,7 +7216,7 @@ $candidate
 
     _isOpeningSessionMenuDrag = true;
     _dismissKeyboard();
-    final width = MediaQuery.sizeOf(context).width;
+    final width = _sessionDrawerWidth(context);
     final delta = event.position.dx - lastPosition.dx;
     _sessionMenuController.value =
         (_sessionMenuController.value + delta / width).clamp(0.0, 1.0);
@@ -7195,6 +7261,81 @@ $candidate
     return found;
   }
 
+  Widget _buildSessionMenu() {
+    return AnimatedBuilder(
+      animation: _sessionMenuController,
+      builder: (context, _) {
+        if (_sessionMenuController.value == 0) {
+          return const SizedBox.shrink();
+        }
+
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: SizedBox(
+            width: _sessionDrawerWidth(context),
+            height: double.infinity,
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragUpdate: _handleSessionMenuDragUpdate,
+              onHorizontalDragEnd: _handleSessionMenuDragEnd,
+              child: _SessionHistorySheet(
+                activeAgent: _activeAgent,
+                sessions: _sessions,
+                sessionRuns: Map.unmodifiable(_sessionRuns),
+                a2aUnreadSessionIds: Set.unmodifiable(
+                  _a2aUnreadConversationSessionIds,
+                ),
+                activeSessionId: _activeSessionId,
+                favoriteAttachments: _activeFavoriteAttachments,
+                initialView: _sessionHistoryInitialView,
+                initialSettingsSection: _sessionHistoryInitialSettingsSection,
+                initialSkillsTab: _sessionHistoryInitialSkillsTab,
+                createFilesClientFuture: _buildFilesClientFuture,
+                createSkillsClientFuture: _buildSkillsClientFuture,
+                createScenariosClientFuture: _buildScenariosClientFuture,
+                createNearbyClientFuture: _getChatClient,
+                activeScenarioId: _activeScenarioId,
+                gitSettings: _gitSettings,
+                onScenarioApplied: _handleScenarioApplied,
+                onGitSettingsChanged: _handleGitSettingsChanged,
+                onGitSettingsCleared: _handleGitSettingsCleared,
+                updateService: widget.updateService,
+                feedbackService: widget.feedbackService,
+                config: _config,
+                onConfigChanged: _handleConfigChanged,
+                onLanguageChanged: widget.onLanguageChanged,
+                onFavoriteTap: _openFavoriteAttachment,
+                onFavoriteRemove: _toggleFavoriteAttachment,
+                onCheckForUpdates: () => _checkForUpdates(automatic: false),
+                onNearbyStart: () => _setA2AConnectionAllowedFromSettings(true),
+                onNearbyStop: () => _setA2AConnectionAllowedFromSettings(false),
+                onNearbyInvite: () => _createA2AInvite('/a2a invite'),
+                onNearbyScan: () => _scanA2AInvite('/a2a scan'),
+                onNearbyDeletePeer: _deleteA2APairedPeer,
+                getNearbyPairingDiagnostic: () async =>
+                    _lastA2APairingDiagnostic,
+                onNewSession: () {
+                  _closeSessionHistory();
+                  _startNewSession();
+                },
+                onRefreshSessions: _refreshVisibleSessions,
+                onSessionSelected: (sessionId) {
+                  _closeSessionHistory();
+                  _selectSession(sessionId);
+                },
+                onSessionPinToggle: _toggleSessionPin,
+                onSessionDelete: (sessionId) {
+                  unawaited(_confirmDeleteSession(sessionId));
+                },
+                onPendingEvolutionChanged: _refreshPendingEvolutionFromSkills,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _dismissKeyboard() {
     FocusManager.instance.primaryFocus?.unfocus();
   }
@@ -7224,202 +7365,217 @@ $candidate
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: _handleChatPointerDown,
-            onPointerMove: _handleChatPointerMove,
-            onPointerUp: _handleChatPointerEnd,
-            onPointerCancel: _handleChatPointerEnd,
-            child: SafeArea(
-              child: Column(
-                children: [
-                  _ChatTopBar(
-                    activeAgent: _activeAgent,
-                    agents: _agents,
-                    runtimeProfile: _activeRuntimeProfile,
-                    language: widget.language,
-                    hasAttachments: _activeConversationAttachments.isNotEmpty,
-                    newAttachmentCount: _newAttachmentCountFor(
-                      _activeSessionId,
+          _buildSessionMenu(),
+          _SessionMenuPageShift(
+            animation: _sessionMenuController,
+            distance: _sessionDrawerWidth(context),
+            onDismiss: _closeSessionHistory,
+            onHorizontalDragUpdate: _handleSessionMenuDragUpdate,
+            onHorizontalDragEnd: _handleSessionMenuDragEnd,
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: _handleChatPointerDown,
+              onPointerMove: _handleChatPointerMove,
+              onPointerUp: _handleChatPointerEnd,
+              onPointerCancel: _handleChatPointerEnd,
+              child: SafeArea(
+                child: Column(
+                  children: [
+                    _ChatTopBar(
+                      activeAgent: _activeAgent,
+                      agents: _agents,
+                      runtimeProfile: _activeRuntimeProfile,
+                      language: widget.language,
+                      hasAttachments: _activeConversationAttachments.isNotEmpty,
+                      newAttachmentCount: _newAttachmentCountFor(
+                        _activeSessionId,
+                      ),
+                      onAgentSelected: _selectAgent,
+                      onEngineSelected: _selectDeveloperEngine,
+                      onManageAgents: _openAgentManager,
+                      onSessionsTap: _openSessionHistory,
+                      onAttachmentsTap: _openConversationAttachments,
+                      onNewTerminal: _activeRuntimeProfile.isDeveloper
+                          ? _openSandboxTerminal
+                          : null,
+                      onCopyWorkspacePath: _activeRuntimeProfile.isDeveloper
+                          ? _copyWorkspacePath
+                          : null,
+                      onCopyBranchName: _activeRuntimeProfile.isDeveloper
+                          ? _copyBranchName
+                          : null,
+                      onOpenWorkbench: _activeRuntimeProfile.isDeveloper
+                          ? _openWorkbenchDrawer
+                          : null,
                     ),
-                    onAgentSelected: _selectAgent,
-                    onEngineSelected: _selectDeveloperEngine,
-                    onManageAgents: _openAgentManager,
-                    onSessionsTap: _openSessionHistory,
-                    onAttachmentsTap: _openConversationAttachments,
-                    onNewTerminal: _activeRuntimeProfile.isDeveloper
-                        ? _openSandboxTerminal
-                        : null,
-                    onCopyWorkspacePath: _activeRuntimeProfile.isDeveloper
-                        ? _copyWorkspacePath
-                        : null,
-                    onCopyBranchName: _activeRuntimeProfile.isDeveloper
-                        ? _copyBranchName
-                        : null,
-                    onOpenWorkbench: _activeRuntimeProfile.isDeveloper
-                        ? _openWorkbenchDrawer
-                        : null,
-                  ),
-                  const Divider(height: 1),
-                  if (_activeScenarioId != _generalScenarioId)
-                    _ScenarioRuntimeBar(
-                      scenarioId: _activeScenarioId,
-                      onTap: _openScenariosFromChat,
-                    ),
-                  Expanded(
-                    child: _isTerminalSession(_activeSessionId)
-                        ? _buildTerminalView()
-                        : GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: _dismissKeyboard,
-                            child: Stack(
-                              children: [
-                                NotificationListener<
-                                  SizeChangedLayoutNotification
-                                >(
-                                  onNotification: (_) {
-                                    _handleMessageListSizeChanged();
-                                    return false;
-                                  },
-                                  child: SizeChangedLayoutNotifier(
-                                    child: ListView.builder(
-                                      key: const Key('chat_message_list'),
-                                      controller: _scrollController,
-                                      keyboardDismissBehavior:
-                                          ScrollViewKeyboardDismissBehavior
-                                              .onDrag,
-                                      padding: EdgeInsets.fromLTRB(
-                                        16,
-                                        messageListTopPadding,
-                                        16,
-                                        18,
-                                      ),
-                                      itemCount: renderItems.length,
-                                      itemBuilder: (context, index) {
-                                        final item = renderItems[index];
-                                        if (item is _GeneratedAttachmentsItem) {
-                                          return _ConversationGeneratedAttachmentsView(
-                                            key: Key(
-                                              'turn_generated_attachments_'
-                                              '${item.turnUserMessageId ?? 'lead'}'
-                                              '_${item.turnIndex}',
-                                            ),
-                                            attachments: item.attachments,
+                    const Divider(height: 1),
+                    if (_activeScenarioId != _generalScenarioId)
+                      _ScenarioRuntimeBar(
+                        scenarioId: _activeScenarioId,
+                        onTap: _openScenariosFromChat,
+                      ),
+                    Expanded(
+                      child: _isTerminalSession(_activeSessionId)
+                          ? _buildTerminalView()
+                          : GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: _dismissKeyboard,
+                              child: Stack(
+                                children: [
+                                  NotificationListener<
+                                    SizeChangedLayoutNotification
+                                  >(
+                                    onNotification: (_) {
+                                      _handleMessageListSizeChanged();
+                                      return false;
+                                    },
+                                    child: SizeChangedLayoutNotifier(
+                                      child: ListView.builder(
+                                        key: const Key('chat_message_list'),
+                                        controller: _scrollController,
+                                        keyboardDismissBehavior:
+                                            ScrollViewKeyboardDismissBehavior
+                                                .onDrag,
+                                        padding: EdgeInsets.fromLTRB(
+                                          16,
+                                          messageListTopPadding,
+                                          16,
+                                          18,
+                                        ),
+                                        itemCount: renderItems.length,
+                                        itemBuilder: (context, index) {
+                                          final item = renderItems[index];
+                                          if (item
+                                              is _GeneratedAttachmentsItem) {
+                                            return _ConversationGeneratedAttachmentsView(
+                                              key: Key(
+                                                'turn_generated_attachments_'
+                                                '${item.turnUserMessageId ?? 'lead'}'
+                                                '_${item.turnIndex}',
+                                              ),
+                                              attachments: item.attachments,
+                                              accountId: _activeAccountId,
+                                              agentId: _activeAgentId,
+                                              isFavoriteAttachment:
+                                                  _isFavoriteAttachment,
+                                              onToggleFavoriteAttachment:
+                                                  _toggleFavoriteAttachment,
+                                            );
+                                          }
+                                          final message =
+                                              (item as _MessageItem).message;
+                                          return _ChatBubble(
+                                            message: message,
                                             accountId: _activeAccountId,
                                             agentId: _activeAgentId,
+                                            onLoadFullToolCall:
+                                                _loadFullHistoryToolCall,
+                                            onOpenConfiguration:
+                                                _openConfigPage,
                                             isFavoriteAttachment:
                                                 _isFavoriteAttachment,
                                             onToggleFavoriteAttachment:
                                                 _toggleFavoriteAttachment,
+                                            onOpenSkillOrganize:
+                                                _openSkillOrganizeFromChat,
+                                            onCopyUserMessage: (message) {
+                                              unawaited(
+                                                _copyUserMessage(message),
+                                              );
+                                            },
+                                            onEditUserMessage: _editUserMessage,
+                                            onAnswerHumanRequest:
+                                                (requestId, response) {
+                                                  _inputController.text =
+                                                      response;
+                                                  unawaited(
+                                                    _sendRunningMessage(
+                                                      response,
+                                                      const [],
+                                                    ),
+                                                  );
+                                                },
+                                            aggregatedAttachmentIdentities:
+                                                generatedIdentities,
                                           );
-                                        }
-                                        final message =
-                                            (item as _MessageItem).message;
-                                        return _ChatBubble(
-                                          message: message,
-                                          accountId: _activeAccountId,
-                                          agentId: _activeAgentId,
-                                          onLoadFullToolCall:
-                                              _loadFullHistoryToolCall,
-                                          onOpenConfiguration: _openConfigPage,
-                                          isFavoriteAttachment:
-                                              _isFavoriteAttachment,
-                                          onToggleFavoriteAttachment:
-                                              _toggleFavoriteAttachment,
-                                          onOpenSkillOrganize:
-                                              _openSkillOrganizeFromChat,
-                                          onCopyUserMessage: (message) {
-                                            unawaited(
-                                              _copyUserMessage(message),
-                                            );
-                                          },
-                                          onEditUserMessage: _editUserMessage,
-                                          onAnswerHumanRequest:
-                                              (requestId, response) {
-                                                _inputController.text =
-                                                    response;
-                                                unawaited(
-                                                  _sendRunningMessage(
-                                                    response,
-                                                    const [],
-                                                  ),
-                                                );
-                                              },
-                                          aggregatedAttachmentIdentities:
-                                              generatedIdentities,
-                                        );
-                                      },
+                                        },
+                                      ),
                                     ),
                                   ),
-                                ),
-                                Positioned(
-                                  left: 16,
-                                  right: 16,
-                                  top: 12,
-                                  child: AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 180),
-                                    switchInCurve: Curves.easeOutCubic,
-                                    switchOutCurve: Curves.easeInCubic,
-                                    child: compactionNotice == null
-                                        ? const SizedBox.shrink()
-                                        : _ContextCompactionBanner(
-                                            key: ValueKey(
-                                              compactionNotice
-                                                  .updatedAt
-                                                  .microsecondsSinceEpoch,
-                                            ),
-                                            notice: compactionNotice,
-                                            status: _activeContextStatus,
-                                            onTap: _handleContextStatusTap,
-                                          ),
-                                  ),
-                                ),
-                                Positioned(
-                                  right: 16,
-                                  bottom: 16,
-                                  child: AnimatedSlide(
-                                    duration: const Duration(milliseconds: 180),
-                                    offset: _showJumpToLatest
-                                        ? Offset.zero
-                                        : const Offset(0, 1.4),
-                                    child: AnimatedOpacity(
+                                  Positioned(
+                                    left: 16,
+                                    right: 16,
+                                    top: 12,
+                                    child: AnimatedSwitcher(
                                       duration: const Duration(
                                         milliseconds: 180,
                                       ),
-                                      opacity: _showJumpToLatest ? 1 : 0,
-                                      child: IgnorePointer(
-                                        ignoring: !_showJumpToLatest,
-                                        child: Tooltip(
-                                          message: AppStrings.of(
-                                            context,
-                                          ).jumpToLatestMessages,
-                                          key: const Key(
-                                            'jump_to_latest_button',
-                                          ),
-                                          child: Material(
-                                            color: Colors.white,
-                                            elevation: 4,
-                                            shadowColor: Colors.black
-                                                .withValues(alpha: 0.14),
-                                            shape: const CircleBorder(
-                                              side: BorderSide(
-                                                color: Color(0xFFD1D5DB),
+                                      switchInCurve: Curves.easeOutCubic,
+                                      switchOutCurve: Curves.easeInCubic,
+                                      child: compactionNotice == null
+                                          ? const SizedBox.shrink()
+                                          : _ContextCompactionBanner(
+                                              key: ValueKey(
+                                                compactionNotice
+                                                    .updatedAt
+                                                    .microsecondsSinceEpoch,
                                               ),
+                                              notice: compactionNotice,
+                                              status: _activeContextStatus,
+                                              onTap: _handleContextStatusTap,
                                             ),
-                                            child: InkWell(
-                                              customBorder:
-                                                  const CircleBorder(),
-                                              onTap: () =>
-                                                  _scrollToBottom(force: true),
-                                              child: const SizedBox(
-                                                width: 46,
-                                                height: 46,
-                                                child: Center(
-                                                  child: Icon(
-                                                    Icons
-                                                        .keyboard_arrow_down_rounded,
-                                                    color: Colors.black,
-                                                    size: 26,
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: 16,
+                                    bottom: 16,
+                                    child: AnimatedSlide(
+                                      duration: const Duration(
+                                        milliseconds: 180,
+                                      ),
+                                      offset: _showJumpToLatest
+                                          ? Offset.zero
+                                          : const Offset(0, 1.4),
+                                      child: AnimatedOpacity(
+                                        duration: const Duration(
+                                          milliseconds: 180,
+                                        ),
+                                        opacity: _showJumpToLatest ? 1 : 0,
+                                        child: IgnorePointer(
+                                          ignoring: !_showJumpToLatest,
+                                          child: Tooltip(
+                                            message: AppStrings.of(
+                                              context,
+                                            ).jumpToLatestMessages,
+                                            key: const Key(
+                                              'jump_to_latest_button',
+                                            ),
+                                            child: Material(
+                                              color: Colors.white,
+                                              elevation: 4,
+                                              shadowColor: Colors.black
+                                                  .withValues(alpha: 0.14),
+                                              shape: const CircleBorder(
+                                                side: BorderSide(
+                                                  color: Color(0xFFD1D5DB),
+                                                ),
+                                              ),
+                                              child: InkWell(
+                                                customBorder:
+                                                    const CircleBorder(),
+                                                onTap: () => _scrollToBottom(
+                                                  force: true,
+                                                ),
+                                                child: const SizedBox(
+                                                  width: 46,
+                                                  height: 46,
+                                                  child: Center(
+                                                    child: Icon(
+                                                      Icons
+                                                          .keyboard_arrow_down_rounded,
+                                                      color: Colors.black,
+                                                      size: 26,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
@@ -7429,146 +7585,52 @@ $candidate
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                  ),
-                  if (_activeRun?.pendingInterjections.isNotEmpty ?? false)
-                    _PendingInterjectionQueue(
-                      language: widget.language,
-                      interjections: _activeRun!.pendingInterjections,
                     ),
-                  if (!_isTerminalSession(_activeSessionId))
-                    _ChatInputShell(
-                      roundedBottom: showMobileBrowserDock,
-                      child: _ChatInputBar(
-                        controller: _inputController,
-                        focusNode: _inputFocusNode,
-                        isSending: _isActiveSessionSending,
-                        isEditing: _editingMessageId != null,
-                        slashCommands: _availableSlashCommands,
-                        contextStatus: _activeContextStatus,
-                        isContextStatusLoading: _isActiveContextStatusLoading,
-                        hasContextSession: _sdkSessions.containsKey(
-                          _activeSessionCacheKey,
-                        ),
-                        onCancelEdit: _cancelUserMessageEdit,
-                        onContextStatusTap: _handleContextStatusTap,
-                        onSend: _sendMessage,
-                        onStop: _stopActiveSend,
-                        channelInputSources: _channelInputSources,
-                        channelInputBusyAccountId: _channelInputBusyAccountId,
-                        channelInputActiveAccountId:
-                            _channelInputActiveAccountId,
-                        onChannelInputSelected: _captureChannelInput,
-                        chatClient: _chatClient,
-                        agentId: _activeAgentId,
+                    if (_activeRun?.pendingInterjections.isNotEmpty ?? false)
+                      _PendingInterjectionQueue(
+                        language: widget.language,
+                        interjections: _activeRun!.pendingInterjections,
                       ),
-                    ),
-                  if (showMobileBrowserDock)
-                    _BrowserMobileDock(
-                      controller: _browserController,
-                      onExpand: _expandBrowserPanel,
-                      onClose: _closeBrowserSidePanel,
-                    ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedBuilder(
-            animation: _sessionMenuController,
-            builder: (context, _) {
-              if (_sessionMenuController.value == 0) {
-                return const SizedBox.shrink();
-              }
-
-              final progress = Curves.easeOutCubic.transform(
-                _sessionMenuController.value,
-              );
-              final width = MediaQuery.sizeOf(context).width;
-
-              return IgnorePointer(
-                ignoring: _sessionMenuController.value == 0,
-                child: Stack(
-                  children: [
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: _closeSessionHistory,
-                      child: ColoredBox(
-                        color: Colors.black.withValues(alpha: 0.18 * progress),
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                    Transform.translate(
-                      offset: Offset(-width * (1 - progress), 0),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onHorizontalDragUpdate: _handleSessionMenuDragUpdate,
-                        onHorizontalDragEnd: _handleSessionMenuDragEnd,
-                        child: _SessionHistorySheet(
-                          activeAgent: _activeAgent,
-                          sessions: _sessions,
-                          sessionRuns: Map.unmodifiable(_sessionRuns),
-                          a2aUnreadSessionIds: Set.unmodifiable(
-                            _a2aUnreadConversationSessionIds,
+                    if (!_isTerminalSession(_activeSessionId))
+                      _ChatInputShell(
+                        roundedBottom: showMobileBrowserDock,
+                        child: _ChatInputBar(
+                          controller: _inputController,
+                          focusNode: _inputFocusNode,
+                          isSending: _isActiveSessionSending,
+                          isEditing: _editingMessageId != null,
+                          slashCommands: _availableSlashCommands,
+                          contextStatus: _activeContextStatus,
+                          isContextStatusLoading: _isActiveContextStatusLoading,
+                          hasContextSession: _sdkSessions.containsKey(
+                            _activeSessionCacheKey,
                           ),
-                          activeSessionId: _activeSessionId,
-                          favoriteAttachments: _activeFavoriteAttachments,
-                          initialView: _sessionHistoryInitialView,
-                          initialSettingsSection:
-                              _sessionHistoryInitialSettingsSection,
-                          initialSkillsTab: _sessionHistoryInitialSkillsTab,
-                          createFilesClientFuture: _buildFilesClientFuture,
-                          createSkillsClientFuture: _buildSkillsClientFuture,
-                          createScenariosClientFuture:
-                              _buildScenariosClientFuture,
-                          createNearbyClientFuture: _getChatClient,
-                          activeScenarioId: _activeScenarioId,
-                          gitSettings: _gitSettings,
-                          onScenarioApplied: _handleScenarioApplied,
-                          onGitSettingsChanged: _handleGitSettingsChanged,
-                          onGitSettingsCleared: _handleGitSettingsCleared,
-                          updateService: widget.updateService,
-                          feedbackService: widget.feedbackService,
-                          config: _config,
-                          onConfigChanged: _handleConfigChanged,
-                          onLanguageChanged: widget.onLanguageChanged,
-                          onFavoriteTap: _openFavoriteAttachment,
-                          onFavoriteRemove: _toggleFavoriteAttachment,
-                          onCheckForUpdates: () =>
-                              _checkForUpdates(automatic: false),
-                          onNearbyStart: () =>
-                              _setA2AConnectionAllowedFromSettings(true),
-                          onNearbyStop: () =>
-                              _setA2AConnectionAllowedFromSettings(false),
-                          onNearbyInvite: () => _createA2AInvite('/a2a invite'),
-                          onNearbyScan: () => _scanA2AInvite('/a2a scan'),
-                          onNearbyDeletePeer: _deleteA2APairedPeer,
-                          getNearbyPairingDiagnostic: () async =>
-                              _lastA2APairingDiagnostic,
-                          onNewSession: () {
-                            _closeSessionHistory();
-                            _startNewSession();
-                          },
-                          onRefreshSessions: _refreshVisibleSessions,
-                          onSessionSelected: (sessionId) {
-                            _closeSessionHistory();
-                            _selectSession(sessionId);
-                          },
-                          onSessionPinToggle: _toggleSessionPin,
-                          onSessionDelete: (sessionId) {
-                            unawaited(_confirmDeleteSession(sessionId));
-                          },
-                          onPendingEvolutionChanged:
-                              _refreshPendingEvolutionFromSkills,
+                          onCancelEdit: _cancelUserMessageEdit,
+                          onContextStatusTap: _handleContextStatusTap,
+                          onSend: _sendMessage,
+                          onStop: _stopActiveSend,
+                          channelInputSources: _channelInputSources,
+                          channelInputBusyAccountId: _channelInputBusyAccountId,
+                          channelInputActiveAccountId:
+                              _channelInputActiveAccountId,
+                          onChannelInputSelected: _captureChannelInput,
+                          chatClient: _chatClient,
+                          agentId: _activeAgentId,
                         ),
                       ),
-                    ),
+                    if (showMobileBrowserDock)
+                      _BrowserMobileDock(
+                        controller: _browserController,
+                        onExpand: _expandBrowserPanel,
+                        onClose: _closeBrowserSidePanel,
+                      ),
                   ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
           if (_activeRuntimeProfile.isDeveloper)
             AnimatedBuilder(

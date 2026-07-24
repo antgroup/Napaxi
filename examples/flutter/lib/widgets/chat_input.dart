@@ -535,7 +535,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
         widget.onChannelInputSelected != null;
 
     return DecoratedBox(
-      decoration: const BoxDecoration(color: Color(0xFFF7F8FA)),
+      decoration: const BoxDecoration(color: _appSurfaceColor),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           12,
@@ -546,14 +546,14 @@ class _ChatInputBarState extends State<_ChatInputBar> {
         child: Container(
           key: const Key('chat_input_container'),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: _appSurfaceColor,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFFE5E7EB)),
+            border: Border.all(color: _appSurfaceBorderColor),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
+                color: Colors.black.withValues(alpha: 0.025),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
               ),
             ],
           ),

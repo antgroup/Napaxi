@@ -1,5 +1,8 @@
 part of '../main.dart';
 
+const _appSurfaceColor = Color(0xFFF7F8FA);
+const _appSurfaceBorderColor = Color(0xFFE5E7EB);
+
 class NapaxiApp extends StatefulWidget {
   const NapaxiApp({
     super.key,
@@ -89,7 +92,7 @@ class _NapaxiAppState extends State<NapaxiApp> {
             seedColor: const Color(0xFF2563EB),
             brightness: Brightness.light,
           ),
-          scaffoldBackgroundColor: const Color(0xFFF7F8FA),
+          scaffoldBackgroundColor: _appSurfaceColor,
           useMaterial3: true,
         ),
         home: ChatScreen(

@@ -6548,6 +6548,35 @@ void main() {
   testWidgets('swipes chat history open and closed', (tester) async {
     await tester.pumpWidget(_testApp());
 
+    expect(
+      tester.getTopLeft(find.byKey(const Key('chat_primary_surface'))).dx,
+      0,
+    );
+    expect(
+      tester
+          .widget<PhysicalModel>(
+            find.byKey(const Key('chat_primary_surface')),
+          )
+          .color,
+      const Color(0xFFF7F8FA),
+    );
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('chat_primary_content')))
+          .opacity,
+      1,
+    );
+    expect(
+      (tester
+                  .widget<Container>(
+                    find.byKey(const Key('chat_input_container')),
+                  )
+                  .decoration
+              as BoxDecoration)
+          .color,
+      const Color(0xFFF7F8FA),
+    );
+
     await tester.drag(
       find.byKey(const Key('chat_message_list')),
       const Offset(320, 0),
@@ -6560,6 +6589,28 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('new_session_button')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('session_history_sheet'))).dx,
+      0,
+    );
+    expect(
+      tester
+          .widget<Material>(
+            find.byKey(const Key('session_history_sheet')),
+          )
+          .color,
+      const Color(0xFFF7F8FA),
+    );
+    expect(
+      tester.getTopLeft(find.byKey(const Key('chat_primary_surface'))).dx,
+      greaterThan(300),
+    );
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('chat_primary_content')))
+          .opacity,
+      lessThan(0.5),
+    );
 
     await tester.dragFrom(const Offset(320, 300), const Offset(-320, 0));
     await tester.pumpAndSettle();
@@ -6570,6 +6621,16 @@ void main() {
       findsNothing,
     );
     expect(find.byKey(const Key('new_session_button')), findsNothing);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('chat_primary_surface'))).dx,
+      0,
+    );
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const Key('chat_primary_content')))
+          .opacity,
+      1,
+    );
   });
 
   testWidgets('dismisses the keyboard focus when tapping the message list', (

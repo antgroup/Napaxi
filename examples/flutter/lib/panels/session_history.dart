@@ -11,6 +11,8 @@ const _contactConfigUrl = String.fromEnvironment(
 const _dingtalkGroupQrAsset = 'assets/contact/dingtalk_group.png';
 const _wechatGroupQrAsset = 'assets/contact/wechat_group.jpg';
 const _nearbyPeerRemarksKey = 'agent_demo.a2a_local.peer_remarks.v1';
+const _sessionMenuText = Color(0xFF171717);
+const _sessionMenuMuted = Color(0xFF707070);
 
 class _ContactConfig {
   const _ContactConfig({
@@ -104,31 +106,40 @@ class _SessionMenuAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(10),
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
+        hoverColor: const Color(0xFFF4F4F4),
+        highlightColor: const Color(0xFFECECEC),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: Row(
-            children: [
-              Icon(icon, color: const Color(0xFF333333), size: 21),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF333333),
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 50),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                SizedBox.square(
+                  dimension: 26,
+                  child: Center(
+                    child: Icon(icon, color: _sessionMenuText, size: 24),
                   ),
                 ),
-              ),
-              const Icon(Icons.chevron_right_rounded, color: Color(0xFF9CA3AF)),
-            ],
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _sessionMenuText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -537,7 +548,8 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
         }
       },
       child: Material(
-        color: const Color(0xFFF5F5F5),
+        key: const Key('session_history_sheet'),
+        color: _appSurfaceColor,
         child: SafeArea(
           child: _buildCurrentView(
             context: context,
@@ -719,7 +731,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                         )
                       : Padding(
                           key: const ValueKey('session_title_header'),
-                          padding: const EdgeInsets.fromLTRB(20, 18, 14, 10),
+                          padding: const EdgeInsets.fromLTRB(24, 24, 20, 18),
                           child: Row(
                             children: [
                               Expanded(
@@ -730,9 +742,10 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    color: Color(0xFF222222),
-                                    fontSize: 22,
+                                    color: _sessionMenuText,
+                                    fontSize: 24,
                                     fontWeight: FontWeight.w800,
+                                    letterSpacing: -0.5,
                                   ),
                                 ),
                               ),
@@ -761,7 +774,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                 ),
                 if (!_isSearching)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
                     child: Column(
                       children: [
                         _SessionMenuAction(
@@ -772,7 +785,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                         ),
                         _buildRepoWorkbenchMenuAction(),
                         _buildEnvironmentMenuAction(),
-                        const SizedBox(height: 6),
                         _SessionMenuAction(
                           key: const Key('skills_menu_item'),
                           icon: Icons.extension_rounded,
@@ -793,10 +805,10 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                       : ListView(
                           key: const Key('session_history_list'),
                           padding: EdgeInsets.fromLTRB(
-                            10,
+                            14,
                             _isSearching ? 4 : 0,
-                            10,
-                            _isSearching ? 20 : 96,
+                            14,
+                            _isSearching ? 20 : 104,
                           ),
                           children: [
                             if (visibleFavorites.isNotEmpty) ...[
@@ -4478,15 +4490,13 @@ class _SessionSectionHeader extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF666666),
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
+              color: _sessionMenuText,
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(child: Container(height: 1, color: const Color(0xFFE5E5E5))),
+          const Spacer(),
           if (onRefresh != null) ...[
-            const SizedBox(width: 6),
             SizedBox(
               width: 28,
               height: 28,
@@ -4498,7 +4508,7 @@ class _SessionSectionHeader extends StatelessWidget {
                 icon: const Icon(
                   Icons.refresh_rounded,
                   size: 18,
-                  color: Color(0xFF9CA3AF),
+                  color: _sessionMenuMuted,
                 ),
               ),
             ),
@@ -4746,8 +4756,8 @@ class _SessionHistoryTile extends StatelessWidget {
         : _sessionHistoryPreview(session);
     final tileBackground = isActive
         ? isTerminalSession
-              ? const Color(0xFFF1F1F1)
-              : const Color(0xFFEAEAEA)
+              ? const Color(0xFFF4F4F4)
+              : const Color(0xFFF0F0F0)
         : Colors.transparent;
     return Material(
       color: Colors.transparent,
@@ -4766,25 +4776,13 @@ class _SessionHistoryTile extends StatelessWidget {
           ),
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              10,
+              12,
               isTerminalSession ? 8 : 10,
-              14,
+              12,
               10,
             ),
             child: Row(
               children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  width: 3,
-                  height: isTerminalSession ? 28 : 34,
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? const Color(0xFF333333)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                const SizedBox(width: 10),
                 if (isTerminalSession) ...[
                   Container(
                     width: 28,
@@ -4811,9 +4809,9 @@ class _SessionHistoryTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF333333),
+                          color: _sessionMenuText,
                           fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -4822,7 +4820,7 @@ class _SessionHistoryTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Color(0xFF666666),
+                          color: _sessionMenuMuted,
                           fontSize: 13,
                         ),
                       ),
@@ -4849,7 +4847,7 @@ class _SessionHistoryTile extends StatelessWidget {
                 Text(
                   timeLabel,
                   style: const TextStyle(
-                    color: Color(0xFF858585),
+                    color: _sessionMenuMuted,
                     fontSize: 12,
                   ),
                 ),
