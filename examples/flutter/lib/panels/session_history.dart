@@ -326,6 +326,7 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.onFilesSelected,
     required this.onSkillsSelected,
     required this.onProjectsSelected,
+    required this.onSettingsSelected,
     required this.primaryView,
     required this.onSessionSelected,
     required this.onSessionPinToggle,
@@ -376,6 +377,7 @@ class _SessionHistorySheet extends StatefulWidget {
   final VoidCallback onFilesSelected;
   final VoidCallback onSkillsSelected;
   final VoidCallback onProjectsSelected;
+  final VoidCallback onSettingsSelected;
   final _ChatPrimaryView primaryView;
   final ValueChanged<String> onSessionSelected;
   final ValueChanged<String> onSessionPinToggle;
@@ -863,6 +865,79 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
   }
 
   Widget _buildSessionMenuHeader(BuildContext context, AppStrings strings) {
+    final headerActions = Container(
+      key: const Key('session_header_action_group'),
+      width: 94,
+      height: 46,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.94),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.055),
+            blurRadius: 18,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Material(
+          color: Colors.transparent,
+          child: Row(
+            children: [
+              Expanded(
+                child: Tooltip(
+                  message: strings.searchHistoryTooltip,
+                  child: InkWell(
+                    key: const Key('session_history_search_button'),
+                    onTap: _toggleSearch,
+                    customBorder: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.horizontal(
+                        left: Radius.circular(24),
+                      ),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.search_rounded,
+                        color: _sessionMenuText,
+                        size: 23,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Tooltip(
+                  message: strings.settingsTooltip,
+                  child: InkWell(
+                    key: const Key('settings_menu_button'),
+                    onTap: widget.onSettingsSelected,
+                    customBorder: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.horizontal(
+                        right: Radius.circular(24),
+                      ),
+                    ),
+                    child: const Center(
+                      child: Icon(
+                        Icons.settings_outlined,
+                        color: _sessionMenuText,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
     final header = AnimatedSwitcher(
       duration: const Duration(milliseconds: 180),
       switchInCurve: Curves.easeOutCubic,
@@ -941,44 +1016,17 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    key: const Key('session_history_search_button'),
-                    tooltip: strings.searchHistoryTooltip,
-                    onPressed: _toggleSearch,
-                    icon: const Icon(Icons.search_rounded),
-                  ),
-                  IconButton(
-                    key: const Key('settings_menu_button'),
-                    tooltip: strings.settingsTooltip,
-                    onPressed: () {
-                      setState(() {
-                        _settingsInitialSection = _SettingsSection.menu;
-                        _viewStack.add(_view);
-                        _view = _SessionHistoryView.settings;
-                      });
-                    },
-                    icon: const Icon(Icons.settings_outlined),
-                  ),
+                  headerActions,
                 ],
               ),
             ),
     );
 
-    return ClipRect(
+    return SizedBox(
       key: const Key('session_history_frosted_header'),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: _appSurfaceColor.withValues(alpha: 0.76),
-            border: Border(
-              bottom: BorderSide(
-                color: _appSurfaceBorderColor.withValues(alpha: 0.48),
-              ),
-            ),
-          ),
-          child: header,
-        ),
+      child: SizedBox(
+        key: const Key('session_history_frosted_header_surface'),
+        child: header,
       ),
     );
   }
@@ -1129,117 +1177,177 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
         return Stack(
           children: [
             Positioned.fill(
-              child: ListView(
-                key: const Key('session_history_list'),
-                padding: EdgeInsets.fromLTRB(
-                  0,
-                  _isSearching ? 72 : 92,
-                  0,
-                  _isSearching ? 20 : 104,
-                ),
-                children: [
-                  if (!_isSearching)
-                    _buildSessionMenuNavigation(context, strings),
-                  if (!hasAnyContent && !_isSearching)
-                    const SizedBox(height: 260, child: _EmptySessionHistory())
-                  else if (_isSearching && !hasSearchResults)
-                    const SizedBox(
-                      height: 260,
-                      child: _EmptySessionSearchResults(),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: Column(
-                        children: [
-                          if (visibleFavorites.isNotEmpty) ...[
+              child: ShaderMask(
+                key: const Key('session_history_scroll_fade'),
+                blendMode: BlendMode.dstIn,
+                shaderCallback: (bounds) {
+                  final height = math.max(bounds.height, 1.0);
+                  final earlyStop = (60 / height).clamp(0.0, 1.0).toDouble();
+                  final middleStop = (96 / height).clamp(0.0, 1.0).toDouble();
+                  final endStop = (160 / height)
+                      .clamp(middleStop, 1.0)
+                      .toDouble();
+                  return LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0, earlyStop, middleStop, endStop],
+                    colors: const [
+                      Color(0x08FFFFFF),
+                      Color(0x24FFFFFF),
+                      Color(0x98FFFFFF),
+                      Colors.white,
+                    ],
+                  ).createShader(bounds);
+                },
+                child: ListView(
+                  key: const Key('session_history_list'),
+                  padding: EdgeInsets.fromLTRB(
+                    0,
+                    _isSearching ? 72 : 92,
+                    0,
+                    _isSearching ? 20 : 104,
+                  ),
+                  children: [
+                    if (!_isSearching)
+                      _buildSessionMenuNavigation(context, strings),
+                    if (!hasAnyContent && !_isSearching)
+                      const SizedBox(height: 260, child: _EmptySessionHistory())
+                    else if (_isSearching && !hasSearchResults)
+                      const SizedBox(
+                        height: 260,
+                        child: _EmptySessionSearchResults(),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: Column(
+                          children: [
+                            if (visibleFavorites.isNotEmpty) ...[
+                              if (!_isSearching)
+                                _SessionSectionHeader(
+                                  label: strings.favorites,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    4,
+                                    10,
+                                    10,
+                                  ),
+                                ),
+                              for (final favorite in visibleFavorites) ...[
+                                _FavoriteAttachmentTile(
+                                  favorite: favorite,
+                                  onTap: () =>
+                                      widget.onFavoriteTap(favorite.attachment),
+                                  onRemove: () => widget.onFavoriteRemove(
+                                    favorite.attachment,
+                                  ),
+                                  onLongPress: () =>
+                                      _showFavoriteActions(context, favorite),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
+                            ],
                             if (!_isSearching)
-                              _SessionSectionHeader(
-                                label: strings.favorites,
-                                padding: const EdgeInsets.fromLTRB(
-                                  10,
-                                  4,
-                                  10,
-                                  10,
+                              if (visibleSessions.any(
+                                (session) => session.isPinned,
+                              ))
+                                _SessionSectionHeader(
+                                  label: strings.pinned,
+                                  fontWeight: FontWeight.w600,
+                                  padding: EdgeInsets.fromLTRB(
+                                    10,
+                                    visibleFavorites.isEmpty ? 4 : 10,
+                                    10,
+                                    10,
+                                  ),
+                                )
+                              else
+                                _SessionSectionHeader(
+                                  label: strings.recent,
+                                  fontWeight: FontWeight.w600,
+                                  padding: EdgeInsets.fromLTRB(
+                                    10,
+                                    visibleFavorites.isEmpty ? 4 : 10,
+                                    10,
+                                    10,
+                                  ),
                                 ),
-                              ),
-                            for (final favorite in visibleFavorites) ...[
-                              _FavoriteAttachmentTile(
-                                favorite: favorite,
+                            for (final session in visibleSessions) ...[
+                              if (!_isSearching &&
+                                  session.isPinned == false &&
+                                  visibleSessions.any(
+                                    (item) => item.isPinned,
+                                  ) &&
+                                  visibleSessions.indexOf(session) ==
+                                      visibleSessions.indexWhere(
+                                        (item) => !item.isPinned,
+                                      ))
+                                _SessionSectionHeader(
+                                  label: strings.recent,
+                                  fontWeight: FontWeight.w600,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    10,
+                                    10,
+                                    10,
+                                  ),
+                                ),
+                              _SessionHistoryTile(
+                                session: session,
+                                runState: widget.sessionRuns[session.id],
+                                hasA2AUnread: widget.a2aUnreadSessionIds
+                                    .contains(session.id),
+                                isActive: session.id == widget.activeSessionId,
                                 onTap: () =>
-                                    widget.onFavoriteTap(favorite.attachment),
-                                onRemove: () => widget.onFavoriteRemove(
-                                  favorite.attachment,
-                                ),
-                                onLongPress: () =>
-                                    _showFavoriteActions(context, favorite),
+                                    widget.onSessionSelected(session.id),
+                                onLongPress: () {
+                                  unawaited(
+                                    _showSessionActions(context, session),
+                                  );
+                                },
                               ),
                               const SizedBox(height: 4),
                             ],
                           ],
-                          if (!_isSearching)
-                            if (visibleSessions.any(
-                              (session) => session.isPinned,
-                            ))
-                              _SessionSectionHeader(
-                                label: strings.pinned,
-                                fontWeight: FontWeight.w600,
-                                padding: EdgeInsets.fromLTRB(
-                                  10,
-                                  visibleFavorites.isEmpty ? 4 : 10,
-                                  10,
-                                  10,
-                                ),
-                              )
-                            else
-                              _SessionSectionHeader(
-                                label: strings.recent,
-                                fontWeight: FontWeight.w600,
-                                padding: EdgeInsets.fromLTRB(
-                                  10,
-                                  visibleFavorites.isEmpty ? 4 : 10,
-                                  10,
-                                  10,
-                                ),
-                              ),
-                          for (final session in visibleSessions) ...[
-                            if (!_isSearching &&
-                                session.isPinned == false &&
-                                visibleSessions.any((item) => item.isPinned) &&
-                                visibleSessions.indexOf(session) ==
-                                    visibleSessions.indexWhere(
-                                      (item) => !item.isPinned,
-                                    ))
-                              _SessionSectionHeader(
-                                label: strings.recent,
-                                fontWeight: FontWeight.w600,
-                                padding: const EdgeInsets.fromLTRB(
-                                  10,
-                                  10,
-                                  10,
-                                  10,
-                                ),
-                              ),
-                            _SessionHistoryTile(
-                              session: session,
-                              runState: widget.sessionRuns[session.id],
-                              hasA2AUnread: widget.a2aUnreadSessionIds.contains(
-                                session.id,
-                              ),
-                              isActive: session.id == widget.activeSessionId,
-                              onTap: () => widget.onSessionSelected(session.id),
-                              onLongPress: () {
-                                unawaited(
-                                  _showSessionActions(context, session),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 4),
-                          ],
-                        ],
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 160,
+              child: IgnorePointer(
+                key: const Key('session_history_progressive_blur'),
+                child: Column(
+                  children: [
+                    for (final band in const [
+                      (height: 34.0, sigma: 34.0),
+                      (height: 28.0, sigma: 24.0),
+                      (height: 28.0, sigma: 18.0),
+                      (height: 26.0, sigma: 12.0),
+                      (height: 24.0, sigma: 7.0),
+                      (height: 20.0, sigma: 3.0),
+                    ])
+                      SizedBox(
+                        height: band.height,
+                        child: ClipRect(
+                          child: BackdropFilter(
+                            filter: ui.ImageFilter.blur(
+                              sigmaX: band.sigma,
+                              sigmaY: band.sigma,
+                            ),
+                            child: ColoredBox(
+                              color: _appSurfaceColor.withValues(alpha: 0.01),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             Positioned(
@@ -1956,6 +2064,7 @@ class _SettingsPage extends StatefulWidget {
     required this.onOpenFeedback,
     required this.onOpenContact,
     required this.onBack,
+    this.onMenu,
     this.initialSection = _SettingsSection.menu,
   });
 
@@ -1981,6 +2090,7 @@ class _SettingsPage extends StatefulWidget {
   final VoidCallback onOpenFeedback;
   final VoidCallback onOpenContact;
   final Future<bool> Function() onBack;
+  final VoidCallback? onMenu;
   final _SettingsSection initialSection;
 
   @override
@@ -2023,18 +2133,25 @@ class _SettingsPageState extends State<_SettingsPage> {
         foregroundColor: _configTextPrimary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: BackButton(
-          onPressed: () async {
-            if (_section != _SettingsSection.menu) {
-              setState(() => _section = _SettingsSection.menu);
-              return;
-            }
-            final handled = await widget.onBack();
-            if (handled != false && context.mounted) {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+        leading: _section == _SettingsSection.menu && widget.onMenu != null
+            ? IconButton(
+                key: const Key('settings_page_menu_button'),
+                tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
+                onPressed: widget.onMenu,
+                icon: const Icon(Icons.menu_rounded),
+              )
+            : BackButton(
+                onPressed: () async {
+                  if (_section != _SettingsSection.menu) {
+                    setState(() => _section = _SettingsSection.menu);
+                    return;
+                  }
+                  final handled = await widget.onBack();
+                  if (handled != false && context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
       ),
       body: _buildBody(strings),
     );

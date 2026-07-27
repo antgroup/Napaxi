@@ -260,7 +260,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-enum _ChatPrimaryView { chat, files, skills, projects, projectDetail }
+enum _ChatPrimaryView { chat, files, skills, projects, projectDetail, settings }
 
 class _ChatScreenState extends State<ChatScreen>
     with
@@ -375,6 +375,8 @@ class _ChatScreenState extends State<ChatScreen>
   _ChatPrimaryView _primaryView = _ChatPrimaryView.chat;
   Future<NapaxiChatClient>? _primaryFilesClientFuture;
   Future<NapaxiChatClient>? _primarySkillsClientFuture;
+  _SettingsSection _primarySettingsInitialSection = _SettingsSection.menu;
+  int _primarySettingsPageRevision = 0;
   String? _selectedChatProjectId;
   bool _isRenamingSessionTitle = false;
   String _activeScenarioId = _generalScenarioId;
@@ -2229,6 +2231,20 @@ class _ChatScreenState extends State<ChatScreen>
       _primarySkillsClientFuture ??= _buildSkillsClientFuture();
     });
     _closeSessionHistory();
+  }
+
+  void _showSettingsSection(_SettingsSection section) {
+    _dismissKeyboard();
+    setState(() {
+      _primaryView = _ChatPrimaryView.settings;
+      _primarySettingsInitialSection = section;
+      _primarySettingsPageRevision += 1;
+    });
+    _closeSessionHistory();
+  }
+
+  void _showSettingsFromMenu() {
+    _showSettingsSection(_SettingsSection.menu);
   }
 
   void _openChatProject(_ChatProject project) {
@@ -6720,13 +6736,7 @@ $candidate
   }
 
   Future<void> _openConfigPage() async {
-    _dismissKeyboard();
-    setState(() {
-      _sessionHistoryInitialView = _SessionHistoryView.settings;
-      _sessionHistoryInitialSettingsSection = _SettingsSection.configuration;
-      _sessionHistoryInitialSkillsTab = _SkillsInitialTab.installed;
-    });
-    await _sessionMenuController.forward();
+    _showSettingsSection(_SettingsSection.configuration);
   }
 
   Future<void> _openActiveContextModelConfig() async {
@@ -7396,13 +7406,7 @@ $candidate
   }
 
   void _openScenariosFromChat() {
-    _dismissKeyboard();
-    setState(() {
-      _sessionHistoryInitialView = _SessionHistoryView.settings;
-      _sessionHistoryInitialSettingsSection = _SettingsSection.scenarios;
-      _sessionHistoryInitialSkillsTab = _SkillsInitialTab.installed;
-    });
-    _sessionMenuController.forward();
+    _showSettingsSection(_SettingsSection.scenarios);
   }
 
   void _openSkillOrganizeFromChat(ChatMessage message) {
@@ -7727,6 +7731,61 @@ $candidate
     );
   }
 
+  void _openPrimaryContactPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const _ContactPage()));
+  }
+
+  void _openPrimaryFeedbackPage() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => _FeedbackPage(
+          updateService: widget.updateService,
+          feedbackService: widget.feedbackService,
+          onOpenContact: _openPrimaryContactPage,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsPrimarySurface() {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleChatPointerDown,
+      onPointerMove: _handleChatPointerMove,
+      onPointerUp: _handleChatPointerEnd,
+      onPointerCancel: _handleChatPointerEnd,
+      child: _SettingsPage(
+        key: ValueKey('primary_settings_$_primarySettingsPageRevision'),
+        initialConfig: _config,
+        language: widget.language,
+        onConfigChanged: _handleConfigChanged,
+        onLanguageChanged: widget.onLanguageChanged,
+        createScenariosClientFuture: _buildScenariosClientFuture,
+        createNearbyClientFuture: _getChatClient,
+        activeScenarioId: _activeScenarioId,
+        gitSettings: _gitSettings,
+        onScenarioApplied: _handleScenarioApplied,
+        onGitSettingsChanged: _handleGitSettingsChanged,
+        onGitSettingsCleared: _handleGitSettingsCleared,
+        updateService: widget.updateService,
+        onCheckForUpdates: () => _checkForUpdates(automatic: false),
+        onNearbyStart: () => _setA2AConnectionAllowedFromSettings(true),
+        onNearbyStop: () => _setA2AConnectionAllowedFromSettings(false),
+        onNearbyInvite: () => _createA2AInvite('/a2a invite'),
+        onNearbyScan: () => _scanA2AInvite('/a2a scan'),
+        onNearbyDeletePeer: _deleteA2APairedPeer,
+        getNearbyPairingDiagnostic: () async => _lastA2APairingDiagnostic,
+        onOpenFeedback: _openPrimaryFeedbackPage,
+        onOpenContact: _openPrimaryContactPage,
+        onBack: () async => false,
+        onMenu: _openSessionHistory,
+        initialSection: _primarySettingsInitialSection,
+      ),
+    );
+  }
+
   Widget _buildFilesPrimarySurface() {
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -7764,6 +7823,7 @@ $candidate
       _ChatPrimaryView.skills => _buildSkillsPrimarySurface(),
       _ChatPrimaryView.projects ||
       _ChatPrimaryView.projectDetail => _buildProjectsPrimarySurface(),
+      _ChatPrimaryView.settings => _buildSettingsPrimarySurface(),
       _ChatPrimaryView.chat => const SizedBox.shrink(),
     };
   }
@@ -7848,6 +7908,7 @@ $candidate
                 onFilesSelected: _showFilesFromMenu,
                 onSkillsSelected: _showSkillsFromMenu,
                 onProjectsSelected: _showProjectsFromMenu,
+                onSettingsSelected: _showSettingsFromMenu,
                 primaryView: _primaryView,
                 onSessionSelected: (sessionId) {
                   _closeSessionHistory();

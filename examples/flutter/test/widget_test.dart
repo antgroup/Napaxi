@@ -2743,6 +2743,18 @@ void main() {
     await tester.tap(find.byKey(const Key('settings_menu_button')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+    expect(find.byKey(const Key('settings_page_menu_button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings_page_menu_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('settings_menu_selected')), findsNothing);
+    await tester.tap(find.byKey(const Key('settings_menu_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+    expect(find.byKey(const Key('settings_page_menu_button')), findsOneWidget);
     expect(find.byKey(const Key('settings_basic_item')), findsOneWidget);
     expect(find.byKey(const Key('settings_scenarios_item')), findsOneWidget);
     expect(find.byKey(const Key('settings_engines_item')), findsNothing);
@@ -5731,6 +5743,28 @@ void main() {
       find.byKey(const Key('session_history_search_button')),
       findsOneWidget,
     );
+    final headerActionGroup = find.byKey(
+      const Key('session_header_action_group'),
+    );
+    expect(headerActionGroup, findsOneWidget);
+    expect(
+      find.descendant(
+        of: headerActionGroup,
+        matching: find.byKey(const Key('session_history_search_button')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: headerActionGroup,
+        matching: find.byKey(const Key('settings_menu_button')),
+      ),
+      findsOneWidget,
+    );
+    final headerActionDecoration =
+        tester.widget<Container>(headerActionGroup).decoration as BoxDecoration;
+    expect(headerActionDecoration.borderRadius, BorderRadius.circular(24));
+    expect(headerActionDecoration.boxShadow, hasLength(1));
     expect(find.text('First conversation'), findsWidgets);
     expect(find.text('just now'), findsOneWidget);
     expect(find.byKey(const Key('new_session_button')), findsOneWidget);
@@ -5752,6 +5786,36 @@ void main() {
     expect(
       find.byKey(const Key('session_history_frosted_header')),
       findsOneWidget,
+    );
+    final frostedHeaderSurface = find.byKey(
+      const Key('session_history_frosted_header_surface'),
+    );
+    expect(frostedHeaderSurface, findsOneWidget);
+    expect(
+      find.ancestor(
+        of: frostedHeaderSurface,
+        matching: find.byType(BackdropFilter),
+      ),
+      findsNothing,
+    );
+    expect(tester.widget(frostedHeaderSurface), isA<SizedBox>());
+    expect(
+      find.ancestor(
+        of: find.byKey(const Key('session_history_list')),
+        matching: find.byKey(const Key('session_history_scroll_fade')),
+      ),
+      findsOneWidget,
+    );
+    final progressiveBlur = find.byKey(
+      const Key('session_history_progressive_blur'),
+    );
+    expect(progressiveBlur, findsOneWidget);
+    expect(
+      find.descendant(
+        of: progressiveBlur,
+        matching: find.byType(BackdropFilter),
+      ),
+      findsNWidgets(6),
     );
 
     await tester.tap(find.byKey(const Key('new_session_button')));
