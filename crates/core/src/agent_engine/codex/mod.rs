@@ -78,6 +78,25 @@ mod tests {
     }
 
     #[test]
+    fn maps_failed_turn_completed_as_error() {
+        let outcome = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "turn/completed",
+            "params": {
+                "turn": {
+                    "status": "failed",
+                    "error": {"message": "stream disconnected before completion"}
+                }
+            }
+        }));
+        assert!(outcome.completed);
+        assert!(outcome.failed);
+        assert!(
+            matches!(outcome.event, Some(ChatEvent::Error { message }) if message == "stream disconnected before completion")
+        );
+    }
+
+    #[test]
     fn maps_turn_error_fixture() {
         let outcome = map_app_server_message(&json!({
             "method": "thread/event",
@@ -86,6 +105,34 @@ mod tests {
         assert!(outcome.completed);
         assert!(outcome.failed);
         assert!(matches!(outcome.event, Some(ChatEvent::Error { message }) if message == "boom"));
+    }
+
+    #[test]
+    fn maps_final_app_server_error_and_ignores_retry_notice() {
+        let retry = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "error",
+            "params": {
+                "error": {"message": "Reconnecting... 2/5"},
+                "willRetry": true
+            }
+        }));
+        assert!(retry.event.is_none());
+        assert!(!retry.completed);
+
+        let final_error = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "error",
+            "params": {
+                "error": {"message": "stream disconnected before completion"},
+                "willRetry": false
+            }
+        }));
+        assert!(final_error.completed);
+        assert!(final_error.failed);
+        assert!(
+            matches!(final_error.event, Some(ChatEvent::Error { message }) if message == "stream disconnected before completion")
+        );
     }
 
     #[test]

@@ -265,6 +265,69 @@ class ChatScreen extends StatefulWidget {
 
 enum _ChatPrimaryView { chat, files, skills, projects, projectDetail }
 
+class _CodexInstallProgress {
+  const _CodexInstallProgress({
+    required this.label,
+    required this.value,
+    required this.running,
+    this.success,
+    this.detail = '',
+  });
+
+  final String label;
+  final double value;
+  final bool running;
+  final bool? success;
+  final String detail;
+}
+
+class _CodexInstallProgressDialog extends StatelessWidget {
+  const _CodexInstallProgressDialog({required this.progress});
+
+  final ValueNotifier<_CodexInstallProgress> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<_CodexInstallProgress>(
+      valueListenable: progress,
+      builder: (context, state, _) {
+        final finished = !state.running;
+        final success = state.success == true;
+        return AlertDialog(
+          title: Text(
+            finished ? (success ? 'Codex 已安装' : 'Codex 安装失败') : '正在安装 Codex',
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(state.label),
+              const SizedBox(height: 12),
+              LinearProgressIndicator(value: state.value.clamp(0, 1)),
+              const SizedBox(height: 8),
+              Text('${(state.value.clamp(0, 1) * 100).round()}%'),
+              if (state.detail.trim().isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  state.detail,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            if (finished)
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(success),
+                child: Text(success ? '继续' : '关闭'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _ChatScreenState extends State<ChatScreen>
     with
         TickerProviderStateMixin,
@@ -390,6 +453,9 @@ class _ChatScreenState extends State<ChatScreen>
   bool _isHandlingNotificationStop = false;
   bool _isHandlingProviderInstall = false;
   bool _isHandlingAgentTrigger = false;
+  bool _isCheckingCodexEnvironment = false;
+  Future<bool>? _codexEnvironmentPreflight;
+  bool _codexEnvironmentReady = false;
   bool _isEnsuringConfiguredChannels = false;
   int _channelInputRefreshSerial = 0;
   int _channelInputLoopSerial = 0;
@@ -3651,6 +3717,190 @@ class _ChatScreenState extends State<ChatScreen>
     return nextSessionId;
   }
 
+  Future<bool> _ensureCodexEnvironmentReady({
+    String? agentId,
+    bool promptToInstall = true,
+  }) async {
+    final targetAgentId = agentId ?? _activeAgentId;
+    if (!Platform.isAndroid || targetAgentId != 'engine.codex') return true;
+    if (_codexEnvironmentReady) return true;
+    final inFlight = _codexEnvironmentPreflight;
+    if (inFlight != null) return inFlight;
+
+    final future = _runCodexEnvironmentPreflight(
+      promptToInstall: promptToInstall,
+    );
+    _codexEnvironmentPreflight = future;
+    try {
+      final ready = await future;
+      _codexEnvironmentReady = ready;
+      return ready;
+    } finally {
+      if (identical(_codexEnvironmentPreflight, future)) {
+        _codexEnvironmentPreflight = null;
+      }
+    }
+  }
+
+  Future<bool> _runCodexEnvironmentPreflight({
+    required bool promptToInstall,
+  }) async {
+    if (_isCheckingCodexEnvironment) return false;
+    if (!mounted) return false;
+    setState(() => _isCheckingCodexEnvironment = true);
+    try {
+      _traceChat('codex preflight check start');
+      final check = await _runDemoEnvironmentShell(
+        _codexCliCheckCommand,
+        timeoutSeconds: 30,
+      );
+      if (!mounted) return false;
+      if (check.success) {
+        _traceChat(
+          'codex preflight installed version="${_tracePreview(_firstOutputLine(check.output))}"',
+        );
+        return true;
+      }
+      _traceChat(
+        'codex preflight missing error="${_tracePreview(check.error.isNotEmpty ? check.error : check.output)}"',
+      );
+      if (!promptToInstall) return false;
+      final install = await _showCodexInstallPrompt(check);
+      if (install != true || !mounted) return false;
+      final installed = await _showCodexInstallProgressDialog();
+      if (!mounted) return false;
+      if (!installed) return false;
+      _showChatSnackBar('Codex 引擎已安装，可以开始对话');
+      return true;
+    } finally {
+      if (mounted) setState(() => _isCheckingCodexEnvironment = false);
+    }
+  }
+
+  Future<bool?> _showCodexInstallPrompt(_EnvironmentCommandResult check) {
+    final detail = _shortEnvironmentMessage(
+      check.error.isNotEmpty ? check.error : check.output,
+    );
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('需要安装 Codex 引擎'),
+        content: Text(
+          '当前 Android 沙箱中没有检测到可用的 codex 命令。'
+          '如果要使用 Codex 引擎，需要先安装 Codex CLI。\n\n'
+          '安装会在沙箱内检查 Node.js/npm，并通过 npm 安装 @openai/codex。'
+          '${detail.isEmpty ? '' : '\n\n检测结果：$detail'}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('安装'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _showCodexInstallProgressDialog() async {
+    final progress = ValueNotifier<_CodexInstallProgress>(
+      const _CodexInstallProgress(
+        label: '准备安装 Codex 引擎…',
+        value: 0,
+        running: true,
+      ),
+    );
+    unawaited(_installCodexWithProgress(progress));
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _CodexInstallProgressDialog(progress: progress),
+    );
+    progress.dispose();
+    return result ?? false;
+  }
+
+  Future<void> _installCodexWithProgress(
+    ValueNotifier<_CodexInstallProgress> progress,
+  ) async {
+    Future<_EnvironmentCommandResult> runStep(
+      String label,
+      double value,
+      String command, {
+      int timeoutSeconds = 600,
+    }) async {
+      progress.value = _CodexInstallProgress(
+        label: label,
+        value: value,
+        running: true,
+      );
+      return _runDemoEnvironmentShell(command, timeoutSeconds: timeoutSeconds);
+    }
+
+    try {
+      var result = await runStep(
+        '检查 Node.js 和 npm…',
+        0.15,
+        'command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1',
+        timeoutSeconds: 30,
+      );
+      if (!result.success) {
+        result = await runStep(
+          '安装 Node.js 和 npm…',
+          0.35,
+          'apk add --no-cache nodejs npm',
+        );
+        if (!result.success) {
+          _completeCodexInstall(progress, result);
+          return;
+        }
+      }
+
+      result = await runStep('安装 Codex CLI…', 0.7, _installCodexCliCommand);
+      if (!result.success) {
+        _completeCodexInstall(progress, result);
+        return;
+      }
+
+      result = await runStep(
+        '验证 Codex CLI…',
+        0.95,
+        _codexCliCheckCommand,
+        timeoutSeconds: 30,
+      );
+      _completeCodexInstall(progress, result);
+    } catch (error) {
+      progress.value = _CodexInstallProgress(
+        label: '安装失败',
+        value: 1,
+        running: false,
+        success: false,
+        detail: error.toString(),
+      );
+    }
+  }
+
+  void _completeCodexInstall(
+    ValueNotifier<_CodexInstallProgress> progress,
+    _EnvironmentCommandResult result,
+  ) {
+    final detail = result.success
+        ? _firstOutputLine(result.output)
+        : _shortEnvironmentMessage(
+            result.error.isNotEmpty ? result.error : result.output,
+          );
+    progress.value = _CodexInstallProgress(
+      label: result.success ? 'Codex CLI 安装完成' : 'Codex CLI 安装失败',
+      value: 1,
+      running: false,
+      success: result.success,
+      detail: detail,
+    );
+  }
+
   Future<void> _sendMessage(
     List<ChatAttachment> attachments, {
     List<String> pinnedSkillNames = const [],
@@ -3659,6 +3909,10 @@ class _ChatScreenState extends State<ChatScreen>
     if (text.isEmpty && attachments.isEmpty) return;
     if (!_initialStateRestored) await _restoreConfigForFirstTurn();
     if (await _handleSlashCommand(text, attachments)) return;
+    if (_activeAgentId == 'engine.codex' &&
+        !await _ensureCodexEnvironmentReady()) {
+      return;
+    }
     await _ensureA2AConnectionReadyForUserTurn();
 
     // Prepend /skill_name mentions for pinned skills so the engine
@@ -4575,11 +4829,9 @@ class _ChatScreenState extends State<ChatScreen>
                   );
                   _updateAssistantMessage(
                     currentAssistantMessageId,
-                    (chatMessage) => chatMessage.copyWith(
-                      content: strings.sdkError(message),
-                      isStreaming: false,
-                      action: ChatMessageAction.openConfiguration,
-                      completedAt: DateTime.now(),
+                    (chatMessage) => _assistantMessageAfterError(
+                      chatMessage,
+                      strings.sdkError(message),
                     ),
                   );
                 case sdk.InterruptedEvent():
@@ -5478,11 +5730,9 @@ class _ChatScreenState extends State<ChatScreen>
       case sdk.ErrorEvent(:final message):
         _updateAssistantMessage(
           assistantMessageId,
-          (chatMessage) => chatMessage.copyWith(
-            content: strings.sdkError(message),
-            isStreaming: false,
-            action: ChatMessageAction.openConfiguration,
-            completedAt: DateTime.now(),
+          (chatMessage) => _assistantMessageAfterError(
+            chatMessage,
+            strings.sdkError(message),
           ),
         );
       default:
@@ -6559,6 +6809,21 @@ $candidate
     });
   }
 
+  ChatMessage _assistantMessageAfterError(
+    ChatMessage message,
+    String errorContent,
+  ) {
+    final hasPartialContent = message.content.trim().isNotEmpty;
+    return message.copyWith(
+      content: hasPartialContent ? message.content : errorContent,
+      isStreaming: false,
+      action: hasPartialContent
+          ? message.action
+          : ChatMessageAction.openConfiguration,
+      completedAt: DateTime.now(),
+    );
+  }
+
   ChatMessage _sanitizeAssistantVisibleMessage(ChatMessage message) {
     if (message.role != ChatRole.assistant || message.content.isEmpty) {
       return message;
@@ -7408,6 +7673,11 @@ $candidate
   Future<void> _selectAgent(String agentId) async {
     if (!_activeRuntimeProfile.supportsAgents) return;
     if (_activeAgentId == agentId) return;
+    if (agentId == 'engine.codex' &&
+        !await _ensureCodexEnvironmentReady(agentId: agentId)) {
+      _showChatSnackBar('Codex 引擎未安装，已保留当前 Agent');
+      return;
+    }
     // CLI engines use a different session restoration mechanism
     if (_isCliAgent(agentId)) {
       await _restoreCliEngineSession(agentId);
@@ -7457,6 +7727,16 @@ $candidate
     if (nextRuntime.activeEngineId == _activeDeveloperEngineId &&
         nextRuntime.agentId == _activeAgentId) {
       return;
+    }
+    if (nextRuntime.agentId == 'engine.codex' && Platform.isAndroid) {
+      final ready = await _ensureCodexEnvironmentReady(
+        agentId: nextRuntime.agentId,
+      );
+      if (!mounted) return;
+      if (!ready) {
+        _showChatSnackBar('Codex 引擎未安装，已保留当前引擎');
+        return;
+      }
     }
     final selection = _scenarioCapabilitySelection(
       nextRuntime.scenarioId,

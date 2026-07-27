@@ -66,12 +66,18 @@ fn configure_codex_agent_engine(_request: ConfigureCodexRequest) -> String {
     json!({"success":false,"providerAvailable":false,"error":CODEX_UNSUPPORTED}).to_string()
 }
 
-#[cfg(target_os = "android")]
-fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
-    let codex_dir = std::path::Path::new(&request.files_dir)
+#[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
+fn codex_config_dir(files_dir: &str) -> std::path::PathBuf {
+    std::path::Path::new(files_dir)
+        .join("linux-env")
         .join("rootfs")
         .join("root")
-        .join(".codex");
+        .join(".codex")
+}
+
+#[cfg(target_os = "android")]
+fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
+    let codex_dir = codex_config_dir(&request.files_dir);
     let result = (|| -> anyhow::Result<()> {
         std::fs::create_dir_all(&codex_dir)?;
         if !request.config_toml.is_empty() {
@@ -87,6 +93,23 @@ fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
         Err(error) => {
             json!({"success":false,"providerAvailable":true,"error":error.to_string()}).to_string()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_config_dir_targets_linux_env_rootfs_home() {
+        assert_eq!(
+            codex_config_dir("app_files"),
+            std::path::Path::new("app_files")
+                .join("linux-env")
+                .join("rootfs")
+                .join("root")
+                .join(".codex"),
+        );
     }
 }
 
@@ -228,6 +251,7 @@ where
                                     .unwrap_or_default()
                             };
                             for message in messages {
+                                log_codex_runtime_message(&message);
                                 if let Some((open_id, is_resume)) = pending_thread_open {
                                     if response_id(&message) == Some(open_id) {
                                         if let Some(error) = response_error(&message) {
@@ -277,49 +301,42 @@ where
                                             save_state(&request.files_dir, &key, &state);
                                         }
                                         if state.native_thread_id.is_none() {
-                                            let event = ChatEvent::Error {
-                                                message: "Failed to create Codex thread (no thread id returned)"
-                                                    .to_string(),
-                                            };
-                                            emit(event.clone());
-                                            events.push(event);
-                                            saw_completion = true;
-                                            should_close = true;
-                                            break;
+                                            // Newer Codex app-server builds may acknowledge thread/start
+                                            // separately from the thread/started notification that carries
+                                            // the actual thread id. Keep waiting instead of failing this turn.
+                                            continue;
                                         }
                                         pending_thread_open = None;
-                                        let turn_line = with_active_rpc(&key, |rpc| {
-                                            turn_start_request(rpc, &request, &state)
-                                        });
-                                        if let Some(turn_line) = turn_line {
-                                            sent_turn = true;
-                                            if let Err(error) = write_line(pty, &turn_line) {
-                                                let event = ChatEvent::Error {
-                                                    message: error.to_string(),
-                                                };
-                                                emit(event.clone());
-                                                events.push(event);
-                                                saw_completion = true;
-                                                should_close = true;
-                                                break;
-                                            }
-                                        } else {
-                                            let event = ChatEvent::Error {
-                                                message: "Codex session registry entry disappeared"
-                                                    .to_string(),
-                                            };
+                                        if let Err(event) = write_turn_after_thread_open(
+                                            pty, &key, &request, &state,
+                                        ) {
                                             emit(event.clone());
                                             events.push(event);
                                             saw_completion = true;
                                             should_close = true;
                                             break;
                                         }
+                                        sent_turn = true;
                                         continue;
                                     }
                                 }
                                 if let Some(thread_id) = extract_thread_id(&message) {
                                     state.native_thread_id = Some(thread_id);
                                     save_state(&request.files_dir, &key, &state);
+                                    if pending_thread_open.is_some() {
+                                        pending_thread_open = None;
+                                        if let Err(event) = write_turn_after_thread_open(
+                                            pty, &key, &request, &state,
+                                        ) {
+                                            emit(event.clone());
+                                            events.push(event);
+                                            saw_completion = true;
+                                            should_close = true;
+                                            break;
+                                        }
+                                        sent_turn = true;
+                                        continue;
+                                    }
                                 }
                                 let mapped = map_app_server_message(&message);
                                 #[cfg(target_os = "android")]
@@ -439,7 +456,7 @@ fn acquire_session_process(
     let argv = vec![
         "/bin/sh".to_string(),
         "-lc".to_string(),
-        "mkdir -p /workspace/codex && stty raw -echo -icanon -ixon -ixoff 2>/dev/null; export HOME=/root PATH=\"/root/.local/bin:$PATH\"; exec codex app-server 2>/dev/null".to_string(),
+        "mkdir -p /workspace/codex /root/.codex && stty raw -echo -icanon -ixon -ixoff 2>/dev/null; export HOME=/root CODEX_HOME=/root/.codex PATH=\"/root/.local/bin:$PATH\"; exec codex app-server 2>&1".to_string(),
     ];
     let pty = crate::android_linux_env::pty::open_pty_session(
         &request.files_dir,
@@ -486,6 +503,46 @@ fn with_active_rpc<T>(key: &str, build: impl FnOnce(&mut JsonRpcClient) -> T) ->
     let active = guard.get_mut(key)?;
     active.last_used = Instant::now();
     Some(build(&mut active.rpc))
+}
+
+#[cfg(target_os = "android")]
+fn write_turn_after_thread_open(
+    pty: u64,
+    key: &str,
+    request: &AgentEngineTurnRequest,
+    state: &super::state::CodexSessionState,
+) -> Result<(), ChatEvent> {
+    let turn_line = with_active_rpc(key, |rpc| turn_start_request(rpc, request, state))
+        .ok_or_else(|| ChatEvent::Error {
+            message: "Codex session registry entry disappeared".to_string(),
+        })?;
+    write_line(pty, &turn_line).map_err(|error| ChatEvent::Error {
+        message: error.to_string(),
+    })
+}
+
+#[cfg(target_os = "android")]
+fn log_codex_runtime_message(message: &serde_json::Value) {
+    if let Some(codex_home) = message
+        .pointer("/result/codexHome")
+        .and_then(|v| v.as_str())
+    {
+        log::info!("[napaxiCodexTrace] app-server codexHome={codex_home}");
+    }
+    if response_id(message).is_some() {
+        let model_provider = message
+            .pointer("/result/modelProvider")
+            .or_else(|| message.pointer("/result/thread/modelProvider"))
+            .and_then(|v| v.as_str());
+        let model = message.pointer("/result/model").and_then(|v| v.as_str());
+        if model_provider.is_some() || model.is_some() {
+            log::info!(
+                "[napaxiCodexTrace] app-server modelProvider={} model={}",
+                model_provider.unwrap_or(""),
+                model.unwrap_or("")
+            );
+        }
+    }
 }
 
 #[cfg(target_os = "android")]

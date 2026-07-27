@@ -29,6 +29,7 @@ pub(crate) fn map_app_server_message(message: &Value) -> CodexTurnOutcome {
             method.starts_with("item/")
                 || method.starts_with("turn/")
                 || method.starts_with("codex/event/")
+                || *method == "error"
         })
         .map(str::to_string)
         .or_else(|| event_type(event));
@@ -67,10 +68,7 @@ pub(crate) fn map_app_server_message(message: &Value) -> CodexTurnOutcome {
         | Some("codex/event/task_complete")
         | Some("turn_completed")
         | Some("completed")
-        | Some("done") => CodexTurnOutcome {
-            completed: true,
-            ..CodexTurnOutcome::default()
-        },
+        | Some("done") => completed_outcome(event),
         Some("codex/event/turn_aborted")
         | Some("turn_aborted")
         | Some("aborted")
@@ -80,21 +78,68 @@ pub(crate) fn map_app_server_message(message: &Value) -> CodexTurnOutcome {
             failed: true,
             ..CodexTurnOutcome::default()
         },
-        Some("turn_error") | Some("error") | Some("failed") => CodexTurnOutcome {
-            event: Some(ChatEvent::Error {
-                message: first_string(event, &["message", "error", "reason"])
-                    .unwrap_or_else(|| "Codex agent engine failed".to_string()),
-            }),
-            completed: true,
-            failed: true,
-            ..CodexTurnOutcome::default()
-        },
+        Some("turn_error") | Some("error") | Some("failed") => error_outcome(event),
         Some("item/tool/requestUserInput")
         | Some("user_input_request")
         | Some("ask_human")
         | Some("input_request") => user_input_outcome(message, event),
         _ => CodexTurnOutcome::default(),
     }
+}
+
+fn completed_outcome(event: &Value) -> CodexTurnOutcome {
+    let turn = event.get("turn").unwrap_or(event);
+    let status = turn.get("status").and_then(Value::as_str);
+    let error = turn.get("error");
+    if status == Some("failed") || error.is_some() {
+        return CodexTurnOutcome {
+            event: Some(ChatEvent::Error {
+                message: error
+                    .and_then(error_message)
+                    .or_else(|| error_message(turn))
+                    .unwrap_or_else(|| "Codex agent engine failed".to_string()),
+            }),
+            completed: true,
+            failed: true,
+            ..CodexTurnOutcome::default()
+        };
+    }
+    CodexTurnOutcome {
+        completed: true,
+        ..CodexTurnOutcome::default()
+    }
+}
+
+fn error_outcome(event: &Value) -> CodexTurnOutcome {
+    if event
+        .get("willRetry")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return CodexTurnOutcome::default();
+    }
+    CodexTurnOutcome {
+        event: Some(ChatEvent::Error {
+            message: event
+                .get("error")
+                .and_then(error_message)
+                .or_else(|| error_message(event))
+                .unwrap_or_else(|| "Codex agent engine failed".to_string()),
+        }),
+        completed: true,
+        failed: true,
+        ..CodexTurnOutcome::default()
+    }
+}
+
+fn error_message(value: &Value) -> Option<String> {
+    first_string(value, &["message", "error", "reason", "additionalDetails"]).or_else(|| {
+        value
+            .pointer("/error/message")
+            .or_else(|| value.pointer("/error/additionalDetails"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    })
 }
 
 fn event_type(value: &Value) -> Option<String> {

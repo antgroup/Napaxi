@@ -147,8 +147,9 @@ pub(crate) fn extract_thread_id(message: &Value) -> Option<String> {
 pub(crate) fn parse_json_lines(buffer: &mut String, chunk: &str) -> Vec<Value> {
     buffer.push_str(chunk);
     let mut parsed = Vec::new();
-    while let Some(pos) = buffer.find('\n') {
-        let line: String = buffer.drain(..=pos).collect();
+    while let Some((line_end, drain_end)) = next_line_boundary(buffer) {
+        let line: String = buffer.drain(..drain_end).collect();
+        let line = &line[..line_end];
         let trimmed = strip_ansi(line.trim());
         if trimmed.starts_with('{') {
             if let Ok(value) = serde_json::from_str::<Value>(&trimmed) {
@@ -157,6 +158,25 @@ pub(crate) fn parse_json_lines(buffer: &mut String, chunk: &str) -> Vec<Value> {
         }
     }
     parsed
+}
+
+fn next_line_boundary(buffer: &str) -> Option<(usize, usize)> {
+    for (idx, ch) in buffer.char_indices() {
+        match ch {
+            '\n' => return Some((idx, idx + ch.len_utf8())),
+            '\r' => {
+                let next = idx + ch.len_utf8();
+                let drain_end = if buffer[next..].starts_with('\n') {
+                    next + '\n'.len_utf8()
+                } else {
+                    next
+                };
+                return Some((idx, drain_end));
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn strip_ansi(input: &str) -> String {
@@ -187,5 +207,38 @@ mod tests {
         let out = parse_json_lines(&mut buf, "noise\n{\"jsonrpc\":\"2.0\"}\n");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0]["jsonrpc"], "2.0");
+    }
+
+    #[test]
+    fn parses_json_lines_with_cr_and_crlf_delimiters() {
+        let mut buf = String::new();
+        let out = parse_json_lines(
+            &mut buf,
+            "{\"jsonrpc\":\"2.0\",\"id\":1}\r{\"jsonrpc\":\"2.0\",\"id\":2}\r\n",
+        );
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0]["id"], 1);
+        assert_eq!(out[1]["id"], 2);
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn parses_json_lines_split_across_chunks() {
+        let mut buf = String::new();
+        assert!(parse_json_lines(&mut buf, "{\"jsonrpc\":").is_empty());
+        let out = parse_json_lines(&mut buf, "\"2.0\",\"id\":3}\r");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["id"], 3);
+        assert!(buf.is_empty());
+    }
+
+    #[test]
+    fn extracts_thread_id_from_thread_started_notification() {
+        let message = json!({
+            "jsonrpc": "2.0",
+            "method": "thread/started",
+            "params": {"thread": {"id": "thread-1"}}
+        });
+        assert_eq!(extract_thread_id(&message).as_deref(), Some("thread-1"));
     }
 }

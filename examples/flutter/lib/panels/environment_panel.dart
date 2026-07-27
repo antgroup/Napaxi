@@ -144,6 +144,79 @@ class _EnvironmentCommandResult {
   final String error;
 }
 
+Future<_EnvironmentCommandResult> _runDemoEnvironmentShell(
+  String command, {
+  required int timeoutSeconds,
+}) async {
+  if (!Platform.isAndroid) {
+    return const _EnvironmentCommandResult(
+      success: false,
+      output: '',
+      error: 'Android Linux environment is only available on Android.',
+    );
+  }
+  try {
+    final supportDir = await getApplicationSupportDirectory();
+    final workspaceDir = Directory('${supportDir.path}/environment-workspace');
+    if (!workspaceDir.existsSync()) {
+      workspaceDir.createSync(recursive: true);
+    }
+    final timeout = timeoutSeconds.clamp(1, 600).toInt();
+    final response = await _environmentPlatformChannel
+        .invokeMethod<String>('executeLinuxProgram', {
+          'workspaceDir': workspaceDir.path,
+          'argv': ['/bin/sh', '-lc', command],
+          'workdir': '/workspace',
+          'timeout': timeout,
+        })
+        .timeout(Duration(seconds: timeout + 5));
+    final decoded = jsonDecode(response ?? '{}');
+    if (decoded is! Map) {
+      return const _EnvironmentCommandResult(
+        success: false,
+        output: '',
+        error: 'Invalid command response.',
+      );
+    }
+    final map = Map<String, dynamic>.from(decoded);
+    final stdout = (map['stdout'] ?? '').toString().trim();
+    final stderr = (map['stderr'] ?? '').toString().trim();
+    final error = (map['error'] ?? '').toString().trim();
+    final success =
+        (map['success'] as bool? ?? false) &&
+        (map['exitCode'] as int? ?? -1) == 0;
+    return _EnvironmentCommandResult(
+      success: success,
+      output: stdout.isNotEmpty ? stdout : stderr,
+      error: error.isNotEmpty ? error : stderr,
+    );
+  } on TimeoutException {
+    return _EnvironmentCommandResult(
+      success: false,
+      output: '',
+      error: 'Command timed out after ${timeoutSeconds}s.',
+    );
+  } on MissingPluginException {
+    return const _EnvironmentCommandResult(
+      success: false,
+      output: '',
+      error: 'Android Linux bridge is not available.',
+    );
+  } on PlatformException catch (error) {
+    return _EnvironmentCommandResult(
+      success: false,
+      output: '',
+      error: error.message ?? error.code,
+    );
+  } catch (error) {
+    return _EnvironmentCommandResult(
+      success: false,
+      output: '',
+      error: error.toString(),
+    );
+  }
+}
+
 DemoEnvironmentToolStatus _persistentEnvironmentStatus(
   DemoEnvironmentToolStatus status,
 ) {
@@ -340,75 +413,8 @@ class _DevelopmentEnvironmentPageState
   Future<_EnvironmentCommandResult> _runEnvironmentShell(
     String command, {
     required int timeoutSeconds,
-  }) async {
-    if (!Platform.isAndroid) {
-      return const _EnvironmentCommandResult(
-        success: false,
-        output: '',
-        error: 'Android Linux environment is only available on Android.',
-      );
-    }
-    try {
-      final supportDir = await getApplicationSupportDirectory();
-      final workspaceDir = Directory(
-        '${supportDir.path}/environment-workspace',
-      );
-      if (!workspaceDir.existsSync()) {
-        workspaceDir.createSync(recursive: true);
-      }
-      final response = await _environmentPlatformChannel
-          .invokeMethod<String>('executeLinuxProgram', {
-            'workspaceDir': workspaceDir.path,
-            'argv': ['/bin/sh', '-lc', command],
-            'workdir': '/workspace',
-            'timeout': timeoutSeconds.clamp(1, 600).toInt(),
-          })
-          .timeout(Duration(seconds: timeoutSeconds.clamp(1, 600).toInt() + 5));
-      final decoded = jsonDecode(response ?? '{}');
-      if (decoded is! Map) {
-        return const _EnvironmentCommandResult(
-          success: false,
-          output: '',
-          error: 'Invalid command response.',
-        );
-      }
-      final map = Map<String, dynamic>.from(decoded);
-      final stdout = (map['stdout'] ?? '').toString().trim();
-      final stderr = (map['stderr'] ?? '').toString().trim();
-      final error = (map['error'] ?? '').toString().trim();
-      final success =
-          (map['success'] as bool? ?? false) &&
-          (map['exitCode'] as int? ?? -1) == 0;
-      return _EnvironmentCommandResult(
-        success: success,
-        output: stdout.isNotEmpty ? stdout : stderr,
-        error: error.isNotEmpty ? error : stderr,
-      );
-    } on TimeoutException {
-      return _EnvironmentCommandResult(
-        success: false,
-        output: '',
-        error: 'Command timed out after ${timeoutSeconds}s.',
-      );
-    } on MissingPluginException {
-      return const _EnvironmentCommandResult(
-        success: false,
-        output: '',
-        error: 'Android Linux bridge is not available.',
-      );
-    } on PlatformException catch (error) {
-      return _EnvironmentCommandResult(
-        success: false,
-        output: '',
-        error: error.message ?? error.code,
-      );
-    } catch (error) {
-      return _EnvironmentCommandResult(
-        success: false,
-        output: '',
-        error: error.toString(),
-      );
-    }
+  }) {
+    return _runDemoEnvironmentShell(command, timeoutSeconds: timeoutSeconds);
   }
 
   Future<void> _editVersion(DemoEnvironmentTool tool) async {
@@ -1518,6 +1524,9 @@ test -f /opt/x86root/sysroot/lib64/ld-linux-x86-64.so.2
 echo 22.04
 ''';
 
+const String _codexCliCheckCommand =
+    r'HOME=/root PATH="/root/.local/bin:$PATH" codex --version 2>&1';
+
 // Installs the Codex CLI into the sandbox user's npm prefix. Avoid `apk add`
 // here: mobile/proot sandboxes may not have permission to write apk's system
 // package database. Node.js/npm are managed separately by the System packages
@@ -1562,8 +1571,7 @@ List<DemoEnvironmentTool> _defaultEnvironmentTools() {
       name: 'Codex',
       category: 'Coding agents',
       targetVersion: 'latest',
-      checkCommand:
-          r'HOME=/root PATH="/root/.local/bin:$PATH" codex --version 2>&1',
+      checkCommand: _codexCliCheckCommand,
       installCommand: _installCodexCliCommand,
       timeoutSeconds: 600,
     ),
