@@ -395,6 +395,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
   final FocusNode _searchFocusNode = FocusNode();
 
   bool _isSearching = false;
+  bool _showSearchClose = false;
   String _searchQuery = '';
   late _SessionHistoryView _view;
   final List<_SessionHistoryView> _viewStack = [];
@@ -458,16 +459,22 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
   }
 
   void _toggleSearch() {
+    final opening = !_isSearching;
     setState(() {
-      _isSearching = !_isSearching;
-      if (!_isSearching) {
+      _isSearching = opening;
+      _showSearchClose = false;
+      if (!opening) {
         _searchController.clear();
         _searchQuery = '';
       }
     });
-    if (_isSearching) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _searchFocusNode.requestFocus();
+    if (opening) {
+      Future<void>.delayed(const Duration(milliseconds: 100), () {
+        if (!mounted || !_isSearching) return;
+        setState(() => _showSearchClose = true);
+      });
+      Future<void>.delayed(const Duration(milliseconds: 180), () {
+        if (mounted && _isSearching) _searchFocusNode.requestFocus();
       });
     } else {
       _searchFocusNode.unfocus();
@@ -938,88 +945,67 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
       ),
     );
 
-    final header = AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      child: _isSearching
-          ? Padding(
-              key: const ValueKey('session_search_header'),
-              padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      key: const Key('session_history_search_field'),
-                      controller: _searchController,
-                      focusNode: _searchFocusNode,
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        hintText: strings.searchHistoryHint,
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 12,
+    final header = SizedBox(
+      height: 88,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 260),
+        reverseDuration: const Duration(milliseconds: 210),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (currentChild, previousChildren) => Stack(
+          alignment: Alignment.topRight,
+          children: [...previousChildren, ?currentChild],
+        ),
+        transitionBuilder: (child, animation) {
+          final curvedAnimation = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          if (child.key == const ValueKey('session_search_header')) {
+            return FadeTransition(
+              opacity: curvedAnimation,
+              child: SizeTransition(
+                axis: Axis.horizontal,
+                axisAlignment: 1,
+                sizeFactor: curvedAnimation,
+                child: child,
+              ),
+            );
+          }
+          return FadeTransition(opacity: curvedAnimation, child: child);
+        },
+        child: _isSearching
+            ? Padding(
+                key: const ValueKey('session_search_header'),
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
+                child: _buildSessionSearchBar(context, strings),
+              )
+            : Padding(
+                key: const ValueKey('session_title_header'),
+                padding: const EdgeInsets.fromLTRB(24, 24, 20, 18),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.activeAgent.label(
+                          _AppLanguageScope.languageOf(context),
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFE5E7EB),
-                          ),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFFE5E7EB),
-                          ),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF333333),
-                            width: 1.2,
-                          ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _sessionMenuText,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
                         ),
                       ),
                     ),
-                  ),
-                  IconButton(
-                    key: const Key('session_history_search_close'),
-                    tooltip: MaterialLocalizations.of(
-                      context,
-                    ).closeButtonTooltip,
-                    onPressed: _toggleSearch,
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                ],
+                    headerActions,
+                  ],
+                ),
               ),
-            )
-          : Padding(
-              key: const ValueKey('session_title_header'),
-              padding: const EdgeInsets.fromLTRB(24, 24, 20, 18),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.activeAgent.label(
-                        _AppLanguageScope.languageOf(context),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _sessionMenuText,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ),
-                  headerActions,
-                ],
-              ),
-            ),
+      ),
     );
 
     return SizedBox(
@@ -1028,6 +1014,112 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
         key: const Key('session_history_frosted_header_surface'),
         child: header,
       ),
+    );
+  }
+
+  Widget _buildSessionSearchBar(BuildContext context, AppStrings strings) {
+    final surfaceDecoration = BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.82),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.94), width: 1),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 18,
+          offset: const Offset(0, 5),
+        ),
+      ],
+    );
+
+    return Row(
+      key: const Key('session_history_search_bar'),
+      children: [
+        Expanded(
+          child: Container(
+            key: const Key('session_history_search_input_surface'),
+            height: 46,
+            decoration: surfaceDecoration,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Material(
+                color: Colors.transparent,
+                child: TextField(
+                  key: const Key('session_history_search_field'),
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  textInputAction: TextInputAction.search,
+                  cursorColor: _sessionMenuText,
+                  style: const TextStyle(
+                    color: _sessionMenuText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: strings.searchHistoryHint,
+                    hintStyle: TextStyle(
+                      color: _sessionMenuMuted.withValues(alpha: 0.62),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    prefixIcon: const Padding(
+                      padding: EdgeInsets.only(left: 2),
+                      child: Icon(
+                        Icons.search_rounded,
+                        color: _sessionMenuText,
+                        size: 22,
+                      ),
+                    ),
+                    prefixIconConstraints: const BoxConstraints(
+                      minWidth: 44,
+                      minHeight: 46,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.fromLTRB(0, 13, 16, 12),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        IgnorePointer(
+          ignoring: !_showSearchClose,
+          child: AnimatedOpacity(
+            opacity: _showSearchClose ? 1 : 0,
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOutCubic,
+            child: AnimatedScale(
+              scale: _showSearchClose ? 1 : 0.82,
+              duration: const Duration(milliseconds: 190),
+              curve: Curves.easeOutBack,
+              child: Container(
+                key: const Key('session_history_search_close_surface'),
+                width: 46,
+                height: 46,
+                decoration: surfaceDecoration,
+                child: ClipOval(
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: const Key('session_history_search_close'),
+                      onTap: _toggleSearch,
+                      child: const Center(
+                        child: Icon(
+                          Icons.close_rounded,
+                          color: _sessionMenuText,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1203,7 +1295,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                   key: const Key('session_history_list'),
                   padding: EdgeInsets.fromLTRB(
                     0,
-                    _isSearching ? 72 : 92,
+                    92,
                     0,
                     _isSearching ? 20 : 104,
                   ),
@@ -2064,7 +2156,7 @@ class _SettingsPage extends StatefulWidget {
     required this.onOpenFeedback,
     required this.onOpenContact,
     required this.onBack,
-    this.onMenu,
+    this.onClose,
     this.initialSection = _SettingsSection.menu,
   });
 
@@ -2090,7 +2182,7 @@ class _SettingsPage extends StatefulWidget {
   final VoidCallback onOpenFeedback;
   final VoidCallback onOpenContact;
   final Future<bool> Function() onBack;
-  final VoidCallback? onMenu;
+  final VoidCallback? onClose;
   final _SettingsSection initialSection;
 
   @override
@@ -2133,28 +2225,36 @@ class _SettingsPageState extends State<_SettingsPage> {
         foregroundColor: _configTextPrimary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: _section == _SettingsSection.menu && widget.onMenu != null
-            ? IconButton(
-                key: const Key('settings_page_menu_button'),
-                tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-                onPressed: widget.onMenu,
-                icon: const Icon(Icons.menu_rounded),
-              )
-            : BackButton(
-                onPressed: () async {
-                  if (_section != _SettingsSection.menu) {
-                    setState(() => _section = _SettingsSection.menu);
-                    return;
-                  }
-                  final handled = await widget.onBack();
-                  if (handled != false && context.mounted) {
-                    Navigator.of(context).pop();
-                  }
-                },
-              ),
+        automaticallyImplyLeading: false,
+        leading: _section == _SettingsSection.menu
+            ? widget.onClose == null
+                  ? BackButton(onPressed: _handleBack)
+                  : null
+            : BackButton(onPressed: _handleBack),
+        actions: [
+          if (_section == _SettingsSection.menu && widget.onClose != null)
+            IconButton(
+              key: const Key('settings_bottom_sheet_close_button'),
+              tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+              onPressed: widget.onClose,
+              icon: const Icon(Icons.close_rounded),
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: _buildBody(strings),
     );
+  }
+
+  Future<void> _handleBack() async {
+    if (_section != _SettingsSection.menu) {
+      setState(() => _section = _SettingsSection.menu);
+      return;
+    }
+    final handled = await widget.onBack();
+    if (handled != false && mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   Widget _buildBody(AppStrings strings) {

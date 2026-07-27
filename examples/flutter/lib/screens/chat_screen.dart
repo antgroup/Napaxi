@@ -260,7 +260,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-enum _ChatPrimaryView { chat, files, skills, projects, projectDetail, settings }
+enum _ChatPrimaryView { chat, files, skills, projects, projectDetail }
 
 class _ChatScreenState extends State<ChatScreen>
     with
@@ -375,8 +375,6 @@ class _ChatScreenState extends State<ChatScreen>
   _ChatPrimaryView _primaryView = _ChatPrimaryView.chat;
   Future<NapaxiChatClient>? _primaryFilesClientFuture;
   Future<NapaxiChatClient>? _primarySkillsClientFuture;
-  _SettingsSection _primarySettingsInitialSection = _SettingsSection.menu;
-  int _primarySettingsPageRevision = 0;
   String? _selectedChatProjectId;
   bool _isRenamingSessionTitle = false;
   String _activeScenarioId = _generalScenarioId;
@@ -2233,18 +2231,139 @@ class _ChatScreenState extends State<ChatScreen>
     _closeSessionHistory();
   }
 
-  void _showSettingsSection(_SettingsSection section) {
+  Future<void> _showSettingsSheet(_SettingsSection section) async {
     _dismissKeyboard();
-    setState(() {
-      _primaryView = _ChatPrimaryView.settings;
-      _primarySettingsInitialSection = section;
-      _primarySettingsPageRevision += 1;
-    });
-    _closeSessionHistory();
+    if (!mounted) return;
+    int? dragPointer;
+    Offset? dragOrigin;
+    var dismissTriggered = false;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.24),
+      builder: (sheetContext) => Listener(
+        key: const Key('settings_bottom_sheet_gesture_surface'),
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (event) {
+          if (dragPointer != null || dismissTriggered) return;
+          dragPointer = event.pointer;
+          dragOrigin = event.position;
+        },
+        onPointerMove: (event) {
+          if (event.pointer != dragPointer || dismissTriggered) return;
+          final origin = dragOrigin;
+          if (origin == null) return;
+          final delta = event.position - origin;
+          if (delta.dy < 72 || delta.dy <= delta.dx.abs() * 1.2) return;
+          dismissTriggered = true;
+          Navigator.of(sheetContext).pop();
+        },
+        onPointerUp: (event) {
+          if (event.pointer != dragPointer) return;
+          dragPointer = null;
+          dragOrigin = null;
+        },
+        onPointerCancel: (event) {
+          if (event.pointer != dragPointer) return;
+          dragPointer = null;
+          dragOrigin = null;
+        },
+        child: FractionallySizedBox(
+          key: const Key('settings_bottom_sheet_frame'),
+          heightFactor: 1,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: _configPageBackground,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.12),
+                  blurRadius: 30,
+                  offset: const Offset(0, -6),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              child: Material(
+                key: const Key('settings_bottom_sheet'),
+                color: _configPageBackground,
+                child: Column(
+                  children: [
+                    const SizedBox(
+                      height: 22,
+                      child: Center(
+                        child: SizedBox(
+                          key: Key('settings_bottom_sheet_handle'),
+                          width: 38,
+                          height: 4,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Color(0xFFD2D4D8),
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(2),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _SettingsPage(
+                        initialConfig: _config,
+                        language: widget.language,
+                        onConfigChanged: _handleConfigChanged,
+                        onLanguageChanged: widget.onLanguageChanged,
+                        createScenariosClientFuture:
+                            _buildScenariosClientFuture,
+                        createNearbyClientFuture: _getChatClient,
+                        activeScenarioId: _activeScenarioId,
+                        gitSettings: _gitSettings,
+                        onScenarioApplied: _handleScenarioApplied,
+                        onGitSettingsChanged: _handleGitSettingsChanged,
+                        onGitSettingsCleared: _handleGitSettingsCleared,
+                        updateService: widget.updateService,
+                        onCheckForUpdates: () =>
+                            _checkForUpdates(automatic: false),
+                        onNearbyStart: () =>
+                            _setA2AConnectionAllowedFromSettings(true),
+                        onNearbyStop: () =>
+                            _setA2AConnectionAllowedFromSettings(false),
+                        onNearbyInvite: () => _createA2AInvite('/a2a invite'),
+                        onNearbyScan: () => _scanA2AInvite('/a2a scan'),
+                        onNearbyDeletePeer: _deleteA2APairedPeer,
+                        getNearbyPairingDiagnostic: () async =>
+                            _lastA2APairingDiagnostic,
+                        onOpenFeedback: _openPrimaryFeedbackPage,
+                        onOpenContact: _openPrimaryContactPage,
+                        onBack: () async {
+                          Navigator.of(sheetContext).pop();
+                          return false;
+                        },
+                        onClose: () => Navigator.of(sheetContext).pop(),
+                        initialSection: section,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _showSettingsFromMenu() {
-    _showSettingsSection(_SettingsSection.menu);
+    unawaited(_showSettingsSheet(_SettingsSection.menu));
   }
 
   void _openChatProject(_ChatProject project) {
@@ -6736,7 +6855,7 @@ $candidate
   }
 
   Future<void> _openConfigPage() async {
-    _showSettingsSection(_SettingsSection.configuration);
+    await _showSettingsSheet(_SettingsSection.configuration);
   }
 
   Future<void> _openActiveContextModelConfig() async {
@@ -7406,7 +7525,7 @@ $candidate
   }
 
   void _openScenariosFromChat() {
-    _showSettingsSection(_SettingsSection.scenarios);
+    unawaited(_showSettingsSheet(_SettingsSection.scenarios));
   }
 
   void _openSkillOrganizeFromChat(ChatMessage message) {
@@ -7749,43 +7868,6 @@ $candidate
     );
   }
 
-  Widget _buildSettingsPrimarySurface() {
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: _handleChatPointerDown,
-      onPointerMove: _handleChatPointerMove,
-      onPointerUp: _handleChatPointerEnd,
-      onPointerCancel: _handleChatPointerEnd,
-      child: _SettingsPage(
-        key: ValueKey('primary_settings_$_primarySettingsPageRevision'),
-        initialConfig: _config,
-        language: widget.language,
-        onConfigChanged: _handleConfigChanged,
-        onLanguageChanged: widget.onLanguageChanged,
-        createScenariosClientFuture: _buildScenariosClientFuture,
-        createNearbyClientFuture: _getChatClient,
-        activeScenarioId: _activeScenarioId,
-        gitSettings: _gitSettings,
-        onScenarioApplied: _handleScenarioApplied,
-        onGitSettingsChanged: _handleGitSettingsChanged,
-        onGitSettingsCleared: _handleGitSettingsCleared,
-        updateService: widget.updateService,
-        onCheckForUpdates: () => _checkForUpdates(automatic: false),
-        onNearbyStart: () => _setA2AConnectionAllowedFromSettings(true),
-        onNearbyStop: () => _setA2AConnectionAllowedFromSettings(false),
-        onNearbyInvite: () => _createA2AInvite('/a2a invite'),
-        onNearbyScan: () => _scanA2AInvite('/a2a scan'),
-        onNearbyDeletePeer: _deleteA2APairedPeer,
-        getNearbyPairingDiagnostic: () async => _lastA2APairingDiagnostic,
-        onOpenFeedback: _openPrimaryFeedbackPage,
-        onOpenContact: _openPrimaryContactPage,
-        onBack: () async => false,
-        onMenu: _openSessionHistory,
-        initialSection: _primarySettingsInitialSection,
-      ),
-    );
-  }
-
   Widget _buildFilesPrimarySurface() {
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -7823,7 +7905,6 @@ $candidate
       _ChatPrimaryView.skills => _buildSkillsPrimarySurface(),
       _ChatPrimaryView.projects ||
       _ChatPrimaryView.projectDetail => _buildProjectsPrimarySurface(),
-      _ChatPrimaryView.settings => _buildSettingsPrimarySurface(),
       _ChatPrimaryView.chat => const SizedBox.shrink(),
     };
   }

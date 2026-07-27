@@ -2564,7 +2564,7 @@ void main() {
 
     expect(find.text('Files'), findsOneWidget);
     expect(find.byKey(const Key('files_menu_button')), findsOneWidget);
-    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('files_menu_button')));
     await tester.pumpAndSettle();
@@ -2743,18 +2743,44 @@ void main() {
     await tester.tap(find.byKey(const Key('settings_menu_button')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
-    expect(find.byKey(const Key('settings_page_menu_button')), findsOneWidget);
-    await tester.tap(find.byKey(const Key('settings_page_menu_button')));
+    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settings_bottom_sheet_handle')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('settings_bottom_sheet_close_button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('settings_page_menu_button')), findsNothing);
+    expect(
+      find.byKey(const Key('settings_bottom_sheet_gesture_surface')),
+      findsOneWidget,
+    );
+    await tester.drag(
+      find.byKey(const Key('settings_basic_item')),
+      const Offset(0, 120),
+    );
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsNothing);
     expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
     expect(find.byKey(const Key('settings_menu_selected')), findsNothing);
     await tester.tap(find.byKey(const Key('settings_menu_button')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
-    expect(find.byKey(const Key('settings_page_menu_button')), findsOneWidget);
+    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    expect(
+      tester
+          .widget<FractionallySizedBox>(
+            find.byKey(const Key('settings_bottom_sheet_frame')),
+          )
+          .heightFactor,
+      1,
+    );
+    expect(find.byKey(const Key('settings_page_menu_button')), findsNothing);
     expect(find.byKey(const Key('settings_basic_item')), findsOneWidget);
     expect(find.byKey(const Key('settings_scenarios_item')), findsOneWidget);
     expect(find.byKey(const Key('settings_engines_item')), findsNothing);
@@ -6162,6 +6188,19 @@ void main() {
 
     await tester.tap(find.byKey(const Key('session_history_search_button')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session_history_search_bar')), findsOneWidget);
+    expect(
+      find.byKey(const Key('session_history_search_close_surface')),
+      findsOneWidget,
+    );
+    final searchInputSurface = find.byKey(
+      const Key('session_history_search_input_surface'),
+    );
+    expect(searchInputSurface, findsOneWidget);
+    final searchInputDecoration =
+        tester.widget<Container>(searchInputSurface).decoration
+            as BoxDecoration;
+    expect(searchInputDecoration.borderRadius, BorderRadius.circular(24));
     await tester.enterText(
       find.byKey(const Key('session_history_search_field')),
       'example',
