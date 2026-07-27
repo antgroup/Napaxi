@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('developer Codex runtime routes through core external host engine', () {
+  test('developer Codex runtime routes through core-owned Codex engine', () {
     final clientSource = File(
       'lib/demo_client/napaxi_chat_client.dart',
     ).readAsStringSync();
@@ -22,20 +22,28 @@ void main() {
       contains('agentEngineExecutor: _CliAgentEngineExecutor'),
     );
     expect(clientSource, contains("runtimeProfile.agentId == 'engine.codex'"));
-    expect(clientSource, contains('sdk.externalHostAgentEngineId'));
+    expect(clientSource, contains('sdk.codexAgentEngineId'));
     expect(clientSource, contains("engineProfileId: isCodex ? 'codex' : ''"));
     expect(
       clientSource,
       contains("engineConfig: isCodex ? const {'kind': 'codex'}"),
     );
-    expect(clientSource, contains('napaxi.agent_engine.external_host'));
+    expect(clientSource, contains('sdk.codexAgentEngineId'));
+    expect(
+      clientSource,
+      contains('napaxi.agent_engine.external_host'),
+    ); // CC remains external-host.
     expect(clientSource, contains('_runtimeAgentDefinitionNeedsUpdate'));
     expect(clientSource, contains('existing.engineId'));
     expect(clientSource, contains('existing.engineProfileId'));
     expect(clientSource, contains('existing.engineConfig'));
     expect(clientSource, contains("agentId == 'engine.cc'"));
-    expect(clientSource, contains("_getOrCreateBridge('codex')"));
-    expect(clientSource, contains('recordNativeThreadId'));
+    expect(
+      clientSource,
+      isNot(contains('recordNativeThreadId(session.threadId')),
+    );
+    expect(clientSource, isNot(contains('_getOrCreateBridge(\'codex\')')));
+    expect(clientSource, contains('_CliEngineSpec.codex.workspacePath'));
 
     expect(
       clientSource,
@@ -52,7 +60,10 @@ void main() {
 
     expect(bridgeSource, contains('class _CliAgentEngineExecutor'));
     expect(bridgeSource, contains('implements sdk.AgentEngineExecutor'));
-    expect(bridgeSource, contains("kind == 'codex' || profile == 'codex'"));
+    expect(
+      bridgeSource,
+      contains('Codex is handled by napaxi.agent_engine.codex in Rust core'),
+    );
     expect(
       bridgeSource,
       contains('sdk.AgentEngineTurnResult.fromEvents(events)'),
@@ -64,10 +75,11 @@ void main() {
       contains(r'export HOME=/root PATH="/root/.local/bin:\$PATH";'),
     );
 
+    expect(scenariosSource, contains('napaxi.agent_engine.codex'));
     expect(scenariosSource, contains('napaxi.agent_engine.external_host'));
     expect(chatScreenSource, contains("if (agentId == 'engine.cc')"));
-    expect(chatScreenSource, contains('Codex now routes through Rust core'));
-    expect(chatScreenSource, contains('Do not migrate'));
+    expect(chatScreenSource, contains('napaxi.agent_engine.codex'));
+    expect(chatScreenSource, contains('core-owned'));
     expect(
       chatScreenSource,
       isNot(contains('if (isCliEngine) {\n        // CLI bridges (CC/Codex)')),

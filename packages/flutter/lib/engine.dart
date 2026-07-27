@@ -44,6 +44,7 @@ import 'api/automation_api.dart';
 import 'api/evolution_api.dart';
 import 'api/tool_api.dart';
 import 'api/workspace_api.dart';
+import 'generated/bridge/agent_engine.dart' as rust_agent_engine;
 import 'generated/bridge/file_bridge.dart' as rust_file_bridge;
 import 'generated/bridge/init.dart' as rust_init;
 import 'generated/bridge/session.dart' as rust_session;
@@ -245,6 +246,7 @@ class NapaxiEngine {
         NapaxiChannelCapability.im,
         NapaxiChannelCapability.device,
         if (_toolExecutor != null) 'napaxi.tool.custom_host',
+        'napaxi.agent_engine.codex',
         if (_agentEngineExecutor != null) 'napaxi.agent_engine.external_host',
         if (_agentAppActionExecutor != null) 'napaxi.tool.agent_app_action',
         if (_platformToolExecutor != null) 'napaxi.platform_tool.*',
@@ -410,6 +412,7 @@ class NapaxiEngine {
         NapaxiChannelCapability.im,
         NapaxiChannelCapability.device,
         if (hasCustomToolExecutor) 'napaxi.tool.custom_host',
+        'napaxi.agent_engine.codex',
         if (hasAgentEngineExecutor) 'napaxi.agent_engine.external_host',
         if (hasAgentAppActionExecutor) 'napaxi.tool.agent_app_action',
         if (enablePlatformTools) 'napaxi.platform_tool.*',
@@ -431,6 +434,7 @@ class NapaxiEngine {
         NapaxiChannelCapability.im,
         NapaxiChannelCapability.device,
         if (hasCustomToolExecutor) 'napaxi.tool.custom_host',
+        'napaxi.agent_engine.codex',
         if (hasAgentEngineExecutor) 'napaxi.agent_engine.external_host',
         if (hasAgentAppActionExecutor) 'napaxi.tool.agent_app_action',
         if (hasBrowserController) BrowserToolProvider.capabilityId,
@@ -450,6 +454,26 @@ class NapaxiEngine {
     );
     if (result) _config = newConfig;
     return result;
+  }
+
+  /// Write Codex app-server configuration into the SDK-managed sandbox.
+  ///
+  /// Android stores these values under `/root/.codex/` inside the Napaxi Linux
+  /// sandbox. Other platforms keep the API surface but return an explicit
+  /// unsupported result until they provide a Codex runtime.
+  CodexAgentEngineConfigResult configureCodexAgentEngine({
+    String configToml = '',
+    String authJson = '',
+  }) {
+    final raw = rust_agent_engine.configureCodexAgentEngineJson(
+      handle: _handle,
+      requestJson: jsonEncode({
+        'files_dir': filesDir,
+        'config_toml': configToml,
+        'auth_json': authJson,
+      }),
+    );
+    return CodexAgentEngineConfigResult.fromMap(decodeJsonObject(raw));
   }
 
   /// 预创建默认 Agent（"napaxi"），确保 listSkills 等 API 可立即使用。

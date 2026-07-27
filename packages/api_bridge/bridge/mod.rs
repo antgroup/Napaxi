@@ -6,6 +6,8 @@
 
 mod wire;
 
+pub mod agent_engine;
+
 pub mod init {
     use crate::frb_generated::StreamSink;
     use std::sync::{Arc, OnceLock};

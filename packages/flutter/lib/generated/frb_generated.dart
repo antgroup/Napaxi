@@ -7,6 +7,7 @@ import 'bridge/a2a.dart';
 import 'bridge/agent.dart';
 import 'bridge/agent_app.dart';
 import 'bridge/agent_defs.dart';
+import 'bridge/agent_engine.dart';
 import 'bridge/automation.dart';
 import 'bridge/capability.dart';
 import 'bridge/channel.dart';
@@ -24,6492 +25,9213 @@ import 'bridge/workspace.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'frb_generated.dart';
-import 'frb_generated.io.dart' if (dart.library.js_interop) 'frb_generated.web.dart';
+import 'frb_generated.io.dart'
+    if (dart.library.js_interop) 'frb_generated.web.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-
-                /// Main entrypoint of the Rust API
-                class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
-                  @internal
-                  static final instance = RustLib._();
-
-                  RustLib._();
-
-                  /// Initialize flutter_rust_bridge
-                  static Future<void> init({
-                    RustLibApi? api,
-                    BaseHandler? handler,
-                    ExternalLibrary? externalLibrary,
-                    bool forceSameCodegenVersion = true,
-                  }) async {
-                    await instance.initImpl(
-                      api: api,
-                      handler: handler,
-                      externalLibrary: externalLibrary,
-                      forceSameCodegenVersion: forceSameCodegenVersion,
-                    );
-                  }
-
-                  /// Initialize flutter_rust_bridge in mock mode.
-                  /// No libraries for FFI are loaded.
-                  static void initMock({
-                    required RustLibApi api,
-                  }) {
-                    instance.initMockImpl(
-                      api: api,
-                    );
-                  }
-
-                  /// Dispose flutter_rust_bridge
-                  ///
-                  /// The call to this function is optional, since flutter_rust_bridge (and everything else)
-                  /// is automatically disposed when the app stops.
-                  static void dispose() => instance.disposeImpl();
-
-                  @override
-                  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor => RustLibApiImpl.new;
-
-                  @override
-                  WireConstructor<RustLibWire> get wireConstructor => RustLibWire.fromExternalLibrary;
-
-                  @override
-                  Future<void> executeRustInitializers() async {
-                    
-                  }
-
-                  @override
-                  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig => kDefaultExternalLibraryLoaderConfig;
-
-                  @override
-                  String get codegenVersion => '2.12.0';
-
-                  @override
-                  int get rustContentHash => 1900470885;
-
-                  static const kDefaultExternalLibraryLoaderConfig = ExternalLibraryLoaderConfig(
-                    stem: 'napaxi_api_bridge',
-                    ioDirectory: '../api_bridge/target/release/',
-                    webPrefix: 'pkg/',
-                    wasmBindgenName: 'wasm_bindgen',
-                  );
-                }
-                
-
-                abstract class RustLibApi extends BaseApi {
-                  String crateBridgeA2AAcceptA2ADeepLink({required PlatformInt64 handle , required String envelopeJson , required String source });
-
-String crateBridgeA2AAcceptA2APeerInvite({required PlatformInt64 handle , required String envelopeJson });
-
-String crateBridgeAgentAppAcceptAgentAppTrigger({required PlatformInt64 handle , required String triggerJson });
-
-bool crateBridgeChannelAckChannelInbound({required PlatformInt64 handle , required String inboundId });
-
-bool crateBridgeChannelAckChannelOutbound({required PlatformInt64 handle , required String outboundId , required String receiptJson });
-
-String crateBridgeCapabilityAgentEngineCapabilityId({required String engineId });
-
-Future<String> crateBridgeAgentAgentSend({required PlatformInt64 handle , required String agentId , required String configJson , required String sessionKeyJson , required String message , required int maxIterations });
-
-Future<bool> crateBridgeSessionAnswerHumanRequest({required PlatformInt64 handle , required String requestId , required String response });
-
-Future<bool> crateBridgeWorkspaceAppendWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path , required String content });
-
-String crateBridgeEvolutionApplyPendingEvolution({required PlatformInt64 handle , required String pendingId });
-
-Future<String> crateBridgeSkillArchiveSkill({required PlatformInt64 handle , required String agentId , required String skillName });
-
-String crateBridgeInitBrowserToolDescriptorsJson();
-
-String crateBridgeA2ABuildA2AResultLink({required PlatformInt64 handle , required String taskId , required String callbackUrl });
-
-Future<bool> crateBridgeSessionCancelSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson });
-
-String crateBridgeChannelAgentChannelAgentStatus({required PlatformInt64 handle , String? channelName });
-
-String crateBridgeSkillCheckSkills({required PlatformInt64 handle , required String agentId });
-
-bool crateBridgeGroupClearGroupHistory({required PlatformInt64 handle , required String groupId });
-
-Future<bool> crateBridgeSessionClearSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson });
-
-Future<String> crateBridgeSessionCompactContext({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , String? focus });
-
-bool crateBridgeFileBridgeConfigureGitIdentity({required PlatformInt64 handle , required String name , required String email });
-
-Future<String> crateBridgeSessionContextStatus({required PlatformInt64 handle , required String configJson , required String agentId , required String threadId });
-
-String crateBridgeA2ACreateA2APeerInvite({required PlatformInt64 handle , required String agentId , required String optionsJson });
-
-String crateBridgeA2ACreateA2ATaskMessage({required PlatformInt64 handle , required String sessionId , required String message , required String optionsJson });
-
-String crateBridgeA2ACreateA2ATaskProgressMessage({required PlatformInt64 handle , required String sessionId , required String taskId , required String message , required String progressJson });
-
-String crateBridgeA2ACreateA2ATaskResultMessage({required PlatformInt64 handle , required String sessionId , required String taskId , required String resultJson });
-
-Future<String> crateBridgeAgentDefsCreateAgentDefinition({required PlatformInt64 handle , required String defJson });
-
-Future<PlatformInt64> crateBridgeAgentDefsCreateAgentFromDefinition({required PlatformInt64 handle , required String defId , required String configJson });
-
-String crateBridgeAutomationCreateAutomationJob({required PlatformInt64 handle , required String jobJson });
-
-PlatformInt64 crateBridgeInitCreateEngine({required String configJson , required String platformContextJson });
-
-Future<String> crateBridgeGroupCreateGroup({required PlatformInt64 handle , required String name , required String membersJson });
-
-Future<String> crateBridgeSessionCreateSession({required PlatformInt64 handle , required String configJson , required String agentId , required String channelType , required String accountId , String? existingThreadId });
-
-bool crateBridgeA2ADeleteA2APeer({required PlatformInt64 handle , required String peerId });
-
-bool crateBridgeAgentDeleteAgent({required PlatformInt64 handle , required String agentId });
-
-bool crateBridgeAgentAppDeleteAgentAppPackage({required PlatformInt64 handle , required String agentId });
-
-Future<bool> crateBridgeAgentDefsDeleteAgentDefinition({required PlatformInt64 handle , required String defId });
-
-bool crateBridgeAutomationDeleteAutomationJob({required PlatformInt64 handle , required String jobId });
-
-bool crateBridgeGroupDeleteGroup({required PlatformInt64 handle , required String groupId });
-
-Future<bool> crateBridgeFileBridgeDeleteSandboxFile({required PlatformInt64 handle , required String sandboxPath });
-
-Future<bool> crateBridgeFileBridgeDeleteSandboxFileScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String sandboxPath });
-
-Future<bool> crateBridgeSessionDeleteSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson });
-
-Future<bool> crateBridgeSessionDeleteSessionIfEmpty({required PlatformInt64 handle , required String sessionKeyJson });
-
-bool crateBridgeFileBridgeDeleteThreadAttachments({required PlatformInt64 handle , required String threadId });
-
-Future<bool> crateBridgeWorkspaceDeleteWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path });
-
-String crateBridgeFileBridgeDetectFileReferences({required PlatformInt64 handle , required String text });
-
-String crateBridgeFileBridgeDetectFileReferencesScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String text });
-
-void crateBridgeInitDisposeEngine({required PlatformInt64 handle });
-
-String crateBridgeChannelEnqueueChannelOutbound({required PlatformInt64 handle , required String outboundJson });
-
-bool crateBridgeInitEnsureAgentReady({required PlatformInt64 handle , required String configJson });
-
-String crateBridgeGroupExportGroupState({required PlatformInt64 handle });
-
-bool crateBridgeChannelFailChannelInbound({required PlatformInt64 handle , required String inboundId , required String error });
-
-bool crateBridgeChannelFailChannelOutbound({required PlatformInt64 handle , required String outboundId , required String error });
-
-String crateBridgeA2AGetA2AAgentCard({required PlatformInt64 handle , required String agentId });
-
-String crateBridgeA2AGetA2ATask({required PlatformInt64 handle , required String taskId });
-
-String crateBridgeSessionRunsGetActiveSessionRuns({required PlatformInt64 handle });
-
-String crateBridgeAgentAppGetAgentAppActionProposal({required PlatformInt64 handle , required String requestId });
-
-String crateBridgeAgentAppGetAgentAppPackage({required PlatformInt64 handle , required String agentId });
-
-Future<String> crateBridgeAgentDefsGetAgentDefinition({required PlatformInt64 handle , required String defId });
-
-String crateBridgeAutomationGetAutomationJob({required PlatformInt64 handle , required String jobId });
-
-Future<String> crateBridgeSkillGetCatalogSkill({required String slug });
-
-String crateBridgeInitGetConfig({required PlatformInt64 handle });
-
-String crateBridgeGroupGetGroup({required PlatformInt64 handle , required String groupId });
-
-String crateBridgeGroupGetGroupMessages({required PlatformInt64 handle , required String groupId });
-
-Future<String> crateBridgeSessionGetHistory({required PlatformInt64 handle , required String configJson , required String agentId , required String threadId });
-
-Future<String> crateBridgeSessionGetHistoryPage({required PlatformInt64 handle , required String configJson , required String agentId , required String threadId , String? before , required PlatformInt64 limit });
-
-String crateBridgeAutomationGetNextAutomationWake({required PlatformInt64 handle });
-
-Future<String> crateBridgeAgentGetOrCreateAgent({required PlatformInt64 handle , required String agentId , required String configJson });
-
-String crateBridgeSessionRunsGetSessionRun({required PlatformInt64 handle , required String runId });
-
-String crateBridgeSkillGetSkill({required PlatformInt64 handle , required String agentId , required String skillName });
-
-String crateBridgeSkillGetSkillSnapshot({required PlatformInt64 handle , required String snapshotId });
-
-String crateBridgeSkillGetSkillStatus({required PlatformInt64 handle , required String agentId , required String skillName });
-
-Future<String> crateBridgeWorkspaceGetSystemPrompt({required PlatformInt64 handle , required String accountId , required String agentId });
-
-Future<String> crateBridgeAgentDefsImportAgentMd({required PlatformInt64 handle , required String content });
-
-Future<bool> crateBridgeGroupImportGroupState({required PlatformInt64 handle , required String stateJson });
-
-bool crateBridgeFileBridgeInitFileBridge({required PlatformInt64 handle });
-
-bool crateBridgeFileBridgeInitFileBridgeScoped({required PlatformInt64 handle , required String accountId , required String agentId });
-
-Future<bool> crateBridgeSessionInjectMessage({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , required String message , required String attachmentsJson });
-
-Future<String> crateBridgeSkillInstallFromCatalog({required PlatformInt64 handle , required String agentId , required String slug });
-
-String crateBridgeCapabilityInstallScenarioPackJson({required PlatformInt64 handle , required String packJson });
-
-Future<String> crateBridgeSkillInstallSkill({required PlatformInt64 handle , required String agentId , required String skillContent });
-
-bool crateBridgeInitIsBrowserTool({required String name });
-
-bool crateBridgeInitIsPlatformTool({required String name });
-
-String crateBridgeChannelLeaseChannelOutbound({required PlatformInt64 handle , required String channelName , String? accountId , required BigInt limit });
-
-String crateBridgeA2AListA2ADeliveryRecords({required PlatformInt64 handle , required String sessionId , required PlatformInt64 limit , required PlatformInt64 offset });
-
-String crateBridgeA2AListA2APeerMessages({required PlatformInt64 handle , required String sessionId , required PlatformInt64 limit , required PlatformInt64 offset });
-
-String crateBridgeA2AListA2APeerSessions({required PlatformInt64 handle , required String peerId });
-
-String crateBridgeA2AListA2APeers({required PlatformInt64 handle , required String agentId });
-
-String crateBridgeA2AListA2ATasks({required PlatformInt64 handle , required String filterJson , required PlatformInt64 limit , required PlatformInt64 offset });
-
-String crateBridgeAgentAppListAgentAppActionProposals({required PlatformInt64 handle , required String agentId });
-
-String crateBridgeAgentAppListAgentAppPackages({required PlatformInt64 handle });
-
-Future<String> crateBridgeAgentDefsListAgentDefinitions({required PlatformInt64 handle });
-
-String crateBridgeAgentListAgents({required PlatformInt64 handle });
-
-String crateBridgeAutomationListAutomationJobs({required PlatformInt64 handle , required String filterJson });
-
-String crateBridgeAutomationListAutomationRuns({required PlatformInt64 handle , String? jobId , required PlatformInt64 limit , required PlatformInt64 offset });
-
-Future<String> crateBridgeAgentDefsListAvailableTools({required PlatformInt64 handle });
-
-String crateBridgeCapabilityListCapabilityDefinitionsJson();
-
-String crateBridgeCapabilityListCapabilityStatusJson({required PlatformInt64 handle , required String profileJson , required String selectionJson });
-
-String crateBridgeChannelAgentListChannelAgentRoutes({required PlatformInt64 handle , String? channelName });
-
-String crateBridgeChannelListChannels({required PlatformInt64 handle });
-
-String crateBridgeEvolutionListEvolutionDiagnostics({required PlatformInt64 handle });
-
-String crateBridgeEvolutionListEvolutionRuns({required PlatformInt64 handle , required String runIdsJson });
-
-String crateBridgeGroupListGroups({required PlatformInt64 handle });
-
-Future<String> crateBridgeWorkspaceListJournalDays({required PlatformInt64 handle , required String accountId , required String agentId });
-
-String crateBridgeEvolutionListPendingEvolution({required PlatformInt64 handle });
-
-String crateBridgeCapabilityListScenarioPacksJson({required PlatformInt64 handle });
-
-String crateBridgeCapabilityListScenarioStatusJson({required PlatformInt64 handle , required String profileJson , required String selectionJson });
-
-String crateBridgeSessionRunsListSessionRuns({required PlatformInt64 handle , required String filterJson , required PlatformInt64 limit , required PlatformInt64 offset });
-
-Future<String> crateBridgeSessionListSessions({required PlatformInt64 handle , required String configJson , required String agentId , required String accountId });
-
-String crateBridgeSkillListSkillCommands({required PlatformInt64 handle , required String agentId });
-
-String crateBridgeSkillListSkillRemediationActions({required PlatformInt64 handle , required String agentId , required String skillName });
-
-String crateBridgeSkillListSkillRemediationRuns({required PlatformInt64 handle , required String agentId , String? skillName , required int limit , required int offset });
-
-String crateBridgeSkillListSkillSecretRequirements({required PlatformInt64 handle , required String agentId , String? skillName });
-
-String crateBridgeSkillListSkillSnapshots({required PlatformInt64 handle , required String agentId , required int limit , required int offset });
-
-String crateBridgeSkillListSkillSources({required PlatformInt64 handle , required String agentId });
-
-String crateBridgeSkillListSkillStatus({required PlatformInt64 handle , required String agentId });
-
-String crateBridgeSkillListSkillUsage({required PlatformInt64 handle , required String agentId });
-
-String crateBridgeSkillListSkills({required PlatformInt64 handle , required String agentId });
-
-Future<String> crateBridgeWorkspaceListWorkspaceFiles({required PlatformInt64 handle , required String accountId , required String agentId , required String directory });
-
-Future<String> crateBridgeFileBridgeListWorkspaceFilesystem({required PlatformInt64 handle , String? subdir , required bool recursive });
-
-Future<String> crateBridgeFileBridgeListWorkspaceFilesystemScoped({required PlatformInt64 handle , required String accountId , required String agentId , String? subdir , required bool recursive });
-
-String crateBridgeFileBridgeLoadThreadAttachments({required PlatformInt64 handle , required String threadId });
-
-Future<String> crateBridgeMcpMcpActivateServer({required PlatformInt64 handle , required String name , required String userId });
-
-Future<String> crateBridgeMcpMcpAddServer({required PlatformInt64 handle , required String name , required String url , required String headersJson , required String userId });
-
-Future<String> crateBridgeMcpMcpDeactivateServer({required PlatformInt64 handle , required String name , required String userId });
-
-Future<String> crateBridgeMcpMcpFinishOauth({required PlatformInt64 handle , required String name , required String userId , required String code , required String state });
-
-Future<String> crateBridgeMcpMcpListServers({required PlatformInt64 handle , required String userId });
-
-Future<String> crateBridgeMcpMcpListTools({required PlatformInt64 handle , required String serverName , required String userId });
-
-Future<String> crateBridgeMcpMcpRemoveServer({required PlatformInt64 handle , required String name , required String userId });
-
-Future<String> crateBridgeMcpMcpStartOauth({required PlatformInt64 handle , required String name , required String userId , required String redirectUri , required String oauthJson });
-
-String crateBridgeA2AOpenA2APeerSession({required PlatformInt64 handle , required String peerJson , required String transport , required String endpoint });
-
-Future<String> crateBridgeSkillPinSkill({required PlatformInt64 handle , required String agentId , required String skillName , required bool pinned });
-
-String crateBridgeInitPlatformToolDescriptorsJson();
-
-String crateBridgeCapabilityProviderCapabilityId({required String provider });
-
-Future<BigInt> crateBridgeSessionPruneEmptySessions({required PlatformInt64 handle , required String agentId , required String accountId });
-
-String crateBridgeChannelQqbotQqbotApiBase({required bool sandbox });
-
-String crateBridgeChannelQqbotQqbotBuildOutboundPayload({required String messageJson , required String markdownEndpointKindsJson });
-
-String crateBridgeChannelQqbotQqbotBuildOutboundPayloadPlain({required String messageJson });
-
-String crateBridgeChannelQqbotQqbotGatewayStep({required String stateJson , required String eventJson });
-
-bool crateBridgeChannelQqbotQqbotIsMessageEvent({required String eventType });
-
-String crateBridgeChannelQqbotQqbotNormalizeInbound({required String eventType , required String dataJson });
-
-String crateBridgeChannelQqbotQqbotOutboundEndpointPath({required String peerKind , required String peerId });
-
-bool crateBridgeChannelQqbotQqbotShouldFallbackFromMarkdown({required PlatformInt64 status });
-
-String crateBridgeFileBridgeReadGitIdentity({required PlatformInt64 handle });
-
-Future<String> crateBridgeWorkspaceReadJournalDay({required PlatformInt64 handle , required String accountId , required String agentId , required String date });
-
-Future<String> crateBridgeSkillReadSkillSupportFile({required PlatformInt64 handle , required String agentId , required String skillName , required String filePath });
-
-Future<String> crateBridgeWorkspaceReadWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path });
-
-String? crateBridgeFileBridgeRealToSandbox({required PlatformInt64 handle , required String realPath });
-
-String? crateBridgeFileBridgeRealToSandboxScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String realPath });
-
-Future<String> crateBridgeWorkspaceRebuildRecallIndex({required PlatformInt64 handle , required String accountId , required String agentId });
-
-Future<String> crateBridgeWorkspaceRecallIndexStats({required PlatformInt64 handle , required String accountId , required String agentId });
-
-Future<String> crateBridgeWorkspaceRecallSessions({required PlatformInt64 handle , required String configJson , required String accountId , required String agentId , required String currentThreadId , required String query , required int limit });
-
-String crateBridgeA2ARecordA2ADeliveryStatus({required PlatformInt64 handle , required String messageJson , required String status , required String error });
-
-String crateBridgeA2ARecordA2APeerMessage({required PlatformInt64 handle , required String messageJson , required String source });
-
-String crateBridgeA2ARecordA2AResultEnvelope({required PlatformInt64 handle , required String envelopeJson });
-
-Future<String> crateBridgeAutomationRecordAutomationWake({required PlatformInt64 handle , required String jobId , required String source });
-
-Future<String> crateBridgeSkillRecordSkillRequirementResolution({required PlatformInt64 handle , required String agentId , required String skillName , required String actionId , required String resultJson });
-
-Future<String> crateBridgeSkillRecordSkillSecretAvailability({required PlatformInt64 handle , required String agentId , required String skillName , required String key , required bool available , required String source });
-
-Future<String> crateBridgeSkillRecordSkillSourceChanged({required PlatformInt64 handle , required String agentId , required String sourceId });
-
-String crateBridgeAgentAppRegisterAgentAppPackage({required PlatformInt64 handle , required String packageJson });
-
-bool crateBridgeChannelRegisterChannel({required PlatformInt64 handle , required String configJson });
-
-String crateBridgeChannelAgentRegisterChannelAgentRoute({required PlatformInt64 handle , required String routeJson });
-
-Stream<String> crateBridgeInitRegisterToolRequestStream();
-
-String crateBridgeEvolutionRejectPendingEvolution({required PlatformInt64 handle , required String pendingId });
-
-bool crateBridgeChannelReleaseChannelInbound({required PlatformInt64 handle , required String inboundId });
-
-Future<String> crateBridgeSkillReloadSkills({required PlatformInt64 handle , required String agentId });
-
-bool crateBridgeChannelAgentRemoveChannelAgentRoute({required PlatformInt64 handle , required String routeId });
-
-String crateBridgeCapabilityRemoveScenarioPackJson({required PlatformInt64 handle , required String scenarioId });
-
-Future<bool> crateBridgeSkillRemoveSkill({required PlatformInt64 handle , required String agentId , required String skillName });
-
-bool crateBridgeGroupRenameGroup({required PlatformInt64 handle , required String groupId , required String newName });
-
-String crateBridgeChannelReplyChannelInbound({required PlatformInt64 handle , required String inboundId , required String replyJson });
-
-Future<String> crateBridgeSkillRequestSkillRemediation({required PlatformInt64 handle , required String agentId , required String skillName , required String actionId });
-
-Future<String> crateBridgeWorkspaceReseedWorkspace({required PlatformInt64 handle , required String accountId , required String agentId });
-
-String crateBridgeChannelAgentResolveChannelAgentRoute({required PlatformInt64 handle , required String bridgeConfigJson , required String inboundJson });
-
-String crateBridgeCapabilityResolveScenarioJson({required PlatformInt64 handle , required String profileJson , required String selectionJson , required String scenarioId });
-
-String crateBridgeSkillResolveSkillCommand({required PlatformInt64 handle , required String agentId , required String text });
-
-bool crateBridgeInitResolveToolExecution({required BigInt requestId , required String result , required bool isError });
-
-Future<String> crateBridgeSkillRestoreSkill({required PlatformInt64 handle , required String agentId , required String skillName });
-
-Future<bool> crateBridgeSessionRetractInjectedMessage({required PlatformInt64 handle , required String sessionKeyJson , required String message });
-
-String crateBridgeFileBridgeRootfsDir({required PlatformInt64 handle });
-
-Future<String> crateBridgeA2ARunA2ATask({required PlatformInt64 handle , required String taskId , required String mode });
-
-Future<String> crateBridgeAutomationRunAutomationJob({required PlatformInt64 handle , required String jobId , required String mode });
-
-Future<String> crateBridgeSkillRunSkillCommand({required PlatformInt64 handle , required String agentId , required String commandName , String? args , String? sessionKeyJson });
-
-String crateBridgeEvolutionRunSkillConsolidationReview({required PlatformInt64 handle , required String agentId , required String configJson , required bool dryRun });
-
-Future<String> crateBridgeSkillRunSkillCurator({required PlatformInt64 handle , required String agentId , required bool dryRun });
-
-String? crateBridgeFileBridgeSandboxToReal({required PlatformInt64 handle , required String sandboxPath });
-
-String? crateBridgeFileBridgeSandboxToRealScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String sandboxPath });
-
-bool crateBridgeFileBridgeSaveMessageAttachments({required PlatformInt64 handle , required String threadId , required int userMsgIndex , required String attachmentsJson });
-
-Future<String> crateBridgeSkillSearchCatalog({required String query });
-
-Future<String> crateBridgeWorkspaceSearchMemory({required PlatformInt64 handle , required String accountId , required String agentId , required String query , required int limit });
-
-Future<String> crateBridgeInitSendMessage({required PlatformInt64 handle , required String configJson , required String message , required String attachmentsJson , required int maxIterations });
-
-Stream<String> crateBridgeInitSendMessageStream({required PlatformInt64 handle , required String configJson , required String message , required String attachmentsJson , required int maxIterations });
-
-Future<String> crateBridgeGroupSendToGroup({required PlatformInt64 handle , required String groupId , required String configJson , required String message , required int maxIterations });
-
-Future<String> crateBridgeGroupSendToGroupAgent({required PlatformInt64 handle , required String groupId , required String agentId , required String configJson , required String sessionKeyJson , required String message , required int maxIterations });
-
-Future<String> crateBridgeInitSendToSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , required String message , required String attachmentsJson , required int maxIterations });
-
-Stream<String> crateBridgeInitSendToSessionStream({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , required String message , required String attachmentsJson , required int maxIterations });
-
-bool crateBridgeGroupSetGroupCustomPrompt({required PlatformInt64 handle , required String groupId , String? prompt });
-
-Future<String> crateBridgeSkillSetSkillEnabled({required PlatformInt64 handle , required String agentId , required String skillName , required bool enabled });
-
-String crateBridgeFileBridgeSkillsDir({required PlatformInt64 handle });
-
-Stream<String> crateBridgeChannelAgentStreamChannelAgentPump({required PlatformInt64 handle , required String configJson , required String bridgeConfigJson });
-
-String crateBridgeAgentAppSubmitAgentAppActionResult({required PlatformInt64 handle , required String resultJson });
-
-String crateBridgeChannelSubmitChannelInbound({required PlatformInt64 handle , required String envelopeJson });
-
-String crateBridgeChannelTakeChannelInbound({required PlatformInt64 handle , required String channelName , required BigInt limit });
-
-Future<String> crateBridgeInitToolBrokerCallTool({required PlatformInt64 handle , required String requestJson });
-
-Future<String> crateBridgeInitToolBrokerListTools({required PlatformInt64 handle , required String requestJson });
-
-String crateBridgeCapabilityToolCapabilityId({required String toolName });
-
-bool crateBridgeChannelUnregisterChannel({required PlatformInt64 handle , required String channelName });
-
-Future<bool> crateBridgeAgentDefsUpdateAgentDefinition({required PlatformInt64 handle , required String defJson });
-
-String crateBridgeAutomationUpdateAutomationJob({required PlatformInt64 handle , required String jobId , required String patchJson });
-
-bool crateBridgeInitUpdateConfig({required PlatformInt64 handle , required String configJson });
-
-bool crateBridgeInitUpdateCustomTools({required PlatformInt64 handle , required String toolsJson });
-
-Future<bool> crateBridgeGroupUpdateGroupMembers({required PlatformInt64 handle , required String groupId , required String membersJson });
-
-Future<String> crateBridgeSkillUpdateSkillConfig({required PlatformInt64 handle , required String agentId , required String skillKey , required String patchJson });
-
-Future<String> crateBridgeSkillUpdateSkillRemediationRun({required PlatformInt64 handle , required String agentId , required String runId , required String status , String? resultJson });
-
-String crateBridgeFileBridgeWorkspaceDir({required PlatformInt64 handle });
-
-String crateBridgeFileBridgeWorkspaceDirScoped({required PlatformInt64 handle , required String accountId , required String agentId });
-
-BigInt crateBridgeFileBridgeWorkspaceSize({required PlatformInt64 handle });
-
-BigInt crateBridgeFileBridgeWorkspaceSizeScoped({required PlatformInt64 handle , required String accountId , required String agentId });
-
-Future<bool> crateBridgeWorkspaceWriteWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path , required String content });
-
-
-                }
-                
-
-                class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
-                  RustLibApiImpl({
-                    required super.handler,
-                    required super.wire,
-                    required super.generalizedFrbRustBinding,
-                    required super.portManager,
-                  });
-
-                  @override String crateBridgeA2AAcceptA2ADeepLink({required PlatformInt64 handle , required String envelopeJson , required String source })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(envelopeJson, serializer);
-sse_encode_String(source, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
-            
-            },
-            codec: 
-        SseCodec(
+/// Main entrypoint of the Rust API
+class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
+  @internal
+  static final instance = RustLib._();
+
+  RustLib._();
+
+  /// Initialize flutter_rust_bridge
+  static Future<void> init({
+    RustLibApi? api,
+    BaseHandler? handler,
+    ExternalLibrary? externalLibrary,
+    bool forceSameCodegenVersion = true,
+  }) async {
+    await instance.initImpl(
+      api: api,
+      handler: handler,
+      externalLibrary: externalLibrary,
+      forceSameCodegenVersion: forceSameCodegenVersion,
+    );
+  }
+
+  /// Initialize flutter_rust_bridge in mock mode.
+  /// No libraries for FFI are loaded.
+  static void initMock({required RustLibApi api}) {
+    instance.initMockImpl(api: api);
+  }
+
+  /// Dispose flutter_rust_bridge
+  ///
+  /// The call to this function is optional, since flutter_rust_bridge (and everything else)
+  /// is automatically disposed when the app stops.
+  static void dispose() => instance.disposeImpl();
+
+  @override
+  ApiImplConstructor<RustLibApiImpl, RustLibWire> get apiImplConstructor =>
+      RustLibApiImpl.new;
+
+  @override
+  WireConstructor<RustLibWire> get wireConstructor =>
+      RustLibWire.fromExternalLibrary;
+
+  @override
+  Future<void> executeRustInitializers() async {}
+
+  @override
+  ExternalLibraryLoaderConfig get defaultExternalLibraryLoaderConfig =>
+      kDefaultExternalLibraryLoaderConfig;
+
+  @override
+  String get codegenVersion => '2.12.0';
+
+  @override
+  int get rustContentHash => -1141771631;
+
+  static const kDefaultExternalLibraryLoaderConfig =
+      ExternalLibraryLoaderConfig(
+        stem: 'napaxi_api_bridge',
+        ioDirectory: '../api_bridge/target/release/',
+        webPrefix: 'pkg/',
+        wasmBindgenName: 'wasm_bindgen',
+      );
+}
+
+abstract class RustLibApi extends BaseApi {
+  String crateBridgeA2AAcceptA2ADeepLink({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+    required String source,
+  });
+
+  String crateBridgeA2AAcceptA2APeerInvite({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+  });
+
+  String crateBridgeAgentAppAcceptAgentAppTrigger({
+    required PlatformInt64 handle,
+    required String triggerJson,
+  });
+
+  bool crateBridgeChannelAckChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+  });
+
+  bool crateBridgeChannelAckChannelOutbound({
+    required PlatformInt64 handle,
+    required String outboundId,
+    required String receiptJson,
+  });
+
+  String crateBridgeCapabilityAgentEngineCapabilityId({
+    required String engineId,
+  });
+
+  Future<String> crateBridgeAgentAgentSend({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String configJson,
+    required String sessionKeyJson,
+    required String message,
+    required int maxIterations,
+  });
+
+  Future<bool> crateBridgeSessionAnswerHumanRequest({
+    required PlatformInt64 handle,
+    required String requestId,
+    required String response,
+  });
+
+  Future<bool> crateBridgeWorkspaceAppendWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+    required String content,
+  });
+
+  String crateBridgeEvolutionApplyPendingEvolution({
+    required PlatformInt64 handle,
+    required String pendingId,
+  });
+
+  Future<String> crateBridgeSkillArchiveSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  });
+
+  String crateBridgeInitBrowserToolDescriptorsJson();
+
+  String crateBridgeA2ABuildA2AResultLink({
+    required PlatformInt64 handle,
+    required String taskId,
+    required String callbackUrl,
+  });
+
+  Future<bool> crateBridgeSessionCancelSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+  });
+
+  String crateBridgeChannelAgentChannelAgentStatus({
+    required PlatformInt64 handle,
+    String? channelName,
+  });
+
+  String crateBridgeSkillCheckSkills({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  bool crateBridgeGroupClearGroupHistory({
+    required PlatformInt64 handle,
+    required String groupId,
+  });
+
+  Future<bool> crateBridgeSessionClearSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+  });
+
+  Future<String> crateBridgeSessionCompactContext({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    String? focus,
+  });
+
+  String crateBridgeAgentEngineConfigureCodexAgentEngineJson({
+    required PlatformInt64 handle,
+    required String requestJson,
+  });
+
+  bool crateBridgeFileBridgeConfigureGitIdentity({
+    required PlatformInt64 handle,
+    required String name,
+    required String email,
+  });
+
+  Future<String> crateBridgeSessionContextStatus({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String threadId,
+  });
+
+  String crateBridgeA2ACreateA2APeerInvite({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String optionsJson,
+  });
+
+  String crateBridgeA2ACreateA2ATaskMessage({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required String message,
+    required String optionsJson,
+  });
+
+  String crateBridgeA2ACreateA2ATaskProgressMessage({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required String taskId,
+    required String message,
+    required String progressJson,
+  });
+
+  String crateBridgeA2ACreateA2ATaskResultMessage({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required String taskId,
+    required String resultJson,
+  });
+
+  Future<String> crateBridgeAgentDefsCreateAgentDefinition({
+    required PlatformInt64 handle,
+    required String defJson,
+  });
+
+  Future<PlatformInt64> crateBridgeAgentDefsCreateAgentFromDefinition({
+    required PlatformInt64 handle,
+    required String defId,
+    required String configJson,
+  });
+
+  String crateBridgeAutomationCreateAutomationJob({
+    required PlatformInt64 handle,
+    required String jobJson,
+  });
+
+  PlatformInt64 crateBridgeInitCreateEngine({
+    required String configJson,
+    required String platformContextJson,
+  });
+
+  Future<String> crateBridgeGroupCreateGroup({
+    required PlatformInt64 handle,
+    required String name,
+    required String membersJson,
+  });
+
+  Future<String> crateBridgeSessionCreateSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String channelType,
+    required String accountId,
+    String? existingThreadId,
+  });
+
+  bool crateBridgeA2ADeleteA2APeer({
+    required PlatformInt64 handle,
+    required String peerId,
+  });
+
+  bool crateBridgeAgentDeleteAgent({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  bool crateBridgeAgentAppDeleteAgentAppPackage({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  Future<bool> crateBridgeAgentDefsDeleteAgentDefinition({
+    required PlatformInt64 handle,
+    required String defId,
+  });
+
+  bool crateBridgeAutomationDeleteAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+  });
+
+  bool crateBridgeGroupDeleteGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+  });
+
+  Future<bool> crateBridgeFileBridgeDeleteSandboxFile({
+    required PlatformInt64 handle,
+    required String sandboxPath,
+  });
+
+  Future<bool> crateBridgeFileBridgeDeleteSandboxFileScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String sandboxPath,
+  });
+
+  Future<bool> crateBridgeSessionDeleteSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+  });
+
+  Future<bool> crateBridgeSessionDeleteSessionIfEmpty({
+    required PlatformInt64 handle,
+    required String sessionKeyJson,
+  });
+
+  bool crateBridgeFileBridgeDeleteThreadAttachments({
+    required PlatformInt64 handle,
+    required String threadId,
+  });
+
+  Future<bool> crateBridgeWorkspaceDeleteWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+  });
+
+  String crateBridgeFileBridgeDetectFileReferences({
+    required PlatformInt64 handle,
+    required String text,
+  });
+
+  String crateBridgeFileBridgeDetectFileReferencesScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String text,
+  });
+
+  void crateBridgeInitDisposeEngine({required PlatformInt64 handle});
+
+  String crateBridgeChannelEnqueueChannelOutbound({
+    required PlatformInt64 handle,
+    required String outboundJson,
+  });
+
+  bool crateBridgeInitEnsureAgentReady({
+    required PlatformInt64 handle,
+    required String configJson,
+  });
+
+  String crateBridgeGroupExportGroupState({required PlatformInt64 handle});
+
+  bool crateBridgeChannelFailChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+    required String error,
+  });
+
+  bool crateBridgeChannelFailChannelOutbound({
+    required PlatformInt64 handle,
+    required String outboundId,
+    required String error,
+  });
+
+  String crateBridgeA2AGetA2AAgentCard({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  String crateBridgeA2AGetA2ATask({
+    required PlatformInt64 handle,
+    required String taskId,
+  });
+
+  String crateBridgeSessionRunsGetActiveSessionRuns({
+    required PlatformInt64 handle,
+  });
+
+  String crateBridgeAgentAppGetAgentAppActionProposal({
+    required PlatformInt64 handle,
+    required String requestId,
+  });
+
+  String crateBridgeAgentAppGetAgentAppPackage({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  Future<String> crateBridgeAgentDefsGetAgentDefinition({
+    required PlatformInt64 handle,
+    required String defId,
+  });
+
+  String crateBridgeAutomationGetAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+  });
+
+  Future<String> crateBridgeSkillGetCatalogSkill({required String slug});
+
+  String crateBridgeInitGetConfig({required PlatformInt64 handle});
+
+  String crateBridgeGroupGetGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+  });
+
+  String crateBridgeGroupGetGroupMessages({
+    required PlatformInt64 handle,
+    required String groupId,
+  });
+
+  Future<String> crateBridgeSessionGetHistory({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String threadId,
+  });
+
+  Future<String> crateBridgeSessionGetHistoryPage({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String threadId,
+    String? before,
+    required PlatformInt64 limit,
+  });
+
+  String crateBridgeAutomationGetNextAutomationWake({
+    required PlatformInt64 handle,
+  });
+
+  Future<String> crateBridgeAgentGetOrCreateAgent({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String configJson,
+  });
+
+  String crateBridgeSessionRunsGetSessionRun({
+    required PlatformInt64 handle,
+    required String runId,
+  });
+
+  String crateBridgeSkillGetSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  });
+
+  String crateBridgeSkillGetSkillSnapshot({
+    required PlatformInt64 handle,
+    required String snapshotId,
+  });
+
+  String crateBridgeSkillGetSkillStatus({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  });
+
+  Future<String> crateBridgeWorkspaceGetSystemPrompt({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  Future<String> crateBridgeAgentDefsImportAgentMd({
+    required PlatformInt64 handle,
+    required String content,
+  });
+
+  Future<bool> crateBridgeGroupImportGroupState({
+    required PlatformInt64 handle,
+    required String stateJson,
+  });
+
+  bool crateBridgeFileBridgeInitFileBridge({required PlatformInt64 handle});
+
+  bool crateBridgeFileBridgeInitFileBridgeScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  Future<bool> crateBridgeSessionInjectMessage({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    required String message,
+    required String attachmentsJson,
+  });
+
+  Future<String> crateBridgeSkillInstallFromCatalog({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String slug,
+  });
+
+  String crateBridgeCapabilityInstallScenarioPackJson({
+    required PlatformInt64 handle,
+    required String packJson,
+  });
+
+  Future<String> crateBridgeSkillInstallSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillContent,
+  });
+
+  bool crateBridgeInitIsBrowserTool({required String name});
+
+  bool crateBridgeInitIsPlatformTool({required String name});
+
+  String crateBridgeChannelLeaseChannelOutbound({
+    required PlatformInt64 handle,
+    required String channelName,
+    String? accountId,
+    required BigInt limit,
+  });
+
+  String crateBridgeA2AListA2ADeliveryRecords({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  });
+
+  String crateBridgeA2AListA2APeerMessages({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  });
+
+  String crateBridgeA2AListA2APeerSessions({
+    required PlatformInt64 handle,
+    required String peerId,
+  });
+
+  String crateBridgeA2AListA2APeers({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  String crateBridgeA2AListA2ATasks({
+    required PlatformInt64 handle,
+    required String filterJson,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  });
+
+  String crateBridgeAgentAppListAgentAppActionProposals({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  String crateBridgeAgentAppListAgentAppPackages({
+    required PlatformInt64 handle,
+  });
+
+  Future<String> crateBridgeAgentDefsListAgentDefinitions({
+    required PlatformInt64 handle,
+  });
+
+  String crateBridgeAgentListAgents({required PlatformInt64 handle});
+
+  String crateBridgeAutomationListAutomationJobs({
+    required PlatformInt64 handle,
+    required String filterJson,
+  });
+
+  String crateBridgeAutomationListAutomationRuns({
+    required PlatformInt64 handle,
+    String? jobId,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  });
+
+  Future<String> crateBridgeAgentDefsListAvailableTools({
+    required PlatformInt64 handle,
+  });
+
+  String crateBridgeCapabilityListCapabilityDefinitionsJson();
+
+  String crateBridgeCapabilityListCapabilityStatusJson({
+    required PlatformInt64 handle,
+    required String profileJson,
+    required String selectionJson,
+  });
+
+  String crateBridgeChannelAgentListChannelAgentRoutes({
+    required PlatformInt64 handle,
+    String? channelName,
+  });
+
+  String crateBridgeChannelListChannels({required PlatformInt64 handle});
+
+  String crateBridgeEvolutionListEvolutionDiagnostics({
+    required PlatformInt64 handle,
+  });
+
+  String crateBridgeEvolutionListEvolutionRuns({
+    required PlatformInt64 handle,
+    required String runIdsJson,
+  });
+
+  String crateBridgeGroupListGroups({required PlatformInt64 handle});
+
+  Future<String> crateBridgeWorkspaceListJournalDays({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  String crateBridgeEvolutionListPendingEvolution({
+    required PlatformInt64 handle,
+  });
+
+  String crateBridgeCapabilityListScenarioPacksJson({
+    required PlatformInt64 handle,
+  });
+
+  String crateBridgeCapabilityListScenarioStatusJson({
+    required PlatformInt64 handle,
+    required String profileJson,
+    required String selectionJson,
+  });
+
+  String crateBridgeSessionRunsListSessionRuns({
+    required PlatformInt64 handle,
+    required String filterJson,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  });
+
+  Future<String> crateBridgeSessionListSessions({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String accountId,
+  });
+
+  String crateBridgeSkillListSkillCommands({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  String crateBridgeSkillListSkillRemediationActions({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  });
+
+  String crateBridgeSkillListSkillRemediationRuns({
+    required PlatformInt64 handle,
+    required String agentId,
+    String? skillName,
+    required int limit,
+    required int offset,
+  });
+
+  String crateBridgeSkillListSkillSecretRequirements({
+    required PlatformInt64 handle,
+    required String agentId,
+    String? skillName,
+  });
+
+  String crateBridgeSkillListSkillSnapshots({
+    required PlatformInt64 handle,
+    required String agentId,
+    required int limit,
+    required int offset,
+  });
+
+  String crateBridgeSkillListSkillSources({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  String crateBridgeSkillListSkillStatus({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  String crateBridgeSkillListSkillUsage({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  String crateBridgeSkillListSkills({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  Future<String> crateBridgeWorkspaceListWorkspaceFiles({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String directory,
+  });
+
+  Future<String> crateBridgeFileBridgeListWorkspaceFilesystem({
+    required PlatformInt64 handle,
+    String? subdir,
+    required bool recursive,
+  });
+
+  Future<String> crateBridgeFileBridgeListWorkspaceFilesystemScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    String? subdir,
+    required bool recursive,
+  });
+
+  String crateBridgeFileBridgeLoadThreadAttachments({
+    required PlatformInt64 handle,
+    required String threadId,
+  });
+
+  Future<String> crateBridgeMcpMcpActivateServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+  });
+
+  Future<String> crateBridgeMcpMcpAddServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String url,
+    required String headersJson,
+    required String userId,
+  });
+
+  Future<String> crateBridgeMcpMcpDeactivateServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+  });
+
+  Future<String> crateBridgeMcpMcpFinishOauth({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+    required String code,
+    required String state,
+  });
+
+  Future<String> crateBridgeMcpMcpListServers({
+    required PlatformInt64 handle,
+    required String userId,
+  });
+
+  Future<String> crateBridgeMcpMcpListTools({
+    required PlatformInt64 handle,
+    required String serverName,
+    required String userId,
+  });
+
+  Future<String> crateBridgeMcpMcpRemoveServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+  });
+
+  Future<String> crateBridgeMcpMcpStartOauth({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+    required String redirectUri,
+    required String oauthJson,
+  });
+
+  String crateBridgeA2AOpenA2APeerSession({
+    required PlatformInt64 handle,
+    required String peerJson,
+    required String transport,
+    required String endpoint,
+  });
+
+  Future<String> crateBridgeSkillPinSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required bool pinned,
+  });
+
+  String crateBridgeInitPlatformToolDescriptorsJson();
+
+  String crateBridgeCapabilityProviderCapabilityId({required String provider});
+
+  Future<BigInt> crateBridgeSessionPruneEmptySessions({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String accountId,
+  });
+
+  String crateBridgeChannelQqbotQqbotApiBase({required bool sandbox});
+
+  String crateBridgeChannelQqbotQqbotBuildOutboundPayload({
+    required String messageJson,
+    required String markdownEndpointKindsJson,
+  });
+
+  String crateBridgeChannelQqbotQqbotBuildOutboundPayloadPlain({
+    required String messageJson,
+  });
+
+  String crateBridgeChannelQqbotQqbotGatewayStep({
+    required String stateJson,
+    required String eventJson,
+  });
+
+  bool crateBridgeChannelQqbotQqbotIsMessageEvent({required String eventType});
+
+  String crateBridgeChannelQqbotQqbotNormalizeInbound({
+    required String eventType,
+    required String dataJson,
+  });
+
+  String crateBridgeChannelQqbotQqbotOutboundEndpointPath({
+    required String peerKind,
+    required String peerId,
+  });
+
+  bool crateBridgeChannelQqbotQqbotShouldFallbackFromMarkdown({
+    required PlatformInt64 status,
+  });
+
+  String crateBridgeFileBridgeReadGitIdentity({required PlatformInt64 handle});
+
+  Future<String> crateBridgeWorkspaceReadJournalDay({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String date,
+  });
+
+  Future<String> crateBridgeSkillReadSkillSupportFile({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String filePath,
+  });
+
+  Future<String> crateBridgeWorkspaceReadWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+  });
+
+  String? crateBridgeFileBridgeRealToSandbox({
+    required PlatformInt64 handle,
+    required String realPath,
+  });
+
+  String? crateBridgeFileBridgeRealToSandboxScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String realPath,
+  });
+
+  Future<String> crateBridgeWorkspaceRebuildRecallIndex({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  Future<String> crateBridgeWorkspaceRecallIndexStats({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  Future<String> crateBridgeWorkspaceRecallSessions({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String accountId,
+    required String agentId,
+    required String currentThreadId,
+    required String query,
+    required int limit,
+  });
+
+  String crateBridgeA2ARecordA2ADeliveryStatus({
+    required PlatformInt64 handle,
+    required String messageJson,
+    required String status,
+    required String error,
+  });
+
+  String crateBridgeA2ARecordA2APeerMessage({
+    required PlatformInt64 handle,
+    required String messageJson,
+    required String source,
+  });
+
+  String crateBridgeA2ARecordA2AResultEnvelope({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+  });
+
+  Future<String> crateBridgeAutomationRecordAutomationWake({
+    required PlatformInt64 handle,
+    required String jobId,
+    required String source,
+  });
+
+  Future<String> crateBridgeSkillRecordSkillRequirementResolution({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String actionId,
+    required String resultJson,
+  });
+
+  Future<String> crateBridgeSkillRecordSkillSecretAvailability({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String key,
+    required bool available,
+    required String source,
+  });
+
+  Future<String> crateBridgeSkillRecordSkillSourceChanged({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String sourceId,
+  });
+
+  String crateBridgeAgentAppRegisterAgentAppPackage({
+    required PlatformInt64 handle,
+    required String packageJson,
+  });
+
+  bool crateBridgeChannelRegisterChannel({
+    required PlatformInt64 handle,
+    required String configJson,
+  });
+
+  String crateBridgeChannelAgentRegisterChannelAgentRoute({
+    required PlatformInt64 handle,
+    required String routeJson,
+  });
+
+  Stream<String> crateBridgeInitRegisterToolRequestStream();
+
+  String crateBridgeEvolutionRejectPendingEvolution({
+    required PlatformInt64 handle,
+    required String pendingId,
+  });
+
+  bool crateBridgeChannelReleaseChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+  });
+
+  Future<String> crateBridgeSkillReloadSkills({
+    required PlatformInt64 handle,
+    required String agentId,
+  });
+
+  bool crateBridgeChannelAgentRemoveChannelAgentRoute({
+    required PlatformInt64 handle,
+    required String routeId,
+  });
+
+  String crateBridgeCapabilityRemoveScenarioPackJson({
+    required PlatformInt64 handle,
+    required String scenarioId,
+  });
+
+  Future<bool> crateBridgeSkillRemoveSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  });
+
+  bool crateBridgeGroupRenameGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String newName,
+  });
+
+  String crateBridgeChannelReplyChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+    required String replyJson,
+  });
+
+  Future<String> crateBridgeSkillRequestSkillRemediation({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String actionId,
+  });
+
+  Future<String> crateBridgeWorkspaceReseedWorkspace({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  String crateBridgeChannelAgentResolveChannelAgentRoute({
+    required PlatformInt64 handle,
+    required String bridgeConfigJson,
+    required String inboundJson,
+  });
+
+  String crateBridgeCapabilityResolveScenarioJson({
+    required PlatformInt64 handle,
+    required String profileJson,
+    required String selectionJson,
+    required String scenarioId,
+  });
+
+  String crateBridgeSkillResolveSkillCommand({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String text,
+  });
+
+  bool crateBridgeInitResolveToolExecution({
+    required BigInt requestId,
+    required String result,
+    required bool isError,
+  });
+
+  Future<String> crateBridgeSkillRestoreSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  });
+
+  Future<bool> crateBridgeSessionRetractInjectedMessage({
+    required PlatformInt64 handle,
+    required String sessionKeyJson,
+    required String message,
+  });
+
+  String crateBridgeFileBridgeRootfsDir({required PlatformInt64 handle});
+
+  Future<String> crateBridgeA2ARunA2ATask({
+    required PlatformInt64 handle,
+    required String taskId,
+    required String mode,
+  });
+
+  Future<String> crateBridgeAutomationRunAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+    required String mode,
+  });
+
+  Future<String> crateBridgeSkillRunSkillCommand({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String commandName,
+    String? args,
+    String? sessionKeyJson,
+  });
+
+  String crateBridgeEvolutionRunSkillConsolidationReview({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String configJson,
+    required bool dryRun,
+  });
+
+  Future<String> crateBridgeSkillRunSkillCurator({
+    required PlatformInt64 handle,
+    required String agentId,
+    required bool dryRun,
+  });
+
+  String? crateBridgeFileBridgeSandboxToReal({
+    required PlatformInt64 handle,
+    required String sandboxPath,
+  });
+
+  String? crateBridgeFileBridgeSandboxToRealScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String sandboxPath,
+  });
+
+  bool crateBridgeFileBridgeSaveMessageAttachments({
+    required PlatformInt64 handle,
+    required String threadId,
+    required int userMsgIndex,
+    required String attachmentsJson,
+  });
+
+  Future<String> crateBridgeSkillSearchCatalog({required String query});
+
+  Future<String> crateBridgeWorkspaceSearchMemory({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String query,
+    required int limit,
+  });
+
+  Future<String> crateBridgeInitSendMessage({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  });
+
+  Stream<String> crateBridgeInitSendMessageStream({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  });
+
+  Future<String> crateBridgeGroupSendToGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String configJson,
+    required String message,
+    required int maxIterations,
+  });
+
+  Future<String> crateBridgeGroupSendToGroupAgent({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String agentId,
+    required String configJson,
+    required String sessionKeyJson,
+    required String message,
+    required int maxIterations,
+  });
+
+  Future<String> crateBridgeInitSendToSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  });
+
+  Stream<String> crateBridgeInitSendToSessionStream({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  });
+
+  bool crateBridgeGroupSetGroupCustomPrompt({
+    required PlatformInt64 handle,
+    required String groupId,
+    String? prompt,
+  });
+
+  Future<String> crateBridgeSkillSetSkillEnabled({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required bool enabled,
+  });
+
+  String crateBridgeFileBridgeSkillsDir({required PlatformInt64 handle});
+
+  Stream<String> crateBridgeChannelAgentStreamChannelAgentPump({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String bridgeConfigJson,
+  });
+
+  String crateBridgeAgentAppSubmitAgentAppActionResult({
+    required PlatformInt64 handle,
+    required String resultJson,
+  });
+
+  String crateBridgeChannelSubmitChannelInbound({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+  });
+
+  String crateBridgeChannelTakeChannelInbound({
+    required PlatformInt64 handle,
+    required String channelName,
+    required BigInt limit,
+  });
+
+  Future<String> crateBridgeInitToolBrokerCallTool({
+    required PlatformInt64 handle,
+    required String requestJson,
+  });
+
+  Future<String> crateBridgeInitToolBrokerListTools({
+    required PlatformInt64 handle,
+    required String requestJson,
+  });
+
+  String crateBridgeCapabilityToolCapabilityId({required String toolName});
+
+  bool crateBridgeChannelUnregisterChannel({
+    required PlatformInt64 handle,
+    required String channelName,
+  });
+
+  Future<bool> crateBridgeAgentDefsUpdateAgentDefinition({
+    required PlatformInt64 handle,
+    required String defJson,
+  });
+
+  String crateBridgeAutomationUpdateAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+    required String patchJson,
+  });
+
+  bool crateBridgeInitUpdateConfig({
+    required PlatformInt64 handle,
+    required String configJson,
+  });
+
+  bool crateBridgeInitUpdateCustomTools({
+    required PlatformInt64 handle,
+    required String toolsJson,
+  });
+
+  Future<bool> crateBridgeGroupUpdateGroupMembers({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String membersJson,
+  });
+
+  Future<String> crateBridgeSkillUpdateSkillConfig({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillKey,
+    required String patchJson,
+  });
+
+  Future<String> crateBridgeSkillUpdateSkillRemediationRun({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String runId,
+    required String status,
+    String? resultJson,
+  });
+
+  String crateBridgeFileBridgeWorkspaceDir({required PlatformInt64 handle});
+
+  String crateBridgeFileBridgeWorkspaceDirScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  BigInt crateBridgeFileBridgeWorkspaceSize({required PlatformInt64 handle});
+
+  BigInt crateBridgeFileBridgeWorkspaceSizeScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  });
+
+  Future<bool> crateBridgeWorkspaceWriteWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+    required String content,
+  });
+}
+
+class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
+  RustLibApiImpl({
+    required super.handler,
+    required super.wire,
+    required super.generalizedFrbRustBinding,
+    required super.portManager,
+  });
+
+  @override
+  String crateBridgeA2AAcceptA2ADeepLink({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+    required String source,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(envelopeJson, serializer);
+          sse_encode_String(source, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AAcceptA2ADeepLinkConstMeta,
-            argValues: [handle, envelopeJson, source],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AAcceptA2ADeepLinkConstMeta,
+        argValues: [handle, envelopeJson, source],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AAcceptA2ADeepLinkConstMeta =>
+      const TaskConstMeta(
+        debugName: "accept_a2a_deep_link",
+        argNames: ["handle", "envelopeJson", "source"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2AAcceptA2ADeepLinkConstMeta => const TaskConstMeta(
-            debugName: "accept_a2a_deep_link",
-            argNames: ["handle", "envelopeJson", "source"],
-        );
-        
-
-@override String crateBridgeA2AAcceptA2APeerInvite({required PlatformInt64 handle , required String envelopeJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(envelopeJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AAcceptA2APeerInvite({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(envelopeJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AAcceptA2APeerInviteConstMeta,
-            argValues: [handle, envelopeJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AAcceptA2APeerInviteConstMeta,
+        argValues: [handle, envelopeJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AAcceptA2APeerInviteConstMeta =>
+      const TaskConstMeta(
+        debugName: "accept_a2a_peer_invite",
+        argNames: ["handle", "envelopeJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2AAcceptA2APeerInviteConstMeta => const TaskConstMeta(
-            debugName: "accept_a2a_peer_invite",
-            argNames: ["handle", "envelopeJson"],
-        );
-        
-
-@override String crateBridgeAgentAppAcceptAgentAppTrigger({required PlatformInt64 handle , required String triggerJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(triggerJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentAppAcceptAgentAppTrigger({
+    required PlatformInt64 handle,
+    required String triggerJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(triggerJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppAcceptAgentAppTriggerConstMeta,
-            argValues: [handle, triggerJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppAcceptAgentAppTriggerConstMeta,
+        argValues: [handle, triggerJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppAcceptAgentAppTriggerConstMeta =>
+      const TaskConstMeta(
+        debugName: "accept_agent_app_trigger",
+        argNames: ["handle", "triggerJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppAcceptAgentAppTriggerConstMeta => const TaskConstMeta(
-            debugName: "accept_agent_app_trigger",
-            argNames: ["handle", "triggerJson"],
-        );
-        
-
-@override bool crateBridgeChannelAckChannelInbound({required PlatformInt64 handle , required String inboundId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(inboundId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelAckChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(inboundId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAckChannelInboundConstMeta,
-            argValues: [handle, inboundId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelAckChannelInboundConstMeta,
+        argValues: [handle, inboundId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelAckChannelInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "ack_channel_inbound",
+        argNames: ["handle", "inboundId"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelAckChannelInboundConstMeta => const TaskConstMeta(
-            debugName: "ack_channel_inbound",
-            argNames: ["handle", "inboundId"],
-        );
-        
-
-@override bool crateBridgeChannelAckChannelOutbound({required PlatformInt64 handle , required String outboundId , required String receiptJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(outboundId, serializer);
-sse_encode_String(receiptJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelAckChannelOutbound({
+    required PlatformInt64 handle,
+    required String outboundId,
+    required String receiptJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(outboundId, serializer);
+          sse_encode_String(receiptJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAckChannelOutboundConstMeta,
-            argValues: [handle, outboundId, receiptJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelAckChannelOutboundConstMeta,
+        argValues: [handle, outboundId, receiptJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelAckChannelOutboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "ack_channel_outbound",
+        argNames: ["handle", "outboundId", "receiptJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelAckChannelOutboundConstMeta => const TaskConstMeta(
-            debugName: "ack_channel_outbound",
-            argNames: ["handle", "outboundId", "receiptJson"],
-        );
-        
-
-@override String crateBridgeCapabilityAgentEngineCapabilityId({required String engineId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(engineId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityAgentEngineCapabilityId({
+    required String engineId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(engineId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 6)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityAgentEngineCapabilityIdConstMeta,
-            argValues: [engineId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityAgentEngineCapabilityIdConstMeta,
+        argValues: [engineId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityAgentEngineCapabilityIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "agent_engine_capability_id",
+        argNames: ["engineId"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityAgentEngineCapabilityIdConstMeta => const TaskConstMeta(
-            debugName: "agent_engine_capability_id",
-            argNames: ["engineId"],
-        );
-        
-
-@override Future<String> crateBridgeAgentAgentSend({required PlatformInt64 handle , required String agentId , required String configJson , required String sessionKeyJson , required String message , required int maxIterations })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_i_32(maxIterations, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAgentAgentSend({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String configJson,
+    required String sessionKeyJson,
+    required String message,
+    required int maxIterations,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_i_32(maxIterations, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAgentSendConstMeta,
-            argValues: [handle, agentId, configJson, sessionKeyJson, message, maxIterations],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAgentSendConstMeta,
+        argValues: [
+          handle,
+          agentId,
+          configJson,
+          sessionKeyJson,
+          message,
+          maxIterations,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAgentSendConstMeta => const TaskConstMeta(
+    debugName: "agent_send",
+    argNames: [
+      "handle",
+      "agentId",
+      "configJson",
+      "sessionKeyJson",
+      "message",
+      "maxIterations",
+    ],
+  );
 
-        TaskConstMeta get kCrateBridgeAgentAgentSendConstMeta => const TaskConstMeta(
-            debugName: "agent_send",
-            argNames: ["handle", "agentId", "configJson", "sessionKeyJson", "message", "maxIterations"],
-        );
-        
-
-@override Future<bool> crateBridgeSessionAnswerHumanRequest({required PlatformInt64 handle , required String requestId , required String response })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(requestId, serializer);
-sse_encode_String(response, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 8, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSessionAnswerHumanRequest({
+    required PlatformInt64 handle,
+    required String requestId,
+    required String response,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(requestId, serializer);
+          sse_encode_String(response, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionAnswerHumanRequestConstMeta,
-            argValues: [handle, requestId, response],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionAnswerHumanRequestConstMeta,
+        argValues: [handle, requestId, response],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionAnswerHumanRequestConstMeta =>
+      const TaskConstMeta(
+        debugName: "answer_human_request",
+        argNames: ["handle", "requestId", "response"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionAnswerHumanRequestConstMeta => const TaskConstMeta(
-            debugName: "answer_human_request",
-            argNames: ["handle", "requestId", "response"],
-        );
-        
-
-@override Future<bool> crateBridgeWorkspaceAppendWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path , required String content })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(path, serializer);
-sse_encode_String(content, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 9, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeWorkspaceAppendWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+    required String content,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(path, serializer);
+          sse_encode_String(content, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceAppendWorkspaceFileConstMeta,
-            argValues: [handle, accountId, agentId, path, content],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceAppendWorkspaceFileConstMeta,
+        argValues: [handle, accountId, agentId, path, content],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceAppendWorkspaceFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "append_workspace_file",
+        argNames: ["handle", "accountId", "agentId", "path", "content"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceAppendWorkspaceFileConstMeta => const TaskConstMeta(
-            debugName: "append_workspace_file",
-            argNames: ["handle", "accountId", "agentId", "path", "content"],
-        );
-        
-
-@override String crateBridgeEvolutionApplyPendingEvolution({required PlatformInt64 handle , required String pendingId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(pendingId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeEvolutionApplyPendingEvolution({
+    required PlatformInt64 handle,
+    required String pendingId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(pendingId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 10)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeEvolutionApplyPendingEvolutionConstMeta,
-            argValues: [handle, pendingId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeEvolutionApplyPendingEvolutionConstMeta,
+        argValues: [handle, pendingId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeEvolutionApplyPendingEvolutionConstMeta =>
+      const TaskConstMeta(
+        debugName: "apply_pending_evolution",
+        argNames: ["handle", "pendingId"],
+      );
 
-        TaskConstMeta get kCrateBridgeEvolutionApplyPendingEvolutionConstMeta => const TaskConstMeta(
-            debugName: "apply_pending_evolution",
-            argNames: ["handle", "pendingId"],
-        );
-        
-
-@override Future<String> crateBridgeSkillArchiveSkill({required PlatformInt64 handle , required String agentId , required String skillName })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 11, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillArchiveSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillArchiveSkillConstMeta,
-            argValues: [handle, agentId, skillName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillArchiveSkillConstMeta,
+        argValues: [handle, agentId, skillName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillArchiveSkillConstMeta =>
+      const TaskConstMeta(
+        debugName: "archive_skill",
+        argNames: ["handle", "agentId", "skillName"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillArchiveSkillConstMeta => const TaskConstMeta(
-            debugName: "archive_skill",
-            argNames: ["handle", "agentId", "skillName"],
-        );
-        
-
-@override String crateBridgeInitBrowserToolDescriptorsJson()  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeInitBrowserToolDescriptorsJson() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 12)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitBrowserToolDescriptorsJsonConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitBrowserToolDescriptorsJsonConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitBrowserToolDescriptorsJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "browser_tool_descriptors_json",
+        argNames: [],
+      );
 
-        TaskConstMeta get kCrateBridgeInitBrowserToolDescriptorsJsonConstMeta => const TaskConstMeta(
-            debugName: "browser_tool_descriptors_json",
-            argNames: [],
-        );
-        
-
-@override String crateBridgeA2ABuildA2AResultLink({required PlatformInt64 handle , required String taskId , required String callbackUrl })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(taskId, serializer);
-sse_encode_String(callbackUrl, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ABuildA2AResultLink({
+    required PlatformInt64 handle,
+    required String taskId,
+    required String callbackUrl,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(taskId, serializer);
+          sse_encode_String(callbackUrl, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 13)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ABuildA2AResultLinkConstMeta,
-            argValues: [handle, taskId, callbackUrl],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ABuildA2AResultLinkConstMeta,
+        argValues: [handle, taskId, callbackUrl],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ABuildA2AResultLinkConstMeta =>
+      const TaskConstMeta(
+        debugName: "build_a2a_result_link",
+        argNames: ["handle", "taskId", "callbackUrl"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ABuildA2AResultLinkConstMeta => const TaskConstMeta(
-            debugName: "build_a2a_result_link",
-            argNames: ["handle", "taskId", "callbackUrl"],
-        );
-        
-
-@override Future<bool> crateBridgeSessionCancelSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 14, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSessionCancelSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionCancelSessionConstMeta,
-            argValues: [handle, configJson, agentId, sessionKeyJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionCancelSessionConstMeta,
+        argValues: [handle, configJson, agentId, sessionKeyJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionCancelSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "cancel_session",
+        argNames: ["handle", "configJson", "agentId", "sessionKeyJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionCancelSessionConstMeta => const TaskConstMeta(
-            debugName: "cancel_session",
-            argNames: ["handle", "configJson", "agentId", "sessionKeyJson"],
-        );
-        
-
-@override String crateBridgeChannelAgentChannelAgentStatus({required PlatformInt64 handle , String? channelName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_opt_String(channelName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelAgentChannelAgentStatus({
+    required PlatformInt64 handle,
+    String? channelName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_opt_String(channelName, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 15)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAgentChannelAgentStatusConstMeta,
-            argValues: [handle, channelName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelAgentChannelAgentStatusConstMeta,
+        argValues: [handle, channelName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelAgentChannelAgentStatusConstMeta =>
+      const TaskConstMeta(
+        debugName: "channel_agent_status",
+        argNames: ["handle", "channelName"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelAgentChannelAgentStatusConstMeta => const TaskConstMeta(
-            debugName: "channel_agent_status",
-            argNames: ["handle", "channelName"],
-        );
-        
-
-@override String crateBridgeSkillCheckSkills({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillCheckSkills({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 16)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillCheckSkillsConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillCheckSkillsConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillCheckSkillsConstMeta =>
+      const TaskConstMeta(
+        debugName: "check_skills",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillCheckSkillsConstMeta => const TaskConstMeta(
-            debugName: "check_skills",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override bool crateBridgeGroupClearGroupHistory({required PlatformInt64 handle , required String groupId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeGroupClearGroupHistory({
+    required PlatformInt64 handle,
+    required String groupId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 17)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupClearGroupHistoryConstMeta,
-            argValues: [handle, groupId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupClearGroupHistoryConstMeta,
+        argValues: [handle, groupId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupClearGroupHistoryConstMeta =>
+      const TaskConstMeta(
+        debugName: "clear_group_history",
+        argNames: ["handle", "groupId"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupClearGroupHistoryConstMeta => const TaskConstMeta(
-            debugName: "clear_group_history",
-            argNames: ["handle", "groupId"],
-        );
-        
-
-@override Future<bool> crateBridgeSessionClearSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSessionClearSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionClearSessionConstMeta,
-            argValues: [handle, configJson, agentId, sessionKeyJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionClearSessionConstMeta,
+        argValues: [handle, configJson, agentId, sessionKeyJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionClearSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "clear_session",
+        argNames: ["handle", "configJson", "agentId", "sessionKeyJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionClearSessionConstMeta => const TaskConstMeta(
-            debugName: "clear_session",
-            argNames: ["handle", "configJson", "agentId", "sessionKeyJson"],
-        );
-        
-
-@override Future<String> crateBridgeSessionCompactContext({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , String? focus })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-sse_encode_opt_String(focus, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 19, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSessionCompactContext({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    String? focus,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          sse_encode_opt_String(focus, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionCompactContextConstMeta,
-            argValues: [handle, configJson, agentId, sessionKeyJson, focus],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionCompactContextConstMeta,
+        argValues: [handle, configJson, agentId, sessionKeyJson, focus],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionCompactContextConstMeta =>
+      const TaskConstMeta(
+        debugName: "compact_context",
+        argNames: [
+          "handle",
+          "configJson",
+          "agentId",
+          "sessionKeyJson",
+          "focus",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionCompactContextConstMeta => const TaskConstMeta(
-            debugName: "compact_context",
-            argNames: ["handle", "configJson", "agentId", "sessionKeyJson", "focus"],
-        );
-        
+  @override
+  String crateBridgeAgentEngineConfigureCodexAgentEngineJson({
+    required PlatformInt64 handle,
+    required String requestJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(requestJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: null,
+        ),
+        constMeta:
+            kCrateBridgeAgentEngineConfigureCodexAgentEngineJsonConstMeta,
+        argValues: [handle, requestJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
-@override bool crateBridgeFileBridgeConfigureGitIdentity({required PlatformInt64 handle , required String name , required String email })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(email, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 20)!;
-            
-            },
-            codec: 
-        SseCodec(
+  TaskConstMeta
+  get kCrateBridgeAgentEngineConfigureCodexAgentEngineJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "configure_codex_agent_engine_json",
+        argNames: ["handle", "requestJson"],
+      );
+
+  @override
+  bool crateBridgeFileBridgeConfigureGitIdentity({
+    required PlatformInt64 handle,
+    required String name,
+    required String email,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(email, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeConfigureGitIdentityConstMeta,
-            argValues: [handle, name, email],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeConfigureGitIdentityConstMeta,
+        argValues: [handle, name, email],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeConfigureGitIdentityConstMeta =>
+      const TaskConstMeta(
+        debugName: "configure_git_identity",
+        argNames: ["handle", "name", "email"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeConfigureGitIdentityConstMeta => const TaskConstMeta(
-            debugName: "configure_git_identity",
-            argNames: ["handle", "name", "email"],
-        );
-        
-
-@override Future<String> crateBridgeSessionContextStatus({required PlatformInt64 handle , required String configJson , required String agentId , required String threadId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(threadId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSessionContextStatus({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String threadId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(threadId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 22,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionContextStatusConstMeta,
-            argValues: [handle, configJson, agentId, threadId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionContextStatusConstMeta,
+        argValues: [handle, configJson, agentId, threadId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionContextStatusConstMeta =>
+      const TaskConstMeta(
+        debugName: "context_status",
+        argNames: ["handle", "configJson", "agentId", "threadId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionContextStatusConstMeta => const TaskConstMeta(
-            debugName: "context_status",
-            argNames: ["handle", "configJson", "agentId", "threadId"],
-        );
-        
-
-@override String crateBridgeA2ACreateA2APeerInvite({required PlatformInt64 handle , required String agentId , required String optionsJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(optionsJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 22)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ACreateA2APeerInvite({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String optionsJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(optionsJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ACreateA2APeerInviteConstMeta,
-            argValues: [handle, agentId, optionsJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ACreateA2APeerInviteConstMeta,
+        argValues: [handle, agentId, optionsJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ACreateA2APeerInviteConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_a2a_peer_invite",
+        argNames: ["handle", "agentId", "optionsJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ACreateA2APeerInviteConstMeta => const TaskConstMeta(
-            debugName: "create_a2a_peer_invite",
-            argNames: ["handle", "agentId", "optionsJson"],
-        );
-        
-
-@override String crateBridgeA2ACreateA2ATaskMessage({required PlatformInt64 handle , required String sessionId , required String message , required String optionsJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sessionId, serializer);
-sse_encode_String(message, serializer);
-sse_encode_String(optionsJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 23)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ACreateA2ATaskMessage({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required String message,
+    required String optionsJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sessionId, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_String(optionsJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ACreateA2ATaskMessageConstMeta,
-            argValues: [handle, sessionId, message, optionsJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ACreateA2ATaskMessageConstMeta,
+        argValues: [handle, sessionId, message, optionsJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ACreateA2ATaskMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_a2a_task_message",
+        argNames: ["handle", "sessionId", "message", "optionsJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ACreateA2ATaskMessageConstMeta => const TaskConstMeta(
-            debugName: "create_a2a_task_message",
-            argNames: ["handle", "sessionId", "message", "optionsJson"],
-        );
-        
-
-@override String crateBridgeA2ACreateA2ATaskProgressMessage({required PlatformInt64 handle , required String sessionId , required String taskId , required String message , required String progressJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sessionId, serializer);
-sse_encode_String(taskId, serializer);
-sse_encode_String(message, serializer);
-sse_encode_String(progressJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 24)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ACreateA2ATaskProgressMessage({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required String taskId,
+    required String message,
+    required String progressJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sessionId, serializer);
+          sse_encode_String(taskId, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_String(progressJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ACreateA2ATaskProgressMessageConstMeta,
-            argValues: [handle, sessionId, taskId, message, progressJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ACreateA2ATaskProgressMessageConstMeta,
+        argValues: [handle, sessionId, taskId, message, progressJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ACreateA2ATaskProgressMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_a2a_task_progress_message",
+        argNames: ["handle", "sessionId", "taskId", "message", "progressJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ACreateA2ATaskProgressMessageConstMeta => const TaskConstMeta(
-            debugName: "create_a2a_task_progress_message",
-            argNames: ["handle", "sessionId", "taskId", "message", "progressJson"],
-        );
-        
-
-@override String crateBridgeA2ACreateA2ATaskResultMessage({required PlatformInt64 handle , required String sessionId , required String taskId , required String resultJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sessionId, serializer);
-sse_encode_String(taskId, serializer);
-sse_encode_String(resultJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ACreateA2ATaskResultMessage({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required String taskId,
+    required String resultJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sessionId, serializer);
+          sse_encode_String(taskId, serializer);
+          sse_encode_String(resultJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ACreateA2ATaskResultMessageConstMeta,
-            argValues: [handle, sessionId, taskId, resultJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ACreateA2ATaskResultMessageConstMeta,
+        argValues: [handle, sessionId, taskId, resultJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ACreateA2ATaskResultMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_a2a_task_result_message",
+        argNames: ["handle", "sessionId", "taskId", "resultJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ACreateA2ATaskResultMessageConstMeta => const TaskConstMeta(
-            debugName: "create_a2a_task_result_message",
-            argNames: ["handle", "sessionId", "taskId", "resultJson"],
-        );
-        
-
-@override Future<String> crateBridgeAgentDefsCreateAgentDefinition({required PlatformInt64 handle , required String defJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(defJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 26, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAgentDefsCreateAgentDefinition({
+    required PlatformInt64 handle,
+    required String defJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(defJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsCreateAgentDefinitionConstMeta,
-            argValues: [handle, defJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsCreateAgentDefinitionConstMeta,
+        argValues: [handle, defJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsCreateAgentDefinitionConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_agent_definition",
+        argNames: ["handle", "defJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsCreateAgentDefinitionConstMeta => const TaskConstMeta(
-            debugName: "create_agent_definition",
-            argNames: ["handle", "defJson"],
-        );
-        
-
-@override Future<PlatformInt64> crateBridgeAgentDefsCreateAgentFromDefinition({required PlatformInt64 handle , required String defId , required String configJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(defId, serializer);
-sse_encode_String(configJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 27, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<PlatformInt64> crateBridgeAgentDefsCreateAgentFromDefinition({
+    required PlatformInt64 handle,
+    required String defId,
+    required String configJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(defId, serializer);
+          sse_encode_String(configJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 28,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_i_64,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsCreateAgentFromDefinitionConstMeta,
-            argValues: [handle, defId, configJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsCreateAgentFromDefinitionConstMeta,
+        argValues: [handle, defId, configJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsCreateAgentFromDefinitionConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_agent_from_definition",
+        argNames: ["handle", "defId", "configJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsCreateAgentFromDefinitionConstMeta => const TaskConstMeta(
-            debugName: "create_agent_from_definition",
-            argNames: ["handle", "defId", "configJson"],
-        );
-        
-
-@override String crateBridgeAutomationCreateAutomationJob({required PlatformInt64 handle , required String jobJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(jobJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 28)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAutomationCreateAutomationJob({
+    required PlatformInt64 handle,
+    required String jobJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(jobJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationCreateAutomationJobConstMeta,
-            argValues: [handle, jobJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationCreateAutomationJobConstMeta,
+        argValues: [handle, jobJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationCreateAutomationJobConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_automation_job",
+        argNames: ["handle", "jobJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationCreateAutomationJobConstMeta => const TaskConstMeta(
-            debugName: "create_automation_job",
-            argNames: ["handle", "jobJson"],
-        );
-        
-
-@override PlatformInt64 crateBridgeInitCreateEngine({required String configJson , required String platformContextJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(configJson, serializer);
-sse_encode_String(platformContextJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 29)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  PlatformInt64 crateBridgeInitCreateEngine({
+    required String configJson,
+    required String platformContextJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(platformContextJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_i_64,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitCreateEngineConstMeta,
-            argValues: [configJson, platformContextJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitCreateEngineConstMeta,
+        argValues: [configJson, platformContextJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitCreateEngineConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_engine",
+        argNames: ["configJson", "platformContextJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeInitCreateEngineConstMeta => const TaskConstMeta(
-            debugName: "create_engine",
-            argNames: ["configJson", "platformContextJson"],
-        );
-        
-
-@override Future<String> crateBridgeGroupCreateGroup({required PlatformInt64 handle , required String name , required String membersJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(membersJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 30, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeGroupCreateGroup({
+    required PlatformInt64 handle,
+    required String name,
+    required String membersJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(membersJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 31,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupCreateGroupConstMeta,
-            argValues: [handle, name, membersJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupCreateGroupConstMeta,
+        argValues: [handle, name, membersJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupCreateGroupConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_group",
+        argNames: ["handle", "name", "membersJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupCreateGroupConstMeta => const TaskConstMeta(
-            debugName: "create_group",
-            argNames: ["handle", "name", "membersJson"],
-        );
-        
-
-@override Future<String> crateBridgeSessionCreateSession({required PlatformInt64 handle , required String configJson , required String agentId , required String channelType , required String accountId , String? existingThreadId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(channelType, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_opt_String(existingThreadId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 31, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSessionCreateSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String channelType,
+    required String accountId,
+    String? existingThreadId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(channelType, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_opt_String(existingThreadId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 32,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionCreateSessionConstMeta,
-            argValues: [handle, configJson, agentId, channelType, accountId, existingThreadId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionCreateSessionConstMeta,
+        argValues: [
+          handle,
+          configJson,
+          agentId,
+          channelType,
+          accountId,
+          existingThreadId,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionCreateSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "create_session",
+        argNames: [
+          "handle",
+          "configJson",
+          "agentId",
+          "channelType",
+          "accountId",
+          "existingThreadId",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionCreateSessionConstMeta => const TaskConstMeta(
-            debugName: "create_session",
-            argNames: ["handle", "configJson", "agentId", "channelType", "accountId", "existingThreadId"],
-        );
-        
-
-@override bool crateBridgeA2ADeleteA2APeer({required PlatformInt64 handle , required String peerId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(peerId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 32)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeA2ADeleteA2APeer({
+    required PlatformInt64 handle,
+    required String peerId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(peerId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ADeleteA2APeerConstMeta,
-            argValues: [handle, peerId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ADeleteA2APeerConstMeta,
+        argValues: [handle, peerId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ADeleteA2APeerConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_a2a_peer",
+        argNames: ["handle", "peerId"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ADeleteA2APeerConstMeta => const TaskConstMeta(
-            debugName: "delete_a2a_peer",
-            argNames: ["handle", "peerId"],
-        );
-        
-
-@override bool crateBridgeAgentDeleteAgent({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 33)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeAgentDeleteAgent({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDeleteAgentConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDeleteAgentConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDeleteAgentConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_agent",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDeleteAgentConstMeta => const TaskConstMeta(
-            debugName: "delete_agent",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override bool crateBridgeAgentAppDeleteAgentAppPackage({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 34)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeAgentAppDeleteAgentAppPackage({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppDeleteAgentAppPackageConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppDeleteAgentAppPackageConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppDeleteAgentAppPackageConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_agent_app_package",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppDeleteAgentAppPackageConstMeta => const TaskConstMeta(
-            debugName: "delete_agent_app_package",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override Future<bool> crateBridgeAgentDefsDeleteAgentDefinition({required PlatformInt64 handle , required String defId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(defId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeAgentDefsDeleteAgentDefinition({
+    required PlatformInt64 handle,
+    required String defId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(defId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 36,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsDeleteAgentDefinitionConstMeta,
-            argValues: [handle, defId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsDeleteAgentDefinitionConstMeta,
+        argValues: [handle, defId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsDeleteAgentDefinitionConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_agent_definition",
+        argNames: ["handle", "defId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsDeleteAgentDefinitionConstMeta => const TaskConstMeta(
-            debugName: "delete_agent_definition",
-            argNames: ["handle", "defId"],
-        );
-        
-
-@override bool crateBridgeAutomationDeleteAutomationJob({required PlatformInt64 handle , required String jobId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(jobId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeAutomationDeleteAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(jobId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationDeleteAutomationJobConstMeta,
-            argValues: [handle, jobId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationDeleteAutomationJobConstMeta,
+        argValues: [handle, jobId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationDeleteAutomationJobConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_automation_job",
+        argNames: ["handle", "jobId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationDeleteAutomationJobConstMeta => const TaskConstMeta(
-            debugName: "delete_automation_job",
-            argNames: ["handle", "jobId"],
-        );
-        
-
-@override bool crateBridgeGroupDeleteGroup({required PlatformInt64 handle , required String groupId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeGroupDeleteGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupDeleteGroupConstMeta,
-            argValues: [handle, groupId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupDeleteGroupConstMeta,
+        argValues: [handle, groupId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupDeleteGroupConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_group",
+        argNames: ["handle", "groupId"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupDeleteGroupConstMeta => const TaskConstMeta(
-            debugName: "delete_group",
-            argNames: ["handle", "groupId"],
-        );
-        
-
-@override Future<bool> crateBridgeFileBridgeDeleteSandboxFile({required PlatformInt64 handle , required String sandboxPath })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sandboxPath, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeFileBridgeDeleteSandboxFile({
+    required PlatformInt64 handle,
+    required String sandboxPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sandboxPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 39,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeDeleteSandboxFileConstMeta,
-            argValues: [handle, sandboxPath],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeDeleteSandboxFileConstMeta,
+        argValues: [handle, sandboxPath],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeDeleteSandboxFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_sandbox_file",
+        argNames: ["handle", "sandboxPath"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeDeleteSandboxFileConstMeta => const TaskConstMeta(
-            debugName: "delete_sandbox_file",
-            argNames: ["handle", "sandboxPath"],
-        );
-        
-
-@override Future<bool> crateBridgeFileBridgeDeleteSandboxFileScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String sandboxPath })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sandboxPath, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeFileBridgeDeleteSandboxFileScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String sandboxPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sandboxPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 40,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeDeleteSandboxFileScopedConstMeta,
-            argValues: [handle, accountId, agentId, sandboxPath],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeDeleteSandboxFileScopedConstMeta,
+        argValues: [handle, accountId, agentId, sandboxPath],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeDeleteSandboxFileScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_sandbox_file_scoped",
+        argNames: ["handle", "accountId", "agentId", "sandboxPath"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeDeleteSandboxFileScopedConstMeta => const TaskConstMeta(
-            debugName: "delete_sandbox_file_scoped",
-            argNames: ["handle", "accountId", "agentId", "sandboxPath"],
-        );
-        
-
-@override Future<bool> crateBridgeSessionDeleteSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSessionDeleteSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 41,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionDeleteSessionConstMeta,
-            argValues: [handle, configJson, agentId, sessionKeyJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionDeleteSessionConstMeta,
+        argValues: [handle, configJson, agentId, sessionKeyJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionDeleteSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_session",
+        argNames: ["handle", "configJson", "agentId", "sessionKeyJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionDeleteSessionConstMeta => const TaskConstMeta(
-            debugName: "delete_session",
-            argNames: ["handle", "configJson", "agentId", "sessionKeyJson"],
-        );
-        
-
-@override Future<bool> crateBridgeSessionDeleteSessionIfEmpty({required PlatformInt64 handle , required String sessionKeyJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 41, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSessionDeleteSessionIfEmpty({
+    required PlatformInt64 handle,
+    required String sessionKeyJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 42,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionDeleteSessionIfEmptyConstMeta,
-            argValues: [handle, sessionKeyJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionDeleteSessionIfEmptyConstMeta,
+        argValues: [handle, sessionKeyJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionDeleteSessionIfEmptyConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_session_if_empty",
+        argNames: ["handle", "sessionKeyJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionDeleteSessionIfEmptyConstMeta => const TaskConstMeta(
-            debugName: "delete_session_if_empty",
-            argNames: ["handle", "sessionKeyJson"],
-        );
-        
-
-@override bool crateBridgeFileBridgeDeleteThreadAttachments({required PlatformInt64 handle , required String threadId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(threadId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 42)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeFileBridgeDeleteThreadAttachments({
+    required PlatformInt64 handle,
+    required String threadId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(threadId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 43)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeDeleteThreadAttachmentsConstMeta,
-            argValues: [handle, threadId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeDeleteThreadAttachmentsConstMeta,
+        argValues: [handle, threadId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeDeleteThreadAttachmentsConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_thread_attachments",
+        argNames: ["handle", "threadId"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeDeleteThreadAttachmentsConstMeta => const TaskConstMeta(
-            debugName: "delete_thread_attachments",
-            argNames: ["handle", "threadId"],
-        );
-        
-
-@override Future<bool> crateBridgeWorkspaceDeleteWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(path, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 43, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeWorkspaceDeleteWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 44,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceDeleteWorkspaceFileConstMeta,
-            argValues: [handle, accountId, agentId, path],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceDeleteWorkspaceFileConstMeta,
+        argValues: [handle, accountId, agentId, path],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceDeleteWorkspaceFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_workspace_file",
+        argNames: ["handle", "accountId", "agentId", "path"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceDeleteWorkspaceFileConstMeta => const TaskConstMeta(
-            debugName: "delete_workspace_file",
-            argNames: ["handle", "accountId", "agentId", "path"],
-        );
-        
-
-@override String crateBridgeFileBridgeDetectFileReferences({required PlatformInt64 handle , required String text })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(text, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 44)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeDetectFileReferences({
+    required PlatformInt64 handle,
+    required String text,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(text, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeDetectFileReferencesConstMeta,
-            argValues: [handle, text],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeDetectFileReferencesConstMeta,
+        argValues: [handle, text],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeDetectFileReferencesConstMeta =>
+      const TaskConstMeta(
+        debugName: "detect_file_references",
+        argNames: ["handle", "text"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeDetectFileReferencesConstMeta => const TaskConstMeta(
-            debugName: "detect_file_references",
-            argNames: ["handle", "text"],
-        );
-        
-
-@override String crateBridgeFileBridgeDetectFileReferencesScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String text })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(text, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 45)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeDetectFileReferencesScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String text,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(text, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeDetectFileReferencesScopedConstMeta,
-            argValues: [handle, accountId, agentId, text],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeDetectFileReferencesScopedConstMeta,
+        argValues: [handle, accountId, agentId, text],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeDetectFileReferencesScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "detect_file_references_scoped",
+        argNames: ["handle", "accountId", "agentId", "text"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeDetectFileReferencesScopedConstMeta => const TaskConstMeta(
-            debugName: "detect_file_references_scoped",
-            argNames: ["handle", "accountId", "agentId", "text"],
-        );
-        
-
-@override void crateBridgeInitDisposeEngine({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  void crateBridgeInitDisposeEngine({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitDisposeEngineConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitDisposeEngineConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitDisposeEngineConstMeta =>
+      const TaskConstMeta(debugName: "dispose_engine", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeInitDisposeEngineConstMeta => const TaskConstMeta(
-            debugName: "dispose_engine",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeChannelEnqueueChannelOutbound({required PlatformInt64 handle , required String outboundJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(outboundJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelEnqueueChannelOutbound({
+    required PlatformInt64 handle,
+    required String outboundJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(outboundJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 48)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelEnqueueChannelOutboundConstMeta,
-            argValues: [handle, outboundJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelEnqueueChannelOutboundConstMeta,
+        argValues: [handle, outboundJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelEnqueueChannelOutboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "enqueue_channel_outbound",
+        argNames: ["handle", "outboundJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelEnqueueChannelOutboundConstMeta => const TaskConstMeta(
-            debugName: "enqueue_channel_outbound",
-            argNames: ["handle", "outboundJson"],
-        );
-        
-
-@override bool crateBridgeInitEnsureAgentReady({required PlatformInt64 handle , required String configJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 48)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeInitEnsureAgentReady({
+    required PlatformInt64 handle,
+    required String configJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitEnsureAgentReadyConstMeta,
-            argValues: [handle, configJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitEnsureAgentReadyConstMeta,
+        argValues: [handle, configJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitEnsureAgentReadyConstMeta =>
+      const TaskConstMeta(
+        debugName: "ensure_agent_ready",
+        argNames: ["handle", "configJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeInitEnsureAgentReadyConstMeta => const TaskConstMeta(
-            debugName: "ensure_agent_ready",
-            argNames: ["handle", "configJson"],
-        );
-        
-
-@override String crateBridgeGroupExportGroupState({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeGroupExportGroupState({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupExportGroupStateConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupExportGroupStateConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupExportGroupStateConstMeta =>
+      const TaskConstMeta(
+        debugName: "export_group_state",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupExportGroupStateConstMeta => const TaskConstMeta(
-            debugName: "export_group_state",
-            argNames: ["handle"],
-        );
-        
-
-@override bool crateBridgeChannelFailChannelInbound({required PlatformInt64 handle , required String inboundId , required String error })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(inboundId, serializer);
-sse_encode_String(error, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 50)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelFailChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+    required String error,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(inboundId, serializer);
+          sse_encode_String(error, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelFailChannelInboundConstMeta,
-            argValues: [handle, inboundId, error],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelFailChannelInboundConstMeta,
+        argValues: [handle, inboundId, error],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelFailChannelInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "fail_channel_inbound",
+        argNames: ["handle", "inboundId", "error"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelFailChannelInboundConstMeta => const TaskConstMeta(
-            debugName: "fail_channel_inbound",
-            argNames: ["handle", "inboundId", "error"],
-        );
-        
-
-@override bool crateBridgeChannelFailChannelOutbound({required PlatformInt64 handle , required String outboundId , required String error })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(outboundId, serializer);
-sse_encode_String(error, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 51)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelFailChannelOutbound({
+    required PlatformInt64 handle,
+    required String outboundId,
+    required String error,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(outboundId, serializer);
+          sse_encode_String(error, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 52)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelFailChannelOutboundConstMeta,
-            argValues: [handle, outboundId, error],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelFailChannelOutboundConstMeta,
+        argValues: [handle, outboundId, error],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelFailChannelOutboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "fail_channel_outbound",
+        argNames: ["handle", "outboundId", "error"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelFailChannelOutboundConstMeta => const TaskConstMeta(
-            debugName: "fail_channel_outbound",
-            argNames: ["handle", "outboundId", "error"],
-        );
-        
-
-@override String crateBridgeA2AGetA2AAgentCard({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 52)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AGetA2AAgentCard({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 53)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AGetA2AAgentCardConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AGetA2AAgentCardConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AGetA2AAgentCardConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_a2a_agent_card",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2AGetA2AAgentCardConstMeta => const TaskConstMeta(
-            debugName: "get_a2a_agent_card",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override String crateBridgeA2AGetA2ATask({required PlatformInt64 handle , required String taskId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(taskId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 53)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AGetA2ATask({
+    required PlatformInt64 handle,
+    required String taskId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(taskId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 54)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AGetA2ATaskConstMeta,
-            argValues: [handle, taskId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AGetA2ATaskConstMeta,
+        argValues: [handle, taskId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AGetA2ATaskConstMeta => const TaskConstMeta(
+    debugName: "get_a2a_task",
+    argNames: ["handle", "taskId"],
+  );
 
-        TaskConstMeta get kCrateBridgeA2AGetA2ATaskConstMeta => const TaskConstMeta(
-            debugName: "get_a2a_task",
-            argNames: ["handle", "taskId"],
-        );
-        
-
-@override String crateBridgeSessionRunsGetActiveSessionRuns({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 54)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSessionRunsGetActiveSessionRuns({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 55)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionRunsGetActiveSessionRunsConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionRunsGetActiveSessionRunsConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionRunsGetActiveSessionRunsConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_active_session_runs",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionRunsGetActiveSessionRunsConstMeta => const TaskConstMeta(
-            debugName: "get_active_session_runs",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeAgentAppGetAgentAppActionProposal({required PlatformInt64 handle , required String requestId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(requestId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 55)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentAppGetAgentAppActionProposal({
+    required PlatformInt64 handle,
+    required String requestId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(requestId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppGetAgentAppActionProposalConstMeta,
-            argValues: [handle, requestId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppGetAgentAppActionProposalConstMeta,
+        argValues: [handle, requestId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppGetAgentAppActionProposalConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_agent_app_action_proposal",
+        argNames: ["handle", "requestId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppGetAgentAppActionProposalConstMeta => const TaskConstMeta(
-            debugName: "get_agent_app_action_proposal",
-            argNames: ["handle", "requestId"],
-        );
-        
-
-@override String crateBridgeAgentAppGetAgentAppPackage({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentAppGetAgentAppPackage({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 57)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppGetAgentAppPackageConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppGetAgentAppPackageConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppGetAgentAppPackageConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_agent_app_package",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppGetAgentAppPackageConstMeta => const TaskConstMeta(
-            debugName: "get_agent_app_package",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override Future<String> crateBridgeAgentDefsGetAgentDefinition({required PlatformInt64 handle , required String defId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(defId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 57, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAgentDefsGetAgentDefinition({
+    required PlatformInt64 handle,
+    required String defId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(defId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 58,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsGetAgentDefinitionConstMeta,
-            argValues: [handle, defId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsGetAgentDefinitionConstMeta,
+        argValues: [handle, defId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsGetAgentDefinitionConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_agent_definition",
+        argNames: ["handle", "defId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsGetAgentDefinitionConstMeta => const TaskConstMeta(
-            debugName: "get_agent_definition",
-            argNames: ["handle", "defId"],
-        );
-        
-
-@override String crateBridgeAutomationGetAutomationJob({required PlatformInt64 handle , required String jobId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(jobId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 58)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAutomationGetAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(jobId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 59)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationGetAutomationJobConstMeta,
-            argValues: [handle, jobId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationGetAutomationJobConstMeta,
+        argValues: [handle, jobId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationGetAutomationJobConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_automation_job",
+        argNames: ["handle", "jobId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationGetAutomationJobConstMeta => const TaskConstMeta(
-            debugName: "get_automation_job",
-            argNames: ["handle", "jobId"],
-        );
-        
-
-@override Future<String> crateBridgeSkillGetCatalogSkill({required String slug })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(slug, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 59, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillGetCatalogSkill({required String slug}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(slug, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 60,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillGetCatalogSkillConstMeta,
-            argValues: [slug],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillGetCatalogSkillConstMeta,
+        argValues: [slug],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillGetCatalogSkillConstMeta =>
+      const TaskConstMeta(debugName: "get_catalog_skill", argNames: ["slug"]);
 
-        TaskConstMeta get kCrateBridgeSkillGetCatalogSkillConstMeta => const TaskConstMeta(
-            debugName: "get_catalog_skill",
-            argNames: ["slug"],
-        );
-        
-
-@override String crateBridgeInitGetConfig({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeInitGetConfig({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitGetConfigConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitGetConfigConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitGetConfigConstMeta =>
+      const TaskConstMeta(debugName: "get_config", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeInitGetConfigConstMeta => const TaskConstMeta(
-            debugName: "get_config",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeGroupGetGroup({required PlatformInt64 handle , required String groupId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeGroupGetGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupGetGroupConstMeta,
-            argValues: [handle, groupId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupGetGroupConstMeta,
+        argValues: [handle, groupId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupGetGroupConstMeta => const TaskConstMeta(
+    debugName: "get_group",
+    argNames: ["handle", "groupId"],
+  );
 
-        TaskConstMeta get kCrateBridgeGroupGetGroupConstMeta => const TaskConstMeta(
-            debugName: "get_group",
-            argNames: ["handle", "groupId"],
-        );
-        
-
-@override String crateBridgeGroupGetGroupMessages({required PlatformInt64 handle , required String groupId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeGroupGetGroupMessages({
+    required PlatformInt64 handle,
+    required String groupId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupGetGroupMessagesConstMeta,
-            argValues: [handle, groupId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupGetGroupMessagesConstMeta,
+        argValues: [handle, groupId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupGetGroupMessagesConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_group_messages",
+        argNames: ["handle", "groupId"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupGetGroupMessagesConstMeta => const TaskConstMeta(
-            debugName: "get_group_messages",
-            argNames: ["handle", "groupId"],
-        );
-        
-
-@override Future<String> crateBridgeSessionGetHistory({required PlatformInt64 handle , required String configJson , required String agentId , required String threadId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(threadId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSessionGetHistory({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String threadId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(threadId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 64,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionGetHistoryConstMeta,
-            argValues: [handle, configJson, agentId, threadId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionGetHistoryConstMeta,
+        argValues: [handle, configJson, agentId, threadId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionGetHistoryConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_history",
+        argNames: ["handle", "configJson", "agentId", "threadId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionGetHistoryConstMeta => const TaskConstMeta(
-            debugName: "get_history",
-            argNames: ["handle", "configJson", "agentId", "threadId"],
-        );
-        
-
-@override Future<String> crateBridgeSessionGetHistoryPage({required PlatformInt64 handle , required String configJson , required String agentId , required String threadId , String? before , required PlatformInt64 limit })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(threadId, serializer);
-sse_encode_opt_String(before, serializer);
-sse_encode_i_64(limit, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSessionGetHistoryPage({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String threadId,
+    String? before,
+    required PlatformInt64 limit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(threadId, serializer);
+          sse_encode_opt_String(before, serializer);
+          sse_encode_i_64(limit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 65,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionGetHistoryPageConstMeta,
-            argValues: [handle, configJson, agentId, threadId, before, limit],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionGetHistoryPageConstMeta,
+        argValues: [handle, configJson, agentId, threadId, before, limit],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionGetHistoryPageConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_history_page",
+        argNames: [
+          "handle",
+          "configJson",
+          "agentId",
+          "threadId",
+          "before",
+          "limit",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionGetHistoryPageConstMeta => const TaskConstMeta(
-            debugName: "get_history_page",
-            argNames: ["handle", "configJson", "agentId", "threadId", "before", "limit"],
-        );
-        
-
-@override String crateBridgeAutomationGetNextAutomationWake({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAutomationGetNextAutomationWake({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationGetNextAutomationWakeConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationGetNextAutomationWakeConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationGetNextAutomationWakeConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_next_automation_wake",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationGetNextAutomationWakeConstMeta => const TaskConstMeta(
-            debugName: "get_next_automation_wake",
-            argNames: ["handle"],
-        );
-        
-
-@override Future<String> crateBridgeAgentGetOrCreateAgent({required PlatformInt64 handle , required String agentId , required String configJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(configJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 66, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAgentGetOrCreateAgent({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String configJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(configJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 67,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentGetOrCreateAgentConstMeta,
-            argValues: [handle, agentId, configJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentGetOrCreateAgentConstMeta,
+        argValues: [handle, agentId, configJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentGetOrCreateAgentConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_or_create_agent",
+        argNames: ["handle", "agentId", "configJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentGetOrCreateAgentConstMeta => const TaskConstMeta(
-            debugName: "get_or_create_agent",
-            argNames: ["handle", "agentId", "configJson"],
-        );
-        
-
-@override String crateBridgeSessionRunsGetSessionRun({required PlatformInt64 handle , required String runId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(runId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 67)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSessionRunsGetSessionRun({
+    required PlatformInt64 handle,
+    required String runId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(runId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionRunsGetSessionRunConstMeta,
-            argValues: [handle, runId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionRunsGetSessionRunConstMeta,
+        argValues: [handle, runId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionRunsGetSessionRunConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_session_run",
+        argNames: ["handle", "runId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionRunsGetSessionRunConstMeta => const TaskConstMeta(
-            debugName: "get_session_run",
-            argNames: ["handle", "runId"],
-        );
-        
-
-@override String crateBridgeSkillGetSkill({required PlatformInt64 handle , required String agentId , required String skillName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillGetSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillGetSkillConstMeta,
-            argValues: [handle, agentId, skillName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillGetSkillConstMeta,
+        argValues: [handle, agentId, skillName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillGetSkillConstMeta => const TaskConstMeta(
+    debugName: "get_skill",
+    argNames: ["handle", "agentId", "skillName"],
+  );
 
-        TaskConstMeta get kCrateBridgeSkillGetSkillConstMeta => const TaskConstMeta(
-            debugName: "get_skill",
-            argNames: ["handle", "agentId", "skillName"],
-        );
-        
-
-@override String crateBridgeSkillGetSkillSnapshot({required PlatformInt64 handle , required String snapshotId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(snapshotId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillGetSkillSnapshot({
+    required PlatformInt64 handle,
+    required String snapshotId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(snapshotId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillGetSkillSnapshotConstMeta,
-            argValues: [handle, snapshotId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillGetSkillSnapshotConstMeta,
+        argValues: [handle, snapshotId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillGetSkillSnapshotConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_skill_snapshot",
+        argNames: ["handle", "snapshotId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillGetSkillSnapshotConstMeta => const TaskConstMeta(
-            debugName: "get_skill_snapshot",
-            argNames: ["handle", "snapshotId"],
-        );
-        
-
-@override String crateBridgeSkillGetSkillStatus({required PlatformInt64 handle , required String agentId , required String skillName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillGetSkillStatus({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillGetSkillStatusConstMeta,
-            argValues: [handle, agentId, skillName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillGetSkillStatusConstMeta,
+        argValues: [handle, agentId, skillName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillGetSkillStatusConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_skill_status",
+        argNames: ["handle", "agentId", "skillName"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillGetSkillStatusConstMeta => const TaskConstMeta(
-            debugName: "get_skill_status",
-            argNames: ["handle", "agentId", "skillName"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceGetSystemPrompt({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceGetSystemPrompt({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 72,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceGetSystemPromptConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceGetSystemPromptConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceGetSystemPromptConstMeta =>
+      const TaskConstMeta(
+        debugName: "get_system_prompt",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceGetSystemPromptConstMeta => const TaskConstMeta(
-            debugName: "get_system_prompt",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override Future<String> crateBridgeAgentDefsImportAgentMd({required PlatformInt64 handle , required String content })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(content, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 72, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAgentDefsImportAgentMd({
+    required PlatformInt64 handle,
+    required String content,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(content, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 73,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsImportAgentMdConstMeta,
-            argValues: [handle, content],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsImportAgentMdConstMeta,
+        argValues: [handle, content],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsImportAgentMdConstMeta =>
+      const TaskConstMeta(
+        debugName: "import_agent_md",
+        argNames: ["handle", "content"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsImportAgentMdConstMeta => const TaskConstMeta(
-            debugName: "import_agent_md",
-            argNames: ["handle", "content"],
-        );
-        
-
-@override Future<bool> crateBridgeGroupImportGroupState({required PlatformInt64 handle , required String stateJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(stateJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 73, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeGroupImportGroupState({
+    required PlatformInt64 handle,
+    required String stateJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(stateJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 74,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupImportGroupStateConstMeta,
-            argValues: [handle, stateJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupImportGroupStateConstMeta,
+        argValues: [handle, stateJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupImportGroupStateConstMeta =>
+      const TaskConstMeta(
+        debugName: "import_group_state",
+        argNames: ["handle", "stateJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupImportGroupStateConstMeta => const TaskConstMeta(
-            debugName: "import_group_state",
-            argNames: ["handle", "stateJson"],
-        );
-        
-
-@override bool crateBridgeFileBridgeInitFileBridge({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 74)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeFileBridgeInitFileBridge({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeInitFileBridgeConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeInitFileBridgeConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeInitFileBridgeConstMeta =>
+      const TaskConstMeta(debugName: "init_file_bridge", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeFileBridgeInitFileBridgeConstMeta => const TaskConstMeta(
-            debugName: "init_file_bridge",
-            argNames: ["handle"],
-        );
-        
-
-@override bool crateBridgeFileBridgeInitFileBridgeScoped({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 75)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeFileBridgeInitFileBridgeScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeInitFileBridgeScopedConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeInitFileBridgeScopedConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeInitFileBridgeScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "init_file_bridge_scoped",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeInitFileBridgeScopedConstMeta => const TaskConstMeta(
-            debugName: "init_file_bridge_scoped",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override Future<bool> crateBridgeSessionInjectMessage({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , required String message , required String attachmentsJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_String(attachmentsJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 76, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSessionInjectMessage({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    required String message,
+    required String attachmentsJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_String(attachmentsJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 77,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionInjectMessageConstMeta,
-            argValues: [handle, configJson, agentId, sessionKeyJson, message, attachmentsJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionInjectMessageConstMeta,
+        argValues: [
+          handle,
+          configJson,
+          agentId,
+          sessionKeyJson,
+          message,
+          attachmentsJson,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionInjectMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "inject_message",
+        argNames: [
+          "handle",
+          "configJson",
+          "agentId",
+          "sessionKeyJson",
+          "message",
+          "attachmentsJson",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionInjectMessageConstMeta => const TaskConstMeta(
-            debugName: "inject_message",
-            argNames: ["handle", "configJson", "agentId", "sessionKeyJson", "message", "attachmentsJson"],
-        );
-        
-
-@override Future<String> crateBridgeSkillInstallFromCatalog({required PlatformInt64 handle , required String agentId , required String slug })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(slug, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 77, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillInstallFromCatalog({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String slug,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(slug, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 78,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillInstallFromCatalogConstMeta,
-            argValues: [handle, agentId, slug],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillInstallFromCatalogConstMeta,
+        argValues: [handle, agentId, slug],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillInstallFromCatalogConstMeta =>
+      const TaskConstMeta(
+        debugName: "install_from_catalog",
+        argNames: ["handle", "agentId", "slug"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillInstallFromCatalogConstMeta => const TaskConstMeta(
-            debugName: "install_from_catalog",
-            argNames: ["handle", "agentId", "slug"],
-        );
-        
-
-@override String crateBridgeCapabilityInstallScenarioPackJson({required PlatformInt64 handle , required String packJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(packJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 78)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityInstallScenarioPackJson({
+    required PlatformInt64 handle,
+    required String packJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(packJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityInstallScenarioPackJsonConstMeta,
-            argValues: [handle, packJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityInstallScenarioPackJsonConstMeta,
+        argValues: [handle, packJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityInstallScenarioPackJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "install_scenario_pack_json",
+        argNames: ["handle", "packJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityInstallScenarioPackJsonConstMeta => const TaskConstMeta(
-            debugName: "install_scenario_pack_json",
-            argNames: ["handle", "packJson"],
-        );
-        
-
-@override Future<String> crateBridgeSkillInstallSkill({required PlatformInt64 handle , required String agentId , required String skillContent })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillContent, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 79, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillInstallSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillContent,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillContent, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 80,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillInstallSkillConstMeta,
-            argValues: [handle, agentId, skillContent],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillInstallSkillConstMeta,
+        argValues: [handle, agentId, skillContent],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillInstallSkillConstMeta =>
+      const TaskConstMeta(
+        debugName: "install_skill",
+        argNames: ["handle", "agentId", "skillContent"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillInstallSkillConstMeta => const TaskConstMeta(
-            debugName: "install_skill",
-            argNames: ["handle", "agentId", "skillContent"],
-        );
-        
-
-@override bool crateBridgeInitIsBrowserTool({required String name })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(name, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 80)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeInitIsBrowserTool({required String name}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(name, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitIsBrowserToolConstMeta,
-            argValues: [name],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitIsBrowserToolConstMeta,
+        argValues: [name],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitIsBrowserToolConstMeta =>
+      const TaskConstMeta(debugName: "is_browser_tool", argNames: ["name"]);
 
-        TaskConstMeta get kCrateBridgeInitIsBrowserToolConstMeta => const TaskConstMeta(
-            debugName: "is_browser_tool",
-            argNames: ["name"],
-        );
-        
-
-@override bool crateBridgeInitIsPlatformTool({required String name })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(name, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 81)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeInitIsPlatformTool({required String name}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(name, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 82)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitIsPlatformToolConstMeta,
-            argValues: [name],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitIsPlatformToolConstMeta,
+        argValues: [name],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitIsPlatformToolConstMeta =>
+      const TaskConstMeta(debugName: "is_platform_tool", argNames: ["name"]);
 
-        TaskConstMeta get kCrateBridgeInitIsPlatformToolConstMeta => const TaskConstMeta(
-            debugName: "is_platform_tool",
-            argNames: ["name"],
-        );
-        
-
-@override String crateBridgeChannelLeaseChannelOutbound({required PlatformInt64 handle , required String channelName , String? accountId , required BigInt limit })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(channelName, serializer);
-sse_encode_opt_String(accountId, serializer);
-sse_encode_usize(limit, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 82)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelLeaseChannelOutbound({
+    required PlatformInt64 handle,
+    required String channelName,
+    String? accountId,
+    required BigInt limit,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(channelName, serializer);
+          sse_encode_opt_String(accountId, serializer);
+          sse_encode_usize(limit, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelLeaseChannelOutboundConstMeta,
-            argValues: [handle, channelName, accountId, limit],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelLeaseChannelOutboundConstMeta,
+        argValues: [handle, channelName, accountId, limit],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelLeaseChannelOutboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "lease_channel_outbound",
+        argNames: ["handle", "channelName", "accountId", "limit"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelLeaseChannelOutboundConstMeta => const TaskConstMeta(
-            debugName: "lease_channel_outbound",
-            argNames: ["handle", "channelName", "accountId", "limit"],
-        );
-        
-
-@override String crateBridgeA2AListA2ADeliveryRecords({required PlatformInt64 handle , required String sessionId , required PlatformInt64 limit , required PlatformInt64 offset })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sessionId, serializer);
-sse_encode_i_64(limit, serializer);
-sse_encode_i_64(offset, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 83)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AListA2ADeliveryRecords({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sessionId, serializer);
+          sse_encode_i_64(limit, serializer);
+          sse_encode_i_64(offset, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 84)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AListA2ADeliveryRecordsConstMeta,
-            argValues: [handle, sessionId, limit, offset],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AListA2ADeliveryRecordsConstMeta,
+        argValues: [handle, sessionId, limit, offset],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AListA2ADeliveryRecordsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_a2a_delivery_records",
+        argNames: ["handle", "sessionId", "limit", "offset"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2AListA2ADeliveryRecordsConstMeta => const TaskConstMeta(
-            debugName: "list_a2a_delivery_records",
-            argNames: ["handle", "sessionId", "limit", "offset"],
-        );
-        
-
-@override String crateBridgeA2AListA2APeerMessages({required PlatformInt64 handle , required String sessionId , required PlatformInt64 limit , required PlatformInt64 offset })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sessionId, serializer);
-sse_encode_i_64(limit, serializer);
-sse_encode_i_64(offset, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 84)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AListA2APeerMessages({
+    required PlatformInt64 handle,
+    required String sessionId,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sessionId, serializer);
+          sse_encode_i_64(limit, serializer);
+          sse_encode_i_64(offset, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 85)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AListA2APeerMessagesConstMeta,
-            argValues: [handle, sessionId, limit, offset],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AListA2APeerMessagesConstMeta,
+        argValues: [handle, sessionId, limit, offset],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AListA2APeerMessagesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_a2a_peer_messages",
+        argNames: ["handle", "sessionId", "limit", "offset"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2AListA2APeerMessagesConstMeta => const TaskConstMeta(
-            debugName: "list_a2a_peer_messages",
-            argNames: ["handle", "sessionId", "limit", "offset"],
-        );
-        
-
-@override String crateBridgeA2AListA2APeerSessions({required PlatformInt64 handle , required String peerId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(peerId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 85)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AListA2APeerSessions({
+    required PlatformInt64 handle,
+    required String peerId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(peerId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 86)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AListA2APeerSessionsConstMeta,
-            argValues: [handle, peerId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AListA2APeerSessionsConstMeta,
+        argValues: [handle, peerId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AListA2APeerSessionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_a2a_peer_sessions",
+        argNames: ["handle", "peerId"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2AListA2APeerSessionsConstMeta => const TaskConstMeta(
-            debugName: "list_a2a_peer_sessions",
-            argNames: ["handle", "peerId"],
-        );
-        
-
-@override String crateBridgeA2AListA2APeers({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 86)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AListA2APeers({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AListA2APeersConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AListA2APeersConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AListA2APeersConstMeta => const TaskConstMeta(
+    debugName: "list_a2a_peers",
+    argNames: ["handle", "agentId"],
+  );
 
-        TaskConstMeta get kCrateBridgeA2AListA2APeersConstMeta => const TaskConstMeta(
-            debugName: "list_a2a_peers",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override String crateBridgeA2AListA2ATasks({required PlatformInt64 handle , required String filterJson , required PlatformInt64 limit , required PlatformInt64 offset })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(filterJson, serializer);
-sse_encode_i_64(limit, serializer);
-sse_encode_i_64(offset, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 87)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AListA2ATasks({
+    required PlatformInt64 handle,
+    required String filterJson,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(filterJson, serializer);
+          sse_encode_i_64(limit, serializer);
+          sse_encode_i_64(offset, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AListA2ATasksConstMeta,
-            argValues: [handle, filterJson, limit, offset],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AListA2ATasksConstMeta,
+        argValues: [handle, filterJson, limit, offset],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AListA2ATasksConstMeta => const TaskConstMeta(
+    debugName: "list_a2a_tasks",
+    argNames: ["handle", "filterJson", "limit", "offset"],
+  );
 
-        TaskConstMeta get kCrateBridgeA2AListA2ATasksConstMeta => const TaskConstMeta(
-            debugName: "list_a2a_tasks",
-            argNames: ["handle", "filterJson", "limit", "offset"],
-        );
-        
-
-@override String crateBridgeAgentAppListAgentAppActionProposals({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 88)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentAppListAgentAppActionProposals({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 89)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppListAgentAppActionProposalsConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppListAgentAppActionProposalsConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppListAgentAppActionProposalsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_agent_app_action_proposals",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppListAgentAppActionProposalsConstMeta => const TaskConstMeta(
-            debugName: "list_agent_app_action_proposals",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override String crateBridgeAgentAppListAgentAppPackages({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 89)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentAppListAgentAppPackages({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 90)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppListAgentAppPackagesConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppListAgentAppPackagesConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppListAgentAppPackagesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_agent_app_packages",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppListAgentAppPackagesConstMeta => const TaskConstMeta(
-            debugName: "list_agent_app_packages",
-            argNames: ["handle"],
-        );
-        
-
-@override Future<String> crateBridgeAgentDefsListAgentDefinitions({required PlatformInt64 handle })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 90, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAgentDefsListAgentDefinitions({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 91,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsListAgentDefinitionsConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsListAgentDefinitionsConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsListAgentDefinitionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_agent_definitions",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsListAgentDefinitionsConstMeta => const TaskConstMeta(
-            debugName: "list_agent_definitions",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeAgentListAgents({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 91)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentListAgents({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 92)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentListAgentsConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentListAgentsConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentListAgentsConstMeta =>
+      const TaskConstMeta(debugName: "list_agents", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeAgentListAgentsConstMeta => const TaskConstMeta(
-            debugName: "list_agents",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeAutomationListAutomationJobs({required PlatformInt64 handle , required String filterJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(filterJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 92)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAutomationListAutomationJobs({
+    required PlatformInt64 handle,
+    required String filterJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(filterJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 93)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationListAutomationJobsConstMeta,
-            argValues: [handle, filterJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationListAutomationJobsConstMeta,
+        argValues: [handle, filterJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationListAutomationJobsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_automation_jobs",
+        argNames: ["handle", "filterJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationListAutomationJobsConstMeta => const TaskConstMeta(
-            debugName: "list_automation_jobs",
-            argNames: ["handle", "filterJson"],
-        );
-        
-
-@override String crateBridgeAutomationListAutomationRuns({required PlatformInt64 handle , String? jobId , required PlatformInt64 limit , required PlatformInt64 offset })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_opt_String(jobId, serializer);
-sse_encode_i_64(limit, serializer);
-sse_encode_i_64(offset, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 93)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAutomationListAutomationRuns({
+    required PlatformInt64 handle,
+    String? jobId,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_opt_String(jobId, serializer);
+          sse_encode_i_64(limit, serializer);
+          sse_encode_i_64(offset, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 94)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationListAutomationRunsConstMeta,
-            argValues: [handle, jobId, limit, offset],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationListAutomationRunsConstMeta,
+        argValues: [handle, jobId, limit, offset],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationListAutomationRunsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_automation_runs",
+        argNames: ["handle", "jobId", "limit", "offset"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationListAutomationRunsConstMeta => const TaskConstMeta(
-            debugName: "list_automation_runs",
-            argNames: ["handle", "jobId", "limit", "offset"],
-        );
-        
-
-@override Future<String> crateBridgeAgentDefsListAvailableTools({required PlatformInt64 handle })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 94, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAgentDefsListAvailableTools({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 95,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsListAvailableToolsConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsListAvailableToolsConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsListAvailableToolsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_available_tools",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsListAvailableToolsConstMeta => const TaskConstMeta(
-            debugName: "list_available_tools",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeCapabilityListCapabilityDefinitionsJson()  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 95)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityListCapabilityDefinitionsJson() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityListCapabilityDefinitionsJsonConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityListCapabilityDefinitionsJsonConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeCapabilityListCapabilityDefinitionsJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_capability_definitions_json",
+        argNames: [],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityListCapabilityDefinitionsJsonConstMeta => const TaskConstMeta(
-            debugName: "list_capability_definitions_json",
-            argNames: [],
-        );
-        
-
-@override String crateBridgeCapabilityListCapabilityStatusJson({required PlatformInt64 handle , required String profileJson , required String selectionJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(profileJson, serializer);
-sse_encode_String(selectionJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 96)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityListCapabilityStatusJson({
+    required PlatformInt64 handle,
+    required String profileJson,
+    required String selectionJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(profileJson, serializer);
+          sse_encode_String(selectionJson, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 97)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityListCapabilityStatusJsonConstMeta,
-            argValues: [handle, profileJson, selectionJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityListCapabilityStatusJsonConstMeta,
+        argValues: [handle, profileJson, selectionJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityListCapabilityStatusJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_capability_status_json",
+        argNames: ["handle", "profileJson", "selectionJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityListCapabilityStatusJsonConstMeta => const TaskConstMeta(
-            debugName: "list_capability_status_json",
-            argNames: ["handle", "profileJson", "selectionJson"],
-        );
-        
-
-@override String crateBridgeChannelAgentListChannelAgentRoutes({required PlatformInt64 handle , String? channelName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_opt_String(channelName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 97)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelAgentListChannelAgentRoutes({
+    required PlatformInt64 handle,
+    String? channelName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_opt_String(channelName, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 98)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAgentListChannelAgentRoutesConstMeta,
-            argValues: [handle, channelName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelAgentListChannelAgentRoutesConstMeta,
+        argValues: [handle, channelName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelAgentListChannelAgentRoutesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_channel_agent_routes",
+        argNames: ["handle", "channelName"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelAgentListChannelAgentRoutesConstMeta => const TaskConstMeta(
-            debugName: "list_channel_agent_routes",
-            argNames: ["handle", "channelName"],
-        );
-        
-
-@override String crateBridgeChannelListChannels({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 98)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelListChannels({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 99)!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelListChannelsConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelListChannelsConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelListChannelsConstMeta =>
+      const TaskConstMeta(debugName: "list_channels", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeChannelListChannelsConstMeta => const TaskConstMeta(
-            debugName: "list_channels",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeEvolutionListEvolutionDiagnostics({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 99)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeEvolutionListEvolutionDiagnostics({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 100,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeEvolutionListEvolutionDiagnosticsConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeEvolutionListEvolutionDiagnosticsConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeEvolutionListEvolutionDiagnosticsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_evolution_diagnostics",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeEvolutionListEvolutionDiagnosticsConstMeta => const TaskConstMeta(
-            debugName: "list_evolution_diagnostics",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeEvolutionListEvolutionRuns({required PlatformInt64 handle , required String runIdsJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(runIdsJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 100)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeEvolutionListEvolutionRuns({
+    required PlatformInt64 handle,
+    required String runIdsJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(runIdsJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 101,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeEvolutionListEvolutionRunsConstMeta,
-            argValues: [handle, runIdsJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeEvolutionListEvolutionRunsConstMeta,
+        argValues: [handle, runIdsJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeEvolutionListEvolutionRunsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_evolution_runs",
+        argNames: ["handle", "runIdsJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeEvolutionListEvolutionRunsConstMeta => const TaskConstMeta(
-            debugName: "list_evolution_runs",
-            argNames: ["handle", "runIdsJson"],
-        );
-        
-
-@override String crateBridgeGroupListGroups({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 101)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeGroupListGroups({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 102,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupListGroupsConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupListGroupsConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupListGroupsConstMeta =>
+      const TaskConstMeta(debugName: "list_groups", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeGroupListGroupsConstMeta => const TaskConstMeta(
-            debugName: "list_groups",
-            argNames: ["handle"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceListJournalDays({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 102, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceListJournalDays({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 103,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceListJournalDaysConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceListJournalDaysConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceListJournalDaysConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_journal_days",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceListJournalDaysConstMeta => const TaskConstMeta(
-            debugName: "list_journal_days",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override String crateBridgeEvolutionListPendingEvolution({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 103)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeEvolutionListPendingEvolution({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 104,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeEvolutionListPendingEvolutionConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeEvolutionListPendingEvolutionConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeEvolutionListPendingEvolutionConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_pending_evolution",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeEvolutionListPendingEvolutionConstMeta => const TaskConstMeta(
-            debugName: "list_pending_evolution",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeCapabilityListScenarioPacksJson({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 104)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityListScenarioPacksJson({
+    required PlatformInt64 handle,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 105,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityListScenarioPacksJsonConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityListScenarioPacksJsonConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityListScenarioPacksJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_scenario_packs_json",
+        argNames: ["handle"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityListScenarioPacksJsonConstMeta => const TaskConstMeta(
-            debugName: "list_scenario_packs_json",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeCapabilityListScenarioStatusJson({required PlatformInt64 handle , required String profileJson , required String selectionJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(profileJson, serializer);
-sse_encode_String(selectionJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 105)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityListScenarioStatusJson({
+    required PlatformInt64 handle,
+    required String profileJson,
+    required String selectionJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(profileJson, serializer);
+          sse_encode_String(selectionJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 106,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityListScenarioStatusJsonConstMeta,
-            argValues: [handle, profileJson, selectionJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityListScenarioStatusJsonConstMeta,
+        argValues: [handle, profileJson, selectionJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityListScenarioStatusJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_scenario_status_json",
+        argNames: ["handle", "profileJson", "selectionJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityListScenarioStatusJsonConstMeta => const TaskConstMeta(
-            debugName: "list_scenario_status_json",
-            argNames: ["handle", "profileJson", "selectionJson"],
-        );
-        
-
-@override String crateBridgeSessionRunsListSessionRuns({required PlatformInt64 handle , required String filterJson , required PlatformInt64 limit , required PlatformInt64 offset })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(filterJson, serializer);
-sse_encode_i_64(limit, serializer);
-sse_encode_i_64(offset, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 106)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSessionRunsListSessionRuns({
+    required PlatformInt64 handle,
+    required String filterJson,
+    required PlatformInt64 limit,
+    required PlatformInt64 offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(filterJson, serializer);
+          sse_encode_i_64(limit, serializer);
+          sse_encode_i_64(offset, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 107,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionRunsListSessionRunsConstMeta,
-            argValues: [handle, filterJson, limit, offset],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionRunsListSessionRunsConstMeta,
+        argValues: [handle, filterJson, limit, offset],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionRunsListSessionRunsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_session_runs",
+        argNames: ["handle", "filterJson", "limit", "offset"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionRunsListSessionRunsConstMeta => const TaskConstMeta(
-            debugName: "list_session_runs",
-            argNames: ["handle", "filterJson", "limit", "offset"],
-        );
-        
-
-@override Future<String> crateBridgeSessionListSessions({required PlatformInt64 handle , required String configJson , required String agentId , required String accountId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(accountId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 107, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSessionListSessions({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String accountId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(accountId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 108,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionListSessionsConstMeta,
-            argValues: [handle, configJson, agentId, accountId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionListSessionsConstMeta,
+        argValues: [handle, configJson, agentId, accountId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionListSessionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_sessions",
+        argNames: ["handle", "configJson", "agentId", "accountId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionListSessionsConstMeta => const TaskConstMeta(
-            debugName: "list_sessions",
-            argNames: ["handle", "configJson", "agentId", "accountId"],
-        );
-        
-
-@override String crateBridgeSkillListSkillCommands({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 108)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillCommands({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 109,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillCommandsConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillCommandsConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillCommandsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_commands",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillCommandsConstMeta => const TaskConstMeta(
-            debugName: "list_skill_commands",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override String crateBridgeSkillListSkillRemediationActions({required PlatformInt64 handle , required String agentId , required String skillName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 109)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillRemediationActions({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 110,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillRemediationActionsConstMeta,
-            argValues: [handle, agentId, skillName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillRemediationActionsConstMeta,
+        argValues: [handle, agentId, skillName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillRemediationActionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_remediation_actions",
+        argNames: ["handle", "agentId", "skillName"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillRemediationActionsConstMeta => const TaskConstMeta(
-            debugName: "list_skill_remediation_actions",
-            argNames: ["handle", "agentId", "skillName"],
-        );
-        
-
-@override String crateBridgeSkillListSkillRemediationRuns({required PlatformInt64 handle , required String agentId , String? skillName , required int limit , required int offset })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_opt_String(skillName, serializer);
-sse_encode_i_32(limit, serializer);
-sse_encode_i_32(offset, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 110)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillRemediationRuns({
+    required PlatformInt64 handle,
+    required String agentId,
+    String? skillName,
+    required int limit,
+    required int offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_opt_String(skillName, serializer);
+          sse_encode_i_32(limit, serializer);
+          sse_encode_i_32(offset, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 111,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillRemediationRunsConstMeta,
-            argValues: [handle, agentId, skillName, limit, offset],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillRemediationRunsConstMeta,
+        argValues: [handle, agentId, skillName, limit, offset],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillRemediationRunsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_remediation_runs",
+        argNames: ["handle", "agentId", "skillName", "limit", "offset"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillRemediationRunsConstMeta => const TaskConstMeta(
-            debugName: "list_skill_remediation_runs",
-            argNames: ["handle", "agentId", "skillName", "limit", "offset"],
-        );
-        
-
-@override String crateBridgeSkillListSkillSecretRequirements({required PlatformInt64 handle , required String agentId , String? skillName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_opt_String(skillName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 111)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillSecretRequirements({
+    required PlatformInt64 handle,
+    required String agentId,
+    String? skillName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_opt_String(skillName, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 112,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillSecretRequirementsConstMeta,
-            argValues: [handle, agentId, skillName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillSecretRequirementsConstMeta,
+        argValues: [handle, agentId, skillName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillSecretRequirementsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_secret_requirements",
+        argNames: ["handle", "agentId", "skillName"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillSecretRequirementsConstMeta => const TaskConstMeta(
-            debugName: "list_skill_secret_requirements",
-            argNames: ["handle", "agentId", "skillName"],
-        );
-        
-
-@override String crateBridgeSkillListSkillSnapshots({required PlatformInt64 handle , required String agentId , required int limit , required int offset })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_i_32(limit, serializer);
-sse_encode_i_32(offset, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 112)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillSnapshots({
+    required PlatformInt64 handle,
+    required String agentId,
+    required int limit,
+    required int offset,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_i_32(limit, serializer);
+          sse_encode_i_32(offset, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 113,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillSnapshotsConstMeta,
-            argValues: [handle, agentId, limit, offset],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillSnapshotsConstMeta,
+        argValues: [handle, agentId, limit, offset],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillSnapshotsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_snapshots",
+        argNames: ["handle", "agentId", "limit", "offset"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillSnapshotsConstMeta => const TaskConstMeta(
-            debugName: "list_skill_snapshots",
-            argNames: ["handle", "agentId", "limit", "offset"],
-        );
-        
-
-@override String crateBridgeSkillListSkillSources({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 113)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillSources({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 114,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillSourcesConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillSourcesConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillSourcesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_sources",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillSourcesConstMeta => const TaskConstMeta(
-            debugName: "list_skill_sources",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override String crateBridgeSkillListSkillStatus({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 114)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillStatus({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 115,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillStatusConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillStatusConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillStatusConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_status",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillStatusConstMeta => const TaskConstMeta(
-            debugName: "list_skill_status",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override String crateBridgeSkillListSkillUsage({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 115)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkillUsage({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 116,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillUsageConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillUsageConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillUsageConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_skill_usage",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillUsageConstMeta => const TaskConstMeta(
-            debugName: "list_skill_usage",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override String crateBridgeSkillListSkills({required PlatformInt64 handle , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 116)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillListSkills({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 117,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillListSkillsConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillListSkillsConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillListSkillsConstMeta => const TaskConstMeta(
+    debugName: "list_skills",
+    argNames: ["handle", "agentId"],
+  );
 
-        TaskConstMeta get kCrateBridgeSkillListSkillsConstMeta => const TaskConstMeta(
-            debugName: "list_skills",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceListWorkspaceFiles({required PlatformInt64 handle , required String accountId , required String agentId , required String directory })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(directory, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 117, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceListWorkspaceFiles({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String directory,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(directory, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 118,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceListWorkspaceFilesConstMeta,
-            argValues: [handle, accountId, agentId, directory],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceListWorkspaceFilesConstMeta,
+        argValues: [handle, accountId, agentId, directory],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceListWorkspaceFilesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_workspace_files",
+        argNames: ["handle", "accountId", "agentId", "directory"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceListWorkspaceFilesConstMeta => const TaskConstMeta(
-            debugName: "list_workspace_files",
-            argNames: ["handle", "accountId", "agentId", "directory"],
-        );
-        
-
-@override Future<String> crateBridgeFileBridgeListWorkspaceFilesystem({required PlatformInt64 handle , String? subdir , required bool recursive })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_opt_String(subdir, serializer);
-sse_encode_bool(recursive, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 118, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeFileBridgeListWorkspaceFilesystem({
+    required PlatformInt64 handle,
+    String? subdir,
+    required bool recursive,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_opt_String(subdir, serializer);
+          sse_encode_bool(recursive, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 119,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeListWorkspaceFilesystemConstMeta,
-            argValues: [handle, subdir, recursive],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeListWorkspaceFilesystemConstMeta,
+        argValues: [handle, subdir, recursive],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeListWorkspaceFilesystemConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_workspace_filesystem",
+        argNames: ["handle", "subdir", "recursive"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeListWorkspaceFilesystemConstMeta => const TaskConstMeta(
-            debugName: "list_workspace_filesystem",
-            argNames: ["handle", "subdir", "recursive"],
-        );
-        
-
-@override Future<String> crateBridgeFileBridgeListWorkspaceFilesystemScoped({required PlatformInt64 handle , required String accountId , required String agentId , String? subdir , required bool recursive })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_opt_String(subdir, serializer);
-sse_encode_bool(recursive, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 119, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeFileBridgeListWorkspaceFilesystemScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    String? subdir,
+    required bool recursive,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_opt_String(subdir, serializer);
+          sse_encode_bool(recursive, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 120,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeListWorkspaceFilesystemScopedConstMeta,
-            argValues: [handle, accountId, agentId, subdir, recursive],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeListWorkspaceFilesystemScopedConstMeta,
+        argValues: [handle, accountId, agentId, subdir, recursive],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeFileBridgeListWorkspaceFilesystemScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_workspace_filesystem_scoped",
+        argNames: ["handle", "accountId", "agentId", "subdir", "recursive"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeListWorkspaceFilesystemScopedConstMeta => const TaskConstMeta(
-            debugName: "list_workspace_filesystem_scoped",
-            argNames: ["handle", "accountId", "agentId", "subdir", "recursive"],
-        );
-        
-
-@override String crateBridgeFileBridgeLoadThreadAttachments({required PlatformInt64 handle , required String threadId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(threadId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 120)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeLoadThreadAttachments({
+    required PlatformInt64 handle,
+    required String threadId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(threadId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 121,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeLoadThreadAttachmentsConstMeta,
-            argValues: [handle, threadId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeLoadThreadAttachmentsConstMeta,
+        argValues: [handle, threadId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeLoadThreadAttachmentsConstMeta =>
+      const TaskConstMeta(
+        debugName: "load_thread_attachments",
+        argNames: ["handle", "threadId"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeLoadThreadAttachmentsConstMeta => const TaskConstMeta(
-            debugName: "load_thread_attachments",
-            argNames: ["handle", "threadId"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpActivateServer({required PlatformInt64 handle , required String name , required String userId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(userId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 121, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpActivateServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 122,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpActivateServerConstMeta,
-            argValues: [handle, name, userId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpActivateServerConstMeta,
+        argValues: [handle, name, userId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpActivateServerConstMeta =>
+      const TaskConstMeta(
+        debugName: "mcp_activate_server",
+        argNames: ["handle", "name", "userId"],
+      );
 
-        TaskConstMeta get kCrateBridgeMcpMcpActivateServerConstMeta => const TaskConstMeta(
-            debugName: "mcp_activate_server",
-            argNames: ["handle", "name", "userId"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpAddServer({required PlatformInt64 handle , required String name , required String url , required String headersJson , required String userId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(url, serializer);
-sse_encode_String(headersJson, serializer);
-sse_encode_String(userId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 122, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpAddServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String url,
+    required String headersJson,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(url, serializer);
+          sse_encode_String(headersJson, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 123,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpAddServerConstMeta,
-            argValues: [handle, name, url, headersJson, userId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpAddServerConstMeta,
+        argValues: [handle, name, url, headersJson, userId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpAddServerConstMeta => const TaskConstMeta(
+    debugName: "mcp_add_server",
+    argNames: ["handle", "name", "url", "headersJson", "userId"],
+  );
 
-        TaskConstMeta get kCrateBridgeMcpMcpAddServerConstMeta => const TaskConstMeta(
-            debugName: "mcp_add_server",
-            argNames: ["handle", "name", "url", "headersJson", "userId"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpDeactivateServer({required PlatformInt64 handle , required String name , required String userId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(userId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 123, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpDeactivateServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 124,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpDeactivateServerConstMeta,
-            argValues: [handle, name, userId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpDeactivateServerConstMeta,
+        argValues: [handle, name, userId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpDeactivateServerConstMeta =>
+      const TaskConstMeta(
+        debugName: "mcp_deactivate_server",
+        argNames: ["handle", "name", "userId"],
+      );
 
-        TaskConstMeta get kCrateBridgeMcpMcpDeactivateServerConstMeta => const TaskConstMeta(
-            debugName: "mcp_deactivate_server",
-            argNames: ["handle", "name", "userId"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpFinishOauth({required PlatformInt64 handle , required String name , required String userId , required String code , required String state })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(userId, serializer);
-sse_encode_String(code, serializer);
-sse_encode_String(state, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 124, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpFinishOauth({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+    required String code,
+    required String state,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(userId, serializer);
+          sse_encode_String(code, serializer);
+          sse_encode_String(state, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 125,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpFinishOauthConstMeta,
-            argValues: [handle, name, userId, code, state],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpFinishOauthConstMeta,
+        argValues: [handle, name, userId, code, state],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpFinishOauthConstMeta =>
+      const TaskConstMeta(
+        debugName: "mcp_finish_oauth",
+        argNames: ["handle", "name", "userId", "code", "state"],
+      );
 
-        TaskConstMeta get kCrateBridgeMcpMcpFinishOauthConstMeta => const TaskConstMeta(
-            debugName: "mcp_finish_oauth",
-            argNames: ["handle", "name", "userId", "code", "state"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpListServers({required PlatformInt64 handle , required String userId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(userId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 125, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpListServers({
+    required PlatformInt64 handle,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 126,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpListServersConstMeta,
-            argValues: [handle, userId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpListServersConstMeta,
+        argValues: [handle, userId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpListServersConstMeta =>
+      const TaskConstMeta(
+        debugName: "mcp_list_servers",
+        argNames: ["handle", "userId"],
+      );
 
-        TaskConstMeta get kCrateBridgeMcpMcpListServersConstMeta => const TaskConstMeta(
-            debugName: "mcp_list_servers",
-            argNames: ["handle", "userId"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpListTools({required PlatformInt64 handle , required String serverName , required String userId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(serverName, serializer);
-sse_encode_String(userId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 126, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpListTools({
+    required PlatformInt64 handle,
+    required String serverName,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(serverName, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 127,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpListToolsConstMeta,
-            argValues: [handle, serverName, userId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpListToolsConstMeta,
+        argValues: [handle, serverName, userId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpListToolsConstMeta => const TaskConstMeta(
+    debugName: "mcp_list_tools",
+    argNames: ["handle", "serverName", "userId"],
+  );
 
-        TaskConstMeta get kCrateBridgeMcpMcpListToolsConstMeta => const TaskConstMeta(
-            debugName: "mcp_list_tools",
-            argNames: ["handle", "serverName", "userId"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpRemoveServer({required PlatformInt64 handle , required String name , required String userId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(userId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 127, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpRemoveServer({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(userId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 128,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpRemoveServerConstMeta,
-            argValues: [handle, name, userId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpRemoveServerConstMeta,
+        argValues: [handle, name, userId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpRemoveServerConstMeta =>
+      const TaskConstMeta(
+        debugName: "mcp_remove_server",
+        argNames: ["handle", "name", "userId"],
+      );
 
-        TaskConstMeta get kCrateBridgeMcpMcpRemoveServerConstMeta => const TaskConstMeta(
-            debugName: "mcp_remove_server",
-            argNames: ["handle", "name", "userId"],
-        );
-        
-
-@override Future<String> crateBridgeMcpMcpStartOauth({required PlatformInt64 handle , required String name , required String userId , required String redirectUri , required String oauthJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(name, serializer);
-sse_encode_String(userId, serializer);
-sse_encode_String(redirectUri, serializer);
-sse_encode_String(oauthJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 128, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeMcpMcpStartOauth({
+    required PlatformInt64 handle,
+    required String name,
+    required String userId,
+    required String redirectUri,
+    required String oauthJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(userId, serializer);
+          sse_encode_String(redirectUri, serializer);
+          sse_encode_String(oauthJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 129,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeMcpMcpStartOauthConstMeta,
-            argValues: [handle, name, userId, redirectUri, oauthJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeMcpMcpStartOauthConstMeta,
+        argValues: [handle, name, userId, redirectUri, oauthJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeMcpMcpStartOauthConstMeta =>
+      const TaskConstMeta(
+        debugName: "mcp_start_oauth",
+        argNames: ["handle", "name", "userId", "redirectUri", "oauthJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeMcpMcpStartOauthConstMeta => const TaskConstMeta(
-            debugName: "mcp_start_oauth",
-            argNames: ["handle", "name", "userId", "redirectUri", "oauthJson"],
-        );
-        
-
-@override String crateBridgeA2AOpenA2APeerSession({required PlatformInt64 handle , required String peerJson , required String transport , required String endpoint })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(peerJson, serializer);
-sse_encode_String(transport, serializer);
-sse_encode_String(endpoint, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 129)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2AOpenA2APeerSession({
+    required PlatformInt64 handle,
+    required String peerJson,
+    required String transport,
+    required String endpoint,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(peerJson, serializer);
+          sse_encode_String(transport, serializer);
+          sse_encode_String(endpoint, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 130,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2AOpenA2APeerSessionConstMeta,
-            argValues: [handle, peerJson, transport, endpoint],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2AOpenA2APeerSessionConstMeta,
+        argValues: [handle, peerJson, transport, endpoint],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2AOpenA2APeerSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "open_a2a_peer_session",
+        argNames: ["handle", "peerJson", "transport", "endpoint"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2AOpenA2APeerSessionConstMeta => const TaskConstMeta(
-            debugName: "open_a2a_peer_session",
-            argNames: ["handle", "peerJson", "transport", "endpoint"],
-        );
-        
-
-@override Future<String> crateBridgeSkillPinSkill({required PlatformInt64 handle , required String agentId , required String skillName , required bool pinned })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-sse_encode_bool(pinned, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 130, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillPinSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required bool pinned,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          sse_encode_bool(pinned, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 131,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillPinSkillConstMeta,
-            argValues: [handle, agentId, skillName, pinned],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillPinSkillConstMeta,
+        argValues: [handle, agentId, skillName, pinned],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillPinSkillConstMeta => const TaskConstMeta(
+    debugName: "pin_skill",
+    argNames: ["handle", "agentId", "skillName", "pinned"],
+  );
 
-        TaskConstMeta get kCrateBridgeSkillPinSkillConstMeta => const TaskConstMeta(
-            debugName: "pin_skill",
-            argNames: ["handle", "agentId", "skillName", "pinned"],
-        );
-        
-
-@override String crateBridgeInitPlatformToolDescriptorsJson()  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 131)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeInitPlatformToolDescriptorsJson() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 132,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitPlatformToolDescriptorsJsonConstMeta,
-            argValues: [],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitPlatformToolDescriptorsJsonConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitPlatformToolDescriptorsJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "platform_tool_descriptors_json",
+        argNames: [],
+      );
 
-        TaskConstMeta get kCrateBridgeInitPlatformToolDescriptorsJsonConstMeta => const TaskConstMeta(
-            debugName: "platform_tool_descriptors_json",
-            argNames: [],
-        );
-        
-
-@override String crateBridgeCapabilityProviderCapabilityId({required String provider })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(provider, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 132)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityProviderCapabilityId({required String provider}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(provider, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 133,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityProviderCapabilityIdConstMeta,
-            argValues: [provider],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityProviderCapabilityIdConstMeta,
+        argValues: [provider],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityProviderCapabilityIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "provider_capability_id",
+        argNames: ["provider"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityProviderCapabilityIdConstMeta => const TaskConstMeta(
-            debugName: "provider_capability_id",
-            argNames: ["provider"],
-        );
-        
-
-@override Future<BigInt> crateBridgeSessionPruneEmptySessions({required PlatformInt64 handle , required String agentId , required String accountId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(accountId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 133, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<BigInt> crateBridgeSessionPruneEmptySessions({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String accountId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(accountId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 134,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_usize,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionPruneEmptySessionsConstMeta,
-            argValues: [handle, agentId, accountId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionPruneEmptySessionsConstMeta,
+        argValues: [handle, agentId, accountId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionPruneEmptySessionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "prune_empty_sessions",
+        argNames: ["handle", "agentId", "accountId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionPruneEmptySessionsConstMeta => const TaskConstMeta(
-            debugName: "prune_empty_sessions",
-            argNames: ["handle", "agentId", "accountId"],
-        );
-        
-
-@override String crateBridgeChannelQqbotQqbotApiBase({required bool sandbox })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_bool(sandbox, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 134)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelQqbotQqbotApiBase({required bool sandbox}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_bool(sandbox, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 135,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotApiBaseConstMeta,
-            argValues: [sandbox],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelQqbotQqbotApiBaseConstMeta,
+        argValues: [sandbox],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelQqbotQqbotApiBaseConstMeta =>
+      const TaskConstMeta(debugName: "qqbot_api_base", argNames: ["sandbox"]);
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotApiBaseConstMeta => const TaskConstMeta(
-            debugName: "qqbot_api_base",
-            argNames: ["sandbox"],
-        );
-        
-
-@override String crateBridgeChannelQqbotQqbotBuildOutboundPayload({required String messageJson , required String markdownEndpointKindsJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(messageJson, serializer);
-sse_encode_String(markdownEndpointKindsJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 135)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelQqbotQqbotBuildOutboundPayload({
+    required String messageJson,
+    required String markdownEndpointKindsJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(messageJson, serializer);
+          sse_encode_String(markdownEndpointKindsJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 136,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadConstMeta,
-            argValues: [messageJson, markdownEndpointKindsJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadConstMeta,
+        argValues: [messageJson, markdownEndpointKindsJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadConstMeta =>
+      const TaskConstMeta(
+        debugName: "qqbot_build_outbound_payload",
+        argNames: ["messageJson", "markdownEndpointKindsJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadConstMeta => const TaskConstMeta(
-            debugName: "qqbot_build_outbound_payload",
-            argNames: ["messageJson", "markdownEndpointKindsJson"],
-        );
-        
-
-@override String crateBridgeChannelQqbotQqbotBuildOutboundPayloadPlain({required String messageJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(messageJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 136)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelQqbotQqbotBuildOutboundPayloadPlain({
+    required String messageJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(messageJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 137,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadPlainConstMeta,
-            argValues: [messageJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta:
+            kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadPlainConstMeta,
+        argValues: [messageJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadPlainConstMeta =>
+      const TaskConstMeta(
+        debugName: "qqbot_build_outbound_payload_plain",
+        argNames: ["messageJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotBuildOutboundPayloadPlainConstMeta => const TaskConstMeta(
-            debugName: "qqbot_build_outbound_payload_plain",
-            argNames: ["messageJson"],
-        );
-        
-
-@override String crateBridgeChannelQqbotQqbotGatewayStep({required String stateJson , required String eventJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(stateJson, serializer);
-sse_encode_String(eventJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 137)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelQqbotQqbotGatewayStep({
+    required String stateJson,
+    required String eventJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(stateJson, serializer);
+          sse_encode_String(eventJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 138,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotGatewayStepConstMeta,
-            argValues: [stateJson, eventJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelQqbotQqbotGatewayStepConstMeta,
+        argValues: [stateJson, eventJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelQqbotQqbotGatewayStepConstMeta =>
+      const TaskConstMeta(
+        debugName: "qqbot_gateway_step",
+        argNames: ["stateJson", "eventJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotGatewayStepConstMeta => const TaskConstMeta(
-            debugName: "qqbot_gateway_step",
-            argNames: ["stateJson", "eventJson"],
-        );
-        
-
-@override bool crateBridgeChannelQqbotQqbotIsMessageEvent({required String eventType })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(eventType, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 138)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelQqbotQqbotIsMessageEvent({required String eventType}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(eventType, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 139,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotIsMessageEventConstMeta,
-            argValues: [eventType],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelQqbotQqbotIsMessageEventConstMeta,
+        argValues: [eventType],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelQqbotQqbotIsMessageEventConstMeta =>
+      const TaskConstMeta(
+        debugName: "qqbot_is_message_event",
+        argNames: ["eventType"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotIsMessageEventConstMeta => const TaskConstMeta(
-            debugName: "qqbot_is_message_event",
-            argNames: ["eventType"],
-        );
-        
-
-@override String crateBridgeChannelQqbotQqbotNormalizeInbound({required String eventType , required String dataJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(eventType, serializer);
-sse_encode_String(dataJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 139)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelQqbotQqbotNormalizeInbound({
+    required String eventType,
+    required String dataJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(eventType, serializer);
+          sse_encode_String(dataJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 140,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotNormalizeInboundConstMeta,
-            argValues: [eventType, dataJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelQqbotQqbotNormalizeInboundConstMeta,
+        argValues: [eventType, dataJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelQqbotQqbotNormalizeInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "qqbot_normalize_inbound",
+        argNames: ["eventType", "dataJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotNormalizeInboundConstMeta => const TaskConstMeta(
-            debugName: "qqbot_normalize_inbound",
-            argNames: ["eventType", "dataJson"],
-        );
-        
-
-@override String crateBridgeChannelQqbotQqbotOutboundEndpointPath({required String peerKind , required String peerId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(peerKind, serializer);
-sse_encode_String(peerId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 140)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelQqbotQqbotOutboundEndpointPath({
+    required String peerKind,
+    required String peerId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(peerKind, serializer);
+          sse_encode_String(peerId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 141,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotOutboundEndpointPathConstMeta,
-            argValues: [peerKind, peerId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelQqbotQqbotOutboundEndpointPathConstMeta,
+        argValues: [peerKind, peerId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeChannelQqbotQqbotOutboundEndpointPathConstMeta =>
+      const TaskConstMeta(
+        debugName: "qqbot_outbound_endpoint_path",
+        argNames: ["peerKind", "peerId"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotOutboundEndpointPathConstMeta => const TaskConstMeta(
-            debugName: "qqbot_outbound_endpoint_path",
-            argNames: ["peerKind", "peerId"],
-        );
-        
-
-@override bool crateBridgeChannelQqbotQqbotShouldFallbackFromMarkdown({required PlatformInt64 status })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(status, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 141)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelQqbotQqbotShouldFallbackFromMarkdown({
+    required PlatformInt64 status,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(status, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 142,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelQqbotQqbotShouldFallbackFromMarkdownConstMeta,
-            argValues: [status],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta:
+            kCrateBridgeChannelQqbotQqbotShouldFallbackFromMarkdownConstMeta,
+        argValues: [status],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeChannelQqbotQqbotShouldFallbackFromMarkdownConstMeta =>
+      const TaskConstMeta(
+        debugName: "qqbot_should_fallback_from_markdown",
+        argNames: ["status"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelQqbotQqbotShouldFallbackFromMarkdownConstMeta => const TaskConstMeta(
-            debugName: "qqbot_should_fallback_from_markdown",
-            argNames: ["status"],
-        );
-        
-
-@override String crateBridgeFileBridgeReadGitIdentity({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 142)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeReadGitIdentity({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 143,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeReadGitIdentityConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeReadGitIdentityConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeReadGitIdentityConstMeta =>
+      const TaskConstMeta(debugName: "read_git_identity", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeFileBridgeReadGitIdentityConstMeta => const TaskConstMeta(
-            debugName: "read_git_identity",
-            argNames: ["handle"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceReadJournalDay({required PlatformInt64 handle , required String accountId , required String agentId , required String date })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(date, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 143, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceReadJournalDay({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String date,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(date, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 144,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceReadJournalDayConstMeta,
-            argValues: [handle, accountId, agentId, date],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceReadJournalDayConstMeta,
+        argValues: [handle, accountId, agentId, date],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceReadJournalDayConstMeta =>
+      const TaskConstMeta(
+        debugName: "read_journal_day",
+        argNames: ["handle", "accountId", "agentId", "date"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceReadJournalDayConstMeta => const TaskConstMeta(
-            debugName: "read_journal_day",
-            argNames: ["handle", "accountId", "agentId", "date"],
-        );
-        
-
-@override Future<String> crateBridgeSkillReadSkillSupportFile({required PlatformInt64 handle , required String agentId , required String skillName , required String filePath })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-sse_encode_String(filePath, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 144, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillReadSkillSupportFile({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String filePath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          sse_encode_String(filePath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 145,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillReadSkillSupportFileConstMeta,
-            argValues: [handle, agentId, skillName, filePath],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillReadSkillSupportFileConstMeta,
+        argValues: [handle, agentId, skillName, filePath],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillReadSkillSupportFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "read_skill_support_file",
+        argNames: ["handle", "agentId", "skillName", "filePath"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillReadSkillSupportFileConstMeta => const TaskConstMeta(
-            debugName: "read_skill_support_file",
-            argNames: ["handle", "agentId", "skillName", "filePath"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceReadWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(path, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 145, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceReadWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(path, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 146,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceReadWorkspaceFileConstMeta,
-            argValues: [handle, accountId, agentId, path],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceReadWorkspaceFileConstMeta,
+        argValues: [handle, accountId, agentId, path],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceReadWorkspaceFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "read_workspace_file",
+        argNames: ["handle", "accountId", "agentId", "path"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceReadWorkspaceFileConstMeta => const TaskConstMeta(
-            debugName: "read_workspace_file",
-            argNames: ["handle", "accountId", "agentId", "path"],
-        );
-        
-
-@override String? crateBridgeFileBridgeRealToSandbox({required PlatformInt64 handle , required String realPath })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(realPath, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 146)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String? crateBridgeFileBridgeRealToSandbox({
+    required PlatformInt64 handle,
+    required String realPath,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(realPath, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 147,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeRealToSandboxConstMeta,
-            argValues: [handle, realPath],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeRealToSandboxConstMeta,
+        argValues: [handle, realPath],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeRealToSandboxConstMeta =>
+      const TaskConstMeta(
+        debugName: "real_to_sandbox",
+        argNames: ["handle", "realPath"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeRealToSandboxConstMeta => const TaskConstMeta(
-            debugName: "real_to_sandbox",
-            argNames: ["handle", "realPath"],
-        );
-        
-
-@override String? crateBridgeFileBridgeRealToSandboxScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String realPath })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(realPath, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 147)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String? crateBridgeFileBridgeRealToSandboxScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String realPath,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(realPath, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 148,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeRealToSandboxScopedConstMeta,
-            argValues: [handle, accountId, agentId, realPath],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeRealToSandboxScopedConstMeta,
+        argValues: [handle, accountId, agentId, realPath],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeRealToSandboxScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "real_to_sandbox_scoped",
+        argNames: ["handle", "accountId", "agentId", "realPath"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeRealToSandboxScopedConstMeta => const TaskConstMeta(
-            debugName: "real_to_sandbox_scoped",
-            argNames: ["handle", "accountId", "agentId", "realPath"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceRebuildRecallIndex({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 148, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceRebuildRecallIndex({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 149,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceRebuildRecallIndexConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceRebuildRecallIndexConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceRebuildRecallIndexConstMeta =>
+      const TaskConstMeta(
+        debugName: "rebuild_recall_index",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceRebuildRecallIndexConstMeta => const TaskConstMeta(
-            debugName: "rebuild_recall_index",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceRecallIndexStats({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 149, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceRecallIndexStats({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 150,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceRecallIndexStatsConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceRecallIndexStatsConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceRecallIndexStatsConstMeta =>
+      const TaskConstMeta(
+        debugName: "recall_index_stats",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceRecallIndexStatsConstMeta => const TaskConstMeta(
-            debugName: "recall_index_stats",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceRecallSessions({required PlatformInt64 handle , required String configJson , required String accountId , required String agentId , required String currentThreadId , required String query , required int limit })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(currentThreadId, serializer);
-sse_encode_String(query, serializer);
-sse_encode_u_32(limit, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 150, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceRecallSessions({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String accountId,
+    required String agentId,
+    required String currentThreadId,
+    required String query,
+    required int limit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(currentThreadId, serializer);
+          sse_encode_String(query, serializer);
+          sse_encode_u_32(limit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 151,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceRecallSessionsConstMeta,
-            argValues: [handle, configJson, accountId, agentId, currentThreadId, query, limit],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceRecallSessionsConstMeta,
+        argValues: [
+          handle,
+          configJson,
+          accountId,
+          agentId,
+          currentThreadId,
+          query,
+          limit,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceRecallSessionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "recall_sessions",
+        argNames: [
+          "handle",
+          "configJson",
+          "accountId",
+          "agentId",
+          "currentThreadId",
+          "query",
+          "limit",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceRecallSessionsConstMeta => const TaskConstMeta(
-            debugName: "recall_sessions",
-            argNames: ["handle", "configJson", "accountId", "agentId", "currentThreadId", "query", "limit"],
-        );
-        
-
-@override String crateBridgeA2ARecordA2ADeliveryStatus({required PlatformInt64 handle , required String messageJson , required String status , required String error })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(messageJson, serializer);
-sse_encode_String(status, serializer);
-sse_encode_String(error, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 151)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ARecordA2ADeliveryStatus({
+    required PlatformInt64 handle,
+    required String messageJson,
+    required String status,
+    required String error,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(messageJson, serializer);
+          sse_encode_String(status, serializer);
+          sse_encode_String(error, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 152,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ARecordA2ADeliveryStatusConstMeta,
-            argValues: [handle, messageJson, status, error],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ARecordA2ADeliveryStatusConstMeta,
+        argValues: [handle, messageJson, status, error],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ARecordA2ADeliveryStatusConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_a2a_delivery_status",
+        argNames: ["handle", "messageJson", "status", "error"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ARecordA2ADeliveryStatusConstMeta => const TaskConstMeta(
-            debugName: "record_a2a_delivery_status",
-            argNames: ["handle", "messageJson", "status", "error"],
-        );
-        
-
-@override String crateBridgeA2ARecordA2APeerMessage({required PlatformInt64 handle , required String messageJson , required String source })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(messageJson, serializer);
-sse_encode_String(source, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 152)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ARecordA2APeerMessage({
+    required PlatformInt64 handle,
+    required String messageJson,
+    required String source,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(messageJson, serializer);
+          sse_encode_String(source, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 153,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ARecordA2APeerMessageConstMeta,
-            argValues: [handle, messageJson, source],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ARecordA2APeerMessageConstMeta,
+        argValues: [handle, messageJson, source],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ARecordA2APeerMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_a2a_peer_message",
+        argNames: ["handle", "messageJson", "source"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ARecordA2APeerMessageConstMeta => const TaskConstMeta(
-            debugName: "record_a2a_peer_message",
-            argNames: ["handle", "messageJson", "source"],
-        );
-        
-
-@override String crateBridgeA2ARecordA2AResultEnvelope({required PlatformInt64 handle , required String envelopeJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(envelopeJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 153)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeA2ARecordA2AResultEnvelope({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(envelopeJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 154,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ARecordA2AResultEnvelopeConstMeta,
-            argValues: [handle, envelopeJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ARecordA2AResultEnvelopeConstMeta,
+        argValues: [handle, envelopeJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ARecordA2AResultEnvelopeConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_a2a_result_envelope",
+        argNames: ["handle", "envelopeJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeA2ARecordA2AResultEnvelopeConstMeta => const TaskConstMeta(
-            debugName: "record_a2a_result_envelope",
-            argNames: ["handle", "envelopeJson"],
-        );
-        
-
-@override Future<String> crateBridgeAutomationRecordAutomationWake({required PlatformInt64 handle , required String jobId , required String source })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(jobId, serializer);
-sse_encode_String(source, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 154, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAutomationRecordAutomationWake({
+    required PlatformInt64 handle,
+    required String jobId,
+    required String source,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(jobId, serializer);
+          sse_encode_String(source, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 155,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationRecordAutomationWakeConstMeta,
-            argValues: [handle, jobId, source],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationRecordAutomationWakeConstMeta,
+        argValues: [handle, jobId, source],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationRecordAutomationWakeConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_automation_wake",
+        argNames: ["handle", "jobId", "source"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationRecordAutomationWakeConstMeta => const TaskConstMeta(
-            debugName: "record_automation_wake",
-            argNames: ["handle", "jobId", "source"],
-        );
-        
-
-@override Future<String> crateBridgeSkillRecordSkillRequirementResolution({required PlatformInt64 handle , required String agentId , required String skillName , required String actionId , required String resultJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-sse_encode_String(actionId, serializer);
-sse_encode_String(resultJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 155, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillRecordSkillRequirementResolution({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String actionId,
+    required String resultJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          sse_encode_String(actionId, serializer);
+          sse_encode_String(resultJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 156,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRecordSkillRequirementResolutionConstMeta,
-            argValues: [handle, agentId, skillName, actionId, resultJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRecordSkillRequirementResolutionConstMeta,
+        argValues: [handle, agentId, skillName, actionId, resultJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeSkillRecordSkillRequirementResolutionConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_skill_requirement_resolution",
+        argNames: ["handle", "agentId", "skillName", "actionId", "resultJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRecordSkillRequirementResolutionConstMeta => const TaskConstMeta(
-            debugName: "record_skill_requirement_resolution",
-            argNames: ["handle", "agentId", "skillName", "actionId", "resultJson"],
-        );
-        
-
-@override Future<String> crateBridgeSkillRecordSkillSecretAvailability({required PlatformInt64 handle , required String agentId , required String skillName , required String key , required bool available , required String source })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-sse_encode_String(key, serializer);
-sse_encode_bool(available, serializer);
-sse_encode_String(source, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 156, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillRecordSkillSecretAvailability({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String key,
+    required bool available,
+    required String source,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          sse_encode_String(key, serializer);
+          sse_encode_bool(available, serializer);
+          sse_encode_String(source, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 157,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRecordSkillSecretAvailabilityConstMeta,
-            argValues: [handle, agentId, skillName, key, available, source],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRecordSkillSecretAvailabilityConstMeta,
+        argValues: [handle, agentId, skillName, key, available, source],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillRecordSkillSecretAvailabilityConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_skill_secret_availability",
+        argNames: [
+          "handle",
+          "agentId",
+          "skillName",
+          "key",
+          "available",
+          "source",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRecordSkillSecretAvailabilityConstMeta => const TaskConstMeta(
-            debugName: "record_skill_secret_availability",
-            argNames: ["handle", "agentId", "skillName", "key", "available", "source"],
-        );
-        
-
-@override Future<String> crateBridgeSkillRecordSkillSourceChanged({required PlatformInt64 handle , required String agentId , required String sourceId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sourceId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 157, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillRecordSkillSourceChanged({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String sourceId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sourceId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 158,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRecordSkillSourceChangedConstMeta,
-            argValues: [handle, agentId, sourceId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRecordSkillSourceChangedConstMeta,
+        argValues: [handle, agentId, sourceId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillRecordSkillSourceChangedConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_skill_source_changed",
+        argNames: ["handle", "agentId", "sourceId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRecordSkillSourceChangedConstMeta => const TaskConstMeta(
-            debugName: "record_skill_source_changed",
-            argNames: ["handle", "agentId", "sourceId"],
-        );
-        
-
-@override String crateBridgeAgentAppRegisterAgentAppPackage({required PlatformInt64 handle , required String packageJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(packageJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 158)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentAppRegisterAgentAppPackage({
+    required PlatformInt64 handle,
+    required String packageJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(packageJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 159,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppRegisterAgentAppPackageConstMeta,
-            argValues: [handle, packageJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppRegisterAgentAppPackageConstMeta,
+        argValues: [handle, packageJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppRegisterAgentAppPackageConstMeta =>
+      const TaskConstMeta(
+        debugName: "register_agent_app_package",
+        argNames: ["handle", "packageJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppRegisterAgentAppPackageConstMeta => const TaskConstMeta(
-            debugName: "register_agent_app_package",
-            argNames: ["handle", "packageJson"],
-        );
-        
-
-@override bool crateBridgeChannelRegisterChannel({required PlatformInt64 handle , required String configJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 159)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelRegisterChannel({
+    required PlatformInt64 handle,
+    required String configJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 160,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelRegisterChannelConstMeta,
-            argValues: [handle, configJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelRegisterChannelConstMeta,
+        argValues: [handle, configJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelRegisterChannelConstMeta =>
+      const TaskConstMeta(
+        debugName: "register_channel",
+        argNames: ["handle", "configJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelRegisterChannelConstMeta => const TaskConstMeta(
-            debugName: "register_channel",
-            argNames: ["handle", "configJson"],
-        );
-        
-
-@override String crateBridgeChannelAgentRegisterChannelAgentRoute({required PlatformInt64 handle , required String routeJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(routeJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 160)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelAgentRegisterChannelAgentRoute({
+    required PlatformInt64 handle,
+    required String routeJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(routeJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 161,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAgentRegisterChannelAgentRouteConstMeta,
-            argValues: [handle, routeJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelAgentRegisterChannelAgentRouteConstMeta,
+        argValues: [handle, routeJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta
+  get kCrateBridgeChannelAgentRegisterChannelAgentRouteConstMeta =>
+      const TaskConstMeta(
+        debugName: "register_channel_agent_route",
+        argNames: ["handle", "routeJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelAgentRegisterChannelAgentRouteConstMeta => const TaskConstMeta(
-            debugName: "register_channel_agent_route",
-            argNames: ["handle", "routeJson"],
-        );
-        
+  @override
+  Stream<String> crateBridgeInitRegisterToolRequestStream() {
+    final sink = RustStreamSink<String>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_StreamSink_String_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 162,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateBridgeInitRegisterToolRequestStreamConstMeta,
+          argValues: [sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
 
-@override Stream<String> crateBridgeInitRegisterToolRequestStream()  { 
-            final sink = RustStreamSink<String>();
-            unawaited(handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_StreamSink_String_Sse(sink, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 161, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitRegisterToolRequestStreamConstMeta,
-            argValues: [sink],
-            apiImpl: this,
-        )));
-            return sink.stream;
-             }
+  TaskConstMeta get kCrateBridgeInitRegisterToolRequestStreamConstMeta =>
+      const TaskConstMeta(
+        debugName: "register_tool_request_stream",
+        argNames: ["sink"],
+      );
 
-
-        TaskConstMeta get kCrateBridgeInitRegisterToolRequestStreamConstMeta => const TaskConstMeta(
-            debugName: "register_tool_request_stream",
-            argNames: ["sink"],
-        );
-        
-
-@override String crateBridgeEvolutionRejectPendingEvolution({required PlatformInt64 handle , required String pendingId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(pendingId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 162)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeEvolutionRejectPendingEvolution({
+    required PlatformInt64 handle,
+    required String pendingId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(pendingId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 163,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeEvolutionRejectPendingEvolutionConstMeta,
-            argValues: [handle, pendingId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeEvolutionRejectPendingEvolutionConstMeta,
+        argValues: [handle, pendingId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeEvolutionRejectPendingEvolutionConstMeta =>
+      const TaskConstMeta(
+        debugName: "reject_pending_evolution",
+        argNames: ["handle", "pendingId"],
+      );
 
-        TaskConstMeta get kCrateBridgeEvolutionRejectPendingEvolutionConstMeta => const TaskConstMeta(
-            debugName: "reject_pending_evolution",
-            argNames: ["handle", "pendingId"],
-        );
-        
-
-@override bool crateBridgeChannelReleaseChannelInbound({required PlatformInt64 handle , required String inboundId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(inboundId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 163)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelReleaseChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(inboundId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 164,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelReleaseChannelInboundConstMeta,
-            argValues: [handle, inboundId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelReleaseChannelInboundConstMeta,
+        argValues: [handle, inboundId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelReleaseChannelInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "release_channel_inbound",
+        argNames: ["handle", "inboundId"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelReleaseChannelInboundConstMeta => const TaskConstMeta(
-            debugName: "release_channel_inbound",
-            argNames: ["handle", "inboundId"],
-        );
-        
-
-@override Future<String> crateBridgeSkillReloadSkills({required PlatformInt64 handle , required String agentId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 164, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillReloadSkills({
+    required PlatformInt64 handle,
+    required String agentId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 165,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillReloadSkillsConstMeta,
-            argValues: [handle, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillReloadSkillsConstMeta,
+        argValues: [handle, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillReloadSkillsConstMeta =>
+      const TaskConstMeta(
+        debugName: "reload_skills",
+        argNames: ["handle", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillReloadSkillsConstMeta => const TaskConstMeta(
-            debugName: "reload_skills",
-            argNames: ["handle", "agentId"],
-        );
-        
-
-@override bool crateBridgeChannelAgentRemoveChannelAgentRoute({required PlatformInt64 handle , required String routeId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(routeId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 165)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelAgentRemoveChannelAgentRoute({
+    required PlatformInt64 handle,
+    required String routeId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(routeId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 166,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAgentRemoveChannelAgentRouteConstMeta,
-            argValues: [handle, routeId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelAgentRemoveChannelAgentRouteConstMeta,
+        argValues: [handle, routeId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelAgentRemoveChannelAgentRouteConstMeta =>
+      const TaskConstMeta(
+        debugName: "remove_channel_agent_route",
+        argNames: ["handle", "routeId"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelAgentRemoveChannelAgentRouteConstMeta => const TaskConstMeta(
-            debugName: "remove_channel_agent_route",
-            argNames: ["handle", "routeId"],
-        );
-        
-
-@override String crateBridgeCapabilityRemoveScenarioPackJson({required PlatformInt64 handle , required String scenarioId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(scenarioId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 166)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityRemoveScenarioPackJson({
+    required PlatformInt64 handle,
+    required String scenarioId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(scenarioId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 167,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityRemoveScenarioPackJsonConstMeta,
-            argValues: [handle, scenarioId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityRemoveScenarioPackJsonConstMeta,
+        argValues: [handle, scenarioId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityRemoveScenarioPackJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "remove_scenario_pack_json",
+        argNames: ["handle", "scenarioId"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityRemoveScenarioPackJsonConstMeta => const TaskConstMeta(
-            debugName: "remove_scenario_pack_json",
-            argNames: ["handle", "scenarioId"],
-        );
-        
-
-@override Future<bool> crateBridgeSkillRemoveSkill({required PlatformInt64 handle , required String agentId , required String skillName })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 167, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSkillRemoveSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 168,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRemoveSkillConstMeta,
-            argValues: [handle, agentId, skillName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRemoveSkillConstMeta,
+        argValues: [handle, agentId, skillName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillRemoveSkillConstMeta =>
+      const TaskConstMeta(
+        debugName: "remove_skill",
+        argNames: ["handle", "agentId", "skillName"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRemoveSkillConstMeta => const TaskConstMeta(
-            debugName: "remove_skill",
-            argNames: ["handle", "agentId", "skillName"],
-        );
-        
-
-@override bool crateBridgeGroupRenameGroup({required PlatformInt64 handle , required String groupId , required String newName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-sse_encode_String(newName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 168)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeGroupRenameGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String newName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          sse_encode_String(newName, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 169,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupRenameGroupConstMeta,
-            argValues: [handle, groupId, newName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupRenameGroupConstMeta,
+        argValues: [handle, groupId, newName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupRenameGroupConstMeta =>
+      const TaskConstMeta(
+        debugName: "rename_group",
+        argNames: ["handle", "groupId", "newName"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupRenameGroupConstMeta => const TaskConstMeta(
-            debugName: "rename_group",
-            argNames: ["handle", "groupId", "newName"],
-        );
-        
-
-@override String crateBridgeChannelReplyChannelInbound({required PlatformInt64 handle , required String inboundId , required String replyJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(inboundId, serializer);
-sse_encode_String(replyJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 169)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelReplyChannelInbound({
+    required PlatformInt64 handle,
+    required String inboundId,
+    required String replyJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(inboundId, serializer);
+          sse_encode_String(replyJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 170,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelReplyChannelInboundConstMeta,
-            argValues: [handle, inboundId, replyJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelReplyChannelInboundConstMeta,
+        argValues: [handle, inboundId, replyJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelReplyChannelInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "reply_channel_inbound",
+        argNames: ["handle", "inboundId", "replyJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelReplyChannelInboundConstMeta => const TaskConstMeta(
-            debugName: "reply_channel_inbound",
-            argNames: ["handle", "inboundId", "replyJson"],
-        );
-        
-
-@override Future<String> crateBridgeSkillRequestSkillRemediation({required PlatformInt64 handle , required String agentId , required String skillName , required String actionId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-sse_encode_String(actionId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 170, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillRequestSkillRemediation({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required String actionId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          sse_encode_String(actionId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 171,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRequestSkillRemediationConstMeta,
-            argValues: [handle, agentId, skillName, actionId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRequestSkillRemediationConstMeta,
+        argValues: [handle, agentId, skillName, actionId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillRequestSkillRemediationConstMeta =>
+      const TaskConstMeta(
+        debugName: "request_skill_remediation",
+        argNames: ["handle", "agentId", "skillName", "actionId"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRequestSkillRemediationConstMeta => const TaskConstMeta(
-            debugName: "request_skill_remediation",
-            argNames: ["handle", "agentId", "skillName", "actionId"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceReseedWorkspace({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 171, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceReseedWorkspace({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 172,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceReseedWorkspaceConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceReseedWorkspaceConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceReseedWorkspaceConstMeta =>
+      const TaskConstMeta(
+        debugName: "reseed_workspace",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceReseedWorkspaceConstMeta => const TaskConstMeta(
-            debugName: "reseed_workspace",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override String crateBridgeChannelAgentResolveChannelAgentRoute({required PlatformInt64 handle , required String bridgeConfigJson , required String inboundJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(bridgeConfigJson, serializer);
-sse_encode_String(inboundJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 172)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelAgentResolveChannelAgentRoute({
+    required PlatformInt64 handle,
+    required String bridgeConfigJson,
+    required String inboundJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(bridgeConfigJson, serializer);
+          sse_encode_String(inboundJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 173,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAgentResolveChannelAgentRouteConstMeta,
-            argValues: [handle, bridgeConfigJson, inboundJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelAgentResolveChannelAgentRouteConstMeta,
+        argValues: [handle, bridgeConfigJson, inboundJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelAgentResolveChannelAgentRouteConstMeta =>
+      const TaskConstMeta(
+        debugName: "resolve_channel_agent_route",
+        argNames: ["handle", "bridgeConfigJson", "inboundJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelAgentResolveChannelAgentRouteConstMeta => const TaskConstMeta(
-            debugName: "resolve_channel_agent_route",
-            argNames: ["handle", "bridgeConfigJson", "inboundJson"],
-        );
-        
-
-@override String crateBridgeCapabilityResolveScenarioJson({required PlatformInt64 handle , required String profileJson , required String selectionJson , required String scenarioId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(profileJson, serializer);
-sse_encode_String(selectionJson, serializer);
-sse_encode_String(scenarioId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 173)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityResolveScenarioJson({
+    required PlatformInt64 handle,
+    required String profileJson,
+    required String selectionJson,
+    required String scenarioId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(profileJson, serializer);
+          sse_encode_String(selectionJson, serializer);
+          sse_encode_String(scenarioId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 174,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityResolveScenarioJsonConstMeta,
-            argValues: [handle, profileJson, selectionJson, scenarioId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityResolveScenarioJsonConstMeta,
+        argValues: [handle, profileJson, selectionJson, scenarioId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityResolveScenarioJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "resolve_scenario_json",
+        argNames: ["handle", "profileJson", "selectionJson", "scenarioId"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityResolveScenarioJsonConstMeta => const TaskConstMeta(
-            debugName: "resolve_scenario_json",
-            argNames: ["handle", "profileJson", "selectionJson", "scenarioId"],
-        );
-        
-
-@override String crateBridgeSkillResolveSkillCommand({required PlatformInt64 handle , required String agentId , required String text })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(text, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 174)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeSkillResolveSkillCommand({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String text,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(text, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 175,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillResolveSkillCommandConstMeta,
-            argValues: [handle, agentId, text],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillResolveSkillCommandConstMeta,
+        argValues: [handle, agentId, text],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillResolveSkillCommandConstMeta =>
+      const TaskConstMeta(
+        debugName: "resolve_skill_command",
+        argNames: ["handle", "agentId", "text"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillResolveSkillCommandConstMeta => const TaskConstMeta(
-            debugName: "resolve_skill_command",
-            argNames: ["handle", "agentId", "text"],
-        );
-        
-
-@override bool crateBridgeInitResolveToolExecution({required BigInt requestId , required String result , required bool isError })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_u_64(requestId, serializer);
-sse_encode_String(result, serializer);
-sse_encode_bool(isError, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 175)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeInitResolveToolExecution({
+    required BigInt requestId,
+    required String result,
+    required bool isError,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_u_64(requestId, serializer);
+          sse_encode_String(result, serializer);
+          sse_encode_bool(isError, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 176,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitResolveToolExecutionConstMeta,
-            argValues: [requestId, result, isError],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitResolveToolExecutionConstMeta,
+        argValues: [requestId, result, isError],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitResolveToolExecutionConstMeta =>
+      const TaskConstMeta(
+        debugName: "resolve_tool_execution",
+        argNames: ["requestId", "result", "isError"],
+      );
 
-        TaskConstMeta get kCrateBridgeInitResolveToolExecutionConstMeta => const TaskConstMeta(
-            debugName: "resolve_tool_execution",
-            argNames: ["requestId", "result", "isError"],
-        );
-        
-
-@override Future<String> crateBridgeSkillRestoreSkill({required PlatformInt64 handle , required String agentId , required String skillName })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 176, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillRestoreSkill({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 177,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRestoreSkillConstMeta,
-            argValues: [handle, agentId, skillName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRestoreSkillConstMeta,
+        argValues: [handle, agentId, skillName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillRestoreSkillConstMeta =>
+      const TaskConstMeta(
+        debugName: "restore_skill",
+        argNames: ["handle", "agentId", "skillName"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRestoreSkillConstMeta => const TaskConstMeta(
-            debugName: "restore_skill",
-            argNames: ["handle", "agentId", "skillName"],
-        );
-        
-
-@override Future<bool> crateBridgeSessionRetractInjectedMessage({required PlatformInt64 handle , required String sessionKeyJson , required String message })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-sse_encode_String(message, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 177, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeSessionRetractInjectedMessage({
+    required PlatformInt64 handle,
+    required String sessionKeyJson,
+    required String message,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          sse_encode_String(message, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 178,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSessionRetractInjectedMessageConstMeta,
-            argValues: [handle, sessionKeyJson, message],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSessionRetractInjectedMessageConstMeta,
+        argValues: [handle, sessionKeyJson, message],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSessionRetractInjectedMessageConstMeta =>
+      const TaskConstMeta(
+        debugName: "retract_injected_message",
+        argNames: ["handle", "sessionKeyJson", "message"],
+      );
 
-        TaskConstMeta get kCrateBridgeSessionRetractInjectedMessageConstMeta => const TaskConstMeta(
-            debugName: "retract_injected_message",
-            argNames: ["handle", "sessionKeyJson", "message"],
-        );
-        
-
-@override String crateBridgeFileBridgeRootfsDir({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 178)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeRootfsDir({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 179,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeRootfsDirConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeRootfsDirConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeRootfsDirConstMeta =>
+      const TaskConstMeta(debugName: "rootfs_dir", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeFileBridgeRootfsDirConstMeta => const TaskConstMeta(
-            debugName: "rootfs_dir",
-            argNames: ["handle"],
-        );
-        
-
-@override Future<String> crateBridgeA2ARunA2ATask({required PlatformInt64 handle , required String taskId , required String mode })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(taskId, serializer);
-sse_encode_String(mode, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 179, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeA2ARunA2ATask({
+    required PlatformInt64 handle,
+    required String taskId,
+    required String mode,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(taskId, serializer);
+          sse_encode_String(mode, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 180,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeA2ARunA2ATaskConstMeta,
-            argValues: [handle, taskId, mode],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeA2ARunA2ATaskConstMeta,
+        argValues: [handle, taskId, mode],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeA2ARunA2ATaskConstMeta => const TaskConstMeta(
+    debugName: "run_a2a_task",
+    argNames: ["handle", "taskId", "mode"],
+  );
 
-        TaskConstMeta get kCrateBridgeA2ARunA2ATaskConstMeta => const TaskConstMeta(
-            debugName: "run_a2a_task",
-            argNames: ["handle", "taskId", "mode"],
-        );
-        
-
-@override Future<String> crateBridgeAutomationRunAutomationJob({required PlatformInt64 handle , required String jobId , required String mode })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(jobId, serializer);
-sse_encode_String(mode, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 180, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeAutomationRunAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+    required String mode,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(jobId, serializer);
+          sse_encode_String(mode, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 181,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationRunAutomationJobConstMeta,
-            argValues: [handle, jobId, mode],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationRunAutomationJobConstMeta,
+        argValues: [handle, jobId, mode],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationRunAutomationJobConstMeta =>
+      const TaskConstMeta(
+        debugName: "run_automation_job",
+        argNames: ["handle", "jobId", "mode"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationRunAutomationJobConstMeta => const TaskConstMeta(
-            debugName: "run_automation_job",
-            argNames: ["handle", "jobId", "mode"],
-        );
-        
-
-@override Future<String> crateBridgeSkillRunSkillCommand({required PlatformInt64 handle , required String agentId , required String commandName , String? args , String? sessionKeyJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(commandName, serializer);
-sse_encode_opt_String(args, serializer);
-sse_encode_opt_String(sessionKeyJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 181, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillRunSkillCommand({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String commandName,
+    String? args,
+    String? sessionKeyJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(commandName, serializer);
+          sse_encode_opt_String(args, serializer);
+          sse_encode_opt_String(sessionKeyJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 182,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRunSkillCommandConstMeta,
-            argValues: [handle, agentId, commandName, args, sessionKeyJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRunSkillCommandConstMeta,
+        argValues: [handle, agentId, commandName, args, sessionKeyJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillRunSkillCommandConstMeta =>
+      const TaskConstMeta(
+        debugName: "run_skill_command",
+        argNames: [
+          "handle",
+          "agentId",
+          "commandName",
+          "args",
+          "sessionKeyJson",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRunSkillCommandConstMeta => const TaskConstMeta(
-            debugName: "run_skill_command",
-            argNames: ["handle", "agentId", "commandName", "args", "sessionKeyJson"],
-        );
-        
-
-@override String crateBridgeEvolutionRunSkillConsolidationReview({required PlatformInt64 handle , required String agentId , required String configJson , required bool dryRun })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_bool(dryRun, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 182)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeEvolutionRunSkillConsolidationReview({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String configJson,
+    required bool dryRun,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_bool(dryRun, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 183,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeEvolutionRunSkillConsolidationReviewConstMeta,
-            argValues: [handle, agentId, configJson, dryRun],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeEvolutionRunSkillConsolidationReviewConstMeta,
+        argValues: [handle, agentId, configJson, dryRun],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeEvolutionRunSkillConsolidationReviewConstMeta =>
+      const TaskConstMeta(
+        debugName: "run_skill_consolidation_review",
+        argNames: ["handle", "agentId", "configJson", "dryRun"],
+      );
 
-        TaskConstMeta get kCrateBridgeEvolutionRunSkillConsolidationReviewConstMeta => const TaskConstMeta(
-            debugName: "run_skill_consolidation_review",
-            argNames: ["handle", "agentId", "configJson", "dryRun"],
-        );
-        
-
-@override Future<String> crateBridgeSkillRunSkillCurator({required PlatformInt64 handle , required String agentId , required bool dryRun })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_bool(dryRun, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 183, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillRunSkillCurator({
+    required PlatformInt64 handle,
+    required String agentId,
+    required bool dryRun,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_bool(dryRun, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 184,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillRunSkillCuratorConstMeta,
-            argValues: [handle, agentId, dryRun],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillRunSkillCuratorConstMeta,
+        argValues: [handle, agentId, dryRun],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillRunSkillCuratorConstMeta =>
+      const TaskConstMeta(
+        debugName: "run_skill_curator",
+        argNames: ["handle", "agentId", "dryRun"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillRunSkillCuratorConstMeta => const TaskConstMeta(
-            debugName: "run_skill_curator",
-            argNames: ["handle", "agentId", "dryRun"],
-        );
-        
-
-@override String? crateBridgeFileBridgeSandboxToReal({required PlatformInt64 handle , required String sandboxPath })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(sandboxPath, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 184)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String? crateBridgeFileBridgeSandboxToReal({
+    required PlatformInt64 handle,
+    required String sandboxPath,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(sandboxPath, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 185,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeSandboxToRealConstMeta,
-            argValues: [handle, sandboxPath],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeSandboxToRealConstMeta,
+        argValues: [handle, sandboxPath],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeSandboxToRealConstMeta =>
+      const TaskConstMeta(
+        debugName: "sandbox_to_real",
+        argNames: ["handle", "sandboxPath"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeSandboxToRealConstMeta => const TaskConstMeta(
-            debugName: "sandbox_to_real",
-            argNames: ["handle", "sandboxPath"],
-        );
-        
-
-@override String? crateBridgeFileBridgeSandboxToRealScoped({required PlatformInt64 handle , required String accountId , required String agentId , required String sandboxPath })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sandboxPath, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 185)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String? crateBridgeFileBridgeSandboxToRealScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String sandboxPath,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sandboxPath, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 186,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_opt_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeSandboxToRealScopedConstMeta,
-            argValues: [handle, accountId, agentId, sandboxPath],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeSandboxToRealScopedConstMeta,
+        argValues: [handle, accountId, agentId, sandboxPath],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeSandboxToRealScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "sandbox_to_real_scoped",
+        argNames: ["handle", "accountId", "agentId", "sandboxPath"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeSandboxToRealScopedConstMeta => const TaskConstMeta(
-            debugName: "sandbox_to_real_scoped",
-            argNames: ["handle", "accountId", "agentId", "sandboxPath"],
-        );
-        
-
-@override bool crateBridgeFileBridgeSaveMessageAttachments({required PlatformInt64 handle , required String threadId , required int userMsgIndex , required String attachmentsJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(threadId, serializer);
-sse_encode_i_32(userMsgIndex, serializer);
-sse_encode_String(attachmentsJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 186)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeFileBridgeSaveMessageAttachments({
+    required PlatformInt64 handle,
+    required String threadId,
+    required int userMsgIndex,
+    required String attachmentsJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(threadId, serializer);
+          sse_encode_i_32(userMsgIndex, serializer);
+          sse_encode_String(attachmentsJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 187,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeSaveMessageAttachmentsConstMeta,
-            argValues: [handle, threadId, userMsgIndex, attachmentsJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeSaveMessageAttachmentsConstMeta,
+        argValues: [handle, threadId, userMsgIndex, attachmentsJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeSaveMessageAttachmentsConstMeta =>
+      const TaskConstMeta(
+        debugName: "save_message_attachments",
+        argNames: ["handle", "threadId", "userMsgIndex", "attachmentsJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeSaveMessageAttachmentsConstMeta => const TaskConstMeta(
-            debugName: "save_message_attachments",
-            argNames: ["handle", "threadId", "userMsgIndex", "attachmentsJson"],
-        );
-        
-
-@override Future<String> crateBridgeSkillSearchCatalog({required String query })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(query, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 187, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillSearchCatalog({required String query}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(query, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 188,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillSearchCatalogConstMeta,
-            argValues: [query],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillSearchCatalogConstMeta,
+        argValues: [query],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillSearchCatalogConstMeta =>
+      const TaskConstMeta(debugName: "search_catalog", argNames: ["query"]);
 
-        TaskConstMeta get kCrateBridgeSkillSearchCatalogConstMeta => const TaskConstMeta(
-            debugName: "search_catalog",
-            argNames: ["query"],
-        );
-        
-
-@override Future<String> crateBridgeWorkspaceSearchMemory({required PlatformInt64 handle , required String accountId , required String agentId , required String query , required int limit })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(query, serializer);
-sse_encode_u_32(limit, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 188, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeWorkspaceSearchMemory({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String query,
+    required int limit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(query, serializer);
+          sse_encode_u_32(limit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 189,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceSearchMemoryConstMeta,
-            argValues: [handle, accountId, agentId, query, limit],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceSearchMemoryConstMeta,
+        argValues: [handle, accountId, agentId, query, limit],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceSearchMemoryConstMeta =>
+      const TaskConstMeta(
+        debugName: "search_memory",
+        argNames: ["handle", "accountId", "agentId", "query", "limit"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceSearchMemoryConstMeta => const TaskConstMeta(
-            debugName: "search_memory",
-            argNames: ["handle", "accountId", "agentId", "query", "limit"],
-        );
-        
-
-@override Future<String> crateBridgeInitSendMessage({required PlatformInt64 handle , required String configJson , required String message , required String attachmentsJson , required int maxIterations })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_String(attachmentsJson, serializer);
-sse_encode_i_32(maxIterations, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 189, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeInitSendMessage({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_String(attachmentsJson, serializer);
+          sse_encode_i_32(maxIterations, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 190,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitSendMessageConstMeta,
-            argValues: [handle, configJson, message, attachmentsJson, maxIterations],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitSendMessageConstMeta,
+        argValues: [
+          handle,
+          configJson,
+          message,
+          attachmentsJson,
+          maxIterations,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitSendMessageConstMeta => const TaskConstMeta(
+    debugName: "send_message",
+    argNames: [
+      "handle",
+      "configJson",
+      "message",
+      "attachmentsJson",
+      "maxIterations",
+    ],
+  );
 
-        TaskConstMeta get kCrateBridgeInitSendMessageConstMeta => const TaskConstMeta(
-            debugName: "send_message",
-            argNames: ["handle", "configJson", "message", "attachmentsJson", "maxIterations"],
-        );
-        
+  @override
+  Stream<String> crateBridgeInitSendMessageStream({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  }) {
+    final sink = RustStreamSink<String>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_i_64(handle, serializer);
+            sse_encode_String(configJson, serializer);
+            sse_encode_String(message, serializer);
+            sse_encode_String(attachmentsJson, serializer);
+            sse_encode_i_32(maxIterations, serializer);
+            sse_encode_StreamSink_String_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 191,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateBridgeInitSendMessageStreamConstMeta,
+          argValues: [
+            handle,
+            configJson,
+            message,
+            attachmentsJson,
+            maxIterations,
+            sink,
+          ],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
 
-@override Stream<String> crateBridgeInitSendMessageStream({required PlatformInt64 handle , required String configJson , required String message , required String attachmentsJson , required int maxIterations })  { 
-            final sink = RustStreamSink<String>();
-            unawaited(handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_String(attachmentsJson, serializer);
-sse_encode_i_32(maxIterations, serializer);
-sse_encode_StreamSink_String_Sse(sink, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 190, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitSendMessageStreamConstMeta,
-            argValues: [handle, configJson, message, attachmentsJson, maxIterations, sink],
-            apiImpl: this,
-        )));
-            return sink.stream;
-             }
+  TaskConstMeta get kCrateBridgeInitSendMessageStreamConstMeta =>
+      const TaskConstMeta(
+        debugName: "send_message_stream",
+        argNames: [
+          "handle",
+          "configJson",
+          "message",
+          "attachmentsJson",
+          "maxIterations",
+          "sink",
+        ],
+      );
 
-
-        TaskConstMeta get kCrateBridgeInitSendMessageStreamConstMeta => const TaskConstMeta(
-            debugName: "send_message_stream",
-            argNames: ["handle", "configJson", "message", "attachmentsJson", "maxIterations", "sink"],
-        );
-        
-
-@override Future<String> crateBridgeGroupSendToGroup({required PlatformInt64 handle , required String groupId , required String configJson , required String message , required int maxIterations })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_i_32(maxIterations, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 191, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeGroupSendToGroup({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String configJson,
+    required String message,
+    required int maxIterations,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_i_32(maxIterations, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 192,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupSendToGroupConstMeta,
-            argValues: [handle, groupId, configJson, message, maxIterations],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupSendToGroupConstMeta,
+        argValues: [handle, groupId, configJson, message, maxIterations],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupSendToGroupConstMeta =>
+      const TaskConstMeta(
+        debugName: "send_to_group",
+        argNames: [
+          "handle",
+          "groupId",
+          "configJson",
+          "message",
+          "maxIterations",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupSendToGroupConstMeta => const TaskConstMeta(
-            debugName: "send_to_group",
-            argNames: ["handle", "groupId", "configJson", "message", "maxIterations"],
-        );
-        
-
-@override Future<String> crateBridgeGroupSendToGroupAgent({required PlatformInt64 handle , required String groupId , required String agentId , required String configJson , required String sessionKeyJson , required String message , required int maxIterations })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_i_32(maxIterations, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 192, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeGroupSendToGroupAgent({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String agentId,
+    required String configJson,
+    required String sessionKeyJson,
+    required String message,
+    required int maxIterations,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_i_32(maxIterations, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 193,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupSendToGroupAgentConstMeta,
-            argValues: [handle, groupId, agentId, configJson, sessionKeyJson, message, maxIterations],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupSendToGroupAgentConstMeta,
+        argValues: [
+          handle,
+          groupId,
+          agentId,
+          configJson,
+          sessionKeyJson,
+          message,
+          maxIterations,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupSendToGroupAgentConstMeta =>
+      const TaskConstMeta(
+        debugName: "send_to_group_agent",
+        argNames: [
+          "handle",
+          "groupId",
+          "agentId",
+          "configJson",
+          "sessionKeyJson",
+          "message",
+          "maxIterations",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupSendToGroupAgentConstMeta => const TaskConstMeta(
-            debugName: "send_to_group_agent",
-            argNames: ["handle", "groupId", "agentId", "configJson", "sessionKeyJson", "message", "maxIterations"],
-        );
-        
-
-@override Future<String> crateBridgeInitSendToSession({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , required String message , required String attachmentsJson , required int maxIterations })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_String(attachmentsJson, serializer);
-sse_encode_i_32(maxIterations, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 193, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeInitSendToSession({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(sessionKeyJson, serializer);
+          sse_encode_String(message, serializer);
+          sse_encode_String(attachmentsJson, serializer);
+          sse_encode_i_32(maxIterations, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 194,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitSendToSessionConstMeta,
-            argValues: [handle, configJson, agentId, sessionKeyJson, message, attachmentsJson, maxIterations],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitSendToSessionConstMeta,
+        argValues: [
+          handle,
+          configJson,
+          agentId,
+          sessionKeyJson,
+          message,
+          attachmentsJson,
+          maxIterations,
+        ],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitSendToSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "send_to_session",
+        argNames: [
+          "handle",
+          "configJson",
+          "agentId",
+          "sessionKeyJson",
+          "message",
+          "attachmentsJson",
+          "maxIterations",
+        ],
+      );
 
-        TaskConstMeta get kCrateBridgeInitSendToSessionConstMeta => const TaskConstMeta(
-            debugName: "send_to_session",
-            argNames: ["handle", "configJson", "agentId", "sessionKeyJson", "message", "attachmentsJson", "maxIterations"],
-        );
-        
+  @override
+  Stream<String> crateBridgeInitSendToSessionStream({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String agentId,
+    required String sessionKeyJson,
+    required String message,
+    required String attachmentsJson,
+    required int maxIterations,
+  }) {
+    final sink = RustStreamSink<String>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_i_64(handle, serializer);
+            sse_encode_String(configJson, serializer);
+            sse_encode_String(agentId, serializer);
+            sse_encode_String(sessionKeyJson, serializer);
+            sse_encode_String(message, serializer);
+            sse_encode_String(attachmentsJson, serializer);
+            sse_encode_i_32(maxIterations, serializer);
+            sse_encode_StreamSink_String_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 195,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateBridgeInitSendToSessionStreamConstMeta,
+          argValues: [
+            handle,
+            configJson,
+            agentId,
+            sessionKeyJson,
+            message,
+            attachmentsJson,
+            maxIterations,
+            sink,
+          ],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
 
-@override Stream<String> crateBridgeInitSendToSessionStream({required PlatformInt64 handle , required String configJson , required String agentId , required String sessionKeyJson , required String message , required String attachmentsJson , required int maxIterations })  { 
-            final sink = RustStreamSink<String>();
-            unawaited(handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(sessionKeyJson, serializer);
-sse_encode_String(message, serializer);
-sse_encode_String(attachmentsJson, serializer);
-sse_encode_i_32(maxIterations, serializer);
-sse_encode_StreamSink_String_Sse(sink, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 194, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitSendToSessionStreamConstMeta,
-            argValues: [handle, configJson, agentId, sessionKeyJson, message, attachmentsJson, maxIterations, sink],
-            apiImpl: this,
-        )));
-            return sink.stream;
-             }
+  TaskConstMeta get kCrateBridgeInitSendToSessionStreamConstMeta =>
+      const TaskConstMeta(
+        debugName: "send_to_session_stream",
+        argNames: [
+          "handle",
+          "configJson",
+          "agentId",
+          "sessionKeyJson",
+          "message",
+          "attachmentsJson",
+          "maxIterations",
+          "sink",
+        ],
+      );
 
-
-        TaskConstMeta get kCrateBridgeInitSendToSessionStreamConstMeta => const TaskConstMeta(
-            debugName: "send_to_session_stream",
-            argNames: ["handle", "configJson", "agentId", "sessionKeyJson", "message", "attachmentsJson", "maxIterations", "sink"],
-        );
-        
-
-@override bool crateBridgeGroupSetGroupCustomPrompt({required PlatformInt64 handle , required String groupId , String? prompt })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-sse_encode_opt_String(prompt, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 195)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeGroupSetGroupCustomPrompt({
+    required PlatformInt64 handle,
+    required String groupId,
+    String? prompt,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          sse_encode_opt_String(prompt, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 196,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupSetGroupCustomPromptConstMeta,
-            argValues: [handle, groupId, prompt],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupSetGroupCustomPromptConstMeta,
+        argValues: [handle, groupId, prompt],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupSetGroupCustomPromptConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_group_custom_prompt",
+        argNames: ["handle", "groupId", "prompt"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupSetGroupCustomPromptConstMeta => const TaskConstMeta(
-            debugName: "set_group_custom_prompt",
-            argNames: ["handle", "groupId", "prompt"],
-        );
-        
-
-@override Future<String> crateBridgeSkillSetSkillEnabled({required PlatformInt64 handle , required String agentId , required String skillName , required bool enabled })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillName, serializer);
-sse_encode_bool(enabled, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 196, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillSetSkillEnabled({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillName,
+    required bool enabled,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillName, serializer);
+          sse_encode_bool(enabled, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 197,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillSetSkillEnabledConstMeta,
-            argValues: [handle, agentId, skillName, enabled],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillSetSkillEnabledConstMeta,
+        argValues: [handle, agentId, skillName, enabled],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillSetSkillEnabledConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_skill_enabled",
+        argNames: ["handle", "agentId", "skillName", "enabled"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillSetSkillEnabledConstMeta => const TaskConstMeta(
-            debugName: "set_skill_enabled",
-            argNames: ["handle", "agentId", "skillName", "enabled"],
-        );
-        
-
-@override String crateBridgeFileBridgeSkillsDir({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 197)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeSkillsDir({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 198,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeSkillsDirConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeSkillsDirConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeSkillsDirConstMeta =>
+      const TaskConstMeta(debugName: "skills_dir", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeFileBridgeSkillsDirConstMeta => const TaskConstMeta(
-            debugName: "skills_dir",
-            argNames: ["handle"],
-        );
-        
+  @override
+  Stream<String> crateBridgeChannelAgentStreamChannelAgentPump({
+    required PlatformInt64 handle,
+    required String configJson,
+    required String bridgeConfigJson,
+  }) {
+    final sink = RustStreamSink<String>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_i_64(handle, serializer);
+            sse_encode_String(configJson, serializer);
+            sse_encode_String(bridgeConfigJson, serializer);
+            sse_encode_StreamSink_String_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 199,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: null,
+          ),
+          constMeta: kCrateBridgeChannelAgentStreamChannelAgentPumpConstMeta,
+          argValues: [handle, configJson, bridgeConfigJson, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
 
-@override Stream<String> crateBridgeChannelAgentStreamChannelAgentPump({required PlatformInt64 handle , required String configJson , required String bridgeConfigJson })  { 
-            final sink = RustStreamSink<String>();
-            unawaited(handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-sse_encode_String(bridgeConfigJson, serializer);
-sse_encode_StreamSink_String_Sse(sink, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 198, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
-          decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelAgentStreamChannelAgentPumpConstMeta,
-            argValues: [handle, configJson, bridgeConfigJson, sink],
-            apiImpl: this,
-        )));
-            return sink.stream;
-             }
+  TaskConstMeta get kCrateBridgeChannelAgentStreamChannelAgentPumpConstMeta =>
+      const TaskConstMeta(
+        debugName: "stream_channel_agent_pump",
+        argNames: ["handle", "configJson", "bridgeConfigJson", "sink"],
+      );
 
-
-        TaskConstMeta get kCrateBridgeChannelAgentStreamChannelAgentPumpConstMeta => const TaskConstMeta(
-            debugName: "stream_channel_agent_pump",
-            argNames: ["handle", "configJson", "bridgeConfigJson", "sink"],
-        );
-        
-
-@override String crateBridgeAgentAppSubmitAgentAppActionResult({required PlatformInt64 handle , required String resultJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(resultJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 199)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAgentAppSubmitAgentAppActionResult({
+    required PlatformInt64 handle,
+    required String resultJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(resultJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 200,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentAppSubmitAgentAppActionResultConstMeta,
-            argValues: [handle, resultJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentAppSubmitAgentAppActionResultConstMeta,
+        argValues: [handle, resultJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentAppSubmitAgentAppActionResultConstMeta =>
+      const TaskConstMeta(
+        debugName: "submit_agent_app_action_result",
+        argNames: ["handle", "resultJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentAppSubmitAgentAppActionResultConstMeta => const TaskConstMeta(
-            debugName: "submit_agent_app_action_result",
-            argNames: ["handle", "resultJson"],
-        );
-        
-
-@override String crateBridgeChannelSubmitChannelInbound({required PlatformInt64 handle , required String envelopeJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(envelopeJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 200)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelSubmitChannelInbound({
+    required PlatformInt64 handle,
+    required String envelopeJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(envelopeJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 201,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelSubmitChannelInboundConstMeta,
-            argValues: [handle, envelopeJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelSubmitChannelInboundConstMeta,
+        argValues: [handle, envelopeJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelSubmitChannelInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "submit_channel_inbound",
+        argNames: ["handle", "envelopeJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelSubmitChannelInboundConstMeta => const TaskConstMeta(
-            debugName: "submit_channel_inbound",
-            argNames: ["handle", "envelopeJson"],
-        );
-        
-
-@override String crateBridgeChannelTakeChannelInbound({required PlatformInt64 handle , required String channelName , required BigInt limit })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(channelName, serializer);
-sse_encode_usize(limit, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 201)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeChannelTakeChannelInbound({
+    required PlatformInt64 handle,
+    required String channelName,
+    required BigInt limit,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(channelName, serializer);
+          sse_encode_usize(limit, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 202,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelTakeChannelInboundConstMeta,
-            argValues: [handle, channelName, limit],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelTakeChannelInboundConstMeta,
+        argValues: [handle, channelName, limit],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelTakeChannelInboundConstMeta =>
+      const TaskConstMeta(
+        debugName: "take_channel_inbound",
+        argNames: ["handle", "channelName", "limit"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelTakeChannelInboundConstMeta => const TaskConstMeta(
-            debugName: "take_channel_inbound",
-            argNames: ["handle", "channelName", "limit"],
-        );
-        
-
-@override Future<String> crateBridgeInitToolBrokerCallTool({required PlatformInt64 handle , required String requestJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(requestJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 202, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeInitToolBrokerCallTool({
+    required PlatformInt64 handle,
+    required String requestJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(requestJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 203,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitToolBrokerCallToolConstMeta,
-            argValues: [handle, requestJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitToolBrokerCallToolConstMeta,
+        argValues: [handle, requestJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitToolBrokerCallToolConstMeta =>
+      const TaskConstMeta(
+        debugName: "tool_broker_call_tool",
+        argNames: ["handle", "requestJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeInitToolBrokerCallToolConstMeta => const TaskConstMeta(
-            debugName: "tool_broker_call_tool",
-            argNames: ["handle", "requestJson"],
-        );
-        
-
-@override Future<String> crateBridgeInitToolBrokerListTools({required PlatformInt64 handle , required String requestJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(requestJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 203, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeInitToolBrokerListTools({
+    required PlatformInt64 handle,
+    required String requestJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(requestJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 204,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitToolBrokerListToolsConstMeta,
-            argValues: [handle, requestJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitToolBrokerListToolsConstMeta,
+        argValues: [handle, requestJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitToolBrokerListToolsConstMeta =>
+      const TaskConstMeta(
+        debugName: "tool_broker_list_tools",
+        argNames: ["handle", "requestJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeInitToolBrokerListToolsConstMeta => const TaskConstMeta(
-            debugName: "tool_broker_list_tools",
-            argNames: ["handle", "requestJson"],
-        );
-        
-
-@override String crateBridgeCapabilityToolCapabilityId({required String toolName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_String(toolName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 204)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeCapabilityToolCapabilityId({required String toolName}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(toolName, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 205,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeCapabilityToolCapabilityIdConstMeta,
-            argValues: [toolName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeCapabilityToolCapabilityIdConstMeta,
+        argValues: [toolName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeCapabilityToolCapabilityIdConstMeta =>
+      const TaskConstMeta(
+        debugName: "tool_capability_id",
+        argNames: ["toolName"],
+      );
 
-        TaskConstMeta get kCrateBridgeCapabilityToolCapabilityIdConstMeta => const TaskConstMeta(
-            debugName: "tool_capability_id",
-            argNames: ["toolName"],
-        );
-        
-
-@override bool crateBridgeChannelUnregisterChannel({required PlatformInt64 handle , required String channelName })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(channelName, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 205)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeChannelUnregisterChannel({
+    required PlatformInt64 handle,
+    required String channelName,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(channelName, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 206,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeChannelUnregisterChannelConstMeta,
-            argValues: [handle, channelName],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeChannelUnregisterChannelConstMeta,
+        argValues: [handle, channelName],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeChannelUnregisterChannelConstMeta =>
+      const TaskConstMeta(
+        debugName: "unregister_channel",
+        argNames: ["handle", "channelName"],
+      );
 
-        TaskConstMeta get kCrateBridgeChannelUnregisterChannelConstMeta => const TaskConstMeta(
-            debugName: "unregister_channel",
-            argNames: ["handle", "channelName"],
-        );
-        
-
-@override Future<bool> crateBridgeAgentDefsUpdateAgentDefinition({required PlatformInt64 handle , required String defJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(defJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 206, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeAgentDefsUpdateAgentDefinition({
+    required PlatformInt64 handle,
+    required String defJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(defJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 207,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAgentDefsUpdateAgentDefinitionConstMeta,
-            argValues: [handle, defJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAgentDefsUpdateAgentDefinitionConstMeta,
+        argValues: [handle, defJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAgentDefsUpdateAgentDefinitionConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_agent_definition",
+        argNames: ["handle", "defJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAgentDefsUpdateAgentDefinitionConstMeta => const TaskConstMeta(
-            debugName: "update_agent_definition",
-            argNames: ["handle", "defJson"],
-        );
-        
-
-@override String crateBridgeAutomationUpdateAutomationJob({required PlatformInt64 handle , required String jobId , required String patchJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(jobId, serializer);
-sse_encode_String(patchJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 207)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeAutomationUpdateAutomationJob({
+    required PlatformInt64 handle,
+    required String jobId,
+    required String patchJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(jobId, serializer);
+          sse_encode_String(patchJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 208,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeAutomationUpdateAutomationJobConstMeta,
-            argValues: [handle, jobId, patchJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeAutomationUpdateAutomationJobConstMeta,
+        argValues: [handle, jobId, patchJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeAutomationUpdateAutomationJobConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_automation_job",
+        argNames: ["handle", "jobId", "patchJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeAutomationUpdateAutomationJobConstMeta => const TaskConstMeta(
-            debugName: "update_automation_job",
-            argNames: ["handle", "jobId", "patchJson"],
-        );
-        
-
-@override bool crateBridgeInitUpdateConfig({required PlatformInt64 handle , required String configJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(configJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 208)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeInitUpdateConfig({
+    required PlatformInt64 handle,
+    required String configJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(configJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 209,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitUpdateConfigConstMeta,
-            argValues: [handle, configJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitUpdateConfigConstMeta,
+        argValues: [handle, configJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitUpdateConfigConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_config",
+        argNames: ["handle", "configJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeInitUpdateConfigConstMeta => const TaskConstMeta(
-            debugName: "update_config",
-            argNames: ["handle", "configJson"],
-        );
-        
-
-@override bool crateBridgeInitUpdateCustomTools({required PlatformInt64 handle , required String toolsJson })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(toolsJson, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 209)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  bool crateBridgeInitUpdateCustomTools({
+    required PlatformInt64 handle,
+    required String toolsJson,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(toolsJson, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 210,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeInitUpdateCustomToolsConstMeta,
-            argValues: [handle, toolsJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeInitUpdateCustomToolsConstMeta,
+        argValues: [handle, toolsJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeInitUpdateCustomToolsConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_custom_tools",
+        argNames: ["handle", "toolsJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeInitUpdateCustomToolsConstMeta => const TaskConstMeta(
-            debugName: "update_custom_tools",
-            argNames: ["handle", "toolsJson"],
-        );
-        
-
-@override Future<bool> crateBridgeGroupUpdateGroupMembers({required PlatformInt64 handle , required String groupId , required String membersJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(groupId, serializer);
-sse_encode_String(membersJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 210, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeGroupUpdateGroupMembers({
+    required PlatformInt64 handle,
+    required String groupId,
+    required String membersJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(groupId, serializer);
+          sse_encode_String(membersJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 211,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeGroupUpdateGroupMembersConstMeta,
-            argValues: [handle, groupId, membersJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeGroupUpdateGroupMembersConstMeta,
+        argValues: [handle, groupId, membersJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeGroupUpdateGroupMembersConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_group_members",
+        argNames: ["handle", "groupId", "membersJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeGroupUpdateGroupMembersConstMeta => const TaskConstMeta(
-            debugName: "update_group_members",
-            argNames: ["handle", "groupId", "membersJson"],
-        );
-        
-
-@override Future<String> crateBridgeSkillUpdateSkillConfig({required PlatformInt64 handle , required String agentId , required String skillKey , required String patchJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(skillKey, serializer);
-sse_encode_String(patchJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 211, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillUpdateSkillConfig({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String skillKey,
+    required String patchJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(skillKey, serializer);
+          sse_encode_String(patchJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 212,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillUpdateSkillConfigConstMeta,
-            argValues: [handle, agentId, skillKey, patchJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillUpdateSkillConfigConstMeta,
+        argValues: [handle, agentId, skillKey, patchJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillUpdateSkillConfigConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_skill_config",
+        argNames: ["handle", "agentId", "skillKey", "patchJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillUpdateSkillConfigConstMeta => const TaskConstMeta(
-            debugName: "update_skill_config",
-            argNames: ["handle", "agentId", "skillKey", "patchJson"],
-        );
-        
-
-@override Future<String> crateBridgeSkillUpdateSkillRemediationRun({required PlatformInt64 handle , required String agentId , required String runId , required String status , String? resultJson })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(runId, serializer);
-sse_encode_String(status, serializer);
-sse_encode_opt_String(resultJson, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 212, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<String> crateBridgeSkillUpdateSkillRemediationRun({
+    required PlatformInt64 handle,
+    required String agentId,
+    required String runId,
+    required String status,
+    String? resultJson,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(runId, serializer);
+          sse_encode_String(status, serializer);
+          sse_encode_opt_String(resultJson, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 213,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeSkillUpdateSkillRemediationRunConstMeta,
-            argValues: [handle, agentId, runId, status, resultJson],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeSkillUpdateSkillRemediationRunConstMeta,
+        argValues: [handle, agentId, runId, status, resultJson],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeSkillUpdateSkillRemediationRunConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_skill_remediation_run",
+        argNames: ["handle", "agentId", "runId", "status", "resultJson"],
+      );
 
-        TaskConstMeta get kCrateBridgeSkillUpdateSkillRemediationRunConstMeta => const TaskConstMeta(
-            debugName: "update_skill_remediation_run",
-            argNames: ["handle", "agentId", "runId", "status", "resultJson"],
-        );
-        
-
-@override String crateBridgeFileBridgeWorkspaceDir({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 213)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeWorkspaceDir({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 214,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeWorkspaceDirConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeWorkspaceDirConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeWorkspaceDirConstMeta =>
+      const TaskConstMeta(debugName: "workspace_dir", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeFileBridgeWorkspaceDirConstMeta => const TaskConstMeta(
-            debugName: "workspace_dir",
-            argNames: ["handle"],
-        );
-        
-
-@override String crateBridgeFileBridgeWorkspaceDirScoped({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 214)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  String crateBridgeFileBridgeWorkspaceDirScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 215,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_String,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeWorkspaceDirScopedConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeWorkspaceDirScopedConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeWorkspaceDirScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "workspace_dir_scoped",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeWorkspaceDirScopedConstMeta => const TaskConstMeta(
-            debugName: "workspace_dir_scoped",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override BigInt crateBridgeFileBridgeWorkspaceSize({required PlatformInt64 handle })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 215)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  BigInt crateBridgeFileBridgeWorkspaceSize({required PlatformInt64 handle}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 216,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_u_64,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeWorkspaceSizeConstMeta,
-            argValues: [handle],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeWorkspaceSizeConstMeta,
+        argValues: [handle],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeWorkspaceSizeConstMeta =>
+      const TaskConstMeta(debugName: "workspace_size", argNames: ["handle"]);
 
-        TaskConstMeta get kCrateBridgeFileBridgeWorkspaceSizeConstMeta => const TaskConstMeta(
-            debugName: "workspace_size",
-            argNames: ["handle"],
-        );
-        
-
-@override BigInt crateBridgeFileBridgeWorkspaceSizeScoped({required PlatformInt64 handle , required String accountId , required String agentId })  { return handler.executeSync(SyncTask(
-            callFfi: () {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-            return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 216)!;
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  BigInt crateBridgeFileBridgeWorkspaceSizeScoped({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+  }) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          return pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 217,
+          )!;
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_u_64,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeFileBridgeWorkspaceSizeScopedConstMeta,
-            argValues: [handle, accountId, agentId],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeFileBridgeWorkspaceSizeScopedConstMeta,
+        argValues: [handle, accountId, agentId],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeFileBridgeWorkspaceSizeScopedConstMeta =>
+      const TaskConstMeta(
+        debugName: "workspace_size_scoped",
+        argNames: ["handle", "accountId", "agentId"],
+      );
 
-        TaskConstMeta get kCrateBridgeFileBridgeWorkspaceSizeScopedConstMeta => const TaskConstMeta(
-            debugName: "workspace_size_scoped",
-            argNames: ["handle", "accountId", "agentId"],
-        );
-        
-
-@override Future<bool> crateBridgeWorkspaceWriteWorkspaceFile({required PlatformInt64 handle , required String accountId , required String agentId , required String path , required String content })  { return handler.executeNormal(NormalTask(
-            callFfi: (port_) {
-              
-            final serializer = SseSerializer(generalizedFrbRustBinding);sse_encode_i_64(handle, serializer);
-sse_encode_String(accountId, serializer);
-sse_encode_String(agentId, serializer);
-sse_encode_String(path, serializer);
-sse_encode_String(content, serializer);
-            pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 217, port: port_);
-            
-            },
-            codec: 
-        SseCodec(
+  @override
+  Future<bool> crateBridgeWorkspaceWriteWorkspaceFile({
+    required PlatformInt64 handle,
+    required String accountId,
+    required String agentId,
+    required String path,
+    required String content,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(handle, serializer);
+          sse_encode_String(accountId, serializer);
+          sse_encode_String(agentId, serializer);
+          sse_encode_String(path, serializer);
+          sse_encode_String(content, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 218,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_bool,
           decodeErrorData: null,
-        )
-        ,
-            constMeta: kCrateBridgeWorkspaceWriteWorkspaceFileConstMeta,
-            argValues: [handle, accountId, agentId, path, content],
-            apiImpl: this,
-        )); }
+        ),
+        constMeta: kCrateBridgeWorkspaceWriteWorkspaceFileConstMeta,
+        argValues: [handle, accountId, agentId, path, content],
+        apiImpl: this,
+      ),
+    );
+  }
 
+  TaskConstMeta get kCrateBridgeWorkspaceWriteWorkspaceFileConstMeta =>
+      const TaskConstMeta(
+        debugName: "write_workspace_file",
+        argNames: ["handle", "accountId", "agentId", "path", "content"],
+      );
 
-        TaskConstMeta get kCrateBridgeWorkspaceWriteWorkspaceFileConstMeta => const TaskConstMeta(
-            debugName: "write_workspace_file",
-            argNames: ["handle", "accountId", "agentId", "path", "content"],
-        );
-        
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AnyhowException(raw as String);
+  }
 
+  @protected
+  RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
 
+  @protected
+  String dco_decode_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as String;
+  }
 
-                  @protected AnyhowException dco_decode_AnyhowException(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return AnyhowException(raw as String); }
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
 
-@protected RustStreamSink<String> dco_decode_StreamSink_String_Sse(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-throw UnimplementedError(); }
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
 
-@protected String dco_decode_String(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as String; }
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
 
-@protected bool dco_decode_bool(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as bool; }
+  @protected
+  Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as Uint8List;
+  }
 
-@protected int dco_decode_i_32(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as int; }
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
 
-@protected PlatformInt64 dco_decode_i_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return dcoDecodeI64(raw); }
+  @protected
+  int dco_decode_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
 
-@protected Uint8List dco_decode_list_prim_u_8_strict(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as Uint8List; }
+  @protected
+  BigInt dco_decode_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
 
-@protected String? dco_decode_opt_String(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw == null ? null : dco_decode_String(raw); }
+  @protected
+  int dco_decode_u_8(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
 
-@protected int dco_decode_u_32(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as int; }
+  @protected
+  void dco_decode_unit(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return;
+  }
 
-@protected BigInt dco_decode_u_64(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return dcoDecodeU64(raw); }
+  @protected
+  BigInt dco_decode_usize(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
+  }
 
-@protected int dco_decode_u_8(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return raw as int; }
+  @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_String(deserializer);
+    return AnyhowException(inner);
+  }
 
-@protected void dco_decode_unit(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return; }
+  @protected
+  RustStreamSink<String> sse_decode_StreamSink_String_Sse(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
 
-@protected BigInt dco_decode_usize(dynamic raw){ // Codec=Dco (DartCObject based), see doc to use other codecs
-return dcoDecodeU64(raw); }
+  @protected
+  String sse_decode_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_list_prim_u_8_strict(deserializer);
+    return utf8.decoder.convert(inner);
+  }
 
-@protected AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var inner = sse_decode_String(deserializer);
-        return AnyhowException(inner); }
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
 
-@protected RustStreamSink<String> sse_decode_StreamSink_String_Sse(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-throw UnimplementedError('Unreachable ()'); }
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
 
-@protected String sse_decode_String(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var inner = sse_decode_list_prim_u_8_strict(deserializer);
-        return utf8.decoder.convert(inner); }
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
 
-@protected bool sse_decode_bool(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getUint8() != 0; }
+  @protected
+  Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getUint8List(len_);
+  }
 
-@protected int sse_decode_i_32(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getInt32(); }
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
 
-@protected PlatformInt64 sse_decode_i_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getPlatformInt64(); }
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
 
-@protected Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-var len_ = sse_decode_i_32(deserializer);
-                return deserializer.buffer.getUint8List(len_); }
+  @protected
+  int sse_decode_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint32();
+  }
 
-@protected String? sse_decode_opt_String(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
+  }
 
-            if (sse_decode_bool(deserializer)) {
-                return (sse_decode_String(deserializer));
-            } else {
-                return null;
-            }
-             }
+  @protected
+  int sse_decode_u_8(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8();
+  }
 
-@protected int sse_decode_u_32(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getUint32(); }
+  @protected
+  void sse_decode_unit(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+  }
 
-@protected BigInt sse_decode_u_64(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getBigUint64(); }
+  @protected
+  BigInt sse_decode_usize(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
+  }
 
-@protected int sse_decode_u_8(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getUint8(); }
+  @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.message, serializer);
+  }
 
-@protected void sse_decode_unit(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
- }
+  @protected
+  void sse_encode_StreamSink_String_Sse(
+    RustStreamSink<String> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
+  }
 
-@protected BigInt sse_decode_usize(SseDeserializer deserializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-return deserializer.buffer.getBigUint64(); }
+  @protected
+  void sse_encode_String(String self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
 
-@protected void sse_encode_AnyhowException(AnyhowException self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_String(self.message, serializer); }
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
 
-@protected void sse_encode_StreamSink_String_Sse(RustStreamSink<String> self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_String(self.setupAndSerialize(codec: SseCodec(
-            decodeSuccessData: sse_decode_String,
-            decodeErrorData: sse_decode_AnyhowException,
-        )), serializer); }
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
 
-@protected void sse_encode_String(String self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer); }
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
 
-@protected void sse_encode_bool(bool self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putUint8(self ? 1 : 0); }
+  @protected
+  void sse_encode_list_prim_u_8_strict(
+    Uint8List self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer.putUint8List(self);
+  }
 
-@protected void sse_encode_i_32(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putInt32(self); }
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
 
-@protected void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putPlatformInt64(self); }
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
 
-@protected void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-sse_encode_i_32(self.length, serializer);
-                    serializer.buffer.putUint8List(self); }
+  @protected
+  void sse_encode_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint32(self);
+  }
 
-@protected void sse_encode_opt_String(String? self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
+  }
 
-                sse_encode_bool(self != null, serializer);
-                if (self != null) {
-                    sse_encode_String(self, serializer);
-                }
-                 }
+  @protected
+  void sse_encode_u_8(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self);
+  }
 
-@protected void sse_encode_u_32(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putUint32(self); }
+  @protected
+  void sse_encode_unit(void self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+  }
 
-@protected void sse_encode_u_64(BigInt self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putBigUint64(self); }
-
-@protected void sse_encode_u_8(int self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putUint8(self); }
-
-@protected void sse_encode_unit(void self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
- }
-
-@protected void sse_encode_usize(BigInt self, SseSerializer serializer){ // Codec=Sse (Serialization based), see doc to use other codecs
-serializer.buffer.putBigUint64(self); }
-                }
-                
+  @protected
+  void sse_encode_usize(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
+  }
+}

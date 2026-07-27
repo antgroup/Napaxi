@@ -64,6 +64,7 @@ pub fn agent_engine_capability_id(engine_id: &str) -> Option<&'static str> {
         "external_host" | "napaxi.agent_engine.external_host" => {
             Some("napaxi.agent_engine.external_host")
         }
+        "codex" | "napaxi.agent_engine.codex" => Some("napaxi.agent_engine.codex"),
         _ => None,
     }
 }

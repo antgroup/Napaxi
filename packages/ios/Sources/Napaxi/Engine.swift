@@ -459,6 +459,7 @@ public final class NapaxiEngine: @unchecked Sendable {
                 NapaxiChannelCapability.im,
                 NapaxiChannelCapability.device,
                 resolvedToolExecutor == nil ? nil : "napaxi.tool.custom_host",
+                "napaxi.agent_engine.codex",
                 resolvedAgentAppActionExecutor == nil ? nil : "napaxi.tool.agent_app_action",
                 resolvedBrowserController == nil ? nil : NapaxiBrowserToolProvider.capabilityId,
                 automationEnabled ? "napaxi.service.automation" : nil,
@@ -548,6 +549,22 @@ public final class NapaxiEngine: @unchecked Sendable {
             config = newConfig
         }
         return updated
+    }
+
+
+    public func configureCodexAgentEngine(
+        configToml: String = "",
+        authJson: String = ""
+    ) throws -> NapaxiCodexAgentEngineConfigResult {
+        try ensureNotDisposed()
+        let request = try NapaxiJSONValue.object([
+            "files_dir": .string(filesDir),
+            "config_toml": .string(configToml),
+            "auth_json": .string(authJson),
+        ]).jsonString()
+        let raw = try configureCodexAgentEngineJson(handle: handle, requestJson: request)
+        let object = (try NapaxiRawJSON(jsonString: raw).value.objectValue) ?? [:]
+        return NapaxiCodexAgentEngineConfigResult(json: object)
     }
 
     public func ensureAgentReady() throws -> Bool {
@@ -1451,6 +1468,7 @@ public final class NapaxiEngine: @unchecked Sendable {
                 NapaxiChannelCapability.im,
                 NapaxiChannelCapability.device,
                 hasCustomToolExecutor ? "napaxi.tool.custom_host" : nil,
+                "napaxi.agent_engine.codex",
                 hasAgentAppActionExecutor ? "napaxi.tool.agent_app_action" : nil,
                 enablePlatformTools ? "napaxi.platform_tool.*" : nil,
                 hasBrowserController ? "napaxi.tool.browser" : nil,

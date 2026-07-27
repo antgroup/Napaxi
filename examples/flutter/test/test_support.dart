@@ -225,6 +225,17 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   }
 
   @override
+  Future<sdk.CodexAgentEngineConfigResult> configureCodexAgentEngine({
+    String configToml = '',
+    String authJson = '',
+  }) async {
+    return const sdk.CodexAgentEngineConfigResult(
+      success: true,
+      providerAvailable: false,
+    );
+  }
+
+  @override
   void resetCliBridge(String engineId) {}
 
   @override

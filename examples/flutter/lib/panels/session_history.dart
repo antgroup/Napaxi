@@ -2209,6 +2209,7 @@ class _SettingsPageState extends State<_SettingsPage> {
         },
       ),
       _SettingsSection.engines => _EngineSettingsPage(
+        clientFuture: widget.createScenariosClientFuture(),
         embedded: true,
         onBack: () async {
           setState(() => _section = _SettingsSection.menu);
@@ -3978,8 +3979,13 @@ class _SettingsListPage extends StatelessWidget {
 }
 
 class _EngineSettingsPage extends StatefulWidget {
-  const _EngineSettingsPage({this.embedded = false, this.onBack});
+  const _EngineSettingsPage({
+    required this.clientFuture,
+    this.embedded = false,
+    this.onBack,
+  });
 
+  final Future<NapaxiChatClient> clientFuture;
   final bool embedded;
   final Future<bool> Function()? onBack;
 
@@ -4053,14 +4059,25 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
       _save(spec.baseUrlStorageKey, baseUrl),
       _save(spec.modelStorageKey, model),
     ]);
-    // Write Codex config into sandbox so `codex app-server` picks it up.
+    // Write Codex config through the SDK/core API so the core-owned
+    // `napaxi.agent_engine.codex` runner and sandbox agree on auth/config.
     if (spec.id == 'codex' && apiKey.trim().isNotEmpty) {
       try {
-        await _CliEngineBridge.writeCodexConfig(
+        final result = await _configureCoreCodex(
           apiKey: apiKey.trim(),
           baseUrl: baseUrl,
           model: model,
         );
+        if (!result.success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                result.error ?? 'Codex engine configuration failed',
+              ),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       } catch (_) {}
     }
     // Write CC config into sandbox so Claude Code picks it up.
@@ -4082,6 +4099,42 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
       );
     }
   }
+
+  Future<sdk.CodexAgentEngineConfigResult> _configureCoreCodex({
+    required String apiKey,
+    String? baseUrl,
+    String? model,
+  }) async {
+    final modelName = model?.trim().isNotEmpty == true
+        ? model!.trim()
+        : 'GLM-4.7';
+    final configToml = StringBuffer()
+      ..write('model_provider = "custom"\n')
+      ..write('model = ${_tomlString(modelName)}\n')
+      ..write(
+        'model_reasoning_effort = ${_tomlString(_CliEngineBridge._codexReasoningEffort)}\n',
+      )
+      ..write('disable_response_storage = true\n')
+      ..write('\n[model_providers.custom]\n')
+      ..write('name = "custom"\n');
+    if (baseUrl != null && baseUrl.trim().isNotEmpty) {
+      configToml.write('base_url = ${_tomlString(baseUrl.trim())}\n');
+    }
+    configToml
+      ..write('wire_api = "responses"\n')
+      ..write('requires_openai_auth = true\n')
+      ..write(
+        '\n[projects.${_tomlString(_CliEngineSpec.codex.workspacePath)}]\n',
+      )
+      ..write('trust_level = "trusted"\n');
+    final client = await widget.clientFuture;
+    return client.configureCodexAgentEngine(
+      configToml: configToml.toString(),
+      authJson: jsonEncode({'OPENAI_API_KEY': apiKey}),
+    );
+  }
+
+  String _tomlString(String value) => jsonEncode(value);
 
   bool _isBusy(String engineId) => engineId == 'cc'
       ? (_ccTesting || _ccFetching)

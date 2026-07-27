@@ -11,6 +11,7 @@ import 'bridge/a2a.dart';
 import 'bridge/agent.dart';
 import 'bridge/agent_app.dart';
 import 'bridge/agent_defs.dart';
+import 'bridge/agent_engine.dart';
 import 'bridge/automation.dart';
 import 'bridge/capability.dart';
 import 'bridge/channel.dart';

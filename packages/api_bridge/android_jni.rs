@@ -67,6 +67,7 @@ mod android {
         "a2a.record_result",
         "a2a.run_task",
         "agent_engine.run_event",
+        "agent_engine.configure_codex",
         "agent_defs.create",
         "agent_defs.create_agent",
         "agent_defs.delete",

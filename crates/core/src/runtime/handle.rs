@@ -54,6 +54,11 @@ pub fn create_engine_handle(config_json: &str, platform_context_json: &str) -> C
     crate::skills::bundled::ensure_bundled_skills(&context.files_dir);
     crate::agent_runtime::runs::mark_stale_running_runs_lost(&context.files_dir);
 
+    crate::agent_engine::codex::register_android_native_library_dir(
+        &context.files_dir,
+        context.native_library_dir.as_deref(),
+    );
+
     let engine = Arc::new(Engine::new(
         context.files_dir,
         context.platform,

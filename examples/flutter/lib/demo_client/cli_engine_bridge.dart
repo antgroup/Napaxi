@@ -70,6 +70,9 @@ class _PendingCliHumanRequest {
 /// The Rust core owns engine selection, turn event recording, tool brokerage,
 /// capability checks, and policy gates. This class only adapts a selected
 /// external profile (currently Codex) onto the existing sandbox PTY process.
+@Deprecated(
+  'Codex is now core-owned; this executor remains only for non-Codex external CLI engines.',
+)
 class _CliAgentEngineExecutor implements sdk.AgentEngineExecutor {
   const _CliAgentEngineExecutor({required this.bridgeForEngine});
 
@@ -131,7 +134,11 @@ class _CliAgentEngineExecutor implements sdk.AgentEngineExecutor {
   String? _cliEngineIdFor(sdk.AgentEngineTurnRequest request) {
     final kind = request.engineConfig['kind']?.toString().trim().toLowerCase();
     final profile = request.engineProfileId.trim().toLowerCase();
-    if (kind == 'codex' || profile == 'codex') return 'codex';
+    if (kind == 'codex' || profile == 'codex') {
+      throw UnsupportedError(
+        'Codex is handled by napaxi.agent_engine.codex in Rust core',
+      );
+    }
     return null;
   }
 
@@ -269,11 +276,9 @@ class _CliEngineBridge {
         _lineBuf.clear();
         _startTimeout(controller);
         if (spec.id == 'codex') {
-          // Codex usually uses its native thread id as the UI session id. When
-          // core dispatches Codex through the generic external-host engine,
-          // however, the UI callback that migrates a brand-new placeholder id
-          // may not be present. Keep a sidecar mapping so future core-routed
-          // turns still resume the same native Codex thread.
+          // Deprecated Codex bridge path: keep sidecar native-thread mapping
+          // only for older callers that still invoke the Flutter PTY bridge.
+          // New Codex turns use napaxi.agent_engine.codex in Rust core.
           final remembered = await _nativeIdFor(uiThreadId);
           _onNativeThreadId = onNativeThreadId;
           _sendTurn(
@@ -2136,6 +2141,10 @@ class _CliEngineBridge {
 
   /// Write Codex config files (config.toml + auth.json) into the sandbox.
   /// Call this from settings when the user saves Codex engine configuration.
+  @Deprecated(
+    'Use the SDK/core Codex configuration API; the demo no longer writes Codex config through a PTY bridge.',
+  )
+  // ignore: unused_element
   static Future<void> writeCodexConfig({
     required String apiKey,
     String? baseUrl,

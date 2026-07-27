@@ -18,13 +18,14 @@ use serde_json::json;
 /// whether a matching pending request was found.
 pub fn answer_human_request(request_id: &str, response: &str) -> bool {
     crate::human_loop::answer_human_request(request_id, response)
+        || crate::agent_engine::codex::answer_human_request(request_id, response)
 }
 
 /// Typed counterpart: `Err(ToolError::NotFound)` when the request id is not
 /// pending (either never registered or already answered), `Ok(())` on
 /// successful injection.
 pub fn answer_human_request_typed(request_id: &str, response: &str) -> CoreResult<()> {
-    if crate::human_loop::answer_human_request(request_id, response) {
+    if answer_human_request(request_id, response) {
         Ok(())
     } else {
         Err(ToolError::NotFound(format!("human_request {request_id}")).into())

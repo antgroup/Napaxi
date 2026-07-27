@@ -985,6 +985,25 @@ public enum NapaxiChannelContentFormat {
     public static let markdown = "markdown"
 }
 
+
+public struct NapaxiCodexAgentEngineConfigResult: Codable, Equatable, Sendable {
+    public var success: Bool
+    public var providerAvailable: Bool
+    public var error: String?
+
+    public init(success: Bool, providerAvailable: Bool, error: String? = nil) {
+        self.success = success
+        self.providerAvailable = providerAvailable
+        self.error = error
+    }
+
+    public init(json: [String: NapaxiJSONValue]) {
+        self.success = json["success"]?.boolValue ?? false
+        self.providerAvailable = json["providerAvailable"]?.boolValue ?? json["provider_available"]?.boolValue ?? false
+        self.error = json["error"]?.stringValue
+    }
+}
+
 public enum NapaxiChannelCapability {
     public static let im = "napaxi.channel.im"
     public static let device = "napaxi.channel.device"

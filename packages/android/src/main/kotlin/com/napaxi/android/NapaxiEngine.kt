@@ -1442,6 +1442,7 @@ public class NapaxiEngine private constructor(
                 NapaxiChannelCapability.IM,
                 NapaxiChannelCapability.DEVICE,
                 "napaxi.tool.custom_host".takeIf { hasCustomToolExecutor },
+                "napaxi.agent_engine.codex",
                 "napaxi.tool.agent_app_action".takeIf { hasAgentAppActionExecutor },
                 "napaxi.platform_tool.*".takeIf { enablePlatformTools },
                 "napaxi.tool.browser".takeIf { hasBrowserController },
@@ -1466,6 +1467,7 @@ public class NapaxiEngine private constructor(
                 NapaxiChannelCapability.IM,
                 NapaxiChannelCapability.DEVICE,
                 "napaxi.tool.custom_host".takeIf { hasCustomToolExecutor },
+                "napaxi.agent_engine.codex",
                 "napaxi.tool.agent_app_action".takeIf { hasAgentAppActionExecutor },
                 "napaxi.tool.browser".takeIf { hasBrowserController },
                 "napaxi.service.automation".takeIf { enableAutomation },
@@ -1475,6 +1477,21 @@ public class NapaxiEngine private constructor(
                 "napaxi.platform_tool.media_library".takeIf { enablePlatformTools && !hasPlatformMediaToolHandler },
                 "napaxi.platform_tool.record_audio".takeIf { enablePlatformTools && !hasPlatformMediaToolHandler },
             ),
+        )
+    }
+
+
+    public fun configureCodexAgentEngine(
+        configToml: String = "",
+        authJson: String = "",
+    ): CodexAgentEngineConfigResult {
+        val requestJson = JSONObject()
+            .put("files_dir", filesDir)
+            .put("config_toml", configToml)
+            .put("auth_json", authJson)
+            .toString()
+        return CodexAgentEngineConfigResult(
+            bridge("agent_engine.configure_codex", JSONObject().put("request_json", requestJson)),
         )
     }
 

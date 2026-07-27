@@ -131,6 +131,16 @@ public func agentEngineRunEvent(requestJson: String) throws -> String {
     ))
 }
 
+
+public func configureCodexAgentEngineJson(handle: Int64, requestJson: String) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "agent_engine",
+        method: "configure_codex",
+        payload: ["request_json": .string(requestJson)]
+    ))
+}
+
 public func updateCustomTools(handle: Int64, toolsJson: String) throws -> Bool {
     try NapaxiNativeBridge.updateCustomTools(handle: handle, toolsJSON: toolsJson)
 }

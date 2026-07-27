@@ -245,10 +245,26 @@ mod registry {
         assert_eq!(external.activation, CapabilityActivation::Host);
         assert!(!external.default_enabled);
 
+        let codex = definitions
+            .iter()
+            .find(|definition| definition.id == "napaxi.agent_engine.codex")
+            .expect("codex engine capability");
+        assert_eq!(codex.kind, CapabilityKind::AgentEngine);
+        assert_eq!(codex.activation, CapabilityActivation::Host);
+        assert!(!codex.default_enabled);
+
         let config = base_config();
         assert_eq!(
             agent_engine_capability_id("external_host"),
             Some("napaxi.agent_engine.external_host")
+        );
+        assert_eq!(
+            agent_engine_capability_id("codex"),
+            Some("napaxi.agent_engine.codex")
+        );
+        assert_eq!(
+            agent_engine_capability_id("napaxi.agent_engine.codex"),
+            Some("napaxi.agent_engine.codex")
         );
         assert!(
             require_agent_engine_enabled_for_config(

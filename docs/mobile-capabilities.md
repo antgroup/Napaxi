@@ -221,12 +221,22 @@ Agent engines are core-owned runtime loop capabilities. The default
 `napaxi.agent_engine.napaxi_core` capability keeps the existing Napaxi tool loop
 enabled when no Agent definition selects another engine.
 
+`napaxi.agent_engine.codex` is the core-owned Codex app-server engine. The
+capability and adapter API are visible across Flutter, Android, and iOS. The
+first runtime implementation is Android-only: core starts `codex app-server`
+inside the Android Linux sandbox PTY, owns the app-server JSON-RPC session,
+maps Codex events to Napaxi `ChatEvent`s, and persists the Napaxi session to
+Codex native thread mapping. iOS and other platforms return the explicit error
+`napaxi.agent_engine.codex is unsupported on this platform` until they provide a
+compatible sandbox runner.
+
 Hosts may declare `napaxi.agent_engine.external_host` when they carry an
 external agent loop executor. The external executor owns turn planning and
 model interaction, but it must call back through the Napaxi ToolBroker for tool
 listing and tool calls. Tool descriptor admission, invocation admission, shell
 policy, workspace scope, approval, rate limiting, output sanitization, run
-evidence, and emitted `ChatEvent` mapping remain core-controlled.
+evidence, and emitted `ChatEvent` mapping remain core-controlled. The `codex`
+alias no longer routes to `external_host`; only `external_host` does.
 
 The core-owned internal JSON protocol has three stable operations:
 `tools/list` returns the current Agent's admitted tool descriptors,
@@ -242,11 +252,12 @@ JSON objects; core stringifies those fields before mapping them to the existing
 Napaxi LLM loop; external engines do not depend on those fields except when the
 host executor chooses to read them from the turn request.
 
-Flutter v1 can register a host-carried `AgentEngineExecutor`. Android and iOS
-v1 expose the stable wire models and explicit unsupported placeholders, but do
-not yet provide native executor registration. Selecting
-`external_host` without a declared and enabled host capability is rejected by
-core capability admission.
+Flutter v1 can register a host-carried `AgentEngineExecutor` for true external
+engines such as demo CLI integrations. Android and iOS v1 expose the stable wire
+models and explicit unsupported placeholders for host executors. Selecting
+`external_host` or `codex` without the declared and enabled capability is
+rejected by core capability admission; selecting `codex` on a non-Android
+runtime returns the platform unsupported error above.
 
 ## LLM And Media Capabilities
 

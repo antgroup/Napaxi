@@ -28,7 +28,7 @@ For SDK-facing changes, include at least one of:
 - Flutter model/wrapper tests.
 - Android Kotlin contract/model tests.
 - iOS Swift contract/model tests.
-- Documentation of an explicit unsupported state.
+- Documentation of an explicit unsupported state (for example, `napaxi.agent_engine.codex` is API-visible on Flutter/Android/iOS but currently runs only on Android and returns a clear unsupported error elsewhere).
 
 ## Required Updates
 

@@ -26,6 +26,14 @@ pub fn definitions() -> Vec<CapabilityDefinition> {
             false,
             &["host_agent_engine_executor", "tool_broker_policy_boundary"],
         ),
+        tool_definition(
+            crate::agent_engine::codex::CODEX_ENGINE_CAPABILITY_ID,
+            CapabilityKind::AgentEngine,
+            CapabilityRisk::High,
+            CapabilityActivation::Host,
+            false,
+            &["android_linux_sandbox_pty", "codex_app_server"],
+        ),
         llm_provider_definition(
             "napaxi.llm.openai",
             "openai",

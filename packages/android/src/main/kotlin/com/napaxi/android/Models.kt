@@ -2239,6 +2239,31 @@ public fun agentEngineRunEvent(
 ): AgentEngineRunEventResult {
     throw UnsupportedOperationException("Android agent engine run/event is unsupported in v1")
 }
+
+public class CodexAgentEngineConfigResult(rawJson: String = "{}") : RawJsonModel(rawJson) {
+    public val success: Boolean get() = obj.optBoolean("success", false)
+    public val providerAvailable: Boolean get() = obj.optBoolean("providerAvailable", false)
+    public val error: String? get() = obj.optString("error").takeIf { it.isNotBlank() }
+
+    public fun toJsonObject(): JSONObject = jsonObject()
+    public fun toJson(): String = toJsonObject().toString()
+    public fun toJsonString(): String = toJson()
+
+    public companion object {
+        @JvmStatic
+        public fun fromJson(rawJson: String): CodexAgentEngineConfigResult =
+            CodexAgentEngineConfigResult(rawJson)
+
+        @JvmStatic
+        public fun fromJsonObject(obj: JSONObject): CodexAgentEngineConfigResult =
+            CodexAgentEngineConfigResult(obj.toString())
+
+        @JvmStatic
+        public fun fromMap(map: Map<String, *>): CodexAgentEngineConfigResult =
+            fromJsonObject(JSONObject(map))
+    }
+}
+
 public class ToolInfo(rawJson: String) : RawJsonModel(rawJson) {
     public val name: String get() = obj.optString("name")
     public val description: String get() = obj.optString("description")

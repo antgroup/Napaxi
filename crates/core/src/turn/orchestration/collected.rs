@@ -63,6 +63,65 @@ where
     let _human_loop_guard =
         crate::human_loop::activate_session_scoped(&files_dir, &session_key_json);
     let mut history_recorder = turn_history_recorder_for(TurnMode::Collected);
+    let codex_request = match crate::agent_engine::codex_turn_request(
+        agent_engine.as_ref(),
+        &prepared,
+        &files_dir,
+        &workspace_files_dir,
+        &agent_id,
+        &session_key_json,
+        &message,
+        &attachments_json,
+        &config_json,
+    ) {
+        Ok(request) => request,
+        Err(error) => {
+            hooks.stage_failed(&context, TurnStage::ExecuteToolLoop, &error);
+            events.push(chat_error(error));
+            return events;
+        }
+    };
+    if let Some(codex_request) = codex_request {
+        hooks.stage_started(&context, TurnStage::ExecuteToolLoop);
+        let codex_events =
+            crate::agent_engine::codex::run_codex_turn(codex_request, |_| {}, &mut is_cancelled)
+                .await;
+        let has_failure = codex_events
+            .iter()
+            .any(|event| matches!(event, ChatEvent::Error { .. } | ChatEvent::Interrupted));
+        let content = crate::agent_engine::final_content_from_events(&codex_events);
+        for event in crate::agent_engine::visible_external_events(codex_events) {
+            history_recorder.record(&event);
+            events.push(event);
+        }
+        if has_failure {
+            hooks.stage_failed(
+                &context,
+                TurnStage::ExecuteToolLoop,
+                "Codex agent engine failed or was interrupted",
+            );
+            persist_turn_history_segments(&files_dir, &session_key_json, &history_recorder, true);
+            return events;
+        }
+        hooks.stage_completed(&context, TurnStage::ExecuteToolLoop);
+        let outcome = finish_successful_turn(
+            &files_dir,
+            &workspace_files_dir,
+            &agent_id,
+            &session_key_json,
+            &message,
+            prepared,
+            content,
+            0,
+            &mut history_recorder,
+            &context,
+            hooks,
+        );
+        hooks.turn_completed(&context, &outcome.summary());
+        events.extend(outcome.into_emitted_events());
+        return events;
+    }
+
     let external_plan = match crate::agent_engine::external_host_turn_plan(
         agent_engine.as_ref(),
         &prepared,

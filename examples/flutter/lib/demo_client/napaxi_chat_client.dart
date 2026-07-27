@@ -704,6 +704,11 @@ abstract class NapaxiChatClient {
     sdk.NapaxiCapabilitySelection capabilitySelection,
   );
 
+  Future<sdk.CodexAgentEngineConfigResult> configureCodexAgentEngine({
+    String configToml = '',
+    String authJson = '',
+  });
+
   Future<List<DemoAgent>> listAgents();
 
   Future<DemoAgent> createAgent({
@@ -1278,7 +1283,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   final FlutterSecureStorage _channelCredentialStore =
       const FlutterSecureStorage();
   _CliEngineBridge? _ccBridge;
-  _CliEngineBridge? _codexBridge;
   Future<String?>? _cliWorkspaceHostPathFuture;
 
   DemoScenarioRuntimeProfile get _activeRuntimeProfile {
@@ -1401,6 +1405,18 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     await _ensureEngine(engine.config);
   }
 
+  @override
+  Future<sdk.CodexAgentEngineConfigResult> configureCodexAgentEngine({
+    String configToml = '',
+    String authJson = '',
+  }) async {
+    final engine = await _ensureManagementEngine();
+    return engine.configureCodexAgentEngine(
+      configToml: configToml,
+      authJson: authJson,
+    );
+  }
+
   Future<String?> _systemUserTimezone() async {
     try {
       final context = await sdk.NapaxiPlatformContextResolver.resolve();
@@ -1437,6 +1453,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
         'napaxi.tool.custom_host',
         _localA2AToolCapabilityId,
         _DemoAutomationToolExecutor.gitCapabilityId,
+        sdk.codexAgentEngineId,
         'napaxi.agent_engine.external_host',
         'napaxi.tool.agent_app_action',
         'napaxi.platform_tool.*',
@@ -1551,6 +1568,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       sdk.NapaxiChannelCapability.im,
       sdk.NapaxiChannelCapability.device,
       'napaxi.tool.agent_app_action',
+      sdk.codexAgentEngineId,
       ...selection.enabledCapabilities,
     }.toList(growable: false);
     final disabled = selection.disabledCapabilities
@@ -3916,15 +3934,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       threadId: threadId,
       agentId: agentId,
     );
-    if (agentId == 'engine.codex' &&
-        threadId.trim().isNotEmpty &&
-        threadId != session.threadId) {
-      unawaited(
-        _getOrCreateBridge(
-          'codex',
-        ).recordNativeThreadId(session.threadId, threadId),
-      );
-    }
     return session;
   }
 
@@ -3940,9 +3949,8 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (agentId == 'engine.cc') {
       return _sendToCliBridge('cc', session.threadId, message);
     }
-    // Codex is intentionally routed through Napaxi core as an external-host
-    // agent engine. Core now owns turn dispatch, event recording, the tool
-    // broker boundary, and policy gates; Flutter only hosts the sandbox PTY.
+    // Codex is routed through the core-owned `napaxi.agent_engine.codex`
+    // runner. Flutter no longer hosts the Codex app-server PTY.
     _automationToolExecutor.setCurrentSession(session, agentId: agentId);
     return _requireEngine().sendToSession(
       session,
@@ -3986,8 +3994,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     switch (engineId) {
       case 'cc':
         return _ccBridge ??= _CliEngineBridge(spec: _CliEngineSpec.cc);
-      case 'codex':
-        return _codexBridge ??= _CliEngineBridge(spec: _CliEngineSpec.codex);
       default:
         throw ArgumentError('Unknown CLI engine: $engineId');
     }
@@ -3999,12 +4005,14 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       case 'cc':
         _ccBridge?.resetForNewConversation();
       case 'codex':
-        _codexBridge?.resetForNewConversation();
+        // Core owns Codex session/thread state; no Flutter PTY bridge reset.
+        return;
     }
   }
 
   @override
   Future<void> clearCliNativeId(String engineId) async {
+    if (engineId == 'codex') return;
     try {
       await _getOrCreateBridge(engineId).clearNativeIds();
     } catch (_) {}
@@ -4090,10 +4098,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (ccBridge != null) {
       return ccBridge.answerHumanRequest(requestId, response);
     }
-    final codexBridge = _codexBridge;
-    if (codexBridge != null) {
-      return codexBridge.answerHumanRequest(requestId, response);
-    }
     return _requireEngine().answerHumanRequest(requestId, response);
   }
 
@@ -4157,44 +4161,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
 
   @override
   Future<List<sdk.SessionInfo>> listSessions({required String agentId}) async {
-    if (agentId == 'engine.codex') {
-      // Codex: pull threads directly via thread/list RPC. The codex thread id
-      // doubles as the UI session id — no mapping layer.
-      final bridge = _getOrCreateBridge('codex');
-      final threads = await bridge.listThreads();
-      debugPrint(
-        '[$_codexHistoryLogTag] listSessions codex threads=${threads.length}',
-      );
-      final sessions = threads
-          .map((thread) {
-            final id = thread['id'] as String;
-            final createdMs = thread['createdAt'] as int;
-            final updatedMs = thread['updatedAt'] as int;
-            final title = (thread['name'] as String).trim().isNotEmpty
-                ? thread['name'] as String
-                : (thread['preview'] as String);
-            return sdk.SessionInfo(
-              key: sdk.SessionKey(
-                channelType: 'cli',
-                accountId: agentId,
-                threadId: id,
-              ),
-              title: title,
-              preview: thread['preview'] as String,
-              createdAt: DateTime.fromMillisecondsSinceEpoch(
-                createdMs,
-              ).toIso8601String(),
-              updatedAt: DateTime.fromMillisecondsSinceEpoch(
-                updatedMs,
-              ).toIso8601String(),
-            );
-          })
-          .toList(growable: false);
-      debugPrint(
-        '[$_codexHistoryLogTag] listSessions codex mapped=${sessions.length} first=${sessions.isEmpty ? 'none' : sessions.first.key.threadId}',
-      );
-      return sessions;
-    }
     if (agentId == 'engine.cc') {
       final sessions = await _getOrCreateBridge(
         'cc',
@@ -4216,7 +4182,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     String threadId, {
     required String agentId,
   }) async {
-    if (agentId == 'engine.cc' || agentId == 'engine.codex') {
+    if (agentId == 'engine.cc') {
       return _getCliEngineHistory(threadId, agentId);
     }
     return (await _ensureManagementEngine()).getHistory(
@@ -4232,7 +4198,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     String? before,
     int limit = 80,
   }) async {
-    if (agentId == 'engine.cc' || agentId == 'engine.codex') {
+    if (agentId == 'engine.cc') {
       final messages = await _getCliEngineHistory(threadId, agentId);
       return sdk.HistoryPage(messages: messages, hasMore: false);
     }
@@ -6471,13 +6437,11 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       id: runtimeProfile.agentId,
       name: runtimeProfile.activeEngine.label,
       description: isCodex
-          ? 'Codex CLI engine runtime hosted by the external agent engine boundary.'
+          ? 'Codex CLI engine runtime hosted by the core-owned Codex agent engine boundary.'
           : 'Focused mobile development engine runtime.',
       systemPrompt:
           'You are a focused mobile development engine. Prioritize concise project-aware coding help, use dedicated Git/project tools when available, and avoid multi-agent delegation unless the host explicitly exposes it.',
-      engineId: isCodex
-          ? sdk.externalHostAgentEngineId
-          : sdk.napaxiCoreAgentEngineId,
+      engineId: isCodex ? sdk.codexAgentEngineId : sdk.napaxiCoreAgentEngineId,
       engineProfileId: isCodex ? 'codex' : '',
       engineConfig: isCodex ? const {'kind': 'codex'} : const {},
       icon: 'terminal',

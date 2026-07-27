@@ -86,6 +86,86 @@ pub(crate) async fn stream_turn_with_hooks<H, E, C>(
         }
     }
 
+    let codex_request = match crate::agent_engine::codex_turn_request(
+        agent_engine.as_ref(),
+        &prepared,
+        &files_dir,
+        &workspace_files_dir,
+        &agent_id,
+        &session_key_json,
+        &message,
+        &attachments_json,
+        &config_json,
+    ) {
+        Ok(request) => request,
+        Err(error) => {
+            hooks.stage_failed(&context, TurnStage::ExecuteToolLoop, &error);
+            emit(chat_error(error));
+            return;
+        }
+    };
+    if let Some(codex_request) = codex_request {
+        hooks.stage_started(&context, TurnStage::ExecuteToolLoop);
+        let mut codex_events = Vec::new();
+        let returned_codex_events = crate::agent_engine::codex::run_codex_turn(
+            codex_request,
+            |event| {
+                for visible in crate::agent_engine::visible_external_events(vec![event.clone()]) {
+                    history_recorder.record(&visible);
+                    if !is_cancelled() || event_survives_cancel(&visible) {
+                        emit(visible);
+                    }
+                }
+                codex_events.push(event);
+            },
+            &is_cancelled,
+        )
+        .await;
+        if codex_events.is_empty() {
+            codex_events = returned_codex_events;
+            for event in crate::agent_engine::visible_external_events(codex_events.clone()) {
+                history_recorder.record(&event);
+                if !is_cancelled() || event_survives_cancel(&event) {
+                    emit(event);
+                }
+            }
+        }
+        let has_failure = codex_events
+            .iter()
+            .any(|event| matches!(event, ChatEvent::Error { .. } | ChatEvent::Interrupted));
+        let content = crate::agent_engine::final_content_from_events(&codex_events);
+        if has_failure {
+            hooks.stage_failed(
+                &context,
+                TurnStage::ExecuteToolLoop,
+                "Codex agent engine failed or was interrupted",
+            );
+            persist_turn_history_segments(&files_dir, &session_key_json, &history_recorder, true);
+            return;
+        }
+        hooks.stage_completed(&context, TurnStage::ExecuteToolLoop);
+        let outcome = finish_successful_turn(
+            &files_dir,
+            &workspace_files_dir,
+            &agent_id,
+            &session_key_json,
+            &message,
+            prepared,
+            content,
+            0,
+            &mut history_recorder,
+            &context,
+            hooks,
+        );
+        hooks.turn_completed(&context, &outcome.summary());
+        for event in outcome.into_emitted_events() {
+            if !is_cancelled() || event_survives_cancel(&event) {
+                emit(event);
+            }
+        }
+        return;
+    }
+
     let external_plan = match crate::agent_engine::external_host_turn_plan(
         agent_engine.as_ref(),
         &prepared,

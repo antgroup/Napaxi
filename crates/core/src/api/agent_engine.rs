@@ -24,3 +24,8 @@ mod tests {
         assert!(result.contains("error"), "malformed json: {result}");
     }
 }
+
+/// Configure the core-owned Codex agent engine (JSON in, JSON out).
+pub fn configure_codex_agent_engine_json(handle: i64, request_json: &str) -> String {
+    crate::agent_engine::codex::configure_codex_agent_engine_json(handle, request_json)
+}

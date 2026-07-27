@@ -35,6 +35,12 @@ pub(super) fn dispatch(handle: i64, namespace: &str, method: &str, payload: &Val
         ("agent_engine", "run_event") => ok_raw(napaxi_core::api::agent_engine::run_event_json(
             &get_string(payload, "request_json"),
         )),
+        ("agent_engine", "configure_codex") => ok_raw(
+            napaxi_core::api::agent_engine::configure_codex_agent_engine_json(
+                handle,
+                &get_string(payload, "request_json"),
+            ),
+        ),
         ("capability", "list_definitions") => {
             ok_raw(napaxi_core::api::capability::list_capability_definitions_json())
         }

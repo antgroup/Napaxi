@@ -4124,9 +4124,10 @@ class _ChatScreenState extends State<ChatScreen>
           threadId: activeSession.id,
         );
       } else {
-        // Codex now routes through Rust core's external_host engine, so it must
-        // use a core-created UUID session. The Codex native thread id is kept
-        // as a sidecar mapping by the bridge instead of becoming the UI/core id.
+        // Codex now routes through Rust core's napaxi.agent_engine.codex engine,
+        // so it must use a core-created UUID session. Rust core owns the
+        // Codex native thread mapping instead of letting Flutter bridge state
+        // become the UI/core id.
         session = await _getSdkSession(client, activeSession.id, agentId);
         if (!mounted) return;
         sessionId = _migrateLiveSessionId(
@@ -4139,8 +4140,8 @@ class _ChatScreenState extends State<ChatScreen>
       final sdkAttachments = await _toSdkAttachments(attachments);
       if (!mounted) return;
 
-      // Codex native thread ids are now sidecar bridge state. Do not migrate
-      // the UI/core session id away from the UUID that Rust storage requires.
+      // Codex native thread ids are now core-owned. Do not migrate the
+      // UI/core session id away from the UUID that Rust storage requires.
       void Function(String)? onNativeThreadId;
 
       var currentAssistantMessageId = assistantMessageId;

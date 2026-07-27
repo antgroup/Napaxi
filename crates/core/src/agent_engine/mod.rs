@@ -16,8 +16,11 @@ use serde_json::{Value, json};
 use crate::tool_registry::{ToolEffect, ToolExecutionContext, ToolRequestBridge};
 use crate::types::ChatEvent;
 
+pub(crate) mod codex;
+
 pub const NAPAXI_CORE_ENGINE_ID: &str = "napaxi_core";
 pub const EXTERNAL_HOST_ENGINE_ID: &str = "external_host";
+pub const CODEX_ENGINE_ID: &str = codex::CODEX_ENGINE_ID;
 pub(crate) const HOST_ENGINE_TURN_TOOL: &str = "__napaxi_agent_engine_turn__";
 const HOST_ENGINE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
 
@@ -133,6 +136,7 @@ pub(crate) fn normalize_engine_id(engine_id: &str) -> String {
     match normalized.as_str() {
         "napaxi.agent_engine.napaxi_core" => NAPAXI_CORE_ENGINE_ID.to_string(),
         "napaxi.agent_engine.external_host" => EXTERNAL_HOST_ENGINE_ID.to_string(),
+        "napaxi.agent_engine.codex" => CODEX_ENGINE_ID.to_string(),
         "" => NAPAXI_CORE_ENGINE_ID.to_string(),
         _ => normalized,
     }
@@ -179,6 +183,12 @@ pub(crate) fn external_host_turn_plan(
     if engine_id == NAPAXI_CORE_ENGINE_ID {
         return Ok(None);
     }
+    if engine_id != EXTERNAL_HOST_ENGINE_ID {
+        return Err(format!(
+            "Unsupported agent engine: {}",
+            selection.engine_id.trim()
+        ));
+    }
     let platform = prepared
         .config
         .capability_profile
@@ -210,6 +220,53 @@ pub(crate) fn external_host_turn_plan(
                 .unwrap_or_else(|_| fallback_config_json.to_string()),
         },
         bridge,
+    }))
+}
+
+pub(crate) fn codex_turn_request(
+    selection: Option<&AgentEngineSelection>,
+    prepared: &crate::turn::PreparedTurn,
+    files_dir: &str,
+    workspace_files_dir: &str,
+    agent_id: &str,
+    session_key_json: &str,
+    message: &str,
+    attachments_json: &str,
+    fallback_config_json: &str,
+) -> Result<Option<AgentEngineTurnRequest>, String> {
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+    let engine_id = normalize_engine_id(&selection.engine_id);
+    if engine_id != CODEX_ENGINE_ID {
+        return Ok(None);
+    }
+    let platform = prepared
+        .config
+        .capability_profile
+        .platform
+        .as_deref()
+        .unwrap_or("unknown");
+    crate::capabilities::require_agent_engine_enabled_for_config(
+        &engine_id,
+        platform,
+        &prepared.config.capability_profile,
+        &prepared.config.capability_selection,
+    )?;
+    Ok(Some(AgentEngineTurnRequest {
+        engine_id,
+        engine_profile_id: selection.engine_profile_id.clone(),
+        engine_config: selection.engine_config.clone(),
+        run_id: uuid::Uuid::new_v4().to_string(),
+        files_dir: files_dir.to_string(),
+        workspace_files_dir: workspace_files_dir.to_string(),
+        account_id: crate::runtime::session_account_id(session_key_json),
+        agent_id: agent_id.to_string(),
+        session_key_json: session_key_json.to_string(),
+        message: message.to_string(),
+        attachments_json: attachments_json.to_string(),
+        config_json: serde_json::to_string(&prepared.config)
+            .unwrap_or_else(|_| fallback_config_json.to_string()),
     }))
 }
 
@@ -558,6 +615,15 @@ fn error_json(message: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalize_engine_id_accepts_codex_aliases() {
+        assert_eq!(normalize_engine_id("codex"), CODEX_ENGINE_ID);
+        assert_eq!(
+            normalize_engine_id("napaxi.agent_engine.codex"),
+            CODEX_ENGINE_ID
+        );
+    }
 
     #[test]
     fn run_event_maps_host_completed_event_to_chat_event() {
