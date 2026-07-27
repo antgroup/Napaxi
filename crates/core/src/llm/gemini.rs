@@ -1,6 +1,7 @@
 use std::cell::Cell;
 
 use anyhow::{Result, anyhow};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::Value;
 
 use crate::session::SessionMessage;
@@ -39,7 +40,7 @@ pub(super) async fn complete(
     let client = json_client();
     let response = client
         .post(url)
-        .headers(extra_headers(config)?)
+        .headers(headers(config)?)
         .json(&body)
         .send()
         .await?;
@@ -85,7 +86,7 @@ pub(super) async fn complete_raw(
     let client = json_client();
     let response = client
         .post(url)
-        .headers(extra_headers(config)?)
+        .headers(headers(config)?)
         .json(&body)
         .send()
         .await?;
@@ -253,11 +254,7 @@ pub(super) fn generate_url(config: &PlatformLlmConfig) -> String {
         .filter(|url| !url.trim().is_empty())
         .unwrap_or("https://generativelanguage.googleapis.com/v1beta")
         .trim_end_matches('/');
-    format!(
-        "{base}/models/{}:generateContent?key={}",
-        config.model.trim(),
-        config.api_key.trim()
-    )
+    format!("{base}/models/{}:generateContent", config.model.trim())
 }
 
 pub(super) fn stream_url(config: &PlatformLlmConfig) -> String {
@@ -268,10 +265,18 @@ pub(super) fn stream_url(config: &PlatformLlmConfig) -> String {
         .unwrap_or("https://generativelanguage.googleapis.com/v1beta")
         .trim_end_matches('/');
     format!(
-        "{base}/models/{}:streamGenerateContent?alt=sse&key={}",
-        config.model.trim(),
-        config.api_key.trim()
+        "{base}/models/{}:streamGenerateContent?alt=sse",
+        config.model.trim()
     )
+}
+
+pub(super) fn headers(config: &PlatformLlmConfig) -> Result<HeaderMap> {
+    let mut headers = extra_headers(config)?;
+    headers.insert(
+        HeaderName::from_static("x-goog-api-key"),
+        HeaderValue::from_str(config.api_key.trim())?,
+    );
+    Ok(headers)
 }
 
 async fn stream_turn_once<F, C>(
@@ -289,7 +294,7 @@ where
     let response = send_stream_request(
         stream_client()
             .post(url)
-            .headers(sse_headers(extra_headers(config)?))
+            .headers(sse_headers(headers(config)?))
             .header("Accept", "text/event-stream")
             .json(body),
     )
@@ -349,7 +354,7 @@ where
     let response = send_stream_request(
         stream_client()
             .post(url)
-            .headers(sse_headers(extra_headers(config)?))
+            .headers(sse_headers(headers(config)?))
             .header("Accept", "text/event-stream")
             .json(body),
     )

@@ -2064,15 +2064,13 @@ Future<void> configureSingleModel(
 
 /// Opens the LLM model configuration surface.
 ///
-/// The demo moved LLM configuration from a top-bar `llm_settings_button` into
-/// the side-menu Settings page (`settings_menu_button`). This helper performs
-/// that navigation so callers reach the same model-editing surface as before.
+/// The grouped Settings home now handles selection and creation directly.
+/// Tests that need the complete model-management surface use the public
+/// `/model` command, which opens that same editor without adding an unrelated
+/// management row to Settings.
 Future<void> openModelConfiguration(WidgetTester tester) async {
-  await tester.tap(find.byKey(const Key('session_history_button')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const Key('settings_menu_button')));
-  await tester.pumpAndSettle();
-  await tester.tap(find.byKey(const Key('settings_basic_item')));
+  await tester.enterText(find.byKey(const Key('chat_input_field')), '/model');
+  await tester.tap(find.byKey(const Key('send_message_button')));
   await tester.pumpAndSettle();
 }
 
@@ -2102,6 +2100,11 @@ Future<void> openAbout(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('session_history_button')));
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('settings_menu_button')));
+  await tester.pumpAndSettle();
+  await tester.drag(
+    find.byKey(const Key('settings_list_page')),
+    const Offset(0, -480),
+  );
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('settings_about_item')));
   await tester.pumpAndSettle();

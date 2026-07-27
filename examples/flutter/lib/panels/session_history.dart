@@ -1140,6 +1140,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
           onGitSettingsChanged: widget.onGitSettingsChanged,
           onGitSettingsCleared: widget.onGitSettingsCleared,
           updateService: widget.updateService,
+          feedbackService: widget.feedbackService,
           onCheckForUpdates: widget.onCheckForUpdates,
           onNearbyStart: widget.onNearbyStart,
           onNearbyStop: widget.onNearbyStop,
@@ -1147,12 +1148,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
           onNearbyScan: widget.onNearbyScan,
           onNearbyDeletePeer: widget.onNearbyDeletePeer,
           getNearbyPairingDiagnostic: widget.getNearbyPairingDiagnostic,
-          onOpenFeedback: () {
-            _navigateTo(_SessionHistoryView.feedback);
-          },
-          onOpenContact: () {
-            _navigateTo(_SessionHistoryView.contact);
-          },
           onBack: () async {
             _settingsInitialSection = _SettingsSection.menu;
             return _handleBack();
@@ -1808,6 +1803,11 @@ enum _SessionHistoryView {
 
 enum _SettingsSection {
   menu,
+  agent,
+  modelEditor,
+  feedback,
+  contact,
+  licenses,
   configuration,
   channels,
   nearby,
@@ -1820,15 +1820,15 @@ class _AboutPage extends StatelessWidget {
   const _AboutPage({
     required this.updateService,
     required this.onCheckForUpdates,
-    required this.onOpenFeedback,
     required this.onOpenContact,
+    required this.onOpenLicenses,
     this.embedded = false,
   });
 
   final DemoUpdateService updateService;
   final VoidCallback onCheckForUpdates;
-  final VoidCallback onOpenFeedback;
   final VoidCallback onOpenContact;
+  final VoidCallback onOpenLicenses;
   final bool embedded;
 
   @override
@@ -1855,93 +1855,248 @@ class _AboutPage extends StatelessWidget {
       builder: (context, snapshot) {
         final version = snapshot.data?.display ?? strings.versionLoading;
         return ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
+          key: const Key('about_page_list'),
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 96),
           children: [
-            if (embedded) ...[
-              _EmbeddedSettingsHeader(title: strings.aboutTitle),
-              const SizedBox(height: 12),
-            ],
-            Text(
-              strings.appTitle,
-              style: const TextStyle(
-                color: _configTextPrimary,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 20),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: _configSurface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _configBorderFaint),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.info_outline_rounded,
-                      color: _configTextSecondary,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            strings.currentVersion,
-                            style: const TextStyle(
-                              color: _configTextSecondary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            version,
-                            key: const Key('about_current_version'),
-                            style: const TextStyle(
-                              color: _configTextPrimary,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+            Center(
+              child: Text(
+                version,
+                key: const Key('about_current_version'),
+                style: const TextStyle(
+                  color: _configTextSecondary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            if (updateService.supportsUpdateCheck) ...[
-              const SizedBox(height: 12),
-              _AboutActionButton(
-                key: const Key('about_check_update_button'),
-                onPressed: onCheckForUpdates,
-                icon: Icons.system_update_alt_rounded,
-                label: strings.checkForUpdates,
-                filled: true,
-              ),
-            ],
-            const SizedBox(height: 12),
-            _AboutActionButton(
-              key: const Key('about_feedback_button'),
-              onPressed: onOpenFeedback,
-              icon: Icons.feedback_outlined,
-              label: strings.feedbackTitle,
-            ),
-            const SizedBox(height: 12),
-            _AboutActionButton(
-              key: const Key('about_contact_button'),
-              onPressed: onOpenContact,
-              icon: Icons.contact_support_outlined,
-              label: strings.contactUs,
+            const SizedBox(height: 24),
+            _SettingsGroupCard(
+              children: [
+                _SettingsActionRow(
+                  key: const Key('about_check_update_button'),
+                  icon: Icons.system_update_alt_rounded,
+                  title: strings.checkForUpdates,
+                  onTap: onCheckForUpdates,
+                ),
+                _SettingsActionRow(
+                  key: const Key('about_contact_button'),
+                  icon: Icons.contact_support_outlined,
+                  title: strings.contactUs,
+                  onTap: onOpenContact,
+                ),
+                _SettingsActionRow(
+                  key: const Key('open_source_licenses_button'),
+                  icon: Icons.article_outlined,
+                  title: strings.openSourceLicensesTitle,
+                  onTap: onOpenLicenses,
+                ),
+              ],
             ),
           ],
         );
       },
+    );
+  }
+}
+
+class _SettingsLicensesPage extends StatefulWidget {
+  const _SettingsLicensesPage();
+
+  @override
+  State<_SettingsLicensesPage> createState() => _SettingsLicensesPageState();
+}
+
+class _SettingsLicensesPageState extends State<_SettingsLicensesPage> {
+  late final Future<List<_SettingsLicenseRecord>> _licenses = _loadLicenses();
+
+  Future<List<_SettingsLicenseRecord>> _loadLicenses() async {
+    final records = <_SettingsLicenseRecord>[];
+    await for (final entry in LicenseRegistry.licenses) {
+      final packages = entry.packages.toList()..sort();
+      records.add(
+        _SettingsLicenseRecord(
+          title: packages.isEmpty ? 'Other' : packages.join(', '),
+          text: entry.paragraphs
+              .map((paragraph) => paragraph.text)
+              .join('\n\n'),
+        ),
+      );
+    }
+    records.sort(
+      (left, right) =>
+          left.title.toLowerCase().compareTo(right.title.toLowerCase()),
+    );
+    return records;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    return FutureBuilder<List<_SettingsLicenseRecord>>(
+      future: _licenses,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(
+            child: CircularProgressIndicator(color: _configTextPrimary),
+          );
+        }
+        final records = snapshot.data!;
+        if (records.isEmpty) {
+          return Center(
+            child: Text(
+              chinese ? '暂无许可信息' : 'No license information',
+              style: const TextStyle(color: _configTextSecondary),
+            ),
+          );
+        }
+        return ListView.separated(
+          key: const Key('settings_licenses_page'),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 96),
+          itemCount: records.length,
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final record = records[index];
+            return Material(
+              color: _configSurface,
+              borderRadius: BorderRadius.circular(18),
+              clipBehavior: Clip.antiAlias,
+              child: ExpansionTile(
+                tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+                childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
+                iconColor: _configTextSecondary,
+                collapsedIconColor: _configTextTertiary,
+                shape: const Border(),
+                collapsedShape: const Border(),
+                title: Text(
+                  record.title,
+                  style: const TextStyle(
+                    color: _configTextPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                children: [
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: SelectableText(
+                      record.text,
+                      style: const TextStyle(
+                        color: _configTextSecondary,
+                        fontSize: 13,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _SettingsLicenseRecord {
+  const _SettingsLicenseRecord({required this.title, required this.text});
+
+  final String title;
+  final String text;
+}
+
+class _SettingsGroupCard extends StatelessWidget {
+  const _SettingsGroupCard({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _configSurface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            children[index],
+            if (index != children.length - 1)
+              const Padding(
+                padding: EdgeInsets.only(left: 54),
+                child: Divider(height: 1, color: _configBorderFaint),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsGroupTitle extends StatelessWidget {
+  const _SettingsGroupTitle({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 9),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: _configTextSecondary,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsActionRow extends StatelessWidget {
+  const _SettingsActionRow({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 58),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Icon(icon, color: _configTextPrimary, size: 22),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: _configTextPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: _configTextTertiary,
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -2048,6 +2203,7 @@ class _SettingsPage extends StatefulWidget {
     required this.onGitSettingsChanged,
     required this.onGitSettingsCleared,
     required this.updateService,
+    required this.feedbackService,
     required this.onCheckForUpdates,
     required this.onNearbyStart,
     required this.onNearbyStop,
@@ -2055,8 +2211,6 @@ class _SettingsPage extends StatefulWidget {
     required this.onNearbyScan,
     required this.onNearbyDeletePeer,
     required this.getNearbyPairingDiagnostic,
-    required this.onOpenFeedback,
-    required this.onOpenContact,
     required this.onBack,
     this.onClose,
     this.initialSection = _SettingsSection.menu,
@@ -2074,6 +2228,7 @@ class _SettingsPage extends StatefulWidget {
   final Future<void> Function(DemoGitSettings settings) onGitSettingsChanged;
   final Future<void> Function() onGitSettingsCleared;
   final DemoUpdateService updateService;
+  final DemoFeedbackService feedbackService;
   final VoidCallback onCheckForUpdates;
   final Future<void> Function() onNearbyStart;
   final Future<void> Function() onNearbyStop;
@@ -2081,8 +2236,6 @@ class _SettingsPage extends StatefulWidget {
   final Future<void> Function() onNearbyScan;
   final Future<void> Function(sdk.A2APeer peer) onNearbyDeletePeer;
   final Future<String?> Function() getNearbyPairingDiagnostic;
-  final VoidCallback onOpenFeedback;
-  final VoidCallback onOpenContact;
   final Future<bool> Function() onBack;
   final VoidCallback? onClose;
   final _SettingsSection initialSection;
@@ -2091,66 +2244,412 @@ class _SettingsPage extends StatefulWidget {
   State<_SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<_SettingsPage> {
+class _SettingsPageState extends State<_SettingsPage>
+    with SingleTickerProviderStateMixin {
+  static const double _backFlingVelocity = 700;
   late _SettingsSection _section;
+  late LlmConfigState _config;
+  late AppLanguage _language;
+  late final AnimationController _sectionController;
+  final List<_SettingsSection> _sectionStack = [];
+  final GlobalKey<_LlmModelProfilePageState> _modelEditorKey = GlobalKey();
+  final GlobalKey<_FeedbackPageState> _feedbackPageKey = GlobalKey();
+  LlmModelProfile? _editingProfile;
+  ModelCapability? _editingCapability;
+  bool _editingNewModel = false;
   Future<NapaxiChatClient>? _scenariosClientFuture;
+  int? _backSwipePointer;
+  Offset? _backSwipeOrigin;
+  VelocityTracker? _backSwipeVelocityTracker;
+  bool _backSwipeActive = false;
+  bool _backTransitionInFlight = false;
+  final Map<_SettingsSection, bool> _sectionScrollAtTop = {};
 
   @override
   void initState() {
     super.initState();
     _section = widget.initialSection;
+    _config = widget.initialConfig;
+    _language = widget.language;
     if (_section == _SettingsSection.engines && !_showsEngineSettings) {
       _section = _SettingsSection.menu;
     }
+    if (_section != _SettingsSection.menu) {
+      _sectionStack.add(_SettingsSection.menu);
+    }
+    _sectionScrollAtTop[_section] = true;
+    _sectionController = AnimationController(
+      vsync: this,
+      value: _section == _SettingsSection.menu ? 0 : 1,
+      duration: const Duration(milliseconds: 260),
+      reverseDuration: const Duration(milliseconds: 240),
+    );
   }
 
   @override
   void didUpdateWidget(_SettingsPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialConfig != widget.initialConfig) {
+      _config = widget.initialConfig;
+    }
+    if (oldWidget.language != widget.language) {
+      _language = widget.language;
+    }
     if (_section == _SettingsSection.engines && !_showsEngineSettings) {
       _section = _SettingsSection.menu;
+      _sectionStack.clear();
+      _sectionScrollAtTop[_SettingsSection.menu] = true;
+      _sectionController.value = 0;
     }
+  }
+
+  @override
+  void dispose() {
+    _sectionController.dispose();
+    super.dispose();
   }
 
   bool get _showsEngineSettings =>
       _normalizeDemoScenarioId(widget.activeScenarioId) ==
       _mobileDevelopmentScenarioId;
 
+  bool get isMenu => _section == _SettingsSection.menu;
+
+  bool get canPullSheetDownFromCurrentContent =>
+      _sectionScrollAtTop[_section] ?? true;
+
   @override
   Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    return Scaffold(
-      backgroundColor: _configPageBackground,
-      appBar: AppBar(
-        title: Text(strings.settingsTitle),
-        backgroundColor: _configPageBackground,
-        foregroundColor: _configTextPrimary,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        leading: _section == _SettingsSection.menu
-            ? widget.onClose == null
-                  ? BackButton(onPressed: _handleBack)
-                  : null
-            : BackButton(onPressed: _handleBack),
-        actions: [
-          if (_section == _SettingsSection.menu && widget.onClose != null)
-            IconButton(
-              key: const Key('settings_bottom_sheet_close_button'),
-              tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
-              onPressed: widget.onClose,
-              icon: const Icon(Icons.close_rounded),
-            ),
-          const SizedBox(width: 8),
-        ],
+    final strings = AppStrings.forLanguage(_language);
+    final backSection = _sectionStack.isEmpty
+        ? _SettingsSection.menu
+        : _sectionStack.last;
+    final backPage = _buildSectionPage(backSection, strings);
+    final detailPage = isMenu ? null : _buildSectionPage(_section, strings);
+    return _AppLanguageScope(
+      language: _language,
+      strings: strings,
+      child: Listener(
+        key: const Key('settings_subpage_gesture_surface'),
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _handleBackSwipeDown,
+        onPointerMove: _handleBackSwipeMove,
+        onPointerUp: _handleBackSwipeEnd,
+        onPointerCancel: _handleBackSwipeCancel,
+        child: AnimatedBuilder(
+          animation: _sectionController,
+          builder: (context, _) {
+            final progress = _sectionController.value;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                Transform.translate(
+                  key: const Key('settings_menu_back_transition'),
+                  offset: Offset(
+                    -MediaQuery.sizeOf(context).width * 0.18 * progress,
+                    0,
+                  ),
+                  child: Opacity(
+                    opacity: 1 - (0.16 * progress),
+                    child: IgnorePointer(
+                      ignoring: progress > 0,
+                      child: backPage,
+                    ),
+                  ),
+                ),
+                if (detailPage != null)
+                  Transform.translate(
+                    key: const Key('settings_detail_back_transition'),
+                    offset: Offset(
+                      MediaQuery.sizeOf(context).width * (1 - progress),
+                      0,
+                    ),
+                    child: PhysicalModel(
+                      color: _configPageBackground,
+                      elevation: 16 * (1 - progress),
+                      shadowColor: Colors.black.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.horizontal(
+                        left: Radius.circular(24 * (1 - progress)),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: detailPage,
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
-      body: _buildBody(strings),
     );
+  }
+
+  Widget _buildSectionPage(_SettingsSection section, AppStrings strings) {
+    final body = _buildBody(strings, section);
+    return KeyedSubtree(
+      key: ValueKey<_SettingsSection>(section),
+      child: Scaffold(
+        backgroundColor: _configPageBackground,
+        appBar: AppBar(
+          title: Text(_sectionTitle(strings, section)),
+          backgroundColor: _configPageBackground,
+          foregroundColor: _configTextPrimary,
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          leading: section == _SettingsSection.menu
+              ? widget.onClose == null
+                    ? BackButton(onPressed: _handleBack)
+                    : null
+              : BackButton(onPressed: _handleBack),
+          actions: [
+            if (section == _SettingsSection.menu && widget.onClose != null)
+              IconButton(
+                key: const Key('settings_bottom_sheet_close_button'),
+                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                onPressed: widget.onClose,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            if (section == _SettingsSection.modelEditor)
+              TextButton(
+                key: const Key('save_model_button'),
+                onPressed: () => _modelEditorKey.currentState?.save(),
+                style: TextButton.styleFrom(
+                  foregroundColor: _configTextPrimary,
+                ),
+                child: Text(strings.save),
+              ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: NotificationListener<ScrollNotification>(
+          onNotification: (notification) =>
+              _handleSectionScrollNotification(section, notification),
+          child: body,
+        ),
+      ),
+    );
+  }
+
+  bool _handleSectionScrollNotification(
+    _SettingsSection section,
+    ScrollNotification notification,
+  ) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    _sectionScrollAtTop[section] =
+        notification.metrics.pixels <=
+        notification.metrics.minScrollExtent + 0.5;
+    return false;
+  }
+
+  String _sectionTitle(AppStrings strings, _SettingsSection section) {
+    return switch (section) {
+      _SettingsSection.menu => strings.settingsTitle,
+      _SettingsSection.agent =>
+        _language == AppLanguage.chinese ? '智能体' : 'Agent',
+      _SettingsSection.modelEditor =>
+        _editingNewModel ? strings.addModel : strings.editModel,
+      _SettingsSection.feedback => strings.feedbackTitle,
+      _SettingsSection.contact => strings.contactUs,
+      _SettingsSection.licenses => strings.openSourceLicensesTitle,
+      _SettingsSection.configuration => strings.llmConfigurationTitle,
+      _SettingsSection.channels => _settingsChannelsTitle(context),
+      _SettingsSection.nearby =>
+        _language == AppLanguage.chinese ? '附近' : 'Nearby',
+      _SettingsSection.scenarios => strings.scenariosTitle,
+      _SettingsSection.engines => strings.engineSettingsTitle,
+      _SettingsSection.about => strings.aboutTitle,
+    };
+  }
+
+  void _handleConfigChanged(LlmConfigState config) {
+    setState(() => _config = config);
+    widget.onConfigChanged(config);
+  }
+
+  void _handleLanguageChanged(AppLanguage language) {
+    if (_language == language) return;
+    setState(() => _language = language);
+    widget.onLanguageChanged(language);
+  }
+
+  void _selectModelProfile(ModelCapability capability, String profileId) {
+    final profile = _config.profileById(profileId);
+    if (profile == null || !profile.supports(capability)) return;
+    final selectedByCapability = Map<ModelCapability, String>.of(
+      _config.selectedProfileIdByCapability,
+    );
+    String? selectedProfileId = _config.selectedProfileId;
+    if (capability == ModelCapability.chat) {
+      selectedProfileId = profileId;
+    } else {
+      selectedByCapability[capability] = profileId;
+    }
+    _handleConfigChanged(
+      LlmConfigState(
+        profiles: _config.profiles,
+        selectedProfileId: selectedProfileId,
+        selectedProfileIdByCapability: Map.unmodifiable(selectedByCapability),
+        systemPrompt: _config.systemPrompt,
+        maxToolIterations: _config.maxToolIterations,
+      ),
+    );
+  }
+
+  Future<void> _addModel({ModelCapability? capability}) async {
+    _editingProfile = LlmModelProfile(
+      id: 'model-${DateTime.now().microsecondsSinceEpoch}',
+      name: '',
+    );
+    _editingCapability = capability;
+    _editingNewModel = true;
+    _setSection(_SettingsSection.modelEditor);
+  }
+
+  void _editModel(LlmModelProfile profile) {
+    _editingProfile = profile;
+    _editingCapability = null;
+    _editingNewModel = false;
+    _setSection(_SettingsSection.modelEditor);
+  }
+
+  void _saveModelEditor(LlmModelProfile profile) {
+    final profiles = _editingNewModel
+        ? [..._config.profiles, profile]
+        : [
+            for (final existing in _config.profiles)
+              existing.id == profile.id ? profile : existing,
+          ];
+    final selectedByCapability = Map<ModelCapability, String>.of(
+      _config.selectedProfileIdByCapability,
+    );
+    var selectedProfileId = _config.selectedProfileId;
+    if (_editingNewModel) {
+      final targetCapability = _editingCapability ?? ModelCapability.chat;
+      if (profile.supports(targetCapability)) {
+        if (targetCapability == ModelCapability.chat) {
+          selectedProfileId = profile.id;
+        } else {
+          selectedByCapability[targetCapability] = profile.id;
+        }
+      }
+    } else {
+      selectedByCapability.removeWhere((capability, profileId) {
+        return profileId == profile.id && !profile.supports(capability);
+      });
+      if (selectedProfileId == profile.id &&
+          !profile.supports(ModelCapability.chat)) {
+        selectedProfileId = profiles
+            .where((item) => item.supports(ModelCapability.chat))
+            .firstOrNull
+            ?.id;
+      }
+    }
+    _handleConfigChanged(
+      LlmConfigState(
+        profiles: List.unmodifiable(profiles),
+        selectedProfileId: selectedProfileId,
+        selectedProfileIdByCapability: Map.unmodifiable(selectedByCapability),
+        systemPrompt: _config.systemPrompt,
+        maxToolIterations: _config.maxToolIterations,
+      ),
+    );
+    unawaited(_animateBackToMenu());
+  }
+
+  void _setSection(_SettingsSection section) {
+    if (_section == section) return;
+    if (section == _SettingsSection.menu) {
+      unawaited(_animateBackToMenu());
+      return;
+    }
+    setState(() {
+      _sectionStack.add(_section);
+      _section = section;
+      _sectionScrollAtTop.putIfAbsent(section, () => true);
+    });
+    _sectionController.forward(from: 0);
+  }
+
+  void _handleBackSwipeDown(PointerDownEvent event) {
+    if (isMenu ||
+        _backSwipePointer != null ||
+        _backTransitionInFlight ||
+        _sectionController.isAnimating) {
+      return;
+    }
+    _backSwipePointer = event.pointer;
+    _backSwipeOrigin = event.position;
+    _backSwipeActive = false;
+    _backSwipeVelocityTracker = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.position);
+  }
+
+  void _handleBackSwipeMove(PointerMoveEvent event) {
+    if (event.pointer != _backSwipePointer || isMenu) {
+      return;
+    }
+    _backSwipeVelocityTracker?.addPosition(event.timeStamp, event.position);
+    final origin = _backSwipeOrigin;
+    if (origin == null) return;
+    final delta = event.position - origin;
+    if (!_backSwipeActive) {
+      if (delta.dx <= 8 || delta.dx <= delta.dy.abs() * 1.15) return;
+      _backSwipeActive = true;
+    }
+    final width = MediaQuery.sizeOf(context).width;
+    _sectionController.value = (1 - delta.dx / width).clamp(0.0, 1.0);
+  }
+
+  void _handleBackSwipeEnd(PointerEvent event) {
+    if (event.pointer != _backSwipePointer) return;
+    _backSwipeVelocityTracker?.addPosition(event.timeStamp, event.position);
+    final velocity =
+        _backSwipeVelocityTracker?.getVelocity().pixelsPerSecond.dx ?? 0.0;
+    final wasDragging = _backSwipeActive;
+    _resetBackSwipe();
+    if (!wasDragging) return;
+    if (velocity > _backFlingVelocity || _sectionController.value <= 0.5) {
+      unawaited(_animateBackToMenu());
+    } else {
+      unawaited(_sectionController.animateTo(1, curve: Curves.easeOutCubic));
+    }
+  }
+
+  void _handleBackSwipeCancel(PointerEvent event) {
+    if (event.pointer != _backSwipePointer) return;
+    final wasDragging = _backSwipeActive;
+    _resetBackSwipe();
+    if (wasDragging) {
+      unawaited(_sectionController.animateTo(1, curve: Curves.easeOutCubic));
+    }
+  }
+
+  void _resetBackSwipe() {
+    _backSwipePointer = null;
+    _backSwipeOrigin = null;
+    _backSwipeVelocityTracker = null;
+    _backSwipeActive = false;
+  }
+
+  Future<void> _animateBackToMenu() async {
+    if (isMenu || _backTransitionInFlight) return;
+    _backTransitionInFlight = true;
+    await _sectionController.animateBack(0, curve: Curves.easeOutCubic);
+    if (mounted && _sectionController.isDismissed) {
+      final target = _sectionStack.isEmpty
+          ? _SettingsSection.menu
+          : _sectionStack.removeLast();
+      setState(() {
+        _section = target;
+      });
+      _sectionController.value = target == _SettingsSection.menu ? 0 : 1;
+    }
+    _backTransitionInFlight = false;
   }
 
   Future<void> _handleBack() async {
     if (_section != _SettingsSection.menu) {
-      setState(() => _section = _SettingsSection.menu);
+      await _animateBackToMenu();
       return;
     }
     final handled = await widget.onBack();
@@ -2159,27 +2658,46 @@ class _SettingsPageState extends State<_SettingsPage> {
     }
   }
 
-  Widget _buildBody(AppStrings strings) {
-    return switch (_section) {
+  Widget _buildBody(AppStrings strings, _SettingsSection section) {
+    return switch (section) {
       _SettingsSection.menu => _SettingsListPage(
-        activeScenarioId: widget.activeScenarioId,
-        showEngineSettings: _showsEngineSettings,
-        onOpenConfiguration: () =>
-            setState(() => _section = _SettingsSection.configuration),
-        onOpenChannels: () =>
-            setState(() => _section = _SettingsSection.channels),
-        onOpenNearby: () => setState(() => _section = _SettingsSection.nearby),
-        onOpenScenarios: () =>
-            setState(() => _section = _SettingsSection.scenarios),
-        onOpenEngines: () =>
-            setState(() => _section = _SettingsSection.engines),
-        onOpenAbout: () => setState(() => _section = _SettingsSection.about),
+        config: _config,
+        language: _language,
+        onSelectModel: _selectModelProfile,
+        onAddModel: (capability) => _addModel(capability: capability),
+        onEditModel: _editModel,
+        onOpenAgent: () => _setSection(_SettingsSection.agent),
+        onLanguageChanged: _handleLanguageChanged,
+        onOpenFeedback: () => _setSection(_SettingsSection.feedback),
+        onOpenAbout: () => _setSection(_SettingsSection.about),
       ),
+      _SettingsSection.agent => _AgentSettingsPage(
+        config: _config,
+        onConfigChanged: _handleConfigChanged,
+      ),
+      _SettingsSection.modelEditor =>
+        _editingProfile == null
+            ? const SizedBox.shrink()
+            : _LlmModelProfilePage(
+                key: _modelEditorKey,
+                initialProfile: _editingProfile!,
+                embedded: true,
+                onSaved: _saveModelEditor,
+              ),
+      _SettingsSection.feedback => _FeedbackPage(
+        key: _feedbackPageKey,
+        updateService: widget.updateService,
+        feedbackService: widget.feedbackService,
+        onOpenContact: () => _setSection(_SettingsSection.contact),
+        embedded: true,
+      ),
+      _SettingsSection.contact => const _ContactPage(embedded: true),
+      _SettingsSection.licenses => const _SettingsLicensesPage(),
       _SettingsSection.configuration => _LlmConfigPage(
-        initialConfig: widget.initialConfig,
-        language: widget.language,
-        onConfigChanged: widget.onConfigChanged,
-        onLanguageChanged: widget.onLanguageChanged,
+        initialConfig: _config,
+        language: _language,
+        onConfigChanged: _handleConfigChanged,
+        onLanguageChanged: _handleLanguageChanged,
         embedded: true,
       ),
       _SettingsSection.channels => _ChannelSettingsPage(
@@ -2204,7 +2722,7 @@ class _SettingsPageState extends State<_SettingsPage> {
         onGitSettingsCleared: widget.onGitSettingsCleared,
         embedded: true,
         onBack: () async {
-          setState(() => _section = _SettingsSection.menu);
+          _setSection(_SettingsSection.menu);
           return false;
         },
       ),
@@ -2212,15 +2730,15 @@ class _SettingsPageState extends State<_SettingsPage> {
         clientFuture: widget.createScenariosClientFuture(),
         embedded: true,
         onBack: () async {
-          setState(() => _section = _SettingsSection.menu);
+          _setSection(_SettingsSection.menu);
           return false;
         },
       ),
       _SettingsSection.about => _AboutPage(
         updateService: widget.updateService,
         onCheckForUpdates: widget.onCheckForUpdates,
-        onOpenFeedback: widget.onOpenFeedback,
-        onOpenContact: widget.onOpenContact,
+        onOpenContact: () => _setSection(_SettingsSection.contact),
+        onOpenLicenses: () => _setSection(_SettingsSection.licenses),
         embedded: true,
       ),
     };
@@ -3895,85 +4413,509 @@ bool _isNearbyTrustedPeer(sdk.A2APeer peer) {
 
 class _SettingsListPage extends StatelessWidget {
   const _SettingsListPage({
-    required this.activeScenarioId,
-    required this.showEngineSettings,
-    required this.onOpenConfiguration,
-    required this.onOpenChannels,
-    required this.onOpenNearby,
-    required this.onOpenScenarios,
-    required this.onOpenEngines,
+    required this.config,
+    required this.language,
+    required this.onSelectModel,
+    required this.onAddModel,
+    required this.onEditModel,
+    required this.onOpenAgent,
+    required this.onLanguageChanged,
+    required this.onOpenFeedback,
     required this.onOpenAbout,
   });
 
-  final String activeScenarioId;
-  final bool showEngineSettings;
-  final VoidCallback onOpenConfiguration;
-  final VoidCallback onOpenChannels;
-  final VoidCallback onOpenNearby;
-  final VoidCallback onOpenScenarios;
-  final VoidCallback onOpenEngines;
+  final LlmConfigState config;
+  final AppLanguage language;
+  final void Function(ModelCapability capability, String profileId)
+  onSelectModel;
+  final Future<void> Function(ModelCapability? capability) onAddModel;
+  final ValueChanged<LlmModelProfile> onEditModel;
+  final VoidCallback onOpenAgent;
+  final ValueChanged<AppLanguage> onLanguageChanged;
+  final VoidCallback onOpenFeedback;
   final VoidCallback onOpenAbout;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final chinese = language == AppLanguage.chinese;
     return ListView(
       key: const Key('settings_list_page'),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
       children: [
-        _SettingsListTile(
-          key: const Key('settings_basic_item'),
-          icon: Icons.tune_rounded,
-          title: strings.llmConfigurationTitle,
-          subtitle: _settingsBasicSubtitle(context),
-          onTap: onOpenConfiguration,
+        _SettingsGroupTitle(title: chinese ? '模型' : 'Models'),
+        _SettingsGroupCard(
+          children: [
+            _ModelSlotRow(
+              capability: ModelCapability.chat,
+              icon: Icons.chat_bubble_outline_rounded,
+              title: chinese ? '主模型' : 'Primary model',
+              config: config,
+              onSelected: onSelectModel,
+              onAddModel: onAddModel,
+              onEditModel: onEditModel,
+            ),
+            _ModelSlotRow(
+              capability: ModelCapability.imageAnalysis,
+              icon: Icons.image_search_outlined,
+              title: chinese ? '图片分析模型' : 'Image analysis',
+              config: config,
+              onSelected: onSelectModel,
+              onAddModel: onAddModel,
+              onEditModel: onEditModel,
+            ),
+            _ModelSlotRow(
+              capability: ModelCapability.imageGeneration,
+              icon: Icons.brush_outlined,
+              title: chinese ? '图片生成模型' : 'Image generation',
+              config: config,
+              onSelected: onSelectModel,
+              onAddModel: onAddModel,
+              onEditModel: onEditModel,
+            ),
+            _ModelSlotRow(
+              capability: ModelCapability.audioAnalysis,
+              icon: Icons.graphic_eq_rounded,
+              title: chinese ? '语音分析模型' : 'Audio analysis',
+              config: config,
+              onSelected: onSelectModel,
+              onAddModel: onAddModel,
+              onEditModel: onEditModel,
+            ),
+            _ModelSlotRow(
+              capability: ModelCapability.videoGeneration,
+              icon: Icons.video_camera_back_outlined,
+              title: chinese ? '视频生成模型' : 'Video generation',
+              config: config,
+              onSelected: onSelectModel,
+              onAddModel: onAddModel,
+              onEditModel: onEditModel,
+            ),
+            _SettingsActionRow(
+              key: const Key('settings_add_model_item'),
+              icon: Icons.add_circle_outline_rounded,
+              title: strings.addModel,
+              onTap: () => unawaited(onAddModel(null)),
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        if (showEngineSettings) ...[
-          _SettingsListTile(
-            key: const Key('settings_engines_item'),
-            icon: Icons.code_rounded,
-            title: strings.engineSettingsTitle,
-            subtitle: strings.engineSettingsDescription,
-            onTap: onOpenEngines,
-          ),
-          const SizedBox(height: 10),
-        ],
-        _SettingsListTile(
-          key: const Key('settings_channels_item'),
-          icon: Icons.hub_outlined,
-          title: _settingsChannelsTitle(context),
-          subtitle: _settingsChannelsSubtitle(context),
-          onTap: onOpenChannels,
+        const SizedBox(height: 26),
+        _SettingsGroupTitle(title: chinese ? '应用设置' : 'App settings'),
+        _SettingsGroupCard(
+          children: [
+            _SettingsActionRow(
+              key: const Key('settings_agent_item'),
+              icon: Icons.smart_toy_outlined,
+              title: chinese ? '智能体' : 'Agent',
+              onTap: onOpenAgent,
+            ),
+            _SettingsLanguageRow(
+              language: language,
+              onChanged: onLanguageChanged,
+            ),
+          ],
         ),
-        const SizedBox(height: 10),
-        _SettingsListTile(
-          key: const Key('settings_nearby_item'),
-          icon: Icons.sensors_rounded,
-          title: '附近',
-          subtitle: '发现并配对附近设备',
-          onTap: onOpenNearby,
-        ),
-        const SizedBox(height: 10),
-        _SettingsListTile(
-          key: const Key('settings_scenarios_item'),
-          icon: Icons.dashboard_customize_rounded,
-          title: strings.scenariosTitle,
-          subtitle: _settingsScenarioSubtitle(
-            context,
-            _scenarioLabelForId(strings, activeScenarioId),
-          ),
-          onTap: onOpenScenarios,
-        ),
-        const SizedBox(height: 10),
-        _SettingsListTile(
-          key: const Key('settings_about_item'),
-          icon: Icons.info_outline_rounded,
-          title: strings.aboutTitle,
-          subtitle: _settingsAboutSubtitle(context),
-          onTap: onOpenAbout,
+        const SizedBox(height: 26),
+        _SettingsGroupTitle(title: chinese ? '获取帮助' : 'Get help'),
+        _SettingsGroupCard(
+          children: [
+            _SettingsActionRow(
+              key: const Key('settings_feedback_item'),
+              icon: Icons.feedback_outlined,
+              title: strings.feedbackTitle,
+              onTap: onOpenFeedback,
+            ),
+            _SettingsActionRow(
+              key: const Key('settings_about_item'),
+              icon: Icons.info_outline_rounded,
+              title: strings.aboutTitle,
+              onTap: onOpenAbout,
+            ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+class _ModelSlotRow extends StatelessWidget {
+  const _ModelSlotRow({
+    required this.capability,
+    required this.icon,
+    required this.title,
+    required this.config,
+    required this.onSelected,
+    required this.onAddModel,
+    required this.onEditModel,
+  });
+
+  static const _addModelValue = '__add_model__';
+  final ModelCapability capability;
+  final IconData icon;
+  final String title;
+  final LlmConfigState config;
+  final void Function(ModelCapability capability, String profileId) onSelected;
+  final Future<void> Function(ModelCapability? capability) onAddModel;
+  final ValueChanged<LlmModelProfile> onEditModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    final profiles = config.profiles
+        .where((profile) => profile.supports(capability))
+        .toList(growable: false);
+    final selectedProfile = config.selectedProfileFor(capability);
+    final selectedId =
+        profiles.any((profile) => profile.id == selectedProfile?.id)
+        ? selectedProfile?.id
+        : null;
+    final dropdownWidth = math.min(
+      MediaQuery.sizeOf(context).width * 0.34,
+      154.0,
+    );
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 58),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+        child: Row(
+          children: [
+            Icon(icon, color: _configTextPrimary, size: 22),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: _configTextPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: dropdownWidth,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  key: Key('settings_model_slot_${capability.name}'),
+                  value: selectedId,
+                  isExpanded: true,
+                  isDense: true,
+                  alignment: AlignmentDirectional.centerEnd,
+                  borderRadius: BorderRadius.circular(16),
+                  icon: const Icon(
+                    Icons.expand_more_rounded,
+                    color: _configTextTertiary,
+                  ),
+                  hint: Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Text(
+                      chinese ? '未配置' : 'Not configured',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _configTextTertiary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  selectedItemBuilder: (context) => [
+                    for (final profile in profiles)
+                      Align(
+                        alignment: AlignmentDirectional.centerEnd,
+                        child: Text(
+                          profile.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: _configTextSecondary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: Text(
+                        chinese ? '新增模型' : 'Add model',
+                        style: const TextStyle(
+                          color: _configTextSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                  items: [
+                    for (final profile in profiles)
+                      DropdownMenuItem<String>(
+                        value: profile.id,
+                        child: Text(
+                          profile.displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    DropdownMenuItem<String>(
+                      value: _addModelValue,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.add_rounded, size: 18),
+                          const SizedBox(width: 8),
+                          Text(chinese ? '新增模型' : 'Add model'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    if (value == _addModelValue) {
+                      unawaited(onAddModel(capability));
+                      return;
+                    }
+                    onSelected(capability, value);
+                  },
+                ),
+              ),
+            ),
+            if (selectedProfile != null)
+              IconButton(
+                key: Key('settings_edit_model_${capability.name}'),
+                tooltip: AppStrings.of(context).editModel,
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.all(6),
+                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                onPressed: () => onEditModel(selectedProfile),
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  color: _configTextSecondary,
+                  size: 18,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsLanguageRow extends StatelessWidget {
+  const _SettingsLanguageRow({required this.language, required this.onChanged});
+
+  final AppLanguage language;
+  final ValueChanged<AppLanguage> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 58),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 10, 8),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.language_rounded,
+              color: _configTextPrimary,
+              size: 22,
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                chinese ? '语言' : 'Language',
+                style: const TextStyle(
+                  color: _configTextPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<AppLanguage>(
+                key: const Key('settings_language_dropdown'),
+                value: language,
+                isDense: true,
+                borderRadius: BorderRadius.circular(16),
+                icon: const Icon(
+                  Icons.expand_more_rounded,
+                  color: _configTextTertiary,
+                ),
+                items: const [
+                  DropdownMenuItem(
+                    value: AppLanguage.chinese,
+                    child: Text('简体中文'),
+                  ),
+                  DropdownMenuItem(
+                    value: AppLanguage.english,
+                    child: Text('English'),
+                  ),
+                ],
+                onChanged: (value) {
+                  if (value != null) onChanged(value);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AgentSettingsPage extends StatefulWidget {
+  const _AgentSettingsPage({
+    required this.config,
+    required this.onConfigChanged,
+  });
+
+  final LlmConfigState config;
+  final ValueChanged<LlmConfigState> onConfigChanged;
+
+  @override
+  State<_AgentSettingsPage> createState() => _AgentSettingsPageState();
+}
+
+class _AgentSettingsPageState extends State<_AgentSettingsPage> {
+  late final TextEditingController _maxRoundsController;
+  late final TextEditingController _userPromptController;
+
+  @override
+  void initState() {
+    super.initState();
+    _maxRoundsController = TextEditingController(
+      text: widget.config.maxToolIterations.toString(),
+    );
+    _userPromptController = TextEditingController(
+      text: widget.config.systemPrompt,
+    );
+  }
+
+  @override
+  void dispose() {
+    _maxRoundsController.dispose();
+    _userPromptController.dispose();
+    super.dispose();
+  }
+
+  int get _maxRounds {
+    final parsed = int.tryParse(_maxRoundsController.text.trim());
+    if (parsed == null) return 50;
+    if (parsed < 0) return -1;
+    if (parsed == 0) return 0;
+    return parsed < 2 ? 2 : parsed;
+  }
+
+  void _emitChanged() {
+    widget.onConfigChanged(
+      LlmConfigState(
+        profiles: widget.config.profiles,
+        selectedProfileId: widget.config.selectedProfileId,
+        selectedProfileIdByCapability:
+            widget.config.selectedProfileIdByCapability,
+        systemPrompt: _userPromptController.text.trim(),
+        maxToolIterations: _maxRounds,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    return ListView(
+      key: const Key('agent_settings_page'),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+      children: [
+        _SettingsGroupCard(
+          children: [
+            _AgentSettingsField(
+              key: const Key('max_execution_rounds_field'),
+              label: chinese ? '最大执行轮次' : 'Maximum execution rounds',
+              controller: _maxRoundsController,
+              keyboardType: const TextInputType.numberWithOptions(signed: true),
+              onChanged: (_) => _emitChanged(),
+            ),
+            _AgentSettingsField(
+              key: const Key('user_prompt_field'),
+              label: chinese ? '用户提示词' : 'User prompt',
+              hintText: chinese
+                  ? '输入希望智能体始终遵循的提示词'
+                  : 'Instructions the agent should always follow',
+              controller: _userPromptController,
+              minLines: 4,
+              maxLines: 8,
+              onChanged: (_) => _emitChanged(),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AgentSettingsField extends StatelessWidget {
+  const _AgentSettingsField({
+    super.key,
+    required this.label,
+    required this.controller,
+    required this.onChanged,
+    this.hintText,
+    this.keyboardType,
+    this.minLines,
+    this.maxLines = 1,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final String? hintText;
+  final TextInputType? keyboardType;
+  final int? minLines;
+  final int maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: _configTextPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            minLines: minLines,
+            maxLines: maxLines,
+            onChanged: onChanged,
+            decoration: InputDecoration(
+              hintText: hintText,
+              filled: true,
+              fillColor: _configPageBackground,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 13,
+                vertical: 12,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: _configBorder),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -4596,79 +5538,6 @@ String _compactBody(String body) {
       : '${normalized.substring(0, 160)}...';
 }
 
-class _SettingsListTile extends StatelessWidget {
-  const _SettingsListTile({
-    super.key,
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: _configSurface,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 72),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: _configBorderFaint),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: _configTextSecondary, size: 22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        color: _configTextPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _configTextSecondary,
-                        fontSize: 12,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right_rounded,
-                color: _configTextTertiary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _EmbeddedSettingsHeader extends StatelessWidget {
   const _EmbeddedSettingsHeader({required this.title});
 
@@ -4695,48 +5564,27 @@ class _EmbeddedSettingsHeader extends StatelessWidget {
   }
 }
 
-String _settingsBasicSubtitle(BuildContext context) {
-  return _AppLanguageScope.languageOf(context) == AppLanguage.chinese
-      ? '模型、语言和上下文设置'
-      : 'Models, language, and context';
-}
-
-String _settingsScenarioSubtitle(BuildContext context, String activeScenario) {
-  return _AppLanguageScope.languageOf(context) == AppLanguage.chinese
-      ? '当前：$activeScenario'
-      : 'Current: $activeScenario';
-}
-
 String _settingsChannelsTitle(BuildContext context) {
   return _AppLanguageScope.languageOf(context) == AppLanguage.chinese
       ? 'Channel'
       : 'Channels';
 }
 
-String _settingsChannelsSubtitle(BuildContext context) {
-  return _AppLanguageScope.languageOf(context) == AppLanguage.chinese
-      ? '管理 QQ 和外设连接'
-      : 'Manage QQ and device connections';
-}
-
-String _settingsAboutSubtitle(BuildContext context) {
-  return _AppLanguageScope.languageOf(context) == AppLanguage.chinese
-      ? '版本、更新与反馈'
-      : 'Version, updates, and feedback';
-}
-
 class _FeedbackPage extends StatefulWidget {
   const _FeedbackPage({
+    super.key,
     required this.updateService,
     required this.feedbackService,
     required this.onOpenContact,
     this.onBack,
+    this.embedded = false,
   });
 
   final DemoUpdateService updateService;
   final DemoFeedbackService feedbackService;
   final VoidCallback onOpenContact;
   final Future<bool> Function()? onBack;
+  final bool embedded;
 
   @override
   State<_FeedbackPage> createState() => _FeedbackPageState();
@@ -4759,6 +5607,92 @@ class _FeedbackPageState extends State<_FeedbackPage> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final body = FutureBuilder<DemoAppVersion>(
+      future: widget.updateService.currentVersion(),
+      builder: (context, snapshot) {
+        final version =
+            snapshot.data ??
+            const DemoAppVersion(version: 'unknown', buildNumber: '');
+        return ListView(
+          key: const Key('feedback_page_list'),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
+          children: [
+            TextField(
+              key: const Key('feedback_content_field'),
+              controller: _contentController,
+              enabled: !_submitting,
+              minLines: 6,
+              maxLines: 10,
+              textInputAction: TextInputAction.newline,
+              decoration: _configInputDecoration(
+                labelText: strings.feedbackContentLabel,
+                hintText: strings.feedbackContentHint,
+              ).copyWith(alignLabelWithHint: true),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('feedback_contact_field'),
+              controller: _contactController,
+              enabled: !_submitting,
+              textInputAction: TextInputAction.done,
+              decoration: _configInputDecoration(
+                labelText: strings.feedbackContactLabel,
+                hintText: strings.feedbackContactHint,
+              ),
+            ),
+            const SizedBox(height: 12),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: _configSurface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _configBorderFaint),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      strings.feedbackContactUsPrompt,
+                      style: const TextStyle(
+                        color: _configTextSecondary,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    _AboutActionButton(
+                      key: const Key('feedback_contact_button'),
+                      onPressed: _submitting ? null : widget.onOpenContact,
+                      icon: Icons.contact_support_outlined,
+                      label: strings.contactUs,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_submitMessage != null) ...[
+              _FeedbackStatusMessage(
+                key: const Key('feedback_submit_message'),
+                message: _submitMessage!,
+                succeeded: _submitSucceeded,
+              ),
+              const SizedBox(height: 12),
+            ],
+            _AboutActionButton(
+              key: const Key('submit_feedback_button'),
+              onPressed: _submitting ? null : () => _submit(version),
+              icon: Icons.send_rounded,
+              label: _submitting ? strings.feedbackSubmitting : strings.submit,
+              filled: true,
+              loading: _submitting,
+            ),
+          ],
+        );
+      },
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       backgroundColor: _configPageBackground,
       appBar: AppBar(
@@ -4776,92 +5710,7 @@ class _FeedbackPageState extends State<_FeedbackPage> {
           },
         ),
       ),
-      body: FutureBuilder<DemoAppVersion>(
-        future: widget.updateService.currentVersion(),
-        builder: (context, snapshot) {
-          final version =
-              snapshot.data ??
-              const DemoAppVersion(version: 'unknown', buildNumber: '');
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
-            children: [
-              TextField(
-                key: const Key('feedback_content_field'),
-                controller: _contentController,
-                enabled: !_submitting,
-                minLines: 6,
-                maxLines: 10,
-                textInputAction: TextInputAction.newline,
-                decoration: _configInputDecoration(
-                  labelText: strings.feedbackContentLabel,
-                  hintText: strings.feedbackContentHint,
-                ).copyWith(alignLabelWithHint: true),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const Key('feedback_contact_field'),
-                controller: _contactController,
-                enabled: !_submitting,
-                textInputAction: TextInputAction.done,
-                decoration: _configInputDecoration(
-                  labelText: strings.feedbackContactLabel,
-                  hintText: strings.feedbackContactHint,
-                ),
-              ),
-              const SizedBox(height: 12),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: _configSurface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: _configBorderFaint),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        strings.feedbackContactUsPrompt,
-                        style: const TextStyle(
-                          color: _configTextSecondary,
-                          fontWeight: FontWeight.w700,
-                          height: 1.35,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      _AboutActionButton(
-                        key: const Key('feedback_contact_button'),
-                        onPressed: _submitting ? null : widget.onOpenContact,
-                        icon: Icons.contact_support_outlined,
-                        label: strings.contactUs,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              if (_submitMessage != null) ...[
-                _FeedbackStatusMessage(
-                  key: const Key('feedback_submit_message'),
-                  message: _submitMessage!,
-                  succeeded: _submitSucceeded,
-                ),
-                const SizedBox(height: 12),
-              ],
-              _AboutActionButton(
-                key: const Key('submit_feedback_button'),
-                onPressed: _submitting ? null : () => _submit(version),
-                icon: Icons.send_rounded,
-                label: _submitting
-                    ? strings.feedbackSubmitting
-                    : strings.submit,
-                filled: true,
-                loading: _submitting,
-              ),
-            ],
-          );
-        },
-      ),
+      body: body,
     );
   }
 
@@ -4979,9 +5828,10 @@ class _FeedbackStatusMessage extends StatelessWidget {
 }
 
 class _ContactPage extends StatefulWidget {
-  const _ContactPage({this.onBack});
+  const _ContactPage({this.onBack, this.embedded = false});
 
   final Future<bool> Function()? onBack;
+  final bool embedded;
 
   @override
   State<_ContactPage> createState() => _ContactPageState();
@@ -5006,6 +5856,70 @@ class _ContactPageState extends State<_ContactPage> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+    final body = FutureBuilder<_ContactConfig>(
+      future: _configFuture,
+      initialData: _ContactConfig.fallback,
+      builder: (context, snapshot) {
+        final config = snapshot.data ?? _ContactConfig.fallback;
+        return ListView(
+          key: const Key('contact_page_list'),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
+          children: [
+            if (snapshot.connectionState == ConnectionState.waiting) ...[
+              const LinearProgressIndicator(
+                minHeight: 2,
+                color: _configTextPrimary,
+                backgroundColor: _configBorderFaint,
+              ),
+              const SizedBox(height: 12),
+            ],
+            _ContactInfoCard(
+              icon: Icons.alternate_email_rounded,
+              title: strings.contactEmail,
+              value: config.email,
+              buttonLabel: strings.copyEmail,
+              onCopy: () => _copyContactValue(context, config.email),
+            ),
+            const SizedBox(height: 12),
+            _ContactQrCard(
+              title: strings.contactDingTalkGroup,
+              imageBytes: config.dingtalkQrBytes,
+              fallbackAssetName: _dingtalkGroupQrAsset,
+              icon: Icons.groups_2_outlined,
+              onSave: () => _shareContactQr(
+                context,
+                title: strings.contactDingTalkGroup,
+                imageBytes: config.dingtalkQrBytes,
+                fallbackAssetName: _dingtalkGroupQrAsset,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ContactQrCard(
+              title: strings.contactWeChatGroup,
+              imageBytes: config.wechatQrBytes,
+              fallbackAssetName: _wechatGroupQrAsset,
+              icon: Icons.chat_bubble_outline_rounded,
+              hint: strings.contactWeChatExpiredHint,
+              onSave: () => _shareContactQr(
+                context,
+                title: strings.contactWeChatGroup,
+                imageBytes: config.wechatQrBytes,
+                fallbackAssetName: _wechatGroupQrAsset,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ContactInfoCard(
+              icon: Icons.person_add_alt_1_rounded,
+              title: strings.contactAdminWeChat,
+              value: config.wechatAdminId,
+              buttonLabel: strings.copyWeChatId,
+              onCopy: () => _copyContactValue(context, config.wechatAdminId),
+            ),
+          ],
+        );
+      },
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       backgroundColor: _configPageBackground,
       appBar: AppBar(
@@ -5032,68 +5946,7 @@ class _ContactPageState extends State<_ContactPage> {
           },
         ),
       ),
-      body: FutureBuilder<_ContactConfig>(
-        future: _configFuture,
-        initialData: _ContactConfig.fallback,
-        builder: (context, snapshot) {
-          final config = snapshot.data ?? _ContactConfig.fallback;
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
-            children: [
-              if (snapshot.connectionState == ConnectionState.waiting) ...[
-                const LinearProgressIndicator(
-                  minHeight: 2,
-                  color: _configTextPrimary,
-                  backgroundColor: _configBorderFaint,
-                ),
-                const SizedBox(height: 12),
-              ],
-              _ContactInfoCard(
-                icon: Icons.alternate_email_rounded,
-                title: strings.contactEmail,
-                value: config.email,
-                buttonLabel: strings.copyEmail,
-                onCopy: () => _copyContactValue(context, config.email),
-              ),
-              const SizedBox(height: 12),
-              _ContactQrCard(
-                title: strings.contactDingTalkGroup,
-                imageBytes: config.dingtalkQrBytes,
-                fallbackAssetName: _dingtalkGroupQrAsset,
-                icon: Icons.groups_2_outlined,
-                onSave: () => _shareContactQr(
-                  context,
-                  title: strings.contactDingTalkGroup,
-                  imageBytes: config.dingtalkQrBytes,
-                  fallbackAssetName: _dingtalkGroupQrAsset,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _ContactQrCard(
-                title: strings.contactWeChatGroup,
-                imageBytes: config.wechatQrBytes,
-                fallbackAssetName: _wechatGroupQrAsset,
-                icon: Icons.chat_bubble_outline_rounded,
-                hint: strings.contactWeChatExpiredHint,
-                onSave: () => _shareContactQr(
-                  context,
-                  title: strings.contactWeChatGroup,
-                  imageBytes: config.wechatQrBytes,
-                  fallbackAssetName: _wechatGroupQrAsset,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _ContactInfoCard(
-                icon: Icons.person_add_alt_1_rounded,
-                title: strings.contactAdminWeChat,
-                value: config.wechatAdminId,
-                buttonLabel: strings.copyWeChatId,
-                onCopy: () => _copyContactValue(context, config.wechatAdminId),
-              ),
-            ],
-          );
-        },
-      ),
+      body: body,
     );
   }
 }

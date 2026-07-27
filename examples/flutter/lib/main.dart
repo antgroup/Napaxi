@@ -7,6 +7,8 @@ import 'dart:ui' as ui;
 import 'package:napaxi/assistant_markdown.dart';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show LicenseRegistry;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';

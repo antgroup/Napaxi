@@ -219,10 +219,20 @@ extension LlmModelProfileSdkConfig on LlmModelProfile {
     final normalized = provider.trim().toLowerCase();
     return switch (normalized) {
       'openai-compatible' ||
+      'openai_compatible' ||
       'deepseek' ||
       'qwen' ||
       'moonshot' => 'openai_compatible',
-      _ => normalized,
+      'openai' ||
+      'anthropic' ||
+      'gemini' ||
+      'glm' ||
+      'zai' ||
+      'zhipu' ||
+      'bigmodel' ||
+      'nearai' => normalized,
+      '' => '',
+      _ => 'openai_compatible',
     };
   }
 }
@@ -252,6 +262,16 @@ class LlmProviderOption {
   final List<String> models;
 }
 
+enum _LlmWireProtocol { openAiCompatible, anthropic, gemini }
+
+_LlmWireProtocol _llmWireProtocolForProvider(String provider) {
+  return switch (provider.trim().toLowerCase()) {
+    'anthropic' => _LlmWireProtocol.anthropic,
+    'gemini' => _LlmWireProtocol.gemini,
+    _ => _LlmWireProtocol.openAiCompatible,
+  };
+}
+
 const List<LlmProviderOption> _providerOptions = [
   LlmProviderOption(
     id: 'openai-compatible',
@@ -266,6 +286,22 @@ const List<LlmProviderOption> _providerOptions = [
     name: 'OpenAI',
     provider: 'openai',
     baseUrl: 'https://api.openai.com/v1',
+    defaultModel: '',
+    models: [],
+  ),
+  LlmProviderOption(
+    id: 'anthropic',
+    name: 'Anthropic',
+    provider: 'anthropic',
+    baseUrl: 'https://api.anthropic.com',
+    defaultModel: '',
+    models: [],
+  ),
+  LlmProviderOption(
+    id: 'gemini',
+    name: 'Google Gemini',
+    provider: 'gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     defaultModel: '',
     models: [],
   ),
@@ -290,6 +326,14 @@ const List<LlmProviderOption> _providerOptions = [
     name: 'Moonshot',
     provider: 'moonshot',
     baseUrl: 'https://api.moonshot.cn/v1',
+    defaultModel: '',
+    models: [],
+  ),
+  LlmProviderOption(
+    id: 'glm',
+    name: 'GLM',
+    provider: 'glm',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     defaultModel: '',
     models: [],
   ),

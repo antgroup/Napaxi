@@ -1697,10 +1697,28 @@ void main() {
     await tester.tap(find.byKey(const Key('add_model_button')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('provider_preset_field')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('DeepSeek').last);
-    await tester.pumpAndSettle();
+    Future<void> selectProvider(String name) async {
+      await tester.tap(find.byKey(const Key('provider_preset_field')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(name).last);
+      await tester.pumpAndSettle();
+    }
+
+    String baseUrl() => tester
+        .widget<TextField>(find.byKey(const Key('base_url_field')))
+        .controller!
+        .text;
+
+    await selectProvider('Anthropic');
+    expect(baseUrl(), 'https://api.anthropic.com');
+
+    await selectProvider('Google Gemini');
+    expect(baseUrl(), 'https://generativelanguage.googleapis.com/v1beta');
+
+    await selectProvider('GLM');
+    expect(baseUrl(), 'https://open.bigmodel.cn/api/paas/v4');
+
+    await selectProvider('DeepSeek');
 
     expect(find.text('DeepSeek'), findsWidgets);
     expect(find.text('https://api.deepseek.com/v1'), findsOneWidget);
@@ -1716,6 +1734,25 @@ void main() {
 
     expect(find.text('DeepSeek'), findsWidgets);
     expect(find.text('deepseek · deepseek-reasoner'), findsOneWidget);
+  });
+
+  test('maps mainstream provider presets to native SDK protocols', () {
+    sdk.LlmConfig configFor(String provider) {
+      return LlmModelProfile(
+        id: provider,
+        name: provider,
+        provider: provider,
+        apiKey: 'key',
+        model: 'model',
+      ).toSdkConfig();
+    }
+
+    expect(configFor('openai').provider, 'openai');
+    expect(configFor('openai-compatible').provider, 'openai_compatible');
+    expect(configFor('anthropic').provider, 'anthropic');
+    expect(configFor('gemini').provider, 'gemini');
+    expect(configFor('glm').provider, 'glm');
+    expect(configFor('custom-gateway').provider, 'openai_compatible');
   });
 
   testWidgets('clears a slot when a model capability is disabled', (
@@ -2667,85 +2704,39 @@ void main() {
     },
   );
 
-  testWidgets('opens localized scenarios from settings', (tester) async {
-    const generalScenario = sdk.NapaxiScenarioPack(
-      id: 'napaxi.scenario.general',
-      version: '1',
-      label: 'General',
-      description: 'General scenario.',
-      risk: 'medium',
-      activation: 'manual',
-      executionPlanes: ['core'],
-      uiSurfaces: ['chat'],
-      memoryScopes: ['workspace', 'session'],
-    );
-    const scenario = sdk.NapaxiScenarioPack(
-      id: 'napaxi.scenario.mobile_development',
-      version: '1',
-      label: 'Developer Workbench',
-      description: 'Privileged mobile development scenario.',
-      risk: 'critical',
-      activation: 'host_policy',
-      executionPlanes: ['core', 'host_bridge'],
-      uiSurfaces: ['chat', 'terminal_panel'],
-      memoryScopes: ['project', 'workspace'],
-    );
-    const hiddenScenario = sdk.NapaxiScenarioPack(
-      id: 'napaxi.scenario.experimental_hidden',
-      version: '1',
-      label: 'Experimental Hidden Scenario',
-      description: 'Should stay hidden in the demo scenario anchors.',
-      risk: 'high',
-      activation: 'host_policy',
-    );
-    const status = sdk.NapaxiScenarioStatus(
-      definition: scenario,
-      registered: true,
-      available: false,
-      enabled: false,
-      missingRequiredCapabilities: ['napaxi.tool.git'],
-    );
-    const resolution = sdk.NapaxiScenarioResolution(
-      status: status,
-      activationPlan: sdk.NapaxiScenarioActivationPlan(
-        enabledCapabilities: ['napaxi.tool.file'],
-        hostRequiredCapabilities: ['napaxi.service.developer_workbench'],
-        remoteRequiredCapabilities: ['napaxi.tool.shell_remote'],
-        policyRequiredCapabilities: ['napaxi.policy.approval'],
-      ),
-    );
-    final fakeClient = FakeNapaxiChatClient(
-      scenarioPacks: const [generalScenario, scenario, hiddenScenario],
-      scenarioStatuses: const [status],
-      scenarioResolution: resolution,
-    );
+  testWidgets('shows grouped settings and agent configuration', (tester) async {
     final preferencesStore = MemoryDemoPreferencesStore();
     await preferencesStore.saveLanguage(AppLanguage.chinese);
+    final configStore = sdk.NapaxiConfigStore.memory();
+    await configStore.saveProfile(
+      const sdk.NapaxiConfigProfile(
+        id: 'primary-model',
+        name: '主力模型',
+        provider: 'openai',
+        model: 'primary-chat',
+      ),
+      apiKey: 'sk-primary',
+    );
+    await configStore.saveProfile(
+      const sdk.NapaxiConfigProfile(
+        id: 'secondary-model',
+        name: '备用模型',
+        provider: 'anthropic',
+        model: 'secondary-chat',
+      ),
+      apiKey: 'sk-secondary',
+    );
+    await configStore.saveSelection(
+      const sdk.NapaxiConfigSelection(selectedProfileId: 'primary-model'),
+    );
 
     await tester.pumpWidget(
-      _testApp(
-        chatClientFactory: () async => fakeClient,
-        preferencesStore: preferencesStore,
-      ),
+      _testApp(preferencesStore: preferencesStore, configStore: configStore),
     );
     await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('scenarios_button')), findsNothing);
 
     await tester.tap(find.byKey(const Key('session_history_button')));
     await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('files_menu_item')), findsOneWidget);
-    expect(find.byKey(const Key('scenarios_menu_item')), findsNothing);
-    expect(find.byKey(const Key('skills_menu_item')), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('skills_menu_item')),
-        matching: find.byIcon(Icons.extension_outlined),
-      ),
-      findsOneWidget,
-    );
-    expect(find.text('场景'), findsNothing);
 
     await tester.tap(find.byKey(const Key('settings_menu_button')));
     await tester.pumpAndSettle();
@@ -2766,19 +2757,17 @@ void main() {
       findsOneWidget,
     );
     await tester.drag(
-      find.byKey(const Key('settings_basic_item')),
-      const Offset(0, 120),
+      find.byKey(const Key('settings_list_page')),
+      const Offset(0, -300),
     );
     await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('settings_bottom_sheet')), findsNothing);
-    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
-    expect(find.byKey(const Key('settings_menu_selected')), findsNothing);
-    await tester.tap(find.byKey(const Key('settings_menu_button')));
+    await tester.drag(
+      find.byKey(const Key('settings_list_page')),
+      const Offset(0, 500),
+    );
     await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
     expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('settings_list_page')), findsOneWidget);
     expect(
       tester
           .widget<FractionallySizedBox>(
@@ -2787,76 +2776,199 @@ void main() {
           .heightFactor,
       1,
     );
-    expect(find.byKey(const Key('settings_page_menu_button')), findsNothing);
-    expect(find.byKey(const Key('settings_basic_item')), findsOneWidget);
-    expect(find.byKey(const Key('settings_scenarios_item')), findsOneWidget);
-    expect(find.byKey(const Key('settings_engines_item')), findsNothing);
-    expect(find.byKey(const Key('settings_about_item')), findsOneWidget);
-    expect(find.text('当前：通用'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('settings_scenarios_item')));
-    await tester.pumpAndSettle();
-    await pumpUntilFound(tester, find.text('开发工作台'));
-
-    expect(find.text('当前场景：通用'), findsOneWidget);
-    expect(find.text('开发工作台'), findsOneWidget);
-    expect(find.text('日常对话、文件、记忆和常用技能。'), findsOneWidget);
-    expect(find.text('Android 项目、Git、构建和环境配置。'), findsNothing);
-
-    await tester.tap(find.text('开发工作台'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Android 项目、Git、构建和环境配置。'), findsOneWidget);
-    expect(find.text('开发中功能，需要邀请码'), findsOneWidget);
-    expect(find.text('开发工作台仍在完善中。输入邀请码后，可以提前试用该场景。'), findsOneWidget);
+    expect(find.text('模型'), findsOneWidget);
+    expect(find.text('应用设置'), findsOneWidget);
+    expect(find.text('获取帮助'), findsOneWidget);
+    expect(find.byKey(const Key('settings_model_slot_chat')), findsOneWidget);
     expect(
-      find.byKey(const Key('developer_workbench_invite_field')),
+      find.byKey(const Key('settings_model_slot_imageAnalysis')),
       findsOneWidget,
     );
-    expect(find.text('激活计划'), findsNothing);
-    expect(find.text('关键'), findsNothing);
-    expect(find.text('宿主策略'), findsNothing);
-    expect(find.text('宿主桥接'), findsNothing);
-    expect(find.byKey(const Key('scenario_apply_button')), findsOneWidget);
-    expect(find.text('Experimental Hidden Scenario'), findsNothing);
-    expect(find.text('Scenarios'), findsNothing);
-    expect(find.text('Developer Workbench'), findsNothing);
-
-    await tester.tap(find.byKey(const Key('scenario_apply_button')));
+    expect(
+      find.byKey(const Key('settings_model_slot_imageGeneration')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('settings_model_slot_audioAnalysis')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('settings_model_slot_videoGeneration')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<DropdownButton<String>>(
+            find.byKey(const Key('settings_model_slot_chat')),
+          )
+          .value,
+      'primary-model',
+    );
+    await tester.tap(find.byKey(const Key('settings_model_slot_chat')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('备用模型').last);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButton<String>>(
+            find.byKey(const Key('settings_model_slot_chat')),
+          )
+          .value,
+      'secondary-model',
+    );
+    expect(
+      (await configStore.loadSelection()).selectedProfileId,
+      'secondary-model',
+    );
+    expect(find.byKey(const Key('settings_add_model_item')), findsOneWidget);
+    expect(find.byKey(const Key('settings_agent_item')), findsOneWidget);
+    expect(find.byKey(const Key('settings_language_dropdown')), findsOneWidget);
+    expect(
+      tester
+          .widget<DropdownButton<AppLanguage>>(
+            find.byKey(const Key('settings_language_dropdown')),
+          )
+          .value,
+      AppLanguage.chinese,
+    );
+    await tester.tap(find.byKey(const Key('settings_language_dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Models'), findsOneWidget);
+    expect(find.text('App settings'), findsOneWidget);
+    expect(find.text('Get help'), findsOneWidget);
+    expect(find.text('模型'), findsNothing);
+    expect(find.text('应用设置'), findsNothing);
+    expect(find.text('获取帮助'), findsNothing);
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('settings_language_dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('简体中文').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('邀请码不正确'), findsOneWidget);
-    expect(fakeClient.appliedCapabilitySelection, isNotNull);
-    expect(
-      fakeClient.appliedCapabilitySelection!.config['scenario_id'],
-      'napaxi.scenario.general',
-    );
-
+    await tester.tap(find.byKey(const Key('settings_edit_model_chat')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('model_profile_form')), findsOneWidget);
+    expect(find.text('编辑模型'), findsOneWidget);
     await tester.enterText(
-      find.byKey(const Key('developer_workbench_invite_field')),
-      'admin',
+      find.descendant(
+        of: find.byKey(const Key('model_name_field')),
+        matching: find.byType(TextField),
+      ),
+      '更新后的模型',
     );
+    await tester.tap(find.byKey(const Key('save_model_button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('scenario_apply_button')));
-    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings_list_page')), findsOneWidget);
+    expect(find.text('更新后的模型'), findsOneWidget);
+    expect(find.byKey(const Key('settings_scenarios_item')), findsNothing);
+    expect(find.byKey(const Key('settings_channels_item')), findsNothing);
 
-    expect(fakeClient.appliedCapabilitySelection, isNotNull);
-    expect(
-      fakeClient.appliedCapabilitySelection!.config['scenario_id'],
-      'napaxi.scenario.mobile_development',
-    );
-    expect(
-      fakeClient.appliedCapabilitySelection!.enabledCapabilities,
-      contains('napaxi.tool.git'),
-    );
-    expect(
-      fakeClient.appliedCapabilitySelection!.enabledCapabilities,
-      contains('napaxi.tool.shell_remote'),
-    );
-    expect(find.text('当前场景：开发工作台'), findsWidgets);
-
-    await tester.tap(find.byType(BackButton).first);
+    await tester.tap(find.byKey(const Key('settings_agent_item')));
     await tester.pumpAndSettle();
+    expect(find.byKey(const Key('agent_settings_page')), findsOneWidget);
+    expect(find.byKey(const Key('max_execution_rounds_field')), findsOneWidget);
+    expect(find.byKey(const Key('user_prompt_field')), findsOneWidget);
+    expect(find.text('最大执行轮次'), findsOneWidget);
+    expect(find.text('用户提示词'), findsOneWidget);
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('max_execution_rounds_field')),
+        matching: find.byType(TextField),
+      ),
+      '18',
+    );
+    await tester.enterText(
+      find.descendant(
+        of: find.byKey(const Key('user_prompt_field')),
+        matching: find.byType(TextField),
+      ),
+      '回答前先检查事实。',
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    final agentSelection = await configStore.loadSelection();
+    expect(agentSelection.maxToolIterations, 18);
+    expect(agentSelection.systemPrompt, '回答前先检查事实。');
+
+    final slowSheetDrag = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('agent_settings_page'))),
+    );
+    await slowSheetDrag.moveBy(const Offset(0, 160));
+    await tester.pump();
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(const Key('settings_bottom_sheet_drag_transform')),
+          )
+          .transform
+          .getTranslation()
+          .y,
+      greaterThan(0),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await slowSheetDrag.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('agent_settings_page')), findsOneWidget);
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(const Key('settings_bottom_sheet_drag_transform')),
+          )
+          .transform
+          .getTranslation()
+          .y,
+      0,
+    );
+
+    final slowBackDrag = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('agent_settings_page'))),
+    );
+    await slowBackDrag.moveBy(const Offset(120, 0));
+    await tester.pump();
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(const Key('settings_detail_back_transition')),
+          )
+          .transform
+          .getTranslation()
+          .x,
+      greaterThan(0),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    await slowBackDrag.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('agent_settings_page')), findsOneWidget);
+    expect(
+      tester
+          .widget<Transform>(
+            find.byKey(const Key('settings_detail_back_transition')),
+          )
+          .transform
+          .getTranslation()
+          .x,
+      0,
+    );
+
+    await tester.drag(
+      find.byKey(const Key('agent_settings_page')),
+      const Offset(150, 0),
+    );
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(find.byKey(const Key('agent_settings_page')), findsOneWidget);
+    expect(find.byKey(const Key('settings_agent_item')), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('settings_agent_item')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('settings_list_page')),
+      const Offset(0, -480),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings_feedback_item')), findsOneWidget);
+    expect(find.byKey(const Key('settings_about_item')), findsOneWidget);
   });
 
   testWidgets('mobile developer scenario uses engine runtime scope', (
@@ -5895,13 +6007,28 @@ void main() {
     await openAbout(tester);
 
     expect(find.text('About'), findsOneWidget);
-    expect(find.text('Current version'), findsOneWidget);
+    expect(find.text('Current version'), findsNothing);
     expect(find.byKey(const Key('about_current_version')), findsOneWidget);
     expect(find.text('0.1.0+14'), findsOneWidget);
     expect(find.byKey(const Key('about_check_update_button')), findsOneWidget);
+    expect(find.byKey(const Key('about_feedback_button')), findsNothing);
+    expect(
+      find.byKey(const Key('open_source_licenses_button')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('open_source_licenses_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Open source licenses'), findsOneWidget);
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('settings_subpage_gesture_surface')),
+      const Offset(320, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('about_check_update_button')), findsOneWidget);
   });
 
-  testWidgets('about page hides update action when platform is unsupported', (
+  testWidgets('about page keeps update action visible on every platform', (
     tester,
   ) async {
     final updates = FakeDemoUpdateService(supportsUpdateCheck: false);
@@ -5912,9 +6039,9 @@ void main() {
     await openAbout(tester);
 
     expect(find.text('About'), findsOneWidget);
-    expect(find.text('Current version'), findsOneWidget);
+    expect(find.text('Current version'), findsNothing);
     expect(find.text('0.1.0+14'), findsOneWidget);
-    expect(find.byKey(const Key('about_check_update_button')), findsNothing);
+    expect(find.byKey(const Key('about_check_update_button')), findsOneWidget);
   });
 
   testWidgets('opens native contact page from the about page', (tester) async {
@@ -5934,9 +6061,16 @@ void main() {
     expect(find.text('WeChat community'), findsOneWidget);
     expect(find.text('Admin WeChat'), findsOneWidget);
     expect(find.text('shu_wentao'), findsOneWidget);
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    await tester.drag(
+      find.byKey(const Key('contact_page_list')),
+      const Offset(320, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('about_contact_button')), findsOneWidget);
   });
 
-  testWidgets('submits feedback from the about page', (tester) async {
+  testWidgets('submits feedback from the settings help group', (tester) async {
     final updates = FakeDemoUpdateService();
     final feedback = FakeDemoFeedbackService();
 
@@ -5945,8 +6079,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await openAbout(tester);
-    await tester.tap(find.byKey(const Key('about_feedback_button')));
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_menu_button')));
+    await tester.pumpAndSettle();
+    await tester.drag(
+      find.byKey(const Key('settings_list_page')),
+      const Offset(0, -480),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_feedback_item')));
     await tester.pumpAndSettle();
 
     expect(find.text('Feedback'), findsOneWidget);

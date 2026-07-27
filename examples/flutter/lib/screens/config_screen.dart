@@ -670,9 +670,16 @@ class _ModelProfileTile extends StatelessWidget {
 }
 
 class _LlmModelProfilePage extends StatefulWidget {
-  const _LlmModelProfilePage({required this.initialProfile});
+  const _LlmModelProfilePage({
+    super.key,
+    required this.initialProfile,
+    this.embedded = false,
+    this.onSaved,
+  });
 
   final LlmModelProfile initialProfile;
+  final bool embedded;
+  final ValueChanged<LlmModelProfile>? onSaved;
 
   @override
   State<_LlmModelProfilePage> createState() => _LlmModelProfilePageState();
@@ -755,8 +762,11 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
     _preCompactionMemoryFlush = widget.initialProfile.preCompactionMemoryFlush;
     _selectedCapabilities = _initialCapabilities();
     final initialOption = _optionForProvider(widget.initialProfile.provider);
-    _selectedProviderOptionId = initialOption?.id ?? 'openai-compatible';
-    if (widget.initialProfile.provider.trim().isEmpty) {
+    final hasInitialProvider = widget.initialProfile.provider.trim().isNotEmpty;
+    _selectedProviderOptionId =
+        initialOption?.id ??
+        (hasInitialProvider ? 'custom' : 'openai-compatible');
+    if (!hasInitialProvider) {
       _providerController.text = 'openai-compatible';
     }
     _availableModels = _initialAvailableModels();
@@ -780,7 +790,7 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
     super.dispose();
   }
 
-  void _save() {
+  void save() {
     final primaryModelId = _modelController.text.trim();
     final models = primaryModelId.isEmpty
         ? const <ModelEntry>[]
@@ -791,25 +801,29 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
             ),
           ];
 
-    Navigator.of(context).pop(
-      LlmModelProfile(
-        id: widget.initialProfile.id,
-        name: _nameController.text.trim(),
-        provider: _providerController.text.trim(),
-        baseUrl: _baseUrlController.text.trim(),
-        apiKey: _normalizedApiKey,
-        model: primaryModelId,
-        models: List.unmodifiable(models),
-        selectedModelByCapability: const {},
-        systemPrompt: widget.initialProfile.systemPrompt,
-        maxTokens: _configuredMaxTokens,
-        contextWindowTokens: _configuredContextWindowTokens,
-        nativeContextWindowTokens: _configuredNativeContextWindowTokens,
-        responseReserveTokens: _configuredResponseReserveTokens,
-        compactionModel: _compactionModelController.text.trim(),
-        preCompactionMemoryFlush: _preCompactionMemoryFlush,
-      ),
+    final profile = LlmModelProfile(
+      id: widget.initialProfile.id,
+      name: _nameController.text.trim(),
+      provider: _providerController.text.trim(),
+      baseUrl: _baseUrlController.text.trim(),
+      apiKey: _normalizedApiKey,
+      model: primaryModelId,
+      models: List.unmodifiable(models),
+      selectedModelByCapability: const {},
+      systemPrompt: widget.initialProfile.systemPrompt,
+      maxTokens: _configuredMaxTokens,
+      contextWindowTokens: _configuredContextWindowTokens,
+      nativeContextWindowTokens: _configuredNativeContextWindowTokens,
+      responseReserveTokens: _configuredResponseReserveTokens,
+      compactionModel: _compactionModelController.text.trim(),
+      preCompactionMemoryFlush: _preCompactionMemoryFlush,
     );
+    final onSaved = widget.onSaved;
+    if (onSaved != null) {
+      onSaved(profile);
+      return;
+    }
+    Navigator.of(context).pop(profile);
   }
 
   int get _configuredMaxTokens {
@@ -1054,7 +1068,8 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
     });
 
     try {
-      final models = await _OpenAiCompatibleModelClient.fetchModels(
+      final models = await _ModelCatalogClient.fetchModels(
+        provider: _providerController.text,
         baseUrl: baseUrl,
         apiKey: apiKey,
       );
@@ -1130,7 +1145,328 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-
+    final body = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _dismissKeyboard,
+      child: ListView(
+        key: const Key('model_profile_form'),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        children: [
+          _ConfigField(
+            key: const Key('model_name_field'),
+            controller: _nameController,
+            label: strings.modelNameLabel,
+            hintText: strings.modelNameHint,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          _ProviderSelector(
+            selectedOptionId: _selectedProviderOptionId,
+            onProviderSelected: _applyProviderOption,
+          ),
+          if (_selectedProviderOptionId == 'custom') ...[
+            const SizedBox(height: 12),
+            _ConfigField(
+              key: const Key('provider_field'),
+              controller: _providerController,
+              label: strings.customProviderLabel,
+              hintText: strings.providerHint,
+              textInputAction: TextInputAction.next,
+            ),
+          ],
+          const SizedBox(height: 24),
+          _SettingsSectionHeader(title: strings.connectionTitle),
+          const SizedBox(height: 12),
+          _ConfigField(
+            key: const Key('base_url_field'),
+            controller: _baseUrlController,
+            label: strings.baseUrlLabel,
+            hintText: 'https://api.example.com/v1',
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 12),
+          _ConfigField(
+            key: const Key('api_key_field'),
+            controller: _apiKeyController,
+            label: strings.apiKeyLabel,
+            hintText: 'sk-...',
+            obscureText: _isApiKeyObscured,
+            suffixIcon: IconButton(
+              tooltip: _isApiKeyObscured ? 'Show API Key' : 'Hide API Key',
+              icon: Icon(
+                _isApiKeyObscured
+                    ? Icons.visibility_rounded
+                    : Icons.visibility_off_rounded,
+              ),
+              onPressed: () {
+                setState(() => _isApiKeyObscured = !_isApiKeyObscured);
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('test_connection_button'),
+                  onPressed: _isTestingConnection ? null : _testConnection,
+                  icon: _isTestingConnection
+                      ? const _ButtonProgress()
+                      : _connectionTestResult == true
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          size: 18,
+                          color: Color(0xFF4B5563),
+                        )
+                      : _connectionTestResult == false
+                      ? const Icon(
+                          Icons.cancel_rounded,
+                          size: 18,
+                          color: Color(0xFF991B1B),
+                        )
+                      : const Icon(Icons.network_check_rounded, size: 18),
+                  label: Text(strings.testConnection),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _connectionTestResult == true
+                        ? const Color(0xFF4B5563)
+                        : _connectionTestResult == false
+                        ? const Color(0xFF991B1B)
+                        : _configTextPrimary,
+                    side: BorderSide(
+                      color: _connectionTestResult == true
+                          ? const Color(0xFF9CA3AF)
+                          : _connectionTestResult == false
+                          ? const Color(0xFFFCA5A5)
+                          : _configBorder,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  key: const Key('fetch_models_button'),
+                  onPressed: _isFetchingModels ? null : _fetchModels,
+                  icon: _isFetchingModels
+                      ? const _ButtonProgress()
+                      : _fetchModelsResult == true
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          size: 18,
+                          color: Color(0xFF4B5563),
+                        )
+                      : _fetchModelsResult == false
+                      ? const Icon(
+                          Icons.cancel_rounded,
+                          size: 18,
+                          color: Color(0xFF991B1B),
+                        )
+                      : const Icon(Icons.cloud_download_outlined, size: 18),
+                  label: Text(strings.fetchModels),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _fetchModelsResult == true
+                        ? const Color(0xFF4B5563)
+                        : _fetchModelsResult == false
+                        ? const Color(0xFF991B1B)
+                        : _configTextPrimary,
+                    side: BorderSide(
+                      color: _fetchModelsResult == true
+                          ? const Color(0xFF9CA3AF)
+                          : _fetchModelsResult == false
+                          ? const Color(0xFFFCA5A5)
+                          : _configBorder,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _ModelSelectorField(
+            controller: _modelController,
+            models: _availableModels,
+            label: strings.addModelIdLabel,
+            onSelected: _selectModel,
+          ),
+          const SizedBox(height: 12),
+          _ConfigField(
+            key: const Key('max_tokens_field'),
+            controller: _maxTokensController,
+            label: strings.maxTokensLabel,
+            hintText: strings.maxTokensHint,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+          ),
+          const SizedBox(height: 24),
+          _SettingsSectionHeader(
+            title: strings.contextAdvancedTitle,
+            description: strings.contextAdvancedDescription,
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            key: const Key('native_context_window_preset_field'),
+            initialValue: _nativeContextWindowPreset,
+            decoration: _configInputDecoration(
+              labelText: strings.nativeContextWindowLabel,
+              helperText: strings.nativeContextWindowHelp,
+            ),
+            items: [
+              for (final value in const [
+                _tokenPresetAuto,
+                _tokenPreset128k,
+                _tokenPreset200k,
+                _tokenPreset1m,
+                _tokenPresetCustom,
+              ])
+                DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(_tokenPresetLabel(value)),
+                ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _nativeContextWindowPreset = value);
+            },
+          ),
+          if (_nativeContextWindowPreset == _tokenPresetCustom) ...[
+            const SizedBox(height: 12),
+            _ConfigField(
+              key: const Key('native_context_window_custom_field'),
+              controller: _nativeContextWindowController,
+              label: strings.nativeContextWindowCustomLabel,
+              hintText: strings.nativeContextWindowCustomHint,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+            ),
+          ],
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            key: const Key('context_window_preset_field'),
+            initialValue: _contextWindowPreset,
+            decoration: _configInputDecoration(
+              labelText: strings.contextWindowLabel,
+              helperText: strings.contextWindowHelp,
+            ),
+            items: [
+              for (final value in const [
+                _tokenPresetAuto,
+                _tokenPreset128k,
+                _tokenPreset200k,
+                _tokenPreset1m,
+                _tokenPresetCustom,
+              ])
+                DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(_tokenPresetLabel(value)),
+                ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _contextWindowPreset = value);
+            },
+          ),
+          if (_contextWindowPreset == _tokenPresetCustom) ...[
+            const SizedBox(height: 12),
+            _ConfigField(
+              key: const Key('context_window_custom_field'),
+              controller: _contextWindowController,
+              label: strings.contextWindowCustomLabel,
+              hintText: strings.contextWindowCustomHint,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+            ),
+          ],
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            key: const Key('response_reserve_preset_field'),
+            initialValue: _responseReservePreset,
+            decoration: _configInputDecoration(
+              labelText: strings.responseReserveLabel,
+              helperText: strings.responseReserveHelp,
+            ),
+            items: [
+              for (final value in const [
+                _tokenPresetAuto,
+                _tokenPreset4k,
+                _tokenPreset8k,
+                _tokenPresetCustom,
+              ])
+                DropdownMenuItem<String>(
+                  value: value,
+                  child: Text(_tokenPresetLabel(value)),
+                ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() => _responseReservePreset = value);
+            },
+          ),
+          if (_responseReservePreset == _tokenPresetCustom) ...[
+            const SizedBox(height: 12),
+            _ConfigField(
+              key: const Key('response_reserve_custom_field'),
+              controller: _responseReserveController,
+              label: strings.responseReserveCustomLabel,
+              hintText: strings.responseReserveCustomHint,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+            ),
+          ],
+          const SizedBox(height: 12),
+          _CompactionModelSelectorField(
+            key: const Key('compaction_model_field'),
+            controller: _compactionModelController,
+            models: _compactionModelOptions,
+            label: strings.compactionModelLabel,
+            followChatLabel: strings.compactionModelFollowChat,
+            hintText: strings.compactionModelHint,
+            helperText: strings.compactionModelHelp,
+            onSelected: _selectCompactionModel,
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile.adaptive(
+            key: const Key('pre_compaction_memory_flush_switch'),
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              strings.preCompactionMemoryFlushLabel,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            subtitle: Text(strings.preCompactionMemoryFlushDescription),
+            value: _preCompactionMemoryFlush,
+            onChanged: (value) {
+              setState(() => _preCompactionMemoryFlush = value);
+            },
+          ),
+          const SizedBox(height: 24),
+          _SettingsSectionHeader(title: strings.modelCapabilitiesTitle),
+          const SizedBox(height: 8),
+          _ModelCapabilitiesSelector(
+            selectedCapabilities: _selectedCapabilities,
+            onCapabilityChanged: _toggleCapability,
+          ),
+          if (_statusMessage != null) ...[
+            const SizedBox(height: 10),
+            _ConnectionStatusMessage(
+              message: _statusMessage!,
+              isError: _statusIsError,
+            ),
+          ],
+          const SizedBox(height: 28),
+          FilledButton(
+            key: const Key('save_model_primary_button'),
+            onPressed: save,
+            style: FilledButton.styleFrom(
+              backgroundColor: _configTextPrimary,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(strings.save),
+          ),
+        ],
+      ),
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       appBar: AppBar(
         title: Text(strings.editModel),
@@ -1141,337 +1477,14 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
         actions: [
           TextButton(
             key: const Key('save_model_button'),
-            onPressed: _save,
+            onPressed: save,
             style: TextButton.styleFrom(foregroundColor: _configTextPrimary),
             child: Text(strings.save),
           ),
         ],
       ),
       backgroundColor: _configPageBackground,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _dismissKeyboard,
-        child: ListView(
-          key: const Key('model_profile_form'),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          children: [
-            _ConfigField(
-              key: const Key('model_name_field'),
-              controller: _nameController,
-              label: strings.modelNameLabel,
-              hintText: strings.modelNameHint,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-            _ProviderSelector(
-              selectedOptionId: _selectedProviderOptionId,
-              onProviderSelected: _applyProviderOption,
-            ),
-            if (_selectedProviderOptionId == 'custom') ...[
-              const SizedBox(height: 12),
-              _ConfigField(
-                key: const Key('provider_field'),
-                controller: _providerController,
-                label: strings.customProviderLabel,
-                hintText: strings.providerHint,
-                textInputAction: TextInputAction.next,
-              ),
-            ],
-            const SizedBox(height: 24),
-            _SettingsSectionHeader(title: strings.connectionTitle),
-            const SizedBox(height: 12),
-            _ConfigField(
-              key: const Key('base_url_field'),
-              controller: _baseUrlController,
-              label: strings.baseUrlLabel,
-              hintText: 'https://api.example.com/v1',
-              keyboardType: TextInputType.url,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-            _ConfigField(
-              key: const Key('api_key_field'),
-              controller: _apiKeyController,
-              label: strings.apiKeyLabel,
-              hintText: 'sk-...',
-              obscureText: _isApiKeyObscured,
-              suffixIcon: IconButton(
-                tooltip: _isApiKeyObscured ? 'Show API Key' : 'Hide API Key',
-                icon: Icon(
-                  _isApiKeyObscured
-                      ? Icons.visibility_rounded
-                      : Icons.visibility_off_rounded,
-                ),
-                onPressed: () {
-                  setState(() => _isApiKeyObscured = !_isApiKeyObscured);
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: const Key('test_connection_button'),
-                    onPressed: _isTestingConnection ? null : _testConnection,
-                    icon: _isTestingConnection
-                        ? const _ButtonProgress()
-                        : _connectionTestResult == true
-                        ? const Icon(
-                            Icons.check_circle_rounded,
-                            size: 18,
-                            color: Color(0xFF4B5563),
-                          )
-                        : _connectionTestResult == false
-                        ? const Icon(
-                            Icons.cancel_rounded,
-                            size: 18,
-                            color: Color(0xFF991B1B),
-                          )
-                        : const Icon(Icons.network_check_rounded, size: 18),
-                    label: Text(strings.testConnection),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _connectionTestResult == true
-                          ? const Color(0xFF4B5563)
-                          : _connectionTestResult == false
-                          ? const Color(0xFF991B1B)
-                          : _configTextPrimary,
-                      side: BorderSide(
-                        color: _connectionTestResult == true
-                            ? const Color(0xFF9CA3AF)
-                            : _connectionTestResult == false
-                            ? const Color(0xFFFCA5A5)
-                            : _configBorder,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    key: const Key('fetch_models_button'),
-                    onPressed: _isFetchingModels ? null : _fetchModels,
-                    icon: _isFetchingModels
-                        ? const _ButtonProgress()
-                        : _fetchModelsResult == true
-                        ? const Icon(
-                            Icons.check_circle_rounded,
-                            size: 18,
-                            color: Color(0xFF4B5563),
-                          )
-                        : _fetchModelsResult == false
-                        ? const Icon(
-                            Icons.cancel_rounded,
-                            size: 18,
-                            color: Color(0xFF991B1B),
-                          )
-                        : const Icon(Icons.cloud_download_outlined, size: 18),
-                    label: Text(strings.fetchModels),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _fetchModelsResult == true
-                          ? const Color(0xFF4B5563)
-                          : _fetchModelsResult == false
-                          ? const Color(0xFF991B1B)
-                          : _configTextPrimary,
-                      side: BorderSide(
-                        color: _fetchModelsResult == true
-                            ? const Color(0xFF9CA3AF)
-                            : _fetchModelsResult == false
-                            ? const Color(0xFFFCA5A5)
-                            : _configBorder,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ModelSelectorField(
-              controller: _modelController,
-              models: _availableModels,
-              label: strings.addModelIdLabel,
-              onSelected: _selectModel,
-            ),
-            const SizedBox(height: 12),
-            _ConfigField(
-              key: const Key('max_tokens_field'),
-              controller: _maxTokensController,
-              label: strings.maxTokensLabel,
-              hintText: strings.maxTokensHint,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 24),
-            _SettingsSectionHeader(
-              title: strings.contextAdvancedTitle,
-              description: strings.contextAdvancedDescription,
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: const Key('native_context_window_preset_field'),
-              initialValue: _nativeContextWindowPreset,
-              decoration: _configInputDecoration(
-                labelText: strings.nativeContextWindowLabel,
-                helperText: strings.nativeContextWindowHelp,
-              ),
-              items: [
-                for (final value in const [
-                  _tokenPresetAuto,
-                  _tokenPreset128k,
-                  _tokenPreset200k,
-                  _tokenPreset1m,
-                  _tokenPresetCustom,
-                ])
-                  DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(_tokenPresetLabel(value)),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _nativeContextWindowPreset = value);
-              },
-            ),
-            if (_nativeContextWindowPreset == _tokenPresetCustom) ...[
-              const SizedBox(height: 12),
-              _ConfigField(
-                key: const Key('native_context_window_custom_field'),
-                controller: _nativeContextWindowController,
-                label: strings.nativeContextWindowCustomLabel,
-                hintText: strings.nativeContextWindowCustomHint,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.next,
-              ),
-            ],
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: const Key('context_window_preset_field'),
-              initialValue: _contextWindowPreset,
-              decoration: _configInputDecoration(
-                labelText: strings.contextWindowLabel,
-                helperText: strings.contextWindowHelp,
-              ),
-              items: [
-                for (final value in const [
-                  _tokenPresetAuto,
-                  _tokenPreset128k,
-                  _tokenPreset200k,
-                  _tokenPreset1m,
-                  _tokenPresetCustom,
-                ])
-                  DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(_tokenPresetLabel(value)),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _contextWindowPreset = value);
-              },
-            ),
-            if (_contextWindowPreset == _tokenPresetCustom) ...[
-              const SizedBox(height: 12),
-              _ConfigField(
-                key: const Key('context_window_custom_field'),
-                controller: _contextWindowController,
-                label: strings.contextWindowCustomLabel,
-                hintText: strings.contextWindowCustomHint,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.next,
-              ),
-            ],
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              key: const Key('response_reserve_preset_field'),
-              initialValue: _responseReservePreset,
-              decoration: _configInputDecoration(
-                labelText: strings.responseReserveLabel,
-                helperText: strings.responseReserveHelp,
-              ),
-              items: [
-                for (final value in const [
-                  _tokenPresetAuto,
-                  _tokenPreset4k,
-                  _tokenPreset8k,
-                  _tokenPresetCustom,
-                ])
-                  DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(_tokenPresetLabel(value)),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _responseReservePreset = value);
-              },
-            ),
-            if (_responseReservePreset == _tokenPresetCustom) ...[
-              const SizedBox(height: 12),
-              _ConfigField(
-                key: const Key('response_reserve_custom_field'),
-                controller: _responseReserveController,
-                label: strings.responseReserveCustomLabel,
-                hintText: strings.responseReserveCustomHint,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.next,
-              ),
-            ],
-            const SizedBox(height: 12),
-            _CompactionModelSelectorField(
-              key: const Key('compaction_model_field'),
-              controller: _compactionModelController,
-              models: _compactionModelOptions,
-              label: strings.compactionModelLabel,
-              followChatLabel: strings.compactionModelFollowChat,
-              hintText: strings.compactionModelHint,
-              helperText: strings.compactionModelHelp,
-              onSelected: _selectCompactionModel,
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile.adaptive(
-              key: const Key('pre_compaction_memory_flush_switch'),
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                strings.preCompactionMemoryFlushLabel,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              subtitle: Text(strings.preCompactionMemoryFlushDescription),
-              value: _preCompactionMemoryFlush,
-              onChanged: (value) {
-                setState(() => _preCompactionMemoryFlush = value);
-              },
-            ),
-            const SizedBox(height: 24),
-            _SettingsSectionHeader(title: strings.modelCapabilitiesTitle),
-            const SizedBox(height: 8),
-            _ModelCapabilitiesSelector(
-              selectedCapabilities: _selectedCapabilities,
-              onCapabilityChanged: _toggleCapability,
-            ),
-            if (_statusMessage != null) ...[
-              const SizedBox(height: 10),
-              _ConnectionStatusMessage(
-                message: _statusMessage!,
-                isError: _statusIsError,
-              ),
-            ],
-            const SizedBox(height: 28),
-            FilledButton(
-              key: const Key('save_model_primary_button'),
-              onPressed: _save,
-              style: FilledButton.styleFrom(
-                backgroundColor: _configTextPrimary,
-                foregroundColor: Colors.white,
-              ),
-              child: Text(strings.save),
-            ),
-          ],
-        ),
-      ),
+      body: body,
     );
   }
 }
@@ -1847,7 +1860,9 @@ class _OpenAiCompatibleModelClient {
       final body = await utf8.decodeStream(response);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('HTTP ${response.statusCode}: ${_compactBody(body)}');
+        throw Exception(
+          'HTTP ${response.statusCode}: ${_compactModelCatalogBody(body)}',
+        );
       }
 
       final decoded = jsonDecode(body);
@@ -1879,14 +1894,164 @@ class _OpenAiCompatibleModelClient {
         : '${baseUri.path}/models';
     return baseUri.replace(path: path);
   }
+}
 
-  static String _compactBody(String body) {
-    final normalized = body.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (normalized.isEmpty) return 'empty response';
-    return normalized.length <= 160
-        ? normalized
-        : '${normalized.substring(0, 160)}...';
+class _ModelCatalogClient {
+  const _ModelCatalogClient._();
+
+  static Future<List<String>> fetchModels({
+    required String provider,
+    required String baseUrl,
+    required String apiKey,
+  }) {
+    return switch (_llmWireProtocolForProvider(provider)) {
+      _LlmWireProtocol.openAiCompatible =>
+        _OpenAiCompatibleModelClient.fetchModels(
+          baseUrl: baseUrl,
+          apiKey: apiKey,
+        ),
+      _LlmWireProtocol.anthropic => _AnthropicModelClient.fetchModels(
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+      ),
+      _LlmWireProtocol.gemini => _GeminiModelClient.fetchModels(
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+      ),
+    };
   }
+}
+
+class _AnthropicModelClient {
+  const _AnthropicModelClient._();
+
+  static Future<List<String>> fetchModels({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 10);
+    try {
+      final request = await client.getUrl(_modelsUri(baseUrl));
+      request.headers.set('x-api-key', apiKey);
+      request.headers.set('anthropic-version', '2023-06-01');
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request.close().timeout(
+        const Duration(seconds: 20),
+      );
+      final body = await utf8.decodeStream(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'HTTP ${response.statusCode}: ${_compactModelCatalogBody(body)}',
+        );
+      }
+
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, Object?>) return const [];
+      final data = decoded['data'];
+      if (data is! List) return const [];
+      return _sortedModelIds(data.whereType<Map>().map((item) => item['id']));
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static Uri _modelsUri(String baseUrl) {
+    var normalized = baseUrl.trim().isEmpty
+        ? 'https://api.anthropic.com'
+        : baseUrl.trim();
+    normalized = normalized.replaceFirst(RegExp(r'/+$'), '');
+    if (normalized.endsWith('/v1/messages')) {
+      normalized = normalized.substring(
+        0,
+        normalized.length - '/messages'.length,
+      );
+    }
+    if (normalized.endsWith('/v1/models')) return Uri.parse(normalized);
+    if (normalized.endsWith('/v1')) return Uri.parse('$normalized/models');
+    return Uri.parse('$normalized/v1/models');
+  }
+}
+
+class _GeminiModelClient {
+  const _GeminiModelClient._();
+
+  static Future<List<String>> fetchModels({
+    required String baseUrl,
+    required String apiKey,
+  }) async {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 10);
+    try {
+      final request = await client.getUrl(_modelsUri(baseUrl));
+      request.headers.set('x-goog-api-key', apiKey);
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      final response = await request.close().timeout(
+        const Duration(seconds: 20),
+      );
+      final body = await utf8.decodeStream(response);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          'HTTP ${response.statusCode}: ${_compactModelCatalogBody(body)}',
+        );
+      }
+
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, Object?>) return const [];
+      final models = decoded['models'];
+      if (models is! List) return const [];
+      final ids = <Object?>[];
+      for (final rawModel in models) {
+        if (rawModel is! Map) continue;
+        final methods = rawModel['supportedGenerationMethods'];
+        if (methods is List && !methods.contains('generateContent')) continue;
+        final baseModelId = rawModel['baseModelId'];
+        if (baseModelId is String && baseModelId.trim().isNotEmpty) {
+          ids.add(baseModelId);
+          continue;
+        }
+        final name = rawModel['name'];
+        ids.add(
+          name is String && name.startsWith('models/')
+              ? name.substring('models/'.length)
+              : name,
+        );
+      }
+      return _sortedModelIds(ids);
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  static Uri _modelsUri(String baseUrl) {
+    var normalized = baseUrl.trim().isEmpty
+        ? 'https://generativelanguage.googleapis.com/v1beta'
+        : baseUrl.trim();
+    normalized = normalized.replaceFirst(RegExp(r'/+$'), '');
+    if (!normalized.endsWith('/models')) normalized = '$normalized/models';
+    final uri = Uri.parse(normalized);
+    return uri.replace(
+      queryParameters: {...uri.queryParameters, 'pageSize': '1000'},
+    );
+  }
+}
+
+List<String> _sortedModelIds(Iterable<Object?> values) {
+  final models = <String>{};
+  for (final value in values) {
+    if (value is! String) continue;
+    final id = value.trim();
+    if (id.isNotEmpty) models.add(id);
+  }
+  return models.toList()..sort();
+}
+
+String _compactModelCatalogBody(String body) {
+  final normalized = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (normalized.isEmpty) return 'empty response';
+  return normalized.length <= 160
+      ? normalized
+      : '${normalized.substring(0, 160)}...';
 }
 
 class _SettingsSectionHeader extends StatelessWidget {

@@ -104,42 +104,51 @@ void main() {
     },
   );
 
-  test('settings menu exposes first-party channels before nearby', () {
-    final source = File('lib/panels/session_history.dart').readAsStringSync();
+  test(
+    'channel settings implementation stays available off the settings home',
+    () {
+      final source = File('lib/panels/session_history.dart').readAsStringSync();
 
-    expect(source, contains('_SettingsSection.channels'));
-    expect(source, contains('_ChannelSettingsPage'));
-    expect(source, isNot(contains("key: const Key('channels_menu_item')")));
-    expect(source, contains("key: const Key('settings_menu_button')"));
-    expect(source, contains('_settingsInitialSection ='));
-    expect(source, contains('_SettingsSection.menu;'));
-    expect(source, contains("key: const Key('settings_channels_item')"));
-    expect(source, contains("key: const Key('channel_settings_page')"));
-    expect(
-      source.indexOf("key: const Key('settings_channels_item')"),
-      lessThan(source.indexOf("key: const Key('settings_nearby_item')")),
-    );
-    expect(source, contains('sdk.QqBotChannelProvider.channelName'));
-    expect(source, contains('sdk.BluetoothHeadsetChannelProvider.channelName'));
-    expect(source, contains("key: const Key('channel_add_button')"));
-    expect(source, contains('_ChannelTypePickerDialog'));
-    expect(source, contains('showModalBottomSheet<String>'));
-    expect(source, contains('_ChannelSetupSheetFrame'));
-    expect(source, contains('listChannelStatuses()'));
-    expect(source, contains('listAgents()'));
-    expect(source, contains('_channelStatusAccountId(status)'));
-    expect(source, contains('_QqChannelSetupDialog'));
-    expect(source, contains('_HeadsetChannelSetupDialog'));
-    expect(source, contains('connectChannel('));
-    expect(source, contains('_refreshConnectedChannel'));
-    expect(source, contains('status.connected'));
-    expect(source, contains("_channelText(context, zh: '刷新', en: 'Refresh')"));
-    expect(
-      source,
-      contains('required Future<bool> Function(NapaxiChatClient client) run'),
-    );
-    expect(source, contains('if (credentials == null) return false;'));
-  });
+      expect(source, contains('_SettingsSection.channels'));
+      expect(source, contains('_ChannelSettingsPage'));
+      expect(source, isNot(contains("key: const Key('channels_menu_item')")));
+      expect(source, contains("key: const Key('settings_menu_button')"));
+      expect(source, contains('_settingsInitialSection ='));
+      expect(source, contains('_SettingsSection.menu;'));
+      expect(
+        source,
+        isNot(contains("key: const Key('settings_channels_item')")),
+      );
+      expect(source, isNot(contains("key: const Key('settings_nearby_item')")));
+      expect(source, contains("key: const Key('channel_settings_page')"));
+      expect(source, contains('sdk.QqBotChannelProvider.channelName'));
+      expect(
+        source,
+        contains('sdk.BluetoothHeadsetChannelProvider.channelName'),
+      );
+      expect(source, contains("key: const Key('channel_add_button')"));
+      expect(source, contains('_ChannelTypePickerDialog'));
+      expect(source, contains('showModalBottomSheet<String>'));
+      expect(source, contains('_ChannelSetupSheetFrame'));
+      expect(source, contains('listChannelStatuses()'));
+      expect(source, contains('listAgents()'));
+      expect(source, contains('_channelStatusAccountId(status)'));
+      expect(source, contains('_QqChannelSetupDialog'));
+      expect(source, contains('_HeadsetChannelSetupDialog'));
+      expect(source, contains('connectChannel('));
+      expect(source, contains('_refreshConnectedChannel'));
+      expect(source, contains('status.connected'));
+      expect(
+        source,
+        contains("_channelText(context, zh: '刷新', en: 'Refresh')"),
+      );
+      expect(
+        source,
+        contains('required Future<bool> Function(NapaxiChatClient client) run'),
+      );
+      expect(source, contains('if (credentials == null) return false;'));
+    },
+  );
 
   test('demo scenarios keep provider action capability enabled', () {
     final source = File('lib/panels/scenarios_panel.dart').readAsStringSync();

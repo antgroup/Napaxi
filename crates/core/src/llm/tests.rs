@@ -6,8 +6,8 @@ use super::anthropic::{
     messages_url as anthropic_messages_url, parse_turn as parse_anthropic_turn,
 };
 use super::gemini::{
-    generate_url as gemini_generate_url, parse_turn as parse_gemini_turn,
-    stream_url as gemini_stream_url,
+    generate_url as gemini_generate_url, headers as gemini_headers,
+    parse_turn as parse_gemini_turn, stream_url as gemini_stream_url,
 };
 use super::http::{chat_completions_url, extra_headers};
 use super::messages::{
@@ -111,11 +111,18 @@ fn builds_provider_urls() {
     );
     assert_eq!(
         gemini_generate_url(&config("gemini", Some("https://gemini.test/v1"))),
-        "https://gemini.test/v1/models/model:generateContent?key=key"
+        "https://gemini.test/v1/models/model:generateContent"
     );
     assert_eq!(
         gemini_stream_url(&config("gemini", Some("https://gemini.test/v1"))),
-        "https://gemini.test/v1/models/model:streamGenerateContent?alt=sse&key=key"
+        "https://gemini.test/v1/models/model:streamGenerateContent?alt=sse"
+    );
+    assert_eq!(
+        gemini_headers(&config("gemini", None))
+            .unwrap()
+            .get("x-goog-api-key")
+            .unwrap(),
+        "key"
     );
 }
 

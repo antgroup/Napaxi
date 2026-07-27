@@ -236,6 +236,136 @@ class _KeyboardInsetIsolation extends StatelessWidget {
   }
 }
 
+class _SettingsSheetDragSurface extends StatefulWidget {
+  const _SettingsSheetDragSurface({
+    super.key,
+    required this.canStartDismiss,
+    required this.onDismissed,
+    required this.child,
+  });
+
+  final bool Function() canStartDismiss;
+  final VoidCallback onDismissed;
+  final Widget child;
+
+  @override
+  State<_SettingsSheetDragSurface> createState() =>
+      _SettingsSheetDragSurfaceState();
+}
+
+class _SettingsSheetDragSurfaceState extends State<_SettingsSheetDragSurface>
+    with SingleTickerProviderStateMixin {
+  static const double _flingVelocity = 700;
+  late final AnimationController _dragController;
+  int? _pointer;
+  Offset? _origin;
+  VelocityTracker? _velocityTracker;
+  bool _canDrag = false;
+  bool _dragActive = false;
+  bool _dismissed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _dragController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 230),
+      reverseDuration: const Duration(milliseconds: 250),
+    );
+  }
+
+  @override
+  void dispose() {
+    _dragController.dispose();
+    super.dispose();
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (_pointer != null || _dismissed || _dragController.isAnimating) return;
+    _pointer = event.pointer;
+    _origin = event.position;
+    _canDrag = widget.canStartDismiss();
+    _dragActive = false;
+    _velocityTracker = VelocityTracker.withKind(event.kind)
+      ..addPosition(event.timeStamp, event.position);
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (event.pointer != _pointer || !_canDrag || _dismissed) return;
+    _velocityTracker?.addPosition(event.timeStamp, event.position);
+    final origin = _origin;
+    if (origin == null) return;
+    final delta = event.position - origin;
+    if (!_dragActive) {
+      if (delta.dy <= 8 || delta.dy <= delta.dx.abs() * 1.15) return;
+      _dragActive = true;
+    }
+    final height = context.size?.height ?? MediaQuery.sizeOf(context).height;
+    _dragController.value = (delta.dy / height).clamp(0.0, 1.0);
+  }
+
+  void _handlePointerEnd(PointerEvent event) {
+    if (event.pointer != _pointer) return;
+    _velocityTracker?.addPosition(event.timeStamp, event.position);
+    final velocity = _velocityTracker?.getVelocity().pixelsPerSecond.dy ?? 0.0;
+    final wasDragging = _dragActive;
+    _resetPointer();
+    if (!wasDragging) return;
+    if (velocity > _flingVelocity || _dragController.value >= 0.5) {
+      unawaited(_finishDismiss());
+    } else {
+      unawaited(_dragController.animateBack(0, curve: Curves.easeOutCubic));
+    }
+  }
+
+  void _handlePointerCancel(PointerEvent event) {
+    if (event.pointer != _pointer) return;
+    final wasDragging = _dragActive;
+    _resetPointer();
+    if (wasDragging) {
+      unawaited(_dragController.animateBack(0, curve: Curves.easeOutCubic));
+    }
+  }
+
+  void _resetPointer() {
+    _pointer = null;
+    _origin = null;
+    _velocityTracker = null;
+    _canDrag = false;
+    _dragActive = false;
+  }
+
+  Future<void> _finishDismiss() async {
+    if (_dismissed) return;
+    _dismissed = true;
+    await _dragController.animateTo(1, curve: Curves.easeOutCubic);
+    if (mounted) widget.onDismissed();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: _handlePointerEnd,
+      onPointerCancel: _handlePointerCancel,
+      child: AnimatedBuilder(
+        animation: _dragController,
+        child: widget.child,
+        builder: (context, child) => Transform.translate(
+          key: const Key('settings_bottom_sheet_drag_transform'),
+          offset: Offset(
+            0,
+            MediaQuery.sizeOf(context).height * _dragController.value,
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
@@ -1092,6 +1222,22 @@ class _ChatScreenState extends State<ChatScreen>
             return PopScope(
               canPop: !downloading && !update.needForceUpdate,
               child: AlertDialog(
+                backgroundColor: _configSurface,
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                titleTextStyle: const TextStyle(
+                  color: _configTextPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+                contentTextStyle: const TextStyle(
+                  color: _configTextSecondary,
+                  fontSize: 15,
+                  height: 1.45,
+                ),
+                actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
                 title: Text(strings.updateAvailableTitle),
                 content: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1176,6 +1322,7 @@ class _ChatScreenState extends State<ChatScreen>
                       !update.needForceUpdate)
                     TextButton(
                       key: const Key('update_later_button'),
+                      style: _updateDialogTextButtonStyle(),
                       onPressed: () {
                         unawaited(widget.updateService.skipUpdate(update));
                         Navigator.of(dialogContext).pop();
@@ -1186,6 +1333,7 @@ class _ChatScreenState extends State<ChatScreen>
                       update.appUrl.isNotEmpty)
                     TextButton(
                       key: const Key('open_pgyer_install_page_button'),
+                      style: _updateDialogTextButtonStyle(),
                       onPressed: () {
                         unawaited(widget.updateService.openInstallPage(update));
                       },
@@ -1195,6 +1343,7 @@ class _ChatScreenState extends State<ChatScreen>
                       widget.updateService.supportsExternalUpdatePage)
                     TextButton(
                       key: const Key('open_release_page_button'),
+                      style: _updateDialogTextButtonStyle(),
                       onPressed: () {
                         unawaited(_showReleasePageDialog());
                       },
@@ -1204,6 +1353,7 @@ class _ChatScreenState extends State<ChatScreen>
                       stage == _UpdateInstallStage.permissionRequired)
                     TextButton(
                       key: const Key('update_done_button'),
+                      style: _updateDialogTextButtonStyle(),
                       onPressed: () => Navigator.of(dialogContext).pop(),
                       child: Text(
                         MaterialLocalizations.of(context).okButtonLabel,
@@ -1213,6 +1363,7 @@ class _ChatScreenState extends State<ChatScreen>
                       stage == _UpdateInstallStage.failed)
                     FilledButton(
                       key: const Key('install_update_button'),
+                      style: _updateDialogFilledButtonStyle(),
                       onPressed: () async {
                         setDialogState(() {
                           stage = _UpdateInstallStage.downloading;
@@ -1250,6 +1401,7 @@ class _ChatScreenState extends State<ChatScreen>
                     )
                   else if (downloading)
                     FilledButton(
+                      style: _updateDialogFilledButtonStyle(),
                       onPressed: null,
                       child: Text(strings.updateInstalling),
                     ),
@@ -1501,10 +1653,27 @@ class _ChatScreenState extends State<ChatScreen>
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
+          backgroundColor: _configSurface,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          titleTextStyle: const TextStyle(
+            color: _configTextPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+          contentTextStyle: const TextStyle(
+            color: _configTextSecondary,
+            fontSize: 15,
+            height: 1.45,
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
           title: Text(strings.checkForUpdates),
           content: Text(message),
           actions: [
             TextButton(
+              style: _updateDialogTextButtonStyle(),
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(strings.updateNoticeClose),
             ),
@@ -1520,15 +1689,33 @@ class _ChatScreenState extends State<ChatScreen>
       context: context,
       builder: (dialogContext) {
         return AlertDialog(
+          backgroundColor: _configSurface,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          titleTextStyle: const TextStyle(
+            color: _configTextPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+          contentTextStyle: const TextStyle(
+            color: _configTextSecondary,
+            fontSize: 15,
+            height: 1.45,
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
           title: Text(strings.checkForUpdates),
           content: Text(strings.updateReleasePagePrompt),
           actions: [
             TextButton(
+              style: _updateDialogTextButtonStyle(),
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: Text(strings.cancel),
             ),
             FilledButton(
               key: const Key('confirm_open_release_page_button'),
+              style: _updateDialogFilledButtonStyle(),
               onPressed: () => Navigator.of(dialogContext).pop(true),
               child: Text(strings.openReleasePage),
             ),
@@ -1540,6 +1727,25 @@ class _ChatScreenState extends State<ChatScreen>
     final opened = await widget.updateService.openExternalUpdatePage();
     if (!mounted || opened) return;
     await _showUpdateNoticeDialog(strings.releasePageOpenFailed);
+  }
+
+  ButtonStyle _updateDialogTextButtonStyle() {
+    return TextButton.styleFrom(
+      foregroundColor: _configTextSecondary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+    );
+  }
+
+  ButtonStyle _updateDialogFilledButtonStyle() {
+    return FilledButton.styleFrom(
+      backgroundColor: _configTextPrimary,
+      foregroundColor: Colors.white,
+      disabledBackgroundColor: _configBorderFaint,
+      disabledForegroundColor: _configTextTertiary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+    );
   }
 
   Future<void> _loadSessionHistory(String sessionId) async {
@@ -2391,9 +2597,7 @@ class _ChatScreenState extends State<ChatScreen>
   Future<void> _showSettingsSheet(_SettingsSection section) async {
     _dismissKeyboard();
     if (!mounted) return;
-    int? dragPointer;
-    Offset? dragOrigin;
-    var dismissTriggered = false;
+    final settingsPageKey = GlobalKey<_SettingsPageState>();
 
     await showModalBottomSheet<void>(
       context: context,
@@ -2402,33 +2606,13 @@ class _ChatScreenState extends State<ChatScreen>
       enableDrag: false,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.24),
-      builder: (sheetContext) => Listener(
+      builder: (sheetContext) => _SettingsSheetDragSurface(
         key: const Key('settings_bottom_sheet_gesture_surface'),
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (event) {
-          if (dragPointer != null || dismissTriggered) return;
-          dragPointer = event.pointer;
-          dragOrigin = event.position;
+        canStartDismiss: () {
+          final settingsState = settingsPageKey.currentState;
+          return settingsState?.canPullSheetDownFromCurrentContent == true;
         },
-        onPointerMove: (event) {
-          if (event.pointer != dragPointer || dismissTriggered) return;
-          final origin = dragOrigin;
-          if (origin == null) return;
-          final delta = event.position - origin;
-          if (delta.dy < 72 || delta.dy <= delta.dx.abs() * 1.2) return;
-          dismissTriggered = true;
-          Navigator.of(sheetContext).pop();
-        },
-        onPointerUp: (event) {
-          if (event.pointer != dragPointer) return;
-          dragPointer = null;
-          dragOrigin = null;
-        },
-        onPointerCancel: (event) {
-          if (event.pointer != dragPointer) return;
-          dragPointer = null;
-          dragOrigin = null;
-        },
+        onDismissed: () => Navigator.of(sheetContext).pop(),
         child: FractionallySizedBox(
           key: const Key('settings_bottom_sheet_frame'),
           heightFactor: 1,
@@ -2475,6 +2659,7 @@ class _ChatScreenState extends State<ChatScreen>
                     ),
                     Expanded(
                       child: _SettingsPage(
+                        key: settingsPageKey,
                         initialConfig: _config,
                         language: widget.language,
                         onConfigChanged: _handleConfigChanged,
@@ -2488,6 +2673,7 @@ class _ChatScreenState extends State<ChatScreen>
                         onGitSettingsChanged: _handleGitSettingsChanged,
                         onGitSettingsCleared: _handleGitSettingsCleared,
                         updateService: widget.updateService,
+                        feedbackService: widget.feedbackService,
                         onCheckForUpdates: () =>
                             _checkForUpdates(automatic: false),
                         onNearbyStart: () =>
@@ -2499,8 +2685,6 @@ class _ChatScreenState extends State<ChatScreen>
                         onNearbyDeletePeer: _deleteA2APairedPeer,
                         getNearbyPairingDiagnostic: () async =>
                             _lastA2APairingDiagnostic,
-                        onOpenFeedback: _openPrimaryFeedbackPage,
-                        onOpenContact: _openPrimaryContactPage,
                         onBack: () async {
                           Navigator.of(sheetContext).pop();
                           return false;
@@ -8586,24 +8770,6 @@ $candidate
       onPointerUp: _handleChatPointerEnd,
       onPointerCancel: _handleChatPointerEnd,
       child: page,
-    );
-  }
-
-  void _openPrimaryContactPage() {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => const _ContactPage()));
-  }
-
-  void _openPrimaryFeedbackPage() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => _FeedbackPage(
-          updateService: widget.updateService,
-          feedbackService: widget.feedbackService,
-          onOpenContact: _openPrimaryContactPage,
-        ),
-      ),
     );
   }
 
