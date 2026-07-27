@@ -289,10 +289,18 @@ String _formatElapsed(Duration duration) {
   return minutes > 0 ? '$minutes:$seconds' : '${duration.inSeconds}s';
 }
 
+class _CodexInstallCancelled implements Exception {
+  const _CodexInstallCancelled();
+}
+
 class _CodexInstallProgressDialog extends StatelessWidget {
-  const _CodexInstallProgressDialog({required this.progress});
+  const _CodexInstallProgressDialog({
+    required this.progress,
+    required this.onCancel,
+  });
 
   final ValueNotifier<_CodexInstallProgress> progress;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -314,6 +322,13 @@ class _CodexInstallProgressDialog extends StatelessWidget {
               LinearProgressIndicator(value: state.value.clamp(0, 1)),
               const SizedBox(height: 8),
               Text('${(state.value.clamp(0, 1) * 100).round()}%'),
+              if (!finished) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '预计等待 1–3 分钟',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
               if (state.substeps.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 ...state.substeps.map(
@@ -344,6 +359,14 @@ class _CodexInstallProgressDialog extends StatelessWidget {
             ],
           ),
           actions: [
+            if (!finished)
+              TextButton(
+                onPressed: () {
+                  onCancel();
+                  Navigator.of(context).pop(false);
+                },
+                child: const Text('取消'),
+              ),
             if (finished)
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(success),
@@ -3751,7 +3774,17 @@ class _ChatScreenState extends State<ChatScreen>
   }) async {
     final targetAgentId = agentId ?? _activeAgentId;
     if (!Platform.isAndroid || targetAgentId != 'engine.codex') return true;
-    if (_codexEnvironmentReady) return true;
+    if (_codexEnvironmentReady) {
+      final check = await _runDemoEnvironmentShell(
+        _codexCliCheckCommand,
+        timeoutSeconds: 10,
+      );
+      if (check.success) return true;
+      _traceChat(
+        'codex cached preflight invalidated error="${_tracePreview(check.error.isNotEmpty ? check.error : check.output)}"',
+      );
+      _codexEnvironmentReady = false;
+    }
     final inFlight = _codexEnvironmentPreflight;
     if (inFlight != null) return inFlight;
 
@@ -3811,10 +3844,9 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (context) => AlertDialog(
         title: const Text('安装 Codex 后即可使用'),
         content: const Text(
-          '当前设备还没有准备好 Codex 引擎。安装完成后，就可以在这个沙箱里使用 Codex 对话和代码能力。\n\n'
+          '首次使用 Codex 前需要先完成一次安装。\n\n'
           '预计下载大小：约 30–80 MB\n\n'
-          '预计安装后占用：约 80–180 MB，实际大小会随 Codex 版本和设备环境变化。\n\n'
-          '安装会优先使用国内 npmmirror 源，通常会比默认 npm 源更快。',
+          '安装过程中请保持网络连接。',
         ),
         actions: [
           TextButton(
@@ -3832,25 +3864,29 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<bool> _showCodexInstallProgressDialog() async {
     final progress = ValueNotifier<_CodexInstallProgress>(
-      const _CodexInstallProgress(
-        label: '准备安装 Codex 引擎…',
-        value: 0,
-        running: true,
-      ),
+      const _CodexInstallProgress(label: '准备安装…', value: 0, running: true),
     );
-    unawaited(_installCodexWithProgress(progress));
+    var cancelRequested = false;
+    final installFuture = _installCodexWithProgress(
+      progress,
+      isCancelled: () => cancelRequested,
+    );
+    unawaited(installFuture.whenComplete(progress.dispose));
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => _CodexInstallProgressDialog(progress: progress),
+      builder: (context) => _CodexInstallProgressDialog(
+        progress: progress,
+        onCancel: () => cancelRequested = true,
+      ),
     );
-    progress.dispose();
     return result ?? false;
   }
 
   Future<void> _installCodexWithProgress(
-    ValueNotifier<_CodexInstallProgress> progress,
-  ) async {
+    ValueNotifier<_CodexInstallProgress> progress, {
+    required bool Function() isCancelled,
+  }) async {
     Future<_EnvironmentCommandResult> runStep(
       String label,
       double value,
@@ -3859,13 +3895,14 @@ class _ChatScreenState extends State<ChatScreen>
       double? endValue,
       List<String> hints = const [],
     }) async {
+      if (isCancelled()) throw const _CodexInstallCancelled();
       Timer? timer;
       final startedAt = DateTime.now();
       progress.value = _CodexInstallProgress(
         label: label,
         value: value,
         running: true,
-        detail: '刚开始…',
+        detail: '',
         substeps: hints,
       );
       if (endValue != null && endValue > value) {
@@ -3878,16 +3915,18 @@ class _ChatScreenState extends State<ChatScreen>
             label: label,
             value: animated.clamp(value, endValue).toDouble(),
             running: true,
-            detail: '已等待 ${_formatElapsed(elapsed)}，仍在执行，请不要关闭应用。',
+            detail: '已等待 ${_formatElapsed(elapsed)}，请保持应用打开。',
             substeps: hints,
           );
         });
       }
       try {
-        return await _runDemoEnvironmentShell(
+        final result = await _runDemoEnvironmentShell(
           command,
           timeoutSeconds: timeoutSeconds,
         );
+        if (isCancelled()) throw const _CodexInstallCancelled();
+        return result;
       } finally {
         timer?.cancel();
       }
@@ -3895,11 +3934,10 @@ class _ChatScreenState extends State<ChatScreen>
 
     try {
       var result = await runStep(
-        '检查内置运行环境…',
+        '检查安装环境…',
         0.12,
         'command -v node && node --version && command -v npm && npm --version',
         timeoutSeconds: 30,
-        hints: const ['检测内置 Node.js', '检测内置 npm'],
       );
       if (!result.success) {
         _completeCodexInstall(progress, result);
@@ -3907,15 +3945,10 @@ class _ChatScreenState extends State<ChatScreen>
       }
 
       result = await runStep(
-        '配置安装目录…',
+        '准备安装文件…',
         0.36,
         _prepareCodexNpmPrefixCommand,
         timeoutSeconds: 60,
-        hints: const [
-          '写入 /root/.local',
-          '更新 PATH',
-          '切换 npm registry 到 npmmirror',
-        ],
       );
       if (!result.success) {
         _completeCodexInstall(progress, result);
@@ -3923,12 +3956,11 @@ class _ChatScreenState extends State<ChatScreen>
       }
 
       result = await runStep(
-        '检查 @openai/codex 包信息…',
+        '获取安装信息…',
         0.56,
         _codexNpmPackageCheckCommand,
         timeoutSeconds: 90,
         endValue: 0.64,
-        hints: const ['连接 npmmirror registry', '读取最新版本'],
       );
       if (!result.success) {
         _completeCodexInstall(progress, result);
@@ -3936,15 +3968,10 @@ class _ChatScreenState extends State<ChatScreen>
       }
 
       result = await runStep(
-        '下载并安装 @openai/codex…',
+        '下载并安装 Codex…',
         0.66,
         _installCodexCliCommand,
         endValue: 0.9,
-        hints: const [
-          '从 npmmirror 下载 package tarball',
-          '解包到 /root/.local',
-          '生成 codex 命令',
-        ],
       );
       if (!result.success) {
         _completeCodexInstall(progress, result);
@@ -3952,13 +3979,19 @@ class _ChatScreenState extends State<ChatScreen>
       }
 
       result = await runStep(
-        '验证 Codex CLI…',
+        '完成安装…',
         0.95,
         _codexCliCheckCommand,
         timeoutSeconds: 30,
-        hints: const ['执行 codex --version'],
       );
       _completeCodexInstall(progress, result);
+    } on _CodexInstallCancelled {
+      progress.value = const _CodexInstallProgress(
+        label: '已取消安装',
+        value: 1,
+        running: false,
+        success: false,
+      );
     } catch (error) {
       progress.value = _CodexInstallProgress(
         label: '安装失败',
