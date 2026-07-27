@@ -6231,8 +6231,24 @@ void main() {
     );
     expect(find.text('example.com'), findsNothing);
 
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pump();
     await tester.tap(find.byKey(const Key('session_history_search_close')));
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(
+      find.byKey(const Key('chat_background_keyboard_inset_isolation')),
+      findsOneWidget,
+    );
+
+    tester.view.resetViewInsets();
     await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('chat_background_keyboard_inset_isolation')),
+      findsNothing,
+    );
 
     await tester.tap(find.byTooltip('Remove from favorites'));
     await tester.pumpAndSettle();
@@ -6915,6 +6931,16 @@ void main() {
 
     expect(find.text('Recent'), findsNothing);
     expect(find.byKey(const Key('new_session_button')), findsNothing);
+    expect(
+      tester
+          .widget<Scaffold>(find.byKey(const Key('chat_root_scaffold')))
+          .resizeToAvoidBottomInset,
+      isFalse,
+    );
+    expect(
+      find.byKey(const Key('chat_background_keyboard_inset_isolation')),
+      findsOneWidget,
+    );
 
     await tester.enterText(
       find.byKey(const Key('session_history_search_field')),

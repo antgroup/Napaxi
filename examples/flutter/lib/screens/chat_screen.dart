@@ -225,10 +225,13 @@ class _KeyboardInsetIsolation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!enabled) return child;
-    return MediaQuery.removeViewInsets(
-      context: context,
-      removeBottom: true,
-      child: child,
+    return KeyedSubtree(
+      key: const Key('chat_background_keyboard_inset_isolation'),
+      child: MediaQuery.removeViewInsets(
+        context: context,
+        removeBottom: true,
+        child: child,
+      ),
     );
   }
 }
@@ -377,6 +380,8 @@ class _ChatScreenState extends State<ChatScreen>
   Future<NapaxiChatClient>? _primarySkillsClientFuture;
   String? _selectedChatProjectId;
   bool _isRenamingSessionTitle = false;
+  bool _isSessionHistorySearching = false;
+  int _sessionHistoryKeyboardIsolationEpoch = 0;
   String _activeScenarioId = _generalScenarioId;
   String _activeDeveloperEngineId = _defaultDeveloperEngineId;
   DemoGitSettings _gitSettings = const DemoGitSettings();
@@ -7323,6 +7328,33 @@ $candidate
     setState(() => _isRenamingSessionTitle = isEditing);
   }
 
+  void _handleSessionHistorySearchModeChanged(bool isSearching) {
+    final epoch = ++_sessionHistoryKeyboardIsolationEpoch;
+    if (isSearching) {
+      if (_isSessionHistorySearching) return;
+      setState(() => _isSessionHistorySearching = true);
+      return;
+    }
+    _dismissKeyboard();
+    unawaited(_releaseSessionHistoryKeyboardIsolation(epoch));
+  }
+
+  Future<void> _releaseSessionHistoryKeyboardIsolation(int epoch) async {
+    final appView = View.of(context);
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while (appView.viewInsets.bottom > 0 &&
+        DateTime.now().isBefore(deadline) &&
+        epoch == _sessionHistoryKeyboardIsolationEpoch) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    if (!mounted ||
+        epoch != _sessionHistoryKeyboardIsolationEpoch ||
+        !_isSessionHistorySearching) {
+      return;
+    }
+    setState(() => _isSessionHistorySearching = false);
+  }
+
   Future<void> _confirmDeleteSession(String sessionId) async {
     final strings = AppStrings.of(context);
     ChatSession? session;
@@ -7517,6 +7549,8 @@ $candidate
   void _openSessionHistory() {
     _dismissKeyboard();
     setState(() {
+      _sessionHistoryKeyboardIsolationEpoch += 1;
+      _isSessionHistorySearching = false;
       _sessionHistoryInitialView = _SessionHistoryView.menu;
       _sessionHistoryInitialSettingsSection = _SettingsSection.menu;
       _sessionHistoryInitialSkillsTab = _SkillsInitialTab.installed;
@@ -7602,6 +7636,9 @@ $candidate
   }
 
   void _closeSessionHistory() {
+    if (_isSessionHistorySearching) {
+      _handleSessionHistorySearchModeChanged(false);
+    }
     _sessionMenuController.reverse();
     unawaited(_refreshChannelInputSources());
   }
@@ -8000,6 +8037,7 @@ $candidate
                 onSessionRename: _renameSession,
                 onSessionRenameEditingChanged:
                     _handleSessionRenameEditingChanged,
+                onSearchModeChanged: _handleSessionHistorySearchModeChanged,
                 onSessionDelete: (sessionId) {
                   unawaited(_confirmDeleteSession(sessionId));
                 },
@@ -8019,7 +8057,9 @@ $candidate
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final keyboardVisible =
+        MediaQuery.viewInsetsOf(context).bottom > 0 &&
+        !_isSessionHistorySearching;
     final browserBelongsToActiveSession =
         _browserPanelAgentId == _activeAgentId &&
         _browserPanelSessionId == _activeSessionId;
@@ -8038,8 +8078,12 @@ $candidate
     final generatedIdentities = _generatedAttachmentIdentities(_activeSession);
 
     return Scaffold(
+      key: const Key('chat_root_scaffold'),
       resizeToAvoidBottomInset:
-          _primaryView == _ChatPrimaryView.chat && !_isRenamingSessionTitle,
+          _primaryView == _ChatPrimaryView.chat &&
+          !_isRenamingSessionTitle &&
+          !_isSessionHistorySearching &&
+          _sessionMenuController.isDismissed,
       body: Stack(
         children: [
           _buildSessionMenu(),
@@ -8051,7 +8095,8 @@ $candidate
             onHorizontalDragEnd: _handleSessionMenuDragEnd,
             child: _primaryView == _ChatPrimaryView.chat
                 ? _KeyboardInsetIsolation(
-                    enabled: _isRenamingSessionTitle,
+                    enabled:
+                        _isRenamingSessionTitle || _isSessionHistorySearching,
                     child: Listener(
                       behavior: HitTestBehavior.translucent,
                       onPointerDown: _handleChatPointerDown,

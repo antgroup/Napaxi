@@ -332,6 +332,7 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.onSessionPinToggle,
     required this.onSessionRename,
     required this.onSessionRenameEditingChanged,
+    required this.onSearchModeChanged,
     required this.onSessionDelete,
     this.onPendingEvolutionChanged,
   });
@@ -383,6 +384,7 @@ class _SessionHistorySheet extends StatefulWidget {
   final ValueChanged<String> onSessionPinToggle;
   final void Function(String sessionId, String title) onSessionRename;
   final ValueChanged<bool> onSessionRenameEditingChanged;
+  final ValueChanged<bool> onSearchModeChanged;
   final ValueChanged<String> onSessionDelete;
   final Future<void> Function()? onPendingEvolutionChanged;
 
@@ -468,6 +470,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
         _searchQuery = '';
       }
     });
+    widget.onSearchModeChanged(opening);
     if (opening) {
       Future<void>.delayed(const Duration(milliseconds: 100), () {
         if (!mounted || !_isSearching) return;
