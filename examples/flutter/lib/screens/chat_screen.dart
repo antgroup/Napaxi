@@ -2218,6 +2218,8 @@ class _ChatScreenState extends State<ChatScreen>
     _configRevision += 1;
     setState(() {
       _config = config;
+      _primaryFilesClientFuture = null;
+      _primarySkillsClientFuture = null;
       _sessions = _sessions.map(_refreshWelcomeMessage).toList();
     });
     unawaited(_persistConfig(config));
@@ -2261,6 +2263,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (!mounted || revision != _configRevision) return;
       setState(() {
         _config = restoredConfig;
+        _primaryFilesClientFuture = null;
+        _primarySkillsClientFuture = null;
         _activeScenarioId = restoredRuntimeProfile.scenarioId;
         _activeDeveloperEngineId = restoredRuntimeProfile.activeEngineId;
         _activeAgentId = restoredRuntimeProfile.agentId;
@@ -2322,6 +2326,8 @@ class _ChatScreenState extends State<ChatScreen>
       );
       setState(() {
         _config = restoredConfig;
+        _primaryFilesClientFuture = null;
+        _primarySkillsClientFuture = null;
         _sessions = _sessions.map(_refreshWelcomeMessage).toList();
       });
     } catch (_) {
@@ -2580,7 +2586,7 @@ class _ChatScreenState extends State<ChatScreen>
     _dismissKeyboard();
     setState(() {
       _primaryView = _ChatPrimaryView.files;
-      _primaryFilesClientFuture ??= _buildFilesClientFuture();
+      _primaryFilesClientFuture = _buildFilesClientFuture();
     });
     _closeSessionHistory();
   }
@@ -2589,7 +2595,7 @@ class _ChatScreenState extends State<ChatScreen>
     _dismissKeyboard();
     setState(() {
       _primaryView = _ChatPrimaryView.skills;
-      _primarySkillsClientFuture ??= _buildSkillsClientFuture();
+      _primarySkillsClientFuture = _buildSkillsClientFuture();
     });
     _closeSessionHistory();
   }
@@ -2664,6 +2670,7 @@ class _ChatScreenState extends State<ChatScreen>
                         language: widget.language,
                         onConfigChanged: _handleConfigChanged,
                         onLanguageChanged: widget.onLanguageChanged,
+                        onEngineConfigChanged: _handleEngineConfigChanged,
                         createScenariosClientFuture:
                             _buildScenariosClientFuture,
                         createNearbyClientFuture: _getChatClient,
@@ -2701,6 +2708,14 @@ class _ChatScreenState extends State<ChatScreen>
         ),
       ),
     );
+  }
+
+  void _handleEngineConfigChanged() {
+    if (!mounted) return;
+    setState(() {
+      _primaryFilesClientFuture = null;
+      _primarySkillsClientFuture = null;
+    });
   }
 
   void _showSettingsFromMenu() {
@@ -7753,35 +7768,25 @@ $candidate
   }
 
   Future<NapaxiChatClient> _buildFilesClientFuture() {
-    final strings = AppStrings.of(context);
-    final agentId = _activeAgentId;
-    final selectedProfile = _runtimeProfileForAgent(agentId);
-    return () async {
-      if (selectedProfile == null ||
-          !selectedProfile.hasModel ||
-          selectedProfile.apiKey.trim().isEmpty) {
-        throw Exception(strings.configureToViewFiles);
-      }
-      final client = await _getChatClient();
-      await client.configure(
-        selectedProfile,
-        responseLanguage: _responseLanguageCode,
-        capabilitySelection: _activeScenarioCapabilitySelection,
-      );
-      return client;
-    }();
+    return _buildContentBrowserClient(
+      missingConfigMessage: AppStrings.of(context).configureToViewFiles,
+    );
   }
 
   Future<NapaxiChatClient> _buildSkillsClientFuture() {
-    final strings = AppStrings.of(context);
+    return _buildContentBrowserClient(
+      missingConfigMessage: AppStrings.of(context).configureToViewSkills,
+    );
+  }
+
+  Future<NapaxiChatClient> _buildContentBrowserClient({
+    required String missingConfigMessage,
+  }) async {
     final agentId = _activeAgentId;
     final selectedProfile = _runtimeProfileForAgent(agentId);
-    return () async {
-      if (selectedProfile == null ||
-          !selectedProfile.hasModel ||
-          selectedProfile.apiKey.trim().isEmpty) {
-        throw Exception(strings.configureToViewSkills);
-      }
+    if (selectedProfile != null &&
+        selectedProfile.hasModel &&
+        selectedProfile.apiKey.trim().isNotEmpty) {
       final client = await _getChatClient();
       await client.configure(
         selectedProfile,
@@ -7789,7 +7794,33 @@ $candidate
         capabilitySelection: _activeScenarioCapabilitySelection,
       );
       return client;
-    }();
+    }
+
+    // Developer CLI engines keep their credentials in the engine settings
+    // instead of LlmConfigState. Files/Skills only need an initialized SDK
+    // management engine, so accept those engine credentials as a valid setup.
+    if (await _hasConfiguredCliEngineCredential(agentId)) {
+      final client = await _getChatClient();
+      await client.configureForManagement(
+        capabilitySelection: _activeScenarioCapabilitySelection,
+      );
+      return client;
+    }
+
+    throw Exception(missingConfigMessage);
+  }
+
+  Future<bool> _hasConfiguredCliEngineCredential(String agentId) async {
+    final spec = switch (agentId) {
+      'engine.cc' => _CliEngineSpec.cc,
+      'engine.codex' => _CliEngineSpec.codex,
+      _ => null,
+    };
+    if (spec == null) return false;
+    final apiKey = await const FlutterSecureStorage().read(
+      key: spec.apiKeyStorageKey,
+    );
+    return apiKey?.trim().isNotEmpty ?? false;
   }
 
   Future<NapaxiChatClient> _buildScenariosClientFuture() async {
@@ -8874,6 +8905,7 @@ $candidate
                 config: _config,
                 onConfigChanged: _handleConfigChanged,
                 onLanguageChanged: widget.onLanguageChanged,
+                onEngineConfigChanged: _handleEngineConfigChanged,
                 onFavoriteTap: _openFavoriteAttachment,
                 onFavoriteRemove: _toggleFavoriteAttachment,
                 onCheckForUpdates: () => _checkForUpdates(automatic: false),

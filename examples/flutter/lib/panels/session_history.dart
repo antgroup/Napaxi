@@ -341,6 +341,7 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.config,
     required this.onConfigChanged,
     required this.onLanguageChanged,
+    required this.onEngineConfigChanged,
     required this.onFavoriteTap,
     required this.onFavoriteRemove,
     required this.onCheckForUpdates,
@@ -396,6 +397,7 @@ class _SessionHistorySheet extends StatefulWidget {
   final LlmConfigState config;
   final ValueChanged<LlmConfigState> onConfigChanged;
   final ValueChanged<AppLanguage> onLanguageChanged;
+  final VoidCallback onEngineConfigChanged;
   final ValueChanged<ChatAttachment> onFavoriteTap;
   final ValueChanged<ChatAttachment> onFavoriteRemove;
   final VoidCallback onCheckForUpdates;
@@ -470,6 +472,11 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
       _viewStack.clear();
       _settingsInitialSection = widget.initialSettingsSection;
       _skillsInitialTab = widget.initialSkillsTab;
+    }
+    if (oldWidget.config != widget.config ||
+        oldWidget.activeAgent.id != widget.activeAgent.id) {
+      _filesClientFuture = null;
+      _skillsClientFuture = null;
     }
     if (oldWidget.activeScenarioId != widget.activeScenarioId) {
       _repoWorkbenchContributionFuture = null;
@@ -1067,6 +1074,12 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     );
   }
 
+  void _handleEngineConfigChanged() {
+    _filesClientFuture = null;
+    _skillsClientFuture = null;
+    widget.onEngineConfigChanged();
+  }
+
   Widget _buildCurrentView({
     required BuildContext context,
     required AppStrings strings,
@@ -1132,6 +1145,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
           language: _AppLanguageScope.languageOf(context),
           onConfigChanged: widget.onConfigChanged,
           onLanguageChanged: widget.onLanguageChanged,
+          onEngineConfigChanged: _handleEngineConfigChanged,
           createScenariosClientFuture: widget.createScenariosClientFuture,
           createNearbyClientFuture: widget.createNearbyClientFuture,
           activeScenarioId: widget.activeScenarioId,
@@ -2195,6 +2209,7 @@ class _SettingsPage extends StatefulWidget {
     required this.language,
     required this.onConfigChanged,
     required this.onLanguageChanged,
+    required this.onEngineConfigChanged,
     required this.createScenariosClientFuture,
     required this.createNearbyClientFuture,
     required this.activeScenarioId,
@@ -2220,6 +2235,7 @@ class _SettingsPage extends StatefulWidget {
   final AppLanguage language;
   final ValueChanged<LlmConfigState> onConfigChanged;
   final ValueChanged<AppLanguage> onLanguageChanged;
+  final VoidCallback onEngineConfigChanged;
   final Future<NapaxiChatClient> Function() createScenariosClientFuture;
   final Future<NapaxiChatClient> Function() createNearbyClientFuture;
   final String activeScenarioId;
@@ -2728,6 +2744,7 @@ class _SettingsPageState extends State<_SettingsPage>
       ),
       _SettingsSection.engines => _EngineSettingsPage(
         clientFuture: widget.createScenariosClientFuture(),
+        onEngineConfigChanged: widget.onEngineConfigChanged,
         embedded: true,
         onBack: () async {
           _setSection(_SettingsSection.menu);
@@ -4923,11 +4940,13 @@ class _AgentSettingsField extends StatelessWidget {
 class _EngineSettingsPage extends StatefulWidget {
   const _EngineSettingsPage({
     required this.clientFuture,
+    required this.onEngineConfigChanged,
     this.embedded = false,
     this.onBack,
   });
 
   final Future<NapaxiChatClient> clientFuture;
+  final VoidCallback onEngineConfigChanged;
   final bool embedded;
   final Future<bool> Function()? onBack;
 
@@ -5032,6 +5051,7 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
         );
       } catch (_) {}
     }
+    widget.onEngineConfigChanged();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
