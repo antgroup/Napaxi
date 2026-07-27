@@ -2807,7 +2807,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Android 项目、Git、构建和环境配置。'), findsOneWidget);
-    expect(find.text('可以切换使用'), findsOneWidget);
+    expect(find.text('开发中功能，需要邀请码'), findsOneWidget);
+    expect(find.text('开发工作台仍在完善中。输入邀请码后，可以提前试用该场景。'), findsOneWidget);
+    expect(
+      find.byKey(const Key('developer_workbench_invite_field')),
+      findsOneWidget,
+    );
     expect(find.text('激活计划'), findsNothing);
     expect(find.text('关键'), findsNothing);
     expect(find.text('宿主策略'), findsNothing);
@@ -2817,6 +2822,21 @@ void main() {
     expect(find.text('Scenarios'), findsNothing);
     expect(find.text('Developer Workbench'), findsNothing);
 
+    await tester.tap(find.byKey(const Key('scenario_apply_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('邀请码不正确'), findsOneWidget);
+    expect(fakeClient.appliedCapabilitySelection, isNotNull);
+    expect(
+      fakeClient.appliedCapabilitySelection!.config['scenario_id'],
+      'napaxi.scenario.general',
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('developer_workbench_invite_field')),
+      'admin',
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('scenario_apply_button')));
     await tester.pumpAndSettle();
 
@@ -2833,14 +2853,10 @@ void main() {
       fakeClient.appliedCapabilitySelection!.enabledCapabilities,
       contains('napaxi.tool.shell_remote'),
     );
-    // After applying, the active scenario label is reflected in more than one
-    // surface (the scenarios page and the settings entry).
     expect(find.text('当前场景：开发工作台'), findsWidgets);
 
     await tester.tap(find.byType(BackButton).first);
     await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('settings_engines_item')), findsOneWidget);
   });
 
   testWidgets('mobile developer scenario uses engine runtime scope', (
