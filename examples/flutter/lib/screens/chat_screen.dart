@@ -272,6 +272,7 @@ class _CodexInstallProgress {
     required this.running,
     this.success,
     this.detail = '',
+    this.substeps = const [],
   });
 
   final String label;
@@ -279,6 +280,13 @@ class _CodexInstallProgress {
   final bool running;
   final bool? success;
   final String detail;
+  final List<String> substeps;
+}
+
+String _formatElapsed(Duration duration) {
+  final minutes = duration.inMinutes;
+  final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+  return minutes > 0 ? '$minutes:$seconds' : '${duration.inSeconds}s';
 }
 
 class _CodexInstallProgressDialog extends StatelessWidget {
@@ -306,6 +314,26 @@ class _CodexInstallProgressDialog extends StatelessWidget {
               LinearProgressIndicator(value: state.value.clamp(0, 1)),
               const SizedBox(height: 8),
               Text('${(state.value.clamp(0, 1) * 100).round()}%'),
+              if (state.substeps.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...state.substeps.map(
+                  (step) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('• '),
+                        Expanded(
+                          child: Text(
+                            step,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               if (state.detail.trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -3778,18 +3806,15 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<bool?> _showCodexInstallPrompt(_EnvironmentCommandResult check) {
-    final detail = _shortEnvironmentMessage(
-      check.error.isNotEmpty ? check.error : check.output,
-    );
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('需要安装 Codex 引擎'),
-        content: Text(
-          '当前 Android 沙箱中没有检测到可用的 codex 命令。'
-          '如果要使用 Codex 引擎，需要先安装 Codex CLI。\n\n'
-          '安装会在沙箱内检查 Node.js/npm，并通过 npm 安装 @openai/codex。'
-          '${detail.isEmpty ? '' : '\n\n检测结果：$detail'}',
+        title: const Text('安装 Codex 后即可使用'),
+        content: const Text(
+          '当前设备还没有准备好 Codex 引擎。安装完成后，就可以在这个沙箱里使用 Codex 对话和代码能力。\n\n'
+          '预计下载大小：约 30–80 MB\n\n'
+          '预计安装后占用：约 80–180 MB，实际大小会随 Codex 版本和设备环境变化。\n\n'
+          '安装会优先使用国内 npmmirror 源，通常会比默认 npm 源更快。',
         ),
         actions: [
           TextButton(
@@ -3831,35 +3856,96 @@ class _ChatScreenState extends State<ChatScreen>
       double value,
       String command, {
       int timeoutSeconds = 600,
+      double? endValue,
+      List<String> hints = const [],
     }) async {
+      Timer? timer;
+      final startedAt = DateTime.now();
       progress.value = _CodexInstallProgress(
         label: label,
         value: value,
         running: true,
+        detail: '刚开始…',
+        substeps: hints,
       );
-      return _runDemoEnvironmentShell(command, timeoutSeconds: timeoutSeconds);
+      if (endValue != null && endValue > value) {
+        timer = Timer.periodic(const Duration(seconds: 2), (_) {
+          final elapsed = DateTime.now().difference(startedAt);
+          final elapsedSeconds = elapsed.inSeconds;
+          final span = endValue - value;
+          final animated = value + span * (1 - 1 / (1 + elapsedSeconds / 18));
+          progress.value = _CodexInstallProgress(
+            label: label,
+            value: animated.clamp(value, endValue).toDouble(),
+            running: true,
+            detail: '已等待 ${_formatElapsed(elapsed)}，仍在执行，请不要关闭应用。',
+            substeps: hints,
+          );
+        });
+      }
+      try {
+        return await _runDemoEnvironmentShell(
+          command,
+          timeoutSeconds: timeoutSeconds,
+        );
+      } finally {
+        timer?.cancel();
+      }
     }
 
     try {
       var result = await runStep(
-        '检查 Node.js 和 npm…',
-        0.15,
-        'command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1',
+        '检查内置运行环境…',
+        0.12,
+        'command -v node && node --version && command -v npm && npm --version',
         timeoutSeconds: 30,
+        hints: const ['检测内置 Node.js', '检测内置 npm'],
       );
       if (!result.success) {
-        result = await runStep(
-          '安装 Node.js 和 npm…',
-          0.35,
-          'apk add --no-cache nodejs npm',
-        );
-        if (!result.success) {
-          _completeCodexInstall(progress, result);
-          return;
-        }
+        _completeCodexInstall(progress, result);
+        return;
       }
 
-      result = await runStep('安装 Codex CLI…', 0.7, _installCodexCliCommand);
+      result = await runStep(
+        '配置安装目录…',
+        0.36,
+        _prepareCodexNpmPrefixCommand,
+        timeoutSeconds: 60,
+        hints: const [
+          '写入 /root/.local',
+          '更新 PATH',
+          '切换 npm registry 到 npmmirror',
+        ],
+      );
+      if (!result.success) {
+        _completeCodexInstall(progress, result);
+        return;
+      }
+
+      result = await runStep(
+        '检查 @openai/codex 包信息…',
+        0.56,
+        _codexNpmPackageCheckCommand,
+        timeoutSeconds: 90,
+        endValue: 0.64,
+        hints: const ['连接 npmmirror registry', '读取最新版本'],
+      );
+      if (!result.success) {
+        _completeCodexInstall(progress, result);
+        return;
+      }
+
+      result = await runStep(
+        '下载并安装 @openai/codex…',
+        0.66,
+        _installCodexCliCommand,
+        endValue: 0.9,
+        hints: const [
+          '从 npmmirror 下载 package tarball',
+          '解包到 /root/.local',
+          '生成 codex 命令',
+        ],
+      );
       if (!result.success) {
         _completeCodexInstall(progress, result);
         return;
@@ -3870,6 +3956,7 @@ class _ChatScreenState extends State<ChatScreen>
         0.95,
         _codexCliCheckCommand,
         timeoutSeconds: 30,
+        hints: const ['执行 codex --version'],
       );
       _completeCodexInstall(progress, result);
     } catch (error) {

@@ -1527,11 +1527,10 @@ echo 22.04
 const String _codexCliCheckCommand =
     r'HOME=/root PATH="/root/.local/bin:$PATH" codex --version 2>&1';
 
-// Installs the Codex CLI into the sandbox user's npm prefix. Avoid `apk add`
-// here: mobile/proot sandboxes may not have permission to write apk's system
-// package database. Node.js/npm are managed separately by the System packages
-// section, while this tool keeps its global npm writes under $HOME/.local.
-const String _installCodexCliCommand = r'''
+// Installs the Codex CLI into the sandbox user's npm prefix. Node.js/npm are
+// expected to be built into the sandbox image; this flow only verifies them and
+// keeps global npm writes under $HOME/.local.
+const String _prepareCodexNpmPrefixCommand = r'''
 set -e
 export HOME=/root
 if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
@@ -1540,21 +1539,43 @@ if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
 fi
 mkdir -p "$HOME/.local/bin"
 npm config set prefix "$HOME/.local"
+npm config set registry "https://registry.npmmirror.com"
 export PATH="$HOME/.local/bin:$PATH"
 if [ -f "$HOME/.profile" ]; then
   grep -qs '\.local/bin' "$HOME/.profile" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.profile"
 else
   printf 'export PATH="$HOME/.local/bin:$PATH"\n' > "$HOME/.profile"
 fi
-npm install -g @openai/codex
+node --version
+npm --version
+''';
+
+const String _codexNpmPackageCheckCommand = r'''
+set -e
+export HOME=/root
+export PATH="$HOME/.local/bin:$PATH"
+npm view @openai/codex version --registry="https://registry.npmmirror.com" --loglevel=notice
+''';
+
+const String _installCodexCliCommand = r'''
+set -e
+export HOME=/root
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  echo "The built-in Node.js/npm runtime is missing; please update the sandbox image." >&2
+  exit 1
+fi
+mkdir -p "$HOME/.local/bin"
+npm config set prefix "$HOME/.local"
+npm config set registry "https://registry.npmmirror.com"
+export PATH="$HOME/.local/bin:$PATH"
+npm install -g @openai/codex --registry="https://registry.npmmirror.com" --loglevel=notice --foreground-scripts
 codex --version
 ''';
 
-// Installs Node.js + npm via apk, then installs the Claude Agent SDK globally
-// through npm. The SDK package was split out of @anthropic-ai/claude-code.
+// Installs the Claude Agent SDK globally through the built-in npm runtime. The
+// SDK package was split out of @anthropic-ai/claude-code.
 const String _installClaudeAgentSdkCommand = '''
 set -e
-apk add --no-cache nodejs npm
 npm install -g @anthropic-ai/claude-agent-sdk
 ''';
 
@@ -1632,14 +1653,6 @@ List<DemoEnvironmentTool> _defaultEnvironmentTools() {
       targetVersion: 'repo',
       checkCommand: 'qemu-x86_64 --version 2>&1',
       installCommand: 'apk add --no-cache qemu-x86_64',
-    ),
-    DemoEnvironmentTool(
-      id: 'npm',
-      name: 'npm',
-      category: 'System packages',
-      targetVersion: 'repo',
-      checkCommand: 'npm --version 2>&1',
-      installCommand: 'apk add --no-cache nodejs npm',
     ),
     DemoEnvironmentTool(
       id: 'alpine-libs',
