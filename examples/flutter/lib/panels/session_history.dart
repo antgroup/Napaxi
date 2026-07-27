@@ -161,12 +161,14 @@ class _SessionSheetAction extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.isDestructive = false,
+    this.showIconSlash = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool isDestructive;
+  final bool showIconSlash;
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +187,35 @@ class _SessionSheetAction extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
           child: Row(
             children: [
-              Icon(icon, color: foregroundColor, size: 22),
+              SizedBox.square(
+                dimension: 22,
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(icon, color: foregroundColor, size: 22),
+                    if (showIconSlash)
+                      Transform.rotate(
+                        angle: -0.785398,
+                        child: Container(
+                          key: const Key('session_action_icon_slash'),
+                          width: 25,
+                          height: 5,
+                          color: _appSurfaceColor,
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 25,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: foregroundColor,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
@@ -323,6 +353,10 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.onNewSession,
     required this.onProjectCreated,
     required this.onProjectChatStarted,
+    required this.onProjectPinToggle,
+    required this.onProjectSettings,
+    required this.onProjectDelete,
+    required this.onProjectSessionRemove,
     required this.onFilesSelected,
     required this.onSkillsSelected,
     required this.onProjectsSelected,
@@ -372,9 +406,13 @@ class _SessionHistorySheet extends StatefulWidget {
   final Future<void> Function(sdk.A2APeer peer) onNearbyDeletePeer;
   final Future<String?> Function() getNearbyPairingDiagnostic;
   final VoidCallback onNewSession;
-  final ValueChanged<String> onProjectCreated;
+  final ValueChanged<_NewProjectDraft> onProjectCreated;
   final Future<void> Function(String projectId, String message)
   onProjectChatStarted;
+  final ValueChanged<_ChatProject> onProjectPinToggle;
+  final ValueChanged<_ChatProject> onProjectSettings;
+  final ValueChanged<_ChatProject> onProjectDelete;
+  final ValueChanged<String> onProjectSessionRemove;
   final VoidCallback onFilesSelected;
   final VoidCallback onSkillsSelected;
   final VoidCallback onProjectsSelected;
@@ -595,171 +633,25 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
   }
 
   Future<void> _showCreateProjectDialog() async {
-    final controller = TextEditingController();
     final appView = View.of(context);
     widget.onSessionRenameEditingChanged(true);
-    String? projectName;
+    _NewProjectDraft? draft;
     try {
-      projectName = await showDialog<String>(
+      draft = await showModalBottomSheet<_NewProjectDraft>(
         context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        enableDrag: true,
+        backgroundColor: Colors.transparent,
         barrierColor: Colors.black.withValues(alpha: 0.22),
-        animationStyle: AnimationStyle.noAnimation,
-        builder: (dialogContext) {
-          var canCreate = false;
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              void submit() {
-                final name = controller.text.trim();
-                if (name.isNotEmpty) {
-                  FocusScope.of(dialogContext).unfocus();
-                  Navigator.of(dialogContext).pop(name);
-                }
-              }
-
-              return Dialog(
-                backgroundColor: Colors.transparent,
-                insetPadding: const EdgeInsets.symmetric(horizontal: 22),
-                child: Material(
-                  color: _appSurfaceColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    side: const BorderSide(color: _appSurfaceBorderColor),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _projectCopy(
-                            context,
-                            english: 'New project',
-                            chinese: '新建项目',
-                          ),
-                          style: const TextStyle(
-                            color: _sessionMenuText,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          key: const Key('new_project_name_field'),
-                          controller: controller,
-                          autofocus: true,
-                          maxLength: 80,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => submit(),
-                          onChanged: (value) {
-                            final nextCanCreate = value.trim().isNotEmpty;
-                            if (nextCanCreate != canCreate) {
-                              setDialogState(() => canCreate = nextCanCreate);
-                            }
-                          },
-                          decoration: InputDecoration(
-                            hintText: _projectCopy(
-                              context,
-                              english: 'Project name',
-                              chinese: '项目名称',
-                            ),
-                            counterText: '',
-                            filled: true,
-                            fillColor: Colors.white,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 15,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
-                              borderSide: const BorderSide(
-                                color: _appSurfaceBorderColor,
-                              ),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
-                              borderSide: const BorderSide(
-                                color: _appSurfaceBorderColor,
-                              ),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(18),
-                              borderSide: const BorderSide(
-                                color: Color(0xFF999999),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                key: const Key('cancel_create_project_button'),
-                                onPressed: () {
-                                  FocusScope.of(dialogContext).unfocus();
-                                  Navigator.of(dialogContext).pop();
-                                },
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: _sessionMenuText,
-                                  minimumSize: const Size.fromHeight(48),
-                                  side: const BorderSide(
-                                    color: _appSurfaceBorderColor,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                ),
-                                child: Text(
-                                  _projectCopy(
-                                    context,
-                                    english: 'Cancel',
-                                    chinese: '取消',
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: FilledButton(
-                                key: const Key('confirm_create_project_button'),
-                                onPressed: canCreate ? submit : null,
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF222222),
-                                  foregroundColor: Colors.white,
-                                  minimumSize: const Size.fromHeight(48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                ),
-                                child: Text(
-                                  _projectCopy(
-                                    context,
-                                    english: 'Create',
-                                    chinese: '创建',
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          );
-        },
+        builder: (_) => const _CreateProjectSheet(),
       );
       await _waitForKeyboardToHide(appView);
     } finally {
-      controller.dispose();
       if (mounted) widget.onSessionRenameEditingChanged(false);
     }
-    if (!mounted || projectName == null) return;
-    widget.onProjectCreated(projectName);
+    if (!mounted || draft == null) return;
+    widget.onProjectCreated(draft);
   }
 
   Widget _buildProjectsPage(BuildContext context) {
@@ -773,6 +665,9 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
       onMenu: () => unawaited(_handleBack()),
       onAdd: () => unawaited(_showCreateProjectDialog()),
       onProjectTap: _openProject,
+      onProjectPinToggle: widget.onProjectPinToggle,
+      onProjectSettings: widget.onProjectSettings,
+      onProjectDelete: widget.onProjectDelete,
     );
   }
 
@@ -795,6 +690,11 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
       sessions: projectSessions,
       onBack: () => unawaited(_handleBack()),
       onSessionTap: widget.onSessionSelected,
+      onSessionPinToggle: widget.onSessionPinToggle,
+      onSessionRename: (session) =>
+          unawaited(_showRenameSessionDialog(session)),
+      onSessionRemove: widget.onProjectSessionRemove,
+      onSessionDelete: widget.onSessionDelete,
       onStartChat: (message, attachments, pinnedSkillNames) =>
           widget.onProjectChatStarted(project.id, message),
       agentId: widget.activeAgent.id,
@@ -1143,7 +1043,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
           _buildEnvironmentMenuAction(),
           _SessionMenuAction(
             key: const Key('skills_menu_item'),
-            icon: Icons.extension_rounded,
+            icon: Icons.extension_outlined,
             label: strings.skillsTitle,
             selected: widget.primaryView == _ChatPrimaryView.skills,
             selectedKey: const Key('skills_menu_selected'),
@@ -1594,9 +1494,8 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                       children: [
                         _SessionSheetAction(
                           key: Key('session_pin_action_${session.id}'),
-                          icon: session.isPinned
-                              ? Icons.push_pin_outlined
-                              : Icons.push_pin_rounded,
+                          icon: Icons.push_pin_outlined,
+                          showIconSlash: session.isPinned,
                           label: session.isPinned
                               ? strings.unpinChat
                               : strings.pinChat,

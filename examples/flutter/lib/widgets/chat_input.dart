@@ -232,6 +232,7 @@ class _ChatInputBar extends StatefulWidget {
     this.chatClient,
     this.agentId = '',
     this.showContextStatus = true,
+    this.messageHint,
     this.inputFieldKey = const Key('chat_input_field'),
     this.sendButtonKey = const Key('send_message_button'),
     this.stopButtonKey = const Key('stop_message_button'),
@@ -260,6 +261,7 @@ class _ChatInputBar extends StatefulWidget {
   final NapaxiChatClient? chatClient;
   final String agentId;
   final bool showContextStatus;
+  final String? messageHint;
   final Key inputFieldKey;
   final Key sendButtonKey;
   final Key stopButtonKey;
@@ -617,7 +619,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                       textInputAction: TextInputAction.newline,
                       onTapOutside: (_) => widget.focusNode.unfocus(),
                       decoration: InputDecoration(
-                        hintText: strings.messageHint,
+                        hintText: widget.messageHint ?? strings.messageHint,
                         hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.zero,

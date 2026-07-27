@@ -2193,18 +2193,53 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  void _createChatProject(String name) {
-    final normalizedName = name.trim();
+  void _createChatProject(_NewProjectDraft draft) {
+    final normalizedName = draft.name.trim();
     if (normalizedName.isEmpty) return;
     final now = DateTime.now();
     final project = _ChatProject(
       id: 'project-${now.microsecondsSinceEpoch}',
       agentId: _activeAgentId,
       name: normalizedName,
+      iconKey: _projectIconForKey(draft.iconKey).key,
+      colorKey: _projectColorForKey(draft.colorKey).key,
+      isPinned: false,
       createdAt: now,
     );
     setState(() {
       _chatProjects = List.unmodifiable([..._chatProjects, project]);
+    });
+    unawaited(_persistChatProjects());
+  }
+
+  void _toggleChatProjectPin(_ChatProject project) {
+    setState(() {
+      _chatProjects = List.unmodifiable([
+        for (final item in _chatProjects)
+          if (item.id == project.id)
+            item.copyWith(isPinned: !item.isPinned)
+          else
+            item,
+      ]);
+    });
+    unawaited(_persistChatProjects());
+  }
+
+  void _updateChatProject(_ChatProject project, _NewProjectDraft draft) {
+    final normalizedName = draft.name.trim();
+    if (normalizedName.isEmpty) return;
+    setState(() {
+      _chatProjects = List.unmodifiable([
+        for (final item in _chatProjects)
+          if (item.id == project.id)
+            item.copyWith(
+              name: normalizedName,
+              iconKey: _projectIconForKey(draft.iconKey).key,
+              colorKey: _projectColorForKey(draft.colorKey).key,
+            )
+          else
+            item,
+      ]);
     });
     unawaited(_persistChatProjects());
   }
@@ -2407,16 +2442,40 @@ class _ChatScreenState extends State<ChatScreen>
     _selectSession(sessionId);
   }
 
-  Future<void> _showCreateChatProjectDialog() async {
+  void _removeSessionFromProject(String sessionId) {
+    final key = _sessionCacheKey(_activeAgentId, sessionId);
+    if (!_projectSessionIds.containsKey(key)) return;
+    setState(() {
+      _projectSessionIds = Map.unmodifiable({
+        for (final entry in _projectSessionIds.entries)
+          if (entry.key != key) entry.key: entry.value,
+      });
+    });
+    unawaited(_persistChatProjects());
+    _showChatSnackBar(
+      _projectCopy(
+        context,
+        english: 'Chat removed from project',
+        chinese: '已从项目移出',
+      ),
+    );
+  }
+
+  Future<void> _showProjectSessionRename(ChatSession session) async {
     final appView = View.of(context);
     _handleSessionRenameEditingChanged(true);
-    String? projectName;
+    String? title;
     try {
-      projectName = await showDialog<String>(
+      title = await showModalBottomSheet<String>(
         context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        enableDrag: true,
+        backgroundColor: Colors.transparent,
         barrierColor: Colors.black.withValues(alpha: 0.22),
-        animationStyle: AnimationStyle.noAnimation,
-        builder: (_) => const _CreateProjectDialog(),
+        builder: (_) => _RenameProjectSessionSheet(
+          initialTitle: _sessionHistoryDisplayTitle(session),
+        ),
       );
       final deadline = DateTime.now().add(const Duration(seconds: 1));
       while (appView.viewInsets.bottom > 0 &&
@@ -2426,8 +2485,225 @@ class _ChatScreenState extends State<ChatScreen>
     } finally {
       if (mounted) _handleSessionRenameEditingChanged(false);
     }
-    if (!mounted || projectName == null) return;
-    _createChatProject(projectName);
+    if (!mounted || title == null) return;
+    _renameSession(session.id, title);
+  }
+
+  Future<void> _showCreateChatProjectDialog() async {
+    final appView = View.of(context);
+    _handleSessionRenameEditingChanged(true);
+    _NewProjectDraft? draft;
+    try {
+      draft = await showModalBottomSheet<_NewProjectDraft>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        enableDrag: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.22),
+        builder: (_) => const _CreateProjectSheet(),
+      );
+      final deadline = DateTime.now().add(const Duration(seconds: 1));
+      while (appView.viewInsets.bottom > 0 &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+    } finally {
+      if (mounted) _handleSessionRenameEditingChanged(false);
+    }
+    if (!mounted || draft == null) return;
+    _createChatProject(draft);
+  }
+
+  Future<void> _showChatProjectSettings(_ChatProject project) async {
+    final appView = View.of(context);
+    _handleSessionRenameEditingChanged(true);
+    _NewProjectDraft? draft;
+    try {
+      draft = await showModalBottomSheet<_NewProjectDraft>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        enableDrag: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.22),
+        builder: (_) => _CreateProjectSheet(
+          initialDraft: _NewProjectDraft(
+            name: project.name,
+            iconKey: project.iconKey,
+            colorKey: project.colorKey,
+          ),
+        ),
+      );
+      final deadline = DateTime.now().add(const Duration(seconds: 1));
+      while (appView.viewInsets.bottom > 0 &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+    } finally {
+      if (mounted) _handleSessionRenameEditingChanged(false);
+    }
+    if (!mounted || draft == null) return;
+    _updateChatProject(project, draft);
+  }
+
+  Future<void> _confirmDeleteChatProject(_ChatProject project) async {
+    final projectSessionIds = _sessions
+        .where(
+          (session) =>
+              _projectSessionIds[_sessionCacheKey(
+                project.agentId,
+                session.id,
+              )] ==
+              project.id,
+        )
+        .map((session) => session.id)
+        .toList(growable: false);
+    final count = projectSessionIds.length;
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.24),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Material(
+          color: _appSurfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 12, 22, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(
+                  child: SizedBox(
+                    width: 38,
+                    height: 4,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Color(0xFFD2D4D8),
+                        borderRadius: BorderRadius.all(Radius.circular(2)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  _projectCopy(
+                    context,
+                    english: 'Delete project?',
+                    chinese: '删除项目？',
+                  ),
+                  style: const TextStyle(
+                    color: _sessionMenuText,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _projectCopy(
+                    context,
+                    english:
+                        'Deleting “${project.name}” will permanently delete all $count ${count == 1 ? 'chat' : 'chats'} in it. To keep any chats, move them out of the project before deleting.',
+                    chinese:
+                        '删除“${project.name}”后，其中的 $count 个聊天记录也会被永久删除。如需保留聊天记录，请先将它们移出项目。',
+                  ),
+                  style: const TextStyle(
+                    color: _sessionMenuMuted,
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _sessionMenuText,
+                          minimumSize: const Size.fromHeight(48),
+                          side: const BorderSide(color: _appSurfaceBorderColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          _projectCopy(
+                            context,
+                            english: 'Cancel',
+                            chinese: '取消',
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        key: const Key('confirm_delete_project_button'),
+                        onPressed: () => Navigator.of(sheetContext).pop(true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFDC2626),
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          _projectCopy(
+                            context,
+                            english: 'Delete project',
+                            chinese: '删除项目',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
+    for (final sessionId in projectSessionIds) {
+      final deleted = await _deleteSession(sessionId, showFeedback: false);
+      if (!deleted) {
+        if (mounted) {
+          _showChatSnackBar(
+            _projectCopy(
+              context,
+              english: 'The project could not be completely deleted.',
+              chinese: '项目未能完全删除，请重试。',
+            ),
+          );
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _chatProjects = List.unmodifiable(
+        _chatProjects.where((item) => item.id != project.id),
+      );
+      _projectSessionIds = Map.unmodifiable({
+        for (final entry in _projectSessionIds.entries)
+          if (entry.value != project.id) entry.key: entry.value,
+      });
+      if (_selectedChatProjectId == project.id) {
+        _selectedChatProjectId = null;
+        _primaryView = _ChatPrimaryView.projects;
+      }
+    });
+    await _persistChatProjects();
+    if (!mounted) return;
+    _showChatSnackBar(
+      _projectCopy(context, english: 'Project deleted', chinese: '项目已删除'),
+    );
   }
 
   void _assignSessionToProject({
@@ -7396,7 +7672,10 @@ $candidate
     await _deleteSession(sessionId);
   }
 
-  Future<void> _deleteSession(String sessionId) async {
+  Future<bool> _deleteSession(
+    String sessionId, {
+    bool showFeedback = true,
+  }) async {
     // Terminal sessions: clean up backend, skip SDK operations.
     if (_isTerminalSession(sessionId)) {
       final ts = _terminalSessionMap.remove(sessionId);
@@ -7443,7 +7722,7 @@ $candidate
       });
       unawaited(_persistRenamedSessions());
       unawaited(_persistChatProjects());
-      return;
+      return true;
     }
 
     final strings = AppStrings.of(context);
@@ -7468,7 +7747,7 @@ $candidate
       if (run != null) {
         unawaited(run.subscription.cancel());
       }
-      if (!mounted || _activeAgentId != agentId) return;
+      if (!mounted || _activeAgentId != agentId) return false;
 
       final remainingSessions = _sessions
           .where((session) => session.id != sessionId)
@@ -7539,10 +7818,16 @@ $candidate
           !_hasLiveSessionRun(_activeSessionId)) {
         unawaited(_loadSessionHistory(_activeSessionId));
       }
-      _showChatSnackBar(strings.chatDeleted);
+      if (showFeedback) _showChatSnackBar(strings.chatDeleted);
+      return true;
     } catch (error) {
-      if (!mounted) return;
-      _showChatSnackBar(strings.chatActionFailed(_friendlyDisplayError(error)));
+      if (!mounted) return false;
+      if (showFeedback) {
+        _showChatSnackBar(
+          strings.chatActionFailed(_friendlyDisplayError(error)),
+        );
+      }
+      return false;
     }
   }
 
@@ -7848,6 +8133,12 @@ $candidate
           sessions: sessions,
           onBack: _returnToProjects,
           onSessionTap: _openProjectSession,
+          onSessionPinToggle: _toggleSessionPin,
+          onSessionRename: (session) =>
+              unawaited(_showProjectSessionRename(session)),
+          onSessionRemove: _removeSessionFromProject,
+          onSessionDelete: (sessionId) =>
+              unawaited(_confirmDeleteSession(sessionId)),
           onStartChat: (message, attachments, pinnedSkillNames) =>
               _startProjectChat(
                 project.id,
@@ -7865,6 +8156,11 @@ $candidate
           onMenu: _openSessionHistory,
           onAdd: () => unawaited(_showCreateChatProjectDialog()),
           onProjectTap: _openChatProject,
+          onProjectPinToggle: _toggleChatProjectPin,
+          onProjectSettings: (project) =>
+              unawaited(_showChatProjectSettings(project)),
+          onProjectDelete: (project) =>
+              unawaited(_confirmDeleteChatProject(project)),
         );
       }
     } else {
@@ -7874,6 +8170,11 @@ $candidate
         onMenu: _openSessionHistory,
         onAdd: () => unawaited(_showCreateChatProjectDialog()),
         onProjectTap: _openChatProject,
+        onProjectPinToggle: _toggleChatProjectPin,
+        onProjectSettings: (project) =>
+            unawaited(_showChatProjectSettings(project)),
+        onProjectDelete: (project) =>
+            unawaited(_confirmDeleteChatProject(project)),
       );
     }
 
@@ -8023,6 +8324,12 @@ $candidate
                 },
                 onProjectCreated: _createChatProject,
                 onProjectChatStarted: _startProjectChat,
+                onProjectPinToggle: _toggleChatProjectPin,
+                onProjectSettings: (project) =>
+                    unawaited(_showChatProjectSettings(project)),
+                onProjectDelete: (project) =>
+                    unawaited(_confirmDeleteChatProject(project)),
+                onProjectSessionRemove: _removeSessionFromProject,
                 onFilesSelected: _showFilesFromMenu,
                 onSkillsSelected: _showSkillsFromMenu,
                 onProjectsSelected: _showProjectsFromMenu,

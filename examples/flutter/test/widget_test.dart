@@ -2738,6 +2738,13 @@ void main() {
     expect(find.byKey(const Key('files_menu_item')), findsOneWidget);
     expect(find.byKey(const Key('scenarios_menu_item')), findsNothing);
     expect(find.byKey(const Key('skills_menu_item')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('skills_menu_item')),
+        matching: find.byIcon(Icons.extension_outlined),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('场景'), findsNothing);
 
     await tester.tap(find.byKey(const Key('settings_menu_button')));
@@ -6699,6 +6706,34 @@ void main() {
     );
     await tester.longPress(find.byKey(const Key('session_tile_session-1')));
     await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_pin_action_session-1')),
+        matching: find.byIcon(Icons.push_pin_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_pin_action_session-1')),
+        matching: find.byKey(const Key('session_action_icon_slash')),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_rename_action_session-1')),
+        matching: find.byIcon(Icons.edit_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_delete_action_session-1')),
+        matching: find.byIcon(Icons.delete_outline_rounded),
+      ),
+      findsOneWidget,
+    );
 
     final previewCard = find.byKey(
       const Key('session_preview_action_session-1'),
@@ -6770,6 +6805,18 @@ void main() {
         .dy;
     expect(pinnedTop, lessThan(recentTop));
 
+    await tester.longPress(find.byKey(const Key('session_tile_session-1')));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_pin_action_session-1')),
+        matching: find.byKey(const Key('session_action_icon_slash')),
+      ),
+      findsOneWidget,
+    );
+    await tester.tapAt(const Offset(4, 4));
+    await tester.pumpAndSettle();
+
     await tester.longPress(find.byKey(const Key('session_tile_session-2')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('session_delete_action_session-2')));
@@ -6831,6 +6878,22 @@ void main() {
 
     await tester.tap(find.byKey(const Key('add_project_button')));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('create_project_bottom_sheet')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('new_project_name_field')), findsOneWidget);
+    expect(find.byKey(const Key('project_icon_options')), findsNothing);
+    await tester.tap(find.byKey(const Key('new_project_icon_button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project_icon_options')), findsOneWidget);
+    expect(find.byKey(const Key('project_color_options')), findsOneWidget);
+    expect(find.byKey(const Key('project_icon_preview')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('project_icon_option_code')));
+    await tester.tap(find.byKey(const Key('project_color_option_violet')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('confirm_project_icon_button')));
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.byKey(const Key('new_project_name_field')),
       'Launch plan',
@@ -6840,12 +6903,64 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Launch plan'), findsOneWidget);
-    await tester.tap(find.text('Launch plan'));
+    expect(find.byIcon(Icons.code_rounded), findsOneWidget);
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.code_rounded)).color,
+      const Color(0xFF8057D9),
+    );
+    expect(find.byIcon(Icons.chevron_right_rounded), findsNothing);
+
+    await tester.longPress(find.text('Launch plan'));
     await tester.pumpAndSettle();
+    expect(find.text('Pin'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    await tester.tap(find.text('Pin'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
+
+    await tester.longPress(find.text('Launch plan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unpin'), findsOneWidget);
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Project settings'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('new_project_name_field')))
+          .controller
+          ?.text,
+      'Launch plan',
+    );
+    await tester.enterText(
+      find.byKey(const Key('new_project_name_field')),
+      'Launch plan updated',
+    );
+    await tester.tap(find.byKey(const Key('new_project_icon_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project_icon_option_rocket')));
+    await tester.tap(find.byKey(const Key('confirm_project_icon_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirm_create_project_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Launch plan updated'), findsOneWidget);
+    expect(find.byIcon(Icons.rocket_launch_outlined), findsOneWidget);
+
+    await tester.tap(find.text('Launch plan updated'));
+    await tester.pumpAndSettle();
+    expect(find.text('Launch plan updated'), findsOneWidget);
+    expect(find.byIcon(Icons.rocket_launch_outlined), findsNothing);
     expect(find.byKey(const Key('project_chat_input')), findsOneWidget);
     expect(find.byKey(const Key('chat_input_container')), findsOneWidget);
     expect(find.byKey(const Key('add_attachment_button')), findsOneWidget);
     expect(find.byKey(const Key('context_status_button')), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('project_chat_input')))
+          .decoration
+          ?.hintText,
+      'Message Launch plan updated',
+    );
 
     await tester.enterText(
       find.byKey(const Key('project_chat_input')),
@@ -6870,22 +6985,54 @@ void main() {
     expect(find.byKey(const Key('project_sessions_list')), findsOneWidget);
     expect(find.text('Prepare the release checklist'), findsOneWidget);
     expect(find.byKey(const Key('project_detail_back_button')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('project_sessions_list')),
+        matching: find.byIcon(Icons.chevron_right_rounded),
+      ),
+      findsNothing,
+    );
+
+    await tester.longPress(find.text('Prepare the release checklist'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pin'), findsOneWidget);
+    expect(find.text('Rename'), findsOneWidget);
+    expect(find.text('Remove from project'), findsOneWidget);
+    expect(find.text('Delete'), findsOneWidget);
+    await tester.tap(find.text('Pin'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.push_pin_outlined), findsOneWidget);
+
+    await tester.longPress(find.text('Prepare the release checklist'));
+    await tester.pumpAndSettle();
+    expect(find.text('Unpin'), findsOneWidget);
+    await tester.tap(find.text('Rename'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('project_session_rename_field')),
+      'Release checklist',
+    );
+    await tester.tap(
+      find.byKey(const Key('confirm_project_session_rename_button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Release checklist'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('project_detail_back_button')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('projects_page')), findsOneWidget);
     expect(find.byKey(const Key('projects_menu_button')), findsOneWidget);
 
-    await tester.tap(find.text('Launch plan'));
+    await tester.tap(find.text('Launch plan updated'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Prepare the release checklist'));
+    await tester.tap(find.text('Release checklist'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('project_chat_back_button')), findsOneWidget);
 
     await tester.dragFrom(const Offset(20, 300), const Offset(220, 0));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('project_sessions_list')), findsOneWidget);
-    expect(find.text('Prepare the release checklist'), findsOneWidget);
+    expect(find.text('Release checklist'), findsOneWidget);
 
     await tester.dragFrom(const Offset(20, 300), const Offset(220, 0));
     await tester.pumpAndSettle();
@@ -6898,6 +7045,78 @@ void main() {
     expect(find.byKey(const Key('projects_menu_selected')), findsOneWidget);
     expect(find.byKey(const Key('session_tile_session-1')), findsOneWidget);
     expect(find.byKey(const Key('session_tile_session-2')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('projects_menu_item')));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Launch plan updated'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete project?'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'To keep any chats, move them out of the project before deleting.',
+      ),
+      findsOneWidget,
+    );
+    expect(fakeClient.deleteCount, 0);
+    await tester.tap(find.byKey(const Key('confirm_delete_project_button')));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+      if (fakeClient.deleteCount == 1 &&
+          find.text('Launch plan updated').evaluate().isEmpty) {
+        break;
+      }
+    }
+    await tester.pumpAndSettle();
+    expect(fakeClient.deleteCount, 1);
+    expect(find.text('Launch plan updated'), findsNothing);
+  });
+
+  testWidgets('moves a project chat back to the main history', (tester) async {
+    final fakeClient = FakeNapaxiChatClient();
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await configureSingleModel(tester);
+
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('projects_menu_item')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('add_project_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('new_project_name_field')),
+      'Archive',
+    );
+    await tester.tap(find.byKey(const Key('confirm_create_project_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Archive'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('project_chat_input')),
+      'Keep this chat',
+    );
+    await tester.tap(find.byKey(const Key('project_start_chat_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('project_chat_back_button')));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Keep this chat'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove from project'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep this chat'), findsNothing);
+    expect(fakeClient.deleteCount, 0);
+
+    await tester.tap(find.byKey(const Key('project_detail_back_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('projects_menu_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Keep this chat'), findsOneWidget);
+    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
   });
 
   testWidgets('searches chat history from the side menu', (tester) async {
