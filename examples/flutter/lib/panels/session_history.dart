@@ -3929,17 +3929,6 @@ class _SettingsListPage extends StatelessWidget {
           onTap: onOpenConfiguration,
         ),
         const SizedBox(height: 10),
-        _SettingsListTile(
-          key: const Key('settings_scenarios_item'),
-          icon: Icons.dashboard_customize_rounded,
-          title: strings.scenariosTitle,
-          subtitle: _settingsScenarioSubtitle(
-            context,
-            _scenarioLabelForId(strings, activeScenarioId),
-          ),
-          onTap: onOpenScenarios,
-        ),
-        const SizedBox(height: 10),
         if (showEngineSettings) ...[
           _SettingsListTile(
             key: const Key('settings_engines_item'),
@@ -3964,6 +3953,17 @@ class _SettingsListPage extends StatelessWidget {
           title: '附近',
           subtitle: '发现并配对附近设备',
           onTap: onOpenNearby,
+        ),
+        const SizedBox(height: 10),
+        _SettingsListTile(
+          key: const Key('settings_scenarios_item'),
+          icon: Icons.dashboard_customize_rounded,
+          title: strings.scenariosTitle,
+          subtitle: _settingsScenarioSubtitle(
+            context,
+            _scenarioLabelForId(strings, activeScenarioId),
+          ),
+          onTap: onOpenScenarios,
         ),
         const SizedBox(height: 10),
         _SettingsListTile(
