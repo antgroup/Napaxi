@@ -317,6 +317,10 @@ class AppStrings {
     required this.pinned,
     required this.pinChat,
     required this.unpinChat,
+    required this.renameChat,
+    required this.renameChatTitle,
+    required this.renameChatHint,
+    required this.latestMessage,
     required this.deleteChat,
     required this.deleteChatConfirmationTitle,
     required this.deleteChatConfirmationMessage,
@@ -647,6 +651,10 @@ class AppStrings {
   final String pinned;
   final String pinChat;
   final String unpinChat;
+  final String renameChat;
+  final String renameChatTitle;
+  final String renameChatHint;
+  final String latestMessage;
   final String deleteChat;
   final String deleteChatConfirmationTitle;
   final String Function(String title) deleteChatConfirmationMessage;
@@ -671,7 +679,7 @@ class AppStrings {
   }
 
   static final english = AppStrings(
-    appTitle: 'napaxi',
+    appTitle: 'Napaxi',
     welcomeMessage:
         'Welcome to napaxi. Open Basic configuration from Settings, then chat with the SDK-backed agent.',
     welcomeReadyMessage: 'napaxi is ready. Ask anything to start chatting.',
@@ -1021,6 +1029,10 @@ class AppStrings {
     pinned: 'Pinned',
     pinChat: 'Pin',
     unpinChat: 'Unpin',
+    renameChat: 'Rename',
+    renameChatTitle: 'Rename chat',
+    renameChatHint: 'Chat title',
+    latestMessage: 'Latest message',
     deleteChat: 'Delete',
     deleteChatConfirmationTitle: 'Delete chat?',
     deleteChatConfirmationMessage: (title) =>
@@ -1036,7 +1048,7 @@ class AppStrings {
   );
 
   static final chinese = AppStrings(
-    appTitle: 'napaxi',
+    appTitle: 'Napaxi',
     welcomeMessage: '欢迎使用 napaxi。请从设置里的“基础配置”添加模型，然后开始对话。',
     welcomeReadyMessage: 'napaxi 已准备好，可以直接开始对话。',
     noModelConfigured: '未配置模型',
@@ -1235,8 +1247,7 @@ class AppStrings {
     updateNoticeClose: '知道了',
     openInstallPage: '打开蒲公英页面',
     openReleasePage: '打开 GitHub 发布页',
-    updateReleasePagePrompt:
-        '当前构建不支持自动应用内更新，是否前往 GitHub 发布页手动下载最新安装包？',
+    updateReleasePagePrompt: '当前构建不支持自动应用内更新，是否前往 GitHub 发布页手动下载最新安装包？',
     releasePageOpenFailed: '无法打开 GitHub 发布页。',
     feedbackTitle: '问题反馈',
     feedbackContentLabel: '问题描述',
@@ -1361,9 +1372,13 @@ class AppStrings {
     removeFavorite: '取消收藏',
     recent: '最近',
     currentChat: '当前',
-    pinned: '置顶',
+    pinned: '已置顶',
     pinChat: '置顶',
     unpinChat: '取消置顶',
+    renameChat: '重命名',
+    renameChatTitle: '重命名会话',
+    renameChatHint: '会话标题',
+    latestMessage: '最新内容',
     deleteChat: '删除',
     deleteChatConfirmationTitle: '删除会话？',
     deleteChatConfirmationMessage: (title) => '确定删除“$title”吗？此操作无法撤销。',

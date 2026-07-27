@@ -5,11 +5,13 @@ class _FilesPage extends StatelessWidget {
     required this.clientFuture,
     required this.agentId,
     this.onBack,
+    this.onMenu,
   });
 
   final Future<NapaxiChatClient> clientFuture;
   final String agentId;
   final Future<bool> Function()? onBack;
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -18,19 +20,29 @@ class _FilesPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: _configPageBackground,
       appBar: AppBar(
-        title: Text(strings.filesTitle),
+        title: Text(
+          strings.filesTitle,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: _configPageBackground,
         foregroundColor: _configTextPrimary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: BackButton(
-          onPressed: () async {
-            final handled = await onBack?.call();
-            if (handled != false && context.mounted) {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+        leading: onMenu != null
+            ? IconButton(
+                key: const Key('files_menu_button'),
+                tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
+                onPressed: onMenu,
+                icon: const Icon(Icons.menu_rounded),
+              )
+            : BackButton(
+                onPressed: () async {
+                  final handled = await onBack?.call();
+                  if (handled != false && context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
       ),
       body: FutureBuilder<NapaxiChatClient>(
         future: clientFuture,

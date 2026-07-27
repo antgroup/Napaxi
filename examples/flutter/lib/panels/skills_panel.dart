@@ -115,6 +115,7 @@ class _SkillsPage extends StatelessWidget {
     this.initialTab = _SkillsInitialTab.installed,
     this.onPendingEvolutionChanged,
     this.onBack,
+    this.onMenu,
   });
 
   final Future<NapaxiChatClient> clientFuture;
@@ -122,6 +123,7 @@ class _SkillsPage extends StatelessWidget {
   final _SkillsInitialTab initialTab;
   final Future<void> Function()? onPendingEvolutionChanged;
   final Future<bool> Function()? onBack;
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -130,19 +132,29 @@ class _SkillsPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: _configPageBackground,
       appBar: AppBar(
-        title: Text(strings.skillsTitle),
+        title: Text(
+          strings.skillsTitle,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         backgroundColor: _configPageBackground,
         foregroundColor: _configTextPrimary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: BackButton(
-          onPressed: () async {
-            final handled = await onBack?.call();
-            if (handled != false && context.mounted) {
-              Navigator.of(context).pop();
-            }
-          },
-        ),
+        leading: onMenu != null
+            ? IconButton(
+                key: const Key('skills_menu_button'),
+                tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
+                onPressed: onMenu,
+                icon: const Icon(Icons.menu_rounded),
+              )
+            : BackButton(
+                onPressed: () async {
+                  final handled = await onBack?.call();
+                  if (handled != false && context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+              ),
       ),
       body: FutureBuilder<NapaxiChatClient>(
         future: clientFuture,
@@ -224,8 +236,9 @@ class _SkillsBrowserState extends State<_SkillsBrowser> {
 
   Future<void> _persistSlugMap() async {
     final prefs = await SharedPreferences.getInstance();
-    final entries =
-        _slugToInstalledName.entries.map((e) => '${e.key}=${e.value}').toList();
+    final entries = _slugToInstalledName.entries
+        .map((e) => '${e.key}=${e.value}')
+        .toList();
     await prefs.setStringList(_slugMapPrefsKey, entries);
   }
 
@@ -3420,18 +3433,16 @@ class _SkillStoreViewState extends State<_SkillStoreView> {
                   separatorBuilder: (_, _) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
                     final skill = results[index];
-                    final installed =
-                        widget.installedNames.contains(skill.slug.toLowerCase());
+                    final installed = widget.installedNames.contains(
+                      skill.slug.toLowerCase(),
+                    );
                     return _CatalogSkillTile(
                       skill: skill,
                       installed: installed,
                       installing: _installingSlug == skill.slug,
                       onInstall: () => _install(skill),
-                      onTap: () => _showCatalogSkillDetails(
-                        context,
-                        skill,
-                        installed,
-                      ),
+                      onTap: () =>
+                          _showCatalogSkillDetails(context, skill, installed),
                     );
                   },
                 ),
@@ -3605,25 +3616,16 @@ class _CatalogSkillDetailSheet extends StatelessWidget {
         ],
         const SizedBox(height: 16),
         if (skill.version.isNotEmpty)
-          _CatalogDetailRow(
-            label: 'Version',
-            value: 'v${skill.version}',
-          ),
+          _CatalogDetailRow(label: 'Version', value: 'v${skill.version}'),
         if ((skill.ownerName ?? skill.owner)?.isNotEmpty == true)
           _CatalogDetailRow(
             label: 'Author',
             value: (skill.ownerName ?? skill.owner)!,
           ),
         if (skill.downloads != null)
-          _CatalogDetailRow(
-            label: 'Downloads',
-            value: '${skill.downloads}',
-          ),
+          _CatalogDetailRow(label: 'Downloads', value: '${skill.downloads}'),
         if (skill.stars != null)
-          _CatalogDetailRow(
-            label: 'Stars',
-            value: '${skill.stars}',
-          ),
+          _CatalogDetailRow(label: 'Stars', value: '${skill.stars}'),
         if (skill.tags.isNotEmpty) ...[
           const SizedBox(height: 12),
           Wrap(
@@ -3632,8 +3634,10 @@ class _CatalogSkillDetailSheet extends StatelessWidget {
             children: [
               for (final tag in skill.tags)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF3F4F6),
                     borderRadius: BorderRadius.circular(4),
@@ -3701,10 +3705,7 @@ class _CatalogDetailRow extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF374151),
-              ),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF374151)),
             ),
           ),
         ],

@@ -216,6 +216,23 @@ class _SessionMenuPageShift extends StatelessWidget {
   }
 }
 
+class _KeyboardInsetIsolation extends StatelessWidget {
+  const _KeyboardInsetIsolation({required this.enabled, required this.child});
+
+  final bool enabled;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    return MediaQuery.removeViewInsets(
+      context: context,
+      removeBottom: true,
+      child: child,
+    );
+  }
+}
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
     super.key,
@@ -243,6 +260,8 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
+enum _ChatPrimaryView { chat, files, skills, projects, projectDetail }
+
 class _ChatScreenState extends State<ChatScreen>
     with
         TickerProviderStateMixin,
@@ -252,6 +271,8 @@ class _ChatScreenState extends State<ChatScreen>
   static const String _favoriteAttachmentsKey =
       'napaxi_demo.favorite_attachments.v1';
   static const String _pinnedSessionsKey = 'napaxi_demo.pinned_sessions.v1';
+  static const String _renamedSessionsKey = 'napaxi_demo.renamed_sessions.v1';
+  static const String _chatProjectsKey = 'napaxi_demo.chat_projects.v1';
   static const String _assistantAttachmentsKey =
       'napaxi_demo.assistant_attachments.v1';
   static const String _seenAttachmentsKey = 'napaxi_demo.seen_attachments.v1';
@@ -343,6 +364,7 @@ class _ChatScreenState extends State<ChatScreen>
   StreamSubscription<DemoChannelBridgeEvent>? _channelBridgeSubscription;
   final Map<String, Timer> _evolutionPollTimers = {};
   final Map<String, Timer> _evolutionHideTimers = {};
+  final Set<String> _unsavedSessionIds = <String>{};
   final Map<String, ChatSessionRunState> _sessionRuns = {};
   final Set<String> _a2aUnreadConversationSessionIds = <String>{};
   _SessionHistoryView _sessionHistoryInitialView = _SessionHistoryView.menu;
@@ -350,6 +372,11 @@ class _ChatScreenState extends State<ChatScreen>
       _SettingsSection.menu;
   _SkillsInitialTab _sessionHistoryInitialSkillsTab =
       _SkillsInitialTab.installed;
+  _ChatPrimaryView _primaryView = _ChatPrimaryView.chat;
+  Future<NapaxiChatClient>? _primaryFilesClientFuture;
+  Future<NapaxiChatClient>? _primarySkillsClientFuture;
+  String? _selectedChatProjectId;
+  bool _isRenamingSessionTitle = false;
   String _activeScenarioId = _generalScenarioId;
   String _activeDeveloperEngineId = _defaultDeveloperEngineId;
   DemoGitSettings _gitSettings = const DemoGitSettings();
@@ -369,6 +396,9 @@ class _ChatScreenState extends State<ChatScreen>
   String? _channelInputActiveAccountId;
   final Map<String, sdk.SessionKey> _sdkSessions = {};
   Set<String> _pinnedSessionIds = const {};
+  Map<String, String> _renamedSessionTitles = const {};
+  List<_ChatProject> _chatProjects = const [];
+  Map<String, String> _projectSessionIds = const {};
   List<FavoriteAttachment> _favoriteAttachments = const [];
   Map<String, List<ChatAttachment>> _assistantAttachmentCache = const {};
   Map<String, List<ChatAttachment>> _pendingAssistantAttachments = const {};
@@ -662,10 +692,13 @@ class _ChatScreenState extends State<ChatScreen>
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_handleChatScroll);
     _inputFocusNode.addListener(_handleInputFocusChanged);
+    _unsavedSessionIds.add(_activeSessionId);
     _restorePersistedStateFuture = _restorePersistedState();
     unawaited(_restorePersistedStateFuture);
     unawaited(_restoreFavoriteAttachments());
     unawaited(_restorePinnedSessions());
+    unawaited(_restoreRenamedSessions());
+    unawaited(_restoreChatProjects());
     unawaited(_restoreAssistantAttachments());
     unawaited(_restoreSeenAttachments());
     unawaited(_refreshSkillSlashCommands());
@@ -2042,6 +2075,271 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  String _renamedSessionKey(String agentId, String sessionId) {
+    return _sessionCacheKey(agentId, sessionId);
+  }
+
+  ChatSession _sessionForHistory(ChatSession session) {
+    final title =
+        _renamedSessionTitles[_renamedSessionKey(_activeAgentId, session.id)];
+    if (title == null || title == session.title) return session;
+    return session.copyWith(title: title);
+  }
+
+  Future<void> _restoreRenamedSessions() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final raw = preferences.getString(_renamedSessionsKey);
+      if (raw == null || raw.trim().isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final renamedSessionTitles = <String, String>{};
+      for (final entry in decoded.entries) {
+        final key = entry.key.toString().trim();
+        final title = entry.value?.toString().trim() ?? '';
+        if (key.isNotEmpty && title.isNotEmpty) {
+          renamedSessionTitles[key] = title;
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _renamedSessionTitles = Map.unmodifiable(renamedSessionTitles);
+      });
+    } catch (_) {
+      // Renamed titles are local UI state; ignore corrupt preferences.
+    }
+  }
+
+  Future<void> _persistRenamedSessions() async {
+    final preferences = await SharedPreferences.getInstance();
+    final entries = _renamedSessionTitles.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    await preferences.setString(
+      _renamedSessionsKey,
+      jsonEncode({for (final entry in entries) entry.key: entry.value}),
+    );
+  }
+
+  void _renameSession(String sessionId, String title) {
+    final normalizedTitle = title.trim();
+    if (normalizedTitle.isEmpty) return;
+    final key = _renamedSessionKey(_activeAgentId, sessionId);
+    setState(() {
+      _renamedSessionTitles = Map.unmodifiable({
+        ..._renamedSessionTitles,
+        key: normalizedTitle,
+      });
+    });
+    unawaited(_persistRenamedSessions());
+  }
+
+  Future<void> _restoreChatProjects() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final raw = preferences.getString(_chatProjectsKey);
+      if (raw == null || raw.trim().isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+
+      final projects = <_ChatProject>[];
+      final rawProjects = decoded['projects'];
+      if (rawProjects is List) {
+        for (final item in rawProjects.whereType<Map>()) {
+          final project = _ChatProject.fromMap(Map<String, Object?>.from(item));
+          if (project.id.isNotEmpty &&
+              project.agentId.isNotEmpty &&
+              project.name.isNotEmpty) {
+            projects.add(project);
+          }
+        }
+      }
+
+      final projectIds = projects.map((project) => project.id).toSet();
+      final sessionProjects = <String, String>{};
+      final rawSessionProjects = decoded['sessionProjects'];
+      if (rawSessionProjects is Map) {
+        for (final entry in rawSessionProjects.entries) {
+          final sessionKey = entry.key.toString().trim();
+          final projectId = entry.value?.toString().trim() ?? '';
+          if (sessionKey.isNotEmpty && projectIds.contains(projectId)) {
+            sessionProjects[sessionKey] = projectId;
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _chatProjects = List.unmodifiable(projects);
+        _projectSessionIds = Map.unmodifiable(sessionProjects);
+      });
+    } catch (_) {
+      // Projects are local organization metadata; ignore corrupt preferences.
+    }
+  }
+
+  Future<void> _persistChatProjects() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      _chatProjectsKey,
+      jsonEncode({
+        'projects': [for (final project in _chatProjects) project.toMap()],
+        'sessionProjects': _projectSessionIds,
+      }),
+    );
+  }
+
+  void _createChatProject(String name) {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty) return;
+    final now = DateTime.now();
+    final project = _ChatProject(
+      id: 'project-${now.microsecondsSinceEpoch}',
+      agentId: _activeAgentId,
+      name: normalizedName,
+      createdAt: now,
+    );
+    setState(() {
+      _chatProjects = List.unmodifiable([..._chatProjects, project]);
+    });
+    unawaited(_persistChatProjects());
+  }
+
+  void _showProjectsFromMenu() {
+    _dismissKeyboard();
+    setState(() {
+      _primaryView = _ChatPrimaryView.projects;
+      _selectedChatProjectId = null;
+    });
+    _closeSessionHistory();
+  }
+
+  void _showFilesFromMenu() {
+    _dismissKeyboard();
+    setState(() {
+      _primaryView = _ChatPrimaryView.files;
+      _primaryFilesClientFuture ??= _buildFilesClientFuture();
+    });
+    _closeSessionHistory();
+  }
+
+  void _showSkillsFromMenu() {
+    _dismissKeyboard();
+    setState(() {
+      _primaryView = _ChatPrimaryView.skills;
+      _primarySkillsClientFuture ??= _buildSkillsClientFuture();
+    });
+    _closeSessionHistory();
+  }
+
+  void _openChatProject(_ChatProject project) {
+    setState(() {
+      _selectedChatProjectId = project.id;
+      _primaryView = _ChatPrimaryView.projectDetail;
+    });
+  }
+
+  String? get _activeSessionProjectId {
+    final projectId =
+        _projectSessionIds[_sessionCacheKey(_activeAgentId, _activeSessionId)];
+    if (projectId == null) return null;
+    final projectExists = _chatProjects.any(
+      (project) => project.id == projectId && project.agentId == _activeAgentId,
+    );
+    return projectExists ? projectId : null;
+  }
+
+  bool get _isActiveProjectChat =>
+      _primaryView == _ChatPrimaryView.chat && _activeSessionProjectId != null;
+
+  void _returnToActiveProject() {
+    final projectId = _activeSessionProjectId;
+    if (projectId == null) return;
+    _dismissKeyboard();
+    setState(() {
+      _selectedChatProjectId = projectId;
+      _primaryView = _ChatPrimaryView.projectDetail;
+    });
+  }
+
+  void _openProjectSession(String sessionId) {
+    _dismissKeyboard();
+    setState(() => _primaryView = _ChatPrimaryView.chat);
+    _selectSession(sessionId);
+  }
+
+  Future<void> _showCreateChatProjectDialog() async {
+    final appView = View.of(context);
+    _handleSessionRenameEditingChanged(true);
+    String? projectName;
+    try {
+      projectName = await showDialog<String>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.22),
+        animationStyle: AnimationStyle.noAnimation,
+        builder: (_) => const _CreateProjectDialog(),
+      );
+      final deadline = DateTime.now().add(const Duration(seconds: 1));
+      while (appView.viewInsets.bottom > 0 &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 16));
+      }
+    } finally {
+      if (mounted) _handleSessionRenameEditingChanged(false);
+    }
+    if (!mounted || projectName == null) return;
+    _createChatProject(projectName);
+  }
+
+  void _assignSessionToProject({
+    required String agentId,
+    required String sessionId,
+    required String projectId,
+  }) {
+    final key = _sessionCacheKey(agentId, sessionId);
+    setState(() {
+      _projectSessionIds = Map.unmodifiable({
+        ..._projectSessionIds,
+        key: projectId,
+      });
+    });
+    unawaited(_persistChatProjects());
+  }
+
+  Future<void> _startProjectChat(
+    String projectId,
+    String initialMessage, [
+    List<ChatAttachment> attachments = const [],
+    List<String> pinnedSkillNames = const [],
+  ]) async {
+    final message = initialMessage.trim();
+    if (message.isEmpty && attachments.isEmpty) return;
+    final isValidProject = _chatProjects.any(
+      (project) => project.id == projectId && project.agentId == _activeAgentId,
+    );
+    if (!isValidProject) return;
+
+    final agentId = _activeAgentId;
+    _startNewSession();
+    final sessionId = _activeSessionId;
+    _assignSessionToProject(
+      agentId: agentId,
+      sessionId: sessionId,
+      projectId: projectId,
+    );
+    setState(() => _primaryView = _ChatPrimaryView.chat);
+    _closeSessionHistory();
+    _inputController.text = message;
+    await _sendMessage(attachments, pinnedSkillNames: pinnedSkillNames);
+  }
+
+  void _returnToProjects() {
+    _dismissKeyboard();
+    setState(() {
+      _selectedChatProjectId = null;
+      _primaryView = _ChatPrimaryView.projects;
+    });
+  }
+
   Future<void> _restoreAssistantAttachments() async {
     try {
       final preferences = await SharedPreferences.getInstance();
@@ -2359,6 +2657,7 @@ class _ChatScreenState extends State<ChatScreen>
     }
     if (restoredSessions.isEmpty) return;
     setState(() {
+      _unsavedSessionIds.clear();
       _sessions = List.unmodifiable(restoredSessions);
       _activeSessionId = restoredSessions.first.id;
       _nextSessionId = _nextSessionNumber(restoredSessions);
@@ -2415,12 +2714,12 @@ class _ChatScreenState extends State<ChatScreen>
       );
       if (!mounted) return;
       setState(() {
+        _unsavedSessionIds
+          ..clear()
+          ..add(session.id);
         _activeAgentId = agentId;
         _activeSessionId = session.id;
-        final hasExisting = _sessions.any((s) => s.id == session.id);
-        if (!hasExisting) {
-          _sessions = [session, ..._sessions];
-        }
+        _sessions = [session];
         _nextMessageId = _nextMessageNumber(_sessions);
         _editingMessageId = null;
         _inputController.clear();
@@ -2452,6 +2751,7 @@ class _ChatScreenState extends State<ChatScreen>
     }
     if (restored.isEmpty || !mounted) return;
     setState(() {
+      _unsavedSessionIds.clear();
       _activeAgentId = agentId;
       _sessions = List.unmodifiable(restored);
       _activeSessionId = restored.first.id;
@@ -2745,6 +3045,9 @@ class _ChatScreenState extends State<ChatScreen>
     final now = DateTime.now();
     final sessionId = _newSessionId();
     setState(() {
+      _unsavedSessionIds
+        ..clear()
+        ..add(sessionId);
       _activeAgentId = agentId;
       _activeSessionId = sessionId;
       _channelInputSources = const [];
@@ -2843,6 +3146,11 @@ class _ChatScreenState extends State<ChatScreen>
     final oldPinnedKey = _pinnedSessionKey(agentId, oldSessionId);
     final nextPinnedKey = _pinnedSessionKey(agentId, nextSessionId);
     final wasPinned = _pinnedSessionIds.contains(oldPinnedKey);
+    final oldRenamedKey = _renamedSessionKey(agentId, oldSessionId);
+    final nextRenamedKey = _renamedSessionKey(agentId, nextSessionId);
+    final renamedTitle = _renamedSessionTitles[oldRenamedKey];
+    final projectId = _projectSessionIds[oldSdkCacheKey];
+    final wasUnsaved = _unsavedSessionIds.contains(oldSessionId);
     final assistantPrefix = '$agentId::$oldSessionId::';
     var didMoveAssistantCache = false;
 
@@ -2856,6 +3164,11 @@ class _ChatScreenState extends State<ChatScreen>
       }).toList();
       if (_activeSessionId == oldSessionId) {
         _activeSessionId = nextSessionId;
+      }
+      if (wasUnsaved) {
+        _unsavedSessionIds
+          ..remove(oldSessionId)
+          ..add(nextSessionId);
       }
 
       _sdkSessions.remove(oldSdkCacheKey);
@@ -2887,6 +3200,20 @@ class _ChatScreenState extends State<ChatScreen>
           if (key != oldPinnedKey) key,
         if (wasPinned) nextPinnedKey,
       };
+      if (renamedTitle != null) {
+        _renamedSessionTitles = Map.unmodifiable({
+          for (final entry in _renamedSessionTitles.entries)
+            if (entry.key != oldRenamedKey) entry.key: entry.value,
+          nextRenamedKey: renamedTitle,
+        });
+      }
+      if (projectId != null) {
+        _projectSessionIds = Map.unmodifiable({
+          for (final entry in _projectSessionIds.entries)
+            if (entry.key != oldSdkCacheKey) entry.key: entry.value,
+          nextSdkCacheKey: projectId,
+        });
+      }
 
       _assistantAttachmentCache = Map.unmodifiable({
         for (final entry in _assistantAttachmentCache.entries)
@@ -2902,6 +3229,8 @@ class _ChatScreenState extends State<ChatScreen>
     });
 
     if (wasPinned) unawaited(_persistPinnedSessions());
+    if (renamedTitle != null) unawaited(_persistRenamedSessions());
+    if (projectId != null) unawaited(_persistChatProjects());
     if (didMoveAssistantCache) unawaited(_persistAssistantAttachments());
     return nextSessionId;
   }
@@ -3064,6 +3393,7 @@ class _ChatScreenState extends State<ChatScreen>
     final now = DateTime.now();
     final sessionId = _activeSessionId;
     setState(() {
+      _unsavedSessionIds.remove(sessionId);
       _sessions = _sessions.map((session) {
         if (session.id != sessionId) return session;
         return session.copyWith(
@@ -3326,6 +3656,7 @@ class _ChatScreenState extends State<ChatScreen>
     ];
 
     setState(() {
+      _unsavedSessionIds.remove(sessionId);
       _pendingAssistantAttachments = Map.unmodifiable({
         for (final entry in _pendingAssistantAttachments.entries)
           if (entry.key != sessionId) entry.key: entry.value,
@@ -6513,6 +6844,9 @@ $candidate
     final now = DateTime.now();
     final sessionId = _newSessionId();
     setState(() {
+      _unsavedSessionIds
+        ..clear()
+        ..add(sessionId);
       _activeScenarioId = runtimeProfile.scenarioId;
       _activeDeveloperEngineId = runtimeProfile.activeEngineId;
       _activeAgentId = runtimeProfile.agentId;
@@ -6673,6 +7007,9 @@ $candidate
     final now = DateTime.now();
     final sessionId = _newSessionId();
     setState(() {
+      _unsavedSessionIds
+        ..clear()
+        ..add(sessionId);
       _activeAgentId = agentId;
       _activeSessionId = sessionId;
       _channelInputSources = const [];
@@ -6744,51 +7081,22 @@ $candidate
     await _activateRuntimeProfile(nextRuntime);
   }
 
-  Future<void> _refreshVisibleSessions() async {
-    final logTag = _activeAgentId == 'engine.cc'
-        ? 'napaxiCCHistory'
-        : _activeAgentId == 'engine.codex'
-        ? 'napaxiCodexHistory'
-        : 'napaxiCCHistory';
-    debugPrint(
-      '[$logTag] refreshSessions agent=$_activeAgentId activeSession=$_activeSessionId',
-    );
-    if (_isCliAgent(_activeAgentId)) {
-      await _restoreCliEngineSession(_activeAgentId);
-      return;
-    }
-    await _restoreSdkSessions(_config);
-  }
-
   void _startNewSession() {
     final agentId = _activeAgentId;
     final now = DateTime.now();
     final sessionId = _newSessionId();
-
-    if (_isCliAgent(agentId)) {
-      // CLI engines: create a fresh placeholder conversation. The first message
-      // triggers codex's thread/start (or CC's resume-less query), whose real
-      // native id is reported back and used to migrate this placeholder id — so
-      // no native mapping needs clearing up front.
-      setState(() {
-        _activeSessionId = sessionId;
-        _sessions = [
-          ChatSession(
-            id: sessionId,
-            createdAt: now,
-            updatedAt: now,
-            messages: [_welcomeMessage(widget.language, _config)],
-          ),
-          ..._sessions,
-        ];
-        _editingMessageId = null;
-        _inputController.clear();
-      });
-      _dismissKeyboard();
-      return;
-    }
+    final discardedSessionIds = Set<String>.of(_unsavedSessionIds);
+    final discardedProjectKeys = {
+      for (final id in discardedSessionIds) _sessionCacheKey(agentId, id),
+    };
+    final removedProjectAssignment = _projectSessionIds.keys.any(
+      discardedProjectKeys.contains,
+    );
 
     setState(() {
+      _unsavedSessionIds
+        ..clear()
+        ..add(sessionId);
       _activeSessionId = sessionId;
       _sessions = [
         ChatSession(
@@ -6797,18 +7105,50 @@ $candidate
           updatedAt: now,
           messages: [_welcomeMessage(widget.language, _config)],
         ),
-        ..._sessions,
+        for (final session in _sessions)
+          if (!discardedSessionIds.contains(session.id)) session,
       ];
+      if (discardedProjectKeys.isNotEmpty) {
+        _projectSessionIds = Map.unmodifiable({
+          for (final entry in _projectSessionIds.entries)
+            if (!discardedProjectKeys.contains(entry.key))
+              entry.key: entry.value,
+        });
+      }
       _editingMessageId = null;
       _inputController.clear();
     });
+    if (removedProjectAssignment) unawaited(_persistChatProjects());
     _dismissKeyboard();
   }
 
   void _selectSession(String sessionId) {
     if (_activeSessionId == sessionId) return;
     final shouldLoadHistory = !_hasLiveSessionRun(sessionId);
+    final discardedSessionIds = {
+      for (final id in _unsavedSessionIds)
+        if (id != sessionId) id,
+    };
+    final discardedProjectKeys = {
+      for (final id in discardedSessionIds)
+        _sessionCacheKey(_activeAgentId, id),
+    };
+    final removedProjectAssignment = _projectSessionIds.keys.any(
+      discardedProjectKeys.contains,
+    );
     setState(() {
+      _unsavedSessionIds.removeAll(discardedSessionIds);
+      _sessions = [
+        for (final session in _sessions)
+          if (!discardedSessionIds.contains(session.id)) session,
+      ];
+      if (discardedProjectKeys.isNotEmpty) {
+        _projectSessionIds = Map.unmodifiable({
+          for (final entry in _projectSessionIds.entries)
+            if (!discardedProjectKeys.contains(entry.key))
+              entry.key: entry.value,
+        });
+      }
       _activeSessionId = sessionId;
       final run = _sessionRuns[sessionId];
       if (run != null) {
@@ -6818,6 +7158,7 @@ $candidate
       _editingMessageId = null;
       _inputController.clear();
     });
+    if (removedProjectAssignment) unawaited(_persistChatProjects());
     _dismissKeyboard();
     _scrollToBottom(force: true);
     if (shouldLoadHistory) {
@@ -6846,6 +7187,11 @@ $candidate
           .toList();
     });
     unawaited(_persistPinnedSessions());
+  }
+
+  void _handleSessionRenameEditingChanged(bool isEditing) {
+    if (_isRenamingSessionTitle == isEditing) return;
+    setState(() => _isRenamingSessionTitle = isEditing);
   }
 
   Future<void> _confirmDeleteSession(String sessionId) async {
@@ -6902,6 +7248,8 @@ $candidate
       final now = DateTime.now();
       final shouldCreate = remainingSessions.isEmpty;
       final replacementId = shouldCreate ? _newSessionId() : null;
+      final renamedKey = _renamedSessionKey(_activeAgentId, sessionId);
+      final projectSessionKey = _sessionCacheKey(_activeAgentId, sessionId);
       final nextSessions = shouldCreate
           ? [
               ChatSession(
@@ -6913,13 +7261,27 @@ $candidate
             ]
           : remainingSessions;
       setState(() {
+        _unsavedSessionIds.remove(sessionId);
+        if (replacementId != null) {
+          _unsavedSessionIds.add(replacementId);
+        }
         _sessions = List.unmodifiable(nextSessions);
         _activeSessionId = _activeSessionId == sessionId
             ? (replacementId ?? nextSessions.first.id)
             : _activeSessionId;
+        _renamedSessionTitles = Map.unmodifiable({
+          for (final entry in _renamedSessionTitles.entries)
+            if (entry.key != renamedKey) entry.key: entry.value,
+        });
+        _projectSessionIds = Map.unmodifiable({
+          for (final entry in _projectSessionIds.entries)
+            if (entry.key != projectSessionKey) entry.key: entry.value,
+        });
         _editingMessageId = null;
         _inputController.clear();
       });
+      unawaited(_persistRenamedSessions());
+      unawaited(_persistChatProjects());
       return;
     }
 
@@ -6972,7 +7334,12 @@ $candidate
             ]
           : remainingSessions;
       final pinKey = _pinnedSessionKey(agentId, sessionId);
+      final renamedKey = _renamedSessionKey(agentId, sessionId);
       setState(() {
+        _unsavedSessionIds.remove(sessionId);
+        if (replacementSessionId != null) {
+          _unsavedSessionIds.add(replacementSessionId);
+        }
         _sessions = List.unmodifiable(nextSessions);
         _activeSessionId = replacementSessionId ?? nextActiveSessionId!;
         _sessionRuns.remove(sessionId);
@@ -6981,6 +7348,14 @@ $candidate
         _contextStatuses.remove(cacheKey);
         _contextStatusLoading.remove(cacheKey);
         _pinnedSessionIds = {..._pinnedSessionIds}..remove(pinKey);
+        _renamedSessionTitles = Map.unmodifiable({
+          for (final entry in _renamedSessionTitles.entries)
+            if (entry.key != renamedKey) entry.key: entry.value,
+        });
+        _projectSessionIds = Map.unmodifiable({
+          for (final entry in _projectSessionIds.entries)
+            if (entry.key != cacheKey) entry.key: entry.value,
+        });
         if (_browserPanelAgentId == agentId &&
             _browserPanelSessionId == sessionId) {
           _browserPanelVisible = false;
@@ -6994,6 +7369,8 @@ $candidate
       });
       _removeSeenAttachmentsForSession(sessionId);
       unawaited(_persistPinnedSessions());
+      unawaited(_persistRenamedSessions());
+      unawaited(_persistChatProjects());
       unawaited(_markDeletedA2AConversationSession(sessionId));
       unawaited(_persistA2AConversationSessions());
       if (_activeSessionId != sessionId &&
@@ -7192,8 +7569,12 @@ $candidate
     if (start == null || lastPosition == null) return;
 
     final totalDelta = event.position - start;
+    final isProjectBackGesture =
+        _isActiveProjectChat || _primaryView == _ChatPrimaryView.projectDetail;
+    final horizontalThreshold = isProjectBackGesture ? 56.0 : 8.0;
     final isHorizontalOpenDrag =
-        totalDelta.dx > 8 && totalDelta.dx.abs() > totalDelta.dy.abs() * 1.2;
+        totalDelta.dx > horizontalThreshold &&
+        totalDelta.dx.abs() > totalDelta.dy.abs() * 1.2;
     if (!_isOpeningSessionMenuDrag && !isHorizontalOpenDrag) {
       _chatDragLastPosition = event.position;
       return;
@@ -7201,6 +7582,10 @@ $candidate
 
     _isOpeningSessionMenuDrag = true;
     _dismissKeyboard();
+    if (isProjectBackGesture) {
+      _chatDragLastPosition = event.position;
+      return;
+    }
     final width = _sessionDrawerWidth(context);
     final delta = event.position.dx - lastPosition.dx;
     _sessionMenuController.value =
@@ -7210,7 +7595,11 @@ $candidate
 
   void _handleChatPointerEnd(PointerEvent event) {
     if (_isOpeningSessionMenuDrag) {
-      if (_sessionMenuController.value >= 0.25) {
+      if (_isActiveProjectChat) {
+        _returnToActiveProject();
+      } else if (_primaryView == _ChatPrimaryView.projectDetail) {
+        _returnToProjects();
+      } else if (_sessionMenuController.value >= 0.25) {
         _sessionMenuController.forward();
       } else {
         _sessionMenuController.reverse();
@@ -7234,8 +7623,20 @@ $candidate
         final renderObject = element.renderObject;
         if (renderObject is RenderBox && renderObject.hasSize) {
           final localPosition = renderObject.globalToLocal(globalPosition);
-          found = renderObject.size.contains(localPosition);
-          if (found) return;
+          if (renderObject.size.contains(localPosition)) {
+            final scrollableState = element is StatefulElement
+                ? element.state
+                : null;
+            if (scrollableState is! ScrollableState) {
+              found = true;
+              return;
+            }
+
+            // A rightward drag should stay with the child pager while it has a
+            // previous tab. At its leading edge, let the parent open the menu.
+            found = scrollableState.position.extentBefore > 0.5;
+            if (found) return;
+          }
         }
       }
 
@@ -7244,6 +7645,127 @@ $candidate
 
     context.visitChildElements(visit);
     return found;
+  }
+
+  Map<String, String> _activeProjectSessionMap() {
+    final result = <String, String>{};
+    for (final session in _sessions) {
+      if (_unsavedSessionIds.contains(session.id)) continue;
+      final projectId =
+          _projectSessionIds[_sessionCacheKey(_activeAgentId, session.id)];
+      if (projectId != null) result[session.id] = projectId;
+    }
+    return Map.unmodifiable(result);
+  }
+
+  Widget _buildProjectsPrimarySurface() {
+    final projects = _chatProjects
+        .where((project) => project.agentId == _activeAgentId)
+        .toList(growable: false);
+    final sessionProjectIds = _activeProjectSessionMap();
+    final sessionCounts = <String, int>{};
+    for (final projectId in sessionProjectIds.values) {
+      sessionCounts[projectId] = (sessionCounts[projectId] ?? 0) + 1;
+    }
+
+    Widget page;
+    if (_primaryView == _ChatPrimaryView.projectDetail) {
+      _ChatProject? selectedProject;
+      for (final project in projects) {
+        if (project.id == _selectedChatProjectId) {
+          selectedProject = project;
+          break;
+        }
+      }
+      if (selectedProject != null) {
+        final project = selectedProject;
+        final sessions = _sessions
+            .where((session) => sessionProjectIds[session.id] == project.id)
+            .map(_sessionForHistory)
+            .toList(growable: false);
+        page = _ProjectDetailPage(
+          project: project,
+          sessions: sessions,
+          onBack: _returnToProjects,
+          onSessionTap: _openProjectSession,
+          onStartChat: (message, attachments, pinnedSkillNames) =>
+              _startProjectChat(
+                project.id,
+                message,
+                attachments,
+                pinnedSkillNames,
+              ),
+          chatClient: _chatClient,
+          agentId: _activeAgentId,
+        );
+      } else {
+        page = _ProjectsPage(
+          projects: projects,
+          sessionCounts: sessionCounts,
+          onMenu: _openSessionHistory,
+          onAdd: () => unawaited(_showCreateChatProjectDialog()),
+          onProjectTap: _openChatProject,
+        );
+      }
+    } else {
+      page = _ProjectsPage(
+        projects: projects,
+        sessionCounts: sessionCounts,
+        onMenu: _openSessionHistory,
+        onAdd: () => unawaited(_showCreateChatProjectDialog()),
+        onProjectTap: _openChatProject,
+      );
+    }
+
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleChatPointerDown,
+      onPointerMove: _handleChatPointerMove,
+      onPointerUp: _handleChatPointerEnd,
+      onPointerCancel: _handleChatPointerEnd,
+      child: page,
+    );
+  }
+
+  Widget _buildFilesPrimarySurface() {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleChatPointerDown,
+      onPointerMove: _handleChatPointerMove,
+      onPointerUp: _handleChatPointerEnd,
+      onPointerCancel: _handleChatPointerEnd,
+      child: _FilesPage(
+        clientFuture: _primaryFilesClientFuture ??= _buildFilesClientFuture(),
+        agentId: _activeAgentId,
+        onMenu: _openSessionHistory,
+      ),
+    );
+  }
+
+  Widget _buildSkillsPrimarySurface() {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleChatPointerDown,
+      onPointerMove: _handleChatPointerMove,
+      onPointerUp: _handleChatPointerEnd,
+      onPointerCancel: _handleChatPointerEnd,
+      child: _SkillsPage(
+        clientFuture: _primarySkillsClientFuture ??= _buildSkillsClientFuture(),
+        agentId: _activeAgentId,
+        onPendingEvolutionChanged: _refreshPendingEvolutionFromSkills,
+        onMenu: _openSessionHistory,
+      ),
+    );
+  }
+
+  Widget _buildNonChatPrimarySurface() {
+    return switch (_primaryView) {
+      _ChatPrimaryView.files => _buildFilesPrimarySurface(),
+      _ChatPrimaryView.skills => _buildSkillsPrimarySurface(),
+      _ChatPrimaryView.projects ||
+      _ChatPrimaryView.projectDetail => _buildProjectsPrimarySurface(),
+      _ChatPrimaryView.chat => const SizedBox.shrink(),
+    };
   }
 
   Widget _buildSessionMenu() {
@@ -7265,12 +7787,29 @@ $candidate
               onHorizontalDragEnd: _handleSessionMenuDragEnd,
               child: _SessionHistorySheet(
                 activeAgent: _activeAgent,
-                sessions: _sessions,
+                sessions: _sessions
+                    .where(
+                      (session) =>
+                          !_unsavedSessionIds.contains(session.id) &&
+                          _projectSessionIds[_sessionCacheKey(
+                                _activeAgentId,
+                                session.id,
+                              )] ==
+                              null,
+                    )
+                    .map(_sessionForHistory)
+                    .toList(growable: false),
                 sessionRuns: Map.unmodifiable(_sessionRuns),
                 a2aUnreadSessionIds: Set.unmodifiable(
                   _a2aUnreadConversationSessionIds,
                 ),
-                activeSessionId: _activeSessionId,
+                activeSessionId: _primaryView == _ChatPrimaryView.chat
+                    ? _activeSessionId
+                    : '',
+                projects: _chatProjects
+                    .where((project) => project.agentId == _activeAgentId)
+                    .toList(growable: false),
+                projectSessionIds: _activeProjectSessionMap(),
                 favoriteAttachments: _activeFavoriteAttachments,
                 initialView: _sessionHistoryInitialView,
                 initialSettingsSection: _sessionHistoryInitialSettingsSection,
@@ -7301,14 +7840,24 @@ $candidate
                     _lastA2APairingDiagnostic,
                 onNewSession: () {
                   _closeSessionHistory();
+                  setState(() => _primaryView = _ChatPrimaryView.chat);
                   _startNewSession();
                 },
-                onRefreshSessions: _refreshVisibleSessions,
+                onProjectCreated: _createChatProject,
+                onProjectChatStarted: _startProjectChat,
+                onFilesSelected: _showFilesFromMenu,
+                onSkillsSelected: _showSkillsFromMenu,
+                onProjectsSelected: _showProjectsFromMenu,
+                primaryView: _primaryView,
                 onSessionSelected: (sessionId) {
                   _closeSessionHistory();
+                  setState(() => _primaryView = _ChatPrimaryView.chat);
                   _selectSession(sessionId);
                 },
                 onSessionPinToggle: _toggleSessionPin,
+                onSessionRename: _renameSession,
+                onSessionRenameEditingChanged:
+                    _handleSessionRenameEditingChanged,
                 onSessionDelete: (sessionId) {
                   unawaited(_confirmDeleteSession(sessionId));
                 },
@@ -7347,7 +7896,8 @@ $candidate
     final generatedIdentities = _generatedAttachmentIdentities(_activeSession);
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset:
+          _primaryView == _ChatPrimaryView.chat && !_isRenamingSessionTitle,
       body: Stack(
         children: [
           _buildSessionMenu(),
@@ -7357,267 +7907,305 @@ $candidate
             onDismiss: _closeSessionHistory,
             onHorizontalDragUpdate: _handleSessionMenuDragUpdate,
             onHorizontalDragEnd: _handleSessionMenuDragEnd,
-            child: Listener(
-              behavior: HitTestBehavior.translucent,
-              onPointerDown: _handleChatPointerDown,
-              onPointerMove: _handleChatPointerMove,
-              onPointerUp: _handleChatPointerEnd,
-              onPointerCancel: _handleChatPointerEnd,
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    _ChatTopBar(
-                      activeAgent: _activeAgent,
-                      agents: _agents,
-                      runtimeProfile: _activeRuntimeProfile,
-                      language: widget.language,
-                      hasAttachments: _activeConversationAttachments.isNotEmpty,
-                      newAttachmentCount: _newAttachmentCountFor(
-                        _activeSessionId,
-                      ),
-                      onAgentSelected: _selectAgent,
-                      onEngineSelected: _selectDeveloperEngine,
-                      onManageAgents: _openAgentManager,
-                      onSessionsTap: _openSessionHistory,
-                      onAttachmentsTap: _openConversationAttachments,
-                      onNewTerminal: _activeRuntimeProfile.isDeveloper
-                          ? _openSandboxTerminal
-                          : null,
-                      onCopyWorkspacePath: _activeRuntimeProfile.isDeveloper
-                          ? _copyWorkspacePath
-                          : null,
-                      onCopyBranchName: _activeRuntimeProfile.isDeveloper
-                          ? _copyBranchName
-                          : null,
-                      onOpenWorkbench: _activeRuntimeProfile.isDeveloper
-                          ? _openWorkbenchDrawer
-                          : null,
-                    ),
-                    const Divider(height: 1),
-                    if (_activeScenarioId != _generalScenarioId)
-                      _ScenarioRuntimeBar(
-                        scenarioId: _activeScenarioId,
-                        onTap: _openScenariosFromChat,
-                      ),
-                    Expanded(
-                      child: _isTerminalSession(_activeSessionId)
-                          ? _buildTerminalView()
-                          : GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: _dismissKeyboard,
-                              child: Stack(
-                                children: [
-                                  NotificationListener<
-                                    SizeChangedLayoutNotification
-                                  >(
-                                    onNotification: (_) {
-                                      _handleMessageListSizeChanged();
-                                      return false;
-                                    },
-                                    child: SizeChangedLayoutNotifier(
-                                      child: ListView.builder(
-                                        key: const Key('chat_message_list'),
-                                        controller: _scrollController,
-                                        keyboardDismissBehavior:
-                                            ScrollViewKeyboardDismissBehavior
-                                                .onDrag,
-                                        padding: EdgeInsets.fromLTRB(
-                                          16,
-                                          messageListTopPadding,
-                                          16,
-                                          18,
-                                        ),
-                                        itemCount: renderItems.length,
-                                        itemBuilder: (context, index) {
-                                          final item = renderItems[index];
-                                          if (item
-                                              is _GeneratedAttachmentsItem) {
-                                            return _ConversationGeneratedAttachmentsView(
-                                              key: Key(
-                                                'turn_generated_attachments_'
-                                                '${item.turnUserMessageId ?? 'lead'}'
-                                                '_${item.turnIndex}',
-                                              ),
-                                              attachments: item.attachments,
-                                              accountId: _activeAccountId,
-                                              agentId: _activeAgentId,
-                                              isFavoriteAttachment:
-                                                  _isFavoriteAttachment,
-                                              onToggleFavoriteAttachment:
-                                                  _toggleFavoriteAttachment,
-                                            );
-                                          }
-                                          final message =
-                                              (item as _MessageItem).message;
-                                          return _ChatBubble(
-                                            message: message,
-                                            accountId: _activeAccountId,
-                                            agentId: _activeAgentId,
-                                            onLoadFullToolCall:
-                                                _loadFullHistoryToolCall,
-                                            onOpenConfiguration:
-                                                _openConfigPage,
-                                            isFavoriteAttachment:
-                                                _isFavoriteAttachment,
-                                            onToggleFavoriteAttachment:
-                                                _toggleFavoriteAttachment,
-                                            onOpenSkillOrganize:
-                                                _openSkillOrganizeFromChat,
-                                            onCopyUserMessage: (message) {
-                                              unawaited(
-                                                _copyUserMessage(message),
-                                              );
+            child: _primaryView == _ChatPrimaryView.chat
+                ? _KeyboardInsetIsolation(
+                    enabled: _isRenamingSessionTitle,
+                    child: Listener(
+                      behavior: HitTestBehavior.translucent,
+                      onPointerDown: _handleChatPointerDown,
+                      onPointerMove: _handleChatPointerMove,
+                      onPointerUp: _handleChatPointerEnd,
+                      onPointerCancel: _handleChatPointerEnd,
+                      child: SafeArea(
+                        child: Column(
+                          children: [
+                            _ChatTopBar(
+                              activeAgent: _activeAgent,
+                              agents: _agents,
+                              runtimeProfile: _activeRuntimeProfile,
+                              language: widget.language,
+                              hasAttachments:
+                                  _activeConversationAttachments.isNotEmpty,
+                              newAttachmentCount: _newAttachmentCountFor(
+                                _activeSessionId,
+                              ),
+                              onAgentSelected: _selectAgent,
+                              onEngineSelected: _selectDeveloperEngine,
+                              onManageAgents: _openAgentManager,
+                              showBackButton: _isActiveProjectChat,
+                              onSessionsTap: _isActiveProjectChat
+                                  ? _returnToActiveProject
+                                  : _openSessionHistory,
+                              onAttachmentsTap: _openConversationAttachments,
+                              onNewTerminal: _activeRuntimeProfile.isDeveloper
+                                  ? _openSandboxTerminal
+                                  : null,
+                              onCopyWorkspacePath:
+                                  _activeRuntimeProfile.isDeveloper
+                                  ? _copyWorkspacePath
+                                  : null,
+                              onCopyBranchName:
+                                  _activeRuntimeProfile.isDeveloper
+                                  ? _copyBranchName
+                                  : null,
+                              onOpenWorkbench: _activeRuntimeProfile.isDeveloper
+                                  ? _openWorkbenchDrawer
+                                  : null,
+                            ),
+                            const Divider(height: 1),
+                            if (_activeScenarioId != _generalScenarioId)
+                              _ScenarioRuntimeBar(
+                                scenarioId: _activeScenarioId,
+                                onTap: _openScenariosFromChat,
+                              ),
+                            Expanded(
+                              child: _isTerminalSession(_activeSessionId)
+                                  ? _buildTerminalView()
+                                  : GestureDetector(
+                                      behavior: HitTestBehavior.opaque,
+                                      onTap: _dismissKeyboard,
+                                      child: Stack(
+                                        children: [
+                                          NotificationListener<
+                                            SizeChangedLayoutNotification
+                                          >(
+                                            onNotification: (_) {
+                                              _handleMessageListSizeChanged();
+                                              return false;
                                             },
-                                            onEditUserMessage: _editUserMessage,
-                                            onAnswerHumanRequest:
-                                                (requestId, response) {
-                                                  _inputController.text =
-                                                      response;
-                                                  unawaited(
-                                                    _sendRunningMessage(
-                                                      response,
-                                                      const [],
-                                                    ),
+                                            child: SizeChangedLayoutNotifier(
+                                              child: ListView.builder(
+                                                key: const Key(
+                                                  'chat_message_list',
+                                                ),
+                                                controller: _scrollController,
+                                                keyboardDismissBehavior:
+                                                    ScrollViewKeyboardDismissBehavior
+                                                        .onDrag,
+                                                padding: EdgeInsets.fromLTRB(
+                                                  16,
+                                                  messageListTopPadding,
+                                                  16,
+                                                  18,
+                                                ),
+                                                itemCount: renderItems.length,
+                                                itemBuilder: (context, index) {
+                                                  final item =
+                                                      renderItems[index];
+                                                  if (item
+                                                      is _GeneratedAttachmentsItem) {
+                                                    return _ConversationGeneratedAttachmentsView(
+                                                      key: Key(
+                                                        'turn_generated_attachments_'
+                                                        '${item.turnUserMessageId ?? 'lead'}'
+                                                        '_${item.turnIndex}',
+                                                      ),
+                                                      attachments:
+                                                          item.attachments,
+                                                      accountId:
+                                                          _activeAccountId,
+                                                      agentId: _activeAgentId,
+                                                      isFavoriteAttachment:
+                                                          _isFavoriteAttachment,
+                                                      onToggleFavoriteAttachment:
+                                                          _toggleFavoriteAttachment,
+                                                    );
+                                                  }
+                                                  final message =
+                                                      (item as _MessageItem)
+                                                          .message;
+                                                  return _ChatBubble(
+                                                    message: message,
+                                                    accountId: _activeAccountId,
+                                                    agentId: _activeAgentId,
+                                                    onLoadFullToolCall:
+                                                        _loadFullHistoryToolCall,
+                                                    onOpenConfiguration:
+                                                        _openConfigPage,
+                                                    isFavoriteAttachment:
+                                                        _isFavoriteAttachment,
+                                                    onToggleFavoriteAttachment:
+                                                        _toggleFavoriteAttachment,
+                                                    onOpenSkillOrganize:
+                                                        _openSkillOrganizeFromChat,
+                                                    onCopyUserMessage:
+                                                        (message) {
+                                                          unawaited(
+                                                            _copyUserMessage(
+                                                              message,
+                                                            ),
+                                                          );
+                                                        },
+                                                    onEditUserMessage:
+                                                        _editUserMessage,
+                                                    onAnswerHumanRequest:
+                                                        (requestId, response) {
+                                                          _inputController
+                                                                  .text =
+                                                              response;
+                                                          unawaited(
+                                                            _sendRunningMessage(
+                                                              response,
+                                                              const [],
+                                                            ),
+                                                          );
+                                                        },
+                                                    aggregatedAttachmentIdentities:
+                                                        generatedIdentities,
                                                   );
                                                 },
-                                            aggregatedAttachmentIdentities:
-                                                generatedIdentities,
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    left: 16,
-                                    right: 16,
-                                    top: 12,
-                                    child: AnimatedSwitcher(
-                                      duration: const Duration(
-                                        milliseconds: 180,
-                                      ),
-                                      switchInCurve: Curves.easeOutCubic,
-                                      switchOutCurve: Curves.easeInCubic,
-                                      child: compactionNotice == null
-                                          ? const SizedBox.shrink()
-                                          : _ContextCompactionBanner(
-                                              key: ValueKey(
-                                                compactionNotice
-                                                    .updatedAt
-                                                    .microsecondsSinceEpoch,
                                               ),
-                                              notice: compactionNotice,
-                                              status: _activeContextStatus,
-                                              onTap: _handleContextStatusTap,
                                             ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    right: 16,
-                                    bottom: 16,
-                                    child: AnimatedSlide(
-                                      duration: const Duration(
-                                        milliseconds: 180,
-                                      ),
-                                      offset: _showJumpToLatest
-                                          ? Offset.zero
-                                          : const Offset(0, 1.4),
-                                      child: AnimatedOpacity(
-                                        duration: const Duration(
-                                          milliseconds: 180,
-                                        ),
-                                        opacity: _showJumpToLatest ? 1 : 0,
-                                        child: IgnorePointer(
-                                          ignoring: !_showJumpToLatest,
-                                          child: Tooltip(
-                                            message: AppStrings.of(
-                                              context,
-                                            ).jumpToLatestMessages,
-                                            key: const Key(
-                                              'jump_to_latest_button',
-                                            ),
-                                            child: Material(
-                                              color: Colors.white,
-                                              elevation: 4,
-                                              shadowColor: Colors.black
-                                                  .withValues(alpha: 0.14),
-                                              shape: const CircleBorder(
-                                                side: BorderSide(
-                                                  color: Color(0xFFD1D5DB),
-                                                ),
+                                          ),
+                                          Positioned(
+                                            left: 16,
+                                            right: 16,
+                                            top: 12,
+                                            child: AnimatedSwitcher(
+                                              duration: const Duration(
+                                                milliseconds: 180,
                                               ),
-                                              child: InkWell(
-                                                customBorder:
-                                                    const CircleBorder(),
-                                                onTap: () => _scrollToBottom(
-                                                  force: true,
+                                              switchInCurve:
+                                                  Curves.easeOutCubic,
+                                              switchOutCurve:
+                                                  Curves.easeInCubic,
+                                              child: compactionNotice == null
+                                                  ? const SizedBox.shrink()
+                                                  : _ContextCompactionBanner(
+                                                      key: ValueKey(
+                                                        compactionNotice
+                                                            .updatedAt
+                                                            .microsecondsSinceEpoch,
+                                                      ),
+                                                      notice: compactionNotice,
+                                                      status:
+                                                          _activeContextStatus,
+                                                      onTap:
+                                                          _handleContextStatusTap,
+                                                    ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            right: 16,
+                                            bottom: 16,
+                                            child: AnimatedSlide(
+                                              duration: const Duration(
+                                                milliseconds: 180,
+                                              ),
+                                              offset: _showJumpToLatest
+                                                  ? Offset.zero
+                                                  : const Offset(0, 1.4),
+                                              child: AnimatedOpacity(
+                                                duration: const Duration(
+                                                  milliseconds: 180,
                                                 ),
-                                                child: const SizedBox(
-                                                  width: 46,
-                                                  height: 46,
-                                                  child: Center(
-                                                    child: Icon(
-                                                      Icons
-                                                          .keyboard_arrow_down_rounded,
-                                                      color: Colors.black,
-                                                      size: 26,
+                                                opacity: _showJumpToLatest
+                                                    ? 1
+                                                    : 0,
+                                                child: IgnorePointer(
+                                                  ignoring: !_showJumpToLatest,
+                                                  child: Tooltip(
+                                                    message: AppStrings.of(
+                                                      context,
+                                                    ).jumpToLatestMessages,
+                                                    key: const Key(
+                                                      'jump_to_latest_button',
+                                                    ),
+                                                    child: Material(
+                                                      color: Colors.white,
+                                                      elevation: 4,
+                                                      shadowColor: Colors.black
+                                                          .withValues(
+                                                            alpha: 0.14,
+                                                          ),
+                                                      shape: const CircleBorder(
+                                                        side: BorderSide(
+                                                          color: Color(
+                                                            0xFFD1D5DB,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                      child: InkWell(
+                                                        customBorder:
+                                                            const CircleBorder(),
+                                                        onTap: () =>
+                                                            _scrollToBottom(
+                                                              force: true,
+                                                            ),
+                                                        child: const SizedBox(
+                                                          width: 46,
+                                                          height: 46,
+                                                          child: Center(
+                                                            child: Icon(
+                                                              Icons
+                                                                  .keyboard_arrow_down_rounded,
+                                                              color:
+                                                                  Colors.black,
+                                                              size: 26,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
                                             ),
                                           ),
-                                        ),
+                                        ],
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
                             ),
-                    ),
-                    if (_activeRun?.pendingInterjections.isNotEmpty ?? false)
-                      _PendingInterjectionQueue(
-                        language: widget.language,
-                        interjections: _activeRun!.pendingInterjections,
-                      ),
-                    if (!_isTerminalSession(_activeSessionId))
-                      _ChatInputShell(
-                        roundedBottom: showMobileBrowserDock,
-                        child: _ChatInputBar(
-                          controller: _inputController,
-                          focusNode: _inputFocusNode,
-                          isSending: _isActiveSessionSending,
-                          isEditing: _editingMessageId != null,
-                          slashCommands: _availableSlashCommands,
-                          contextStatus: _activeContextStatus,
-                          isContextStatusLoading: _isActiveContextStatusLoading,
-                          hasContextSession: _sdkSessions.containsKey(
-                            _activeSessionCacheKey,
-                          ),
-                          onCancelEdit: _cancelUserMessageEdit,
-                          onContextStatusTap: _handleContextStatusTap,
-                          onSend: _sendMessage,
-                          onStop: _stopActiveSend,
-                          channelInputSources: _channelInputSources,
-                          channelInputBusyAccountId: _channelInputBusyAccountId,
-                          channelInputActiveAccountId:
-                              _channelInputActiveAccountId,
-                          onChannelInputSelected: _captureChannelInput,
-                          chatClient: _chatClient,
-                          agentId: _activeAgentId,
+                            if (_activeRun?.pendingInterjections.isNotEmpty ??
+                                false)
+                              _PendingInterjectionQueue(
+                                language: widget.language,
+                                interjections: _activeRun!.pendingInterjections,
+                              ),
+                            if (!_isTerminalSession(_activeSessionId))
+                              _ChatInputShell(
+                                roundedBottom: showMobileBrowserDock,
+                                child: _ChatInputBar(
+                                  controller: _inputController,
+                                  focusNode: _inputFocusNode,
+                                  isSending: _isActiveSessionSending,
+                                  isEditing: _editingMessageId != null,
+                                  slashCommands: _availableSlashCommands,
+                                  contextStatus: _activeContextStatus,
+                                  isContextStatusLoading:
+                                      _isActiveContextStatusLoading,
+                                  hasContextSession: _sdkSessions.containsKey(
+                                    _activeSessionCacheKey,
+                                  ),
+                                  onCancelEdit: _cancelUserMessageEdit,
+                                  onContextStatusTap: _handleContextStatusTap,
+                                  onSend: _sendMessage,
+                                  onStop: _stopActiveSend,
+                                  channelInputSources: _channelInputSources,
+                                  channelInputBusyAccountId:
+                                      _channelInputBusyAccountId,
+                                  channelInputActiveAccountId:
+                                      _channelInputActiveAccountId,
+                                  onChannelInputSelected: _captureChannelInput,
+                                  chatClient: _chatClient,
+                                  agentId: _activeAgentId,
+                                ),
+                              ),
+                            if (showMobileBrowserDock)
+                              _BrowserMobileDock(
+                                controller: _browserController,
+                                onExpand: _expandBrowserPanel,
+                                onClose: _closeBrowserSidePanel,
+                              ),
+                          ],
                         ),
                       ),
-                    if (showMobileBrowserDock)
-                      _BrowserMobileDock(
-                        controller: _browserController,
-                        onExpand: _expandBrowserPanel,
-                        onClose: _closeBrowserSidePanel,
-                      ),
-                  ],
-                ),
-              ),
-            ),
+                    ),
+                  )
+                : _buildNonChatPrimarySurface(),
           ),
-          if (_activeRuntimeProfile.isDeveloper)
+          if (_primaryView == _ChatPrimaryView.chat &&
+              _activeRuntimeProfile.isDeveloper)
             AnimatedBuilder(
               animation: _workbenchDrawerController,
               builder: (context, _) {
@@ -7669,7 +8257,8 @@ $candidate
                 );
               },
             ),
-          if (_browserPanelVisible &&
+          if (_primaryView == _ChatPrimaryView.chat &&
+              _browserPanelVisible &&
               browserBelongsToActiveSession &&
               MediaQuery.sizeOf(context).width >= 840)
             Positioned(
@@ -7682,7 +8271,7 @@ $candidate
                 onClose: _closeBrowserSidePanel,
               ),
             ),
-          if (showMobileBrowserOverlay)
+          if (_primaryView == _ChatPrimaryView.chat && showMobileBrowserOverlay)
             Positioned.fill(
               child: _BrowserFullscreenPanel(
                 controller: _browserController,

@@ -58,6 +58,7 @@ part 'widgets/chat_tool_trace.dart';
 part 'widgets/chat_tool_read_file.dart';
 part 'widgets/chat_tool_write_file.dart';
 part 'panels/skills_panel.dart';
+part 'panels/projects_panel.dart';
 part 'panels/files_panel.dart';
 part 'panels/session_history.dart';
 part 'panels/scenarios_panel.dart';

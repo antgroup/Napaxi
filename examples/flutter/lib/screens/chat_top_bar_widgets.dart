@@ -48,6 +48,7 @@ class _ChatTopBar extends StatelessWidget {
     required this.onManageAgents,
     required this.onSessionsTap,
     required this.onAttachmentsTap,
+    this.showBackButton = false,
     this.onNewTerminal,
     this.onCopyWorkspacePath,
     this.onCopyBranchName,
@@ -65,6 +66,7 @@ class _ChatTopBar extends StatelessWidget {
   final VoidCallback onManageAgents;
   final VoidCallback onSessionsTap;
   final VoidCallback onAttachmentsTap;
+  final bool showBackButton;
   final VoidCallback? onNewTerminal;
   final VoidCallback? onCopyWorkspacePath;
   final VoidCallback? onCopyBranchName;
@@ -81,11 +83,19 @@ class _ChatTopBar extends StatelessWidget {
           SizedBox.square(
             dimension: 40,
             child: IconButton(
-              key: const Key('session_history_button'),
-              tooltip: strings.sessionsTooltip,
+              key: Key(
+                showBackButton
+                    ? 'project_chat_back_button'
+                    : 'session_history_button',
+              ),
+              tooltip: showBackButton
+                  ? MaterialLocalizations.of(context).backButtonTooltip
+                  : strings.sessionsTooltip,
               padding: EdgeInsets.zero,
               onPressed: onSessionsTap,
-              icon: const Icon(Icons.menu_rounded),
+              icon: Icon(
+                showBackButton ? Icons.arrow_back_rounded : Icons.menu_rounded,
+              ),
             ),
           ),
           Expanded(

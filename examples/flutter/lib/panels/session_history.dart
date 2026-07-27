@@ -14,6 +14,8 @@ const _nearbyPeerRemarksKey = 'agent_demo.a2a_local.peer_remarks.v1';
 const _sessionMenuText = Color(0xFF171717);
 const _sessionMenuMuted = Color(0xFF707070);
 
+enum _SessionAction { open, pinToggle, rename, delete }
+
 class _ContactConfig {
   const _ContactConfig({
     required this.email,
@@ -97,16 +99,21 @@ class _SessionMenuAction extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.selected = false,
+    this.selectedKey,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool selected;
+  final Key? selectedKey;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      key: selected ? selectedKey : null,
+      color: selected ? const Color(0xFFE7E7E7) : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -134,12 +141,63 @@ class _SessionMenuAction extends StatelessWidget {
                     style: const TextStyle(
                       color: _sessionMenuText,
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionSheetAction extends StatelessWidget {
+  const _SessionSheetAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.isDestructive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool isDestructive;
+
+  @override
+  Widget build(BuildContext context) {
+    final foregroundColor = isDestructive
+        ? const Color(0xFFDC2626)
+        : _sessionMenuText;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        highlightColor: const Color(0xFFE7E8EA),
+        splashColor: const Color(0xFFD4D4D4).withValues(alpha: 0.2),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            children: [
+              Icon(icon, color: foregroundColor, size: 22),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: foregroundColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -169,6 +227,43 @@ String _sessionHistoryPreview(ChatSession session) {
   return sanitized;
 }
 
+List<String> _sessionHistoryExpandedPreview(
+  BuildContext context,
+  ChatSession session,
+) {
+  final isChinese =
+      _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+  final entries = <String>[];
+
+  for (final message in session.messages.reversed) {
+    if (message.id == 'welcome') continue;
+
+    var content = _sanitizeA2AProtocolText(message.content).trim();
+    if (content.isEmpty && message.attachments.isNotEmpty) {
+      final attachmentNames = message.attachments
+          .map((attachment) => attachment.name)
+          .where((name) => name.trim().isNotEmpty)
+          .take(2)
+          .join(isChinese ? '、' : ', ');
+      content = attachmentNames.isEmpty
+          ? (isChinese ? '附件' : 'Attachment')
+          : (isChinese
+                ? '附件：$attachmentNames'
+                : 'Attachment: $attachmentNames');
+    }
+    if (content.isEmpty) continue;
+
+    final speaker = message.isUser ? (isChinese ? '你' : 'You') : 'napaxi';
+    entries.add('$speaker${isChinese ? '：' : ': '}$content');
+    if (entries.length == 3) break;
+  }
+
+  if (entries.isEmpty) {
+    return <String>[_sessionHistoryPreview(session)];
+  }
+  return entries;
+}
+
 String _fileNameFromPath(String path) {
   final normalized = path.replaceAll('\\', '/').replaceAll(RegExp(r'/+$'), '');
   if (normalized.isEmpty) return path;
@@ -196,6 +291,8 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.sessionRuns,
     required this.a2aUnreadSessionIds,
     required this.activeSessionId,
+    required this.projects,
+    required this.projectSessionIds,
     required this.favoriteAttachments,
     required this.initialView,
     required this.initialSettingsSection,
@@ -224,9 +321,16 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.onNearbyDeletePeer,
     required this.getNearbyPairingDiagnostic,
     required this.onNewSession,
-    required this.onRefreshSessions,
+    required this.onProjectCreated,
+    required this.onProjectChatStarted,
+    required this.onFilesSelected,
+    required this.onSkillsSelected,
+    required this.onProjectsSelected,
+    required this.primaryView,
     required this.onSessionSelected,
     required this.onSessionPinToggle,
+    required this.onSessionRename,
+    required this.onSessionRenameEditingChanged,
     required this.onSessionDelete,
     this.onPendingEvolutionChanged,
   });
@@ -236,6 +340,8 @@ class _SessionHistorySheet extends StatefulWidget {
   final Map<String, ChatSessionRunState> sessionRuns;
   final Set<String> a2aUnreadSessionIds;
   final String activeSessionId;
+  final List<_ChatProject> projects;
+  final Map<String, String> projectSessionIds;
   final List<FavoriteAttachment> favoriteAttachments;
   final _SessionHistoryView initialView;
   final _SettingsSection initialSettingsSection;
@@ -264,9 +370,17 @@ class _SessionHistorySheet extends StatefulWidget {
   final Future<void> Function(sdk.A2APeer peer) onNearbyDeletePeer;
   final Future<String?> Function() getNearbyPairingDiagnostic;
   final VoidCallback onNewSession;
-  final Future<void> Function() onRefreshSessions;
+  final ValueChanged<String> onProjectCreated;
+  final Future<void> Function(String projectId, String message)
+  onProjectChatStarted;
+  final VoidCallback onFilesSelected;
+  final VoidCallback onSkillsSelected;
+  final VoidCallback onProjectsSelected;
+  final _ChatPrimaryView primaryView;
   final ValueChanged<String> onSessionSelected;
   final ValueChanged<String> onSessionPinToggle;
+  final void Function(String sessionId, String title) onSessionRename;
+  final ValueChanged<bool> onSessionRenameEditingChanged;
   final ValueChanged<String> onSessionDelete;
   final Future<void> Function()? onPendingEvolutionChanged;
 
@@ -292,6 +406,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
   sdk.NapaxiScenarioUiContribution? _repoWorkbenchContribution;
   Future<sdk.NapaxiScenarioUiContribution?>? _environmentContributionFuture;
   sdk.NapaxiScenarioUiContribution? _environmentContribution;
+  String? _selectedProjectId;
 
   @override
   void initState() {
@@ -462,6 +577,218 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     return false;
   }
 
+  void _openProject(_ChatProject project) {
+    _selectedProjectId = project.id;
+    _navigateTo(_SessionHistoryView.projectDetail);
+  }
+
+  Future<void> _showCreateProjectDialog() async {
+    final controller = TextEditingController();
+    final appView = View.of(context);
+    widget.onSessionRenameEditingChanged(true);
+    String? projectName;
+    try {
+      projectName = await showDialog<String>(
+        context: context,
+        barrierColor: Colors.black.withValues(alpha: 0.22),
+        animationStyle: AnimationStyle.noAnimation,
+        builder: (dialogContext) {
+          var canCreate = false;
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              void submit() {
+                final name = controller.text.trim();
+                if (name.isNotEmpty) {
+                  FocusScope.of(dialogContext).unfocus();
+                  Navigator.of(dialogContext).pop(name);
+                }
+              }
+
+              return Dialog(
+                backgroundColor: Colors.transparent,
+                insetPadding: const EdgeInsets.symmetric(horizontal: 22),
+                child: Material(
+                  color: _appSurfaceColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    side: const BorderSide(color: _appSurfaceBorderColor),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _projectCopy(
+                            context,
+                            english: 'New project',
+                            chinese: '新建项目',
+                          ),
+                          style: const TextStyle(
+                            color: _sessionMenuText,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          key: const Key('new_project_name_field'),
+                          controller: controller,
+                          autofocus: true,
+                          maxLength: 80,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => submit(),
+                          onChanged: (value) {
+                            final nextCanCreate = value.trim().isNotEmpty;
+                            if (nextCanCreate != canCreate) {
+                              setDialogState(() => canCreate = nextCanCreate);
+                            }
+                          },
+                          decoration: InputDecoration(
+                            hintText: _projectCopy(
+                              context,
+                              english: 'Project name',
+                              chinese: '项目名称',
+                            ),
+                            counterText: '',
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 15,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: const BorderSide(
+                                color: _appSurfaceBorderColor,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: const BorderSide(
+                                color: _appSurfaceBorderColor,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: const BorderSide(
+                                color: Color(0xFF999999),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                key: const Key('cancel_create_project_button'),
+                                onPressed: () {
+                                  FocusScope.of(dialogContext).unfocus();
+                                  Navigator.of(dialogContext).pop();
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: _sessionMenuText,
+                                  minimumSize: const Size.fromHeight(48),
+                                  side: const BorderSide(
+                                    color: _appSurfaceBorderColor,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: Text(
+                                  _projectCopy(
+                                    context,
+                                    english: 'Cancel',
+                                    chinese: '取消',
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: FilledButton(
+                                key: const Key('confirm_create_project_button'),
+                                onPressed: canCreate ? submit : null,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF222222),
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size.fromHeight(48),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: Text(
+                                  _projectCopy(
+                                    context,
+                                    english: 'Create',
+                                    chinese: '创建',
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+      await _waitForKeyboardToHide(appView);
+    } finally {
+      controller.dispose();
+      if (mounted) widget.onSessionRenameEditingChanged(false);
+    }
+    if (!mounted || projectName == null) return;
+    widget.onProjectCreated(projectName);
+  }
+
+  Widget _buildProjectsPage(BuildContext context) {
+    final sessionCounts = <String, int>{};
+    for (final projectId in widget.projectSessionIds.values) {
+      sessionCounts[projectId] = (sessionCounts[projectId] ?? 0) + 1;
+    }
+    return _ProjectsPage(
+      projects: widget.projects,
+      sessionCounts: sessionCounts,
+      onMenu: () => unawaited(_handleBack()),
+      onAdd: () => unawaited(_showCreateProjectDialog()),
+      onProjectTap: _openProject,
+    );
+  }
+
+  Widget _buildProjectDetailPage(BuildContext context) {
+    _ChatProject? selectedProject;
+    for (final project in widget.projects) {
+      if (project.id == _selectedProjectId) {
+        selectedProject = project;
+        break;
+      }
+    }
+    if (selectedProject == null) return _buildProjectsPage(context);
+
+    final project = selectedProject;
+    final projectSessions = widget.sessions
+        .where((session) => widget.projectSessionIds[session.id] == project.id)
+        .toList(growable: false);
+    return _ProjectDetailPage(
+      project: project,
+      sessions: projectSessions,
+      onBack: () => unawaited(_handleBack()),
+      onSessionTap: widget.onSessionSelected,
+      onStartChat: (message, attachments, pinnedSkillNames) =>
+          widget.onProjectChatStarted(project.id, message),
+      agentId: widget.activeAgent.id,
+    );
+  }
+
   bool _matchesSearch(ChatSession session, String normalizedQuery) {
     if (normalizedQuery.isEmpty) return true;
     final searchableText = [
@@ -485,35 +812,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
       attachment.typeLabel,
     ].join(' ').toLowerCase();
     return searchableText.contains(normalizedQuery);
-  }
-
-  String _formatRelativeTime(BuildContext context, DateTime time) {
-    final language = _AppLanguageScope.languageOf(context);
-    final diff = DateTime.now().difference(time);
-    final elapsed = diff.isNegative ? Duration.zero : diff;
-
-    if (elapsed.inMinutes < 1) {
-      return switch (language) {
-        AppLanguage.chinese => '刚刚',
-        AppLanguage.english => 'just now',
-      };
-    }
-    if (elapsed.inHours < 1) {
-      return switch (language) {
-        AppLanguage.chinese => '${elapsed.inMinutes}分钟前',
-        AppLanguage.english => '${elapsed.inMinutes}m ago',
-      };
-    }
-    if (elapsed.inDays < 1) {
-      return switch (language) {
-        AppLanguage.chinese => '${elapsed.inHours}小时前',
-        AppLanguage.english => '${elapsed.inHours}h ago',
-      };
-    }
-    return switch (language) {
-      AppLanguage.chinese => '${elapsed.inDays}天前',
-      AppLanguage.english => '${elapsed.inDays}d ago',
-    };
   }
 
   @override
@@ -564,6 +862,168 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     );
   }
 
+  Widget _buildSessionMenuHeader(BuildContext context, AppStrings strings) {
+    final header = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: _isSearching
+          ? Padding(
+              key: const ValueKey('session_search_header'),
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('session_history_search_field'),
+                      controller: _searchController,
+                      focusNode: _searchFocusNode,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: strings.searchHistoryHint,
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE5E7EB),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE5E7EB),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF333333),
+                            width: 1.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('session_history_search_close'),
+                    tooltip: MaterialLocalizations.of(
+                      context,
+                    ).closeButtonTooltip,
+                    onPressed: _toggleSearch,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            )
+          : Padding(
+              key: const ValueKey('session_title_header'),
+              padding: const EdgeInsets.fromLTRB(24, 24, 20, 18),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.activeAgent.label(
+                        _AppLanguageScope.languageOf(context),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: _sessionMenuText,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const Key('session_history_search_button'),
+                    tooltip: strings.searchHistoryTooltip,
+                    onPressed: _toggleSearch,
+                    icon: const Icon(Icons.search_rounded),
+                  ),
+                  IconButton(
+                    key: const Key('settings_menu_button'),
+                    tooltip: strings.settingsTooltip,
+                    onPressed: () {
+                      setState(() {
+                        _settingsInitialSection = _SettingsSection.menu;
+                        _viewStack.add(_view);
+                        _view = _SessionHistoryView.settings;
+                      });
+                    },
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ],
+              ),
+            ),
+    );
+
+    return ClipRect(
+      key: const Key('session_history_frosted_header'),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: _appSurfaceColor.withValues(alpha: 0.76),
+            border: Border(
+              bottom: BorderSide(
+                color: _appSurfaceBorderColor.withValues(alpha: 0.48),
+              ),
+            ),
+          ),
+          child: header,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSessionMenuNavigation(BuildContext context, AppStrings strings) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
+      child: Column(
+        children: [
+          _SessionMenuAction(
+            key: const Key('files_menu_item'),
+            icon: Icons.folder_open_rounded,
+            label: strings.filesTitle,
+            selected: widget.primaryView == _ChatPrimaryView.files,
+            selectedKey: const Key('files_menu_selected'),
+            onTap: widget.onFilesSelected,
+          ),
+          _buildRepoWorkbenchMenuAction(),
+          _buildEnvironmentMenuAction(),
+          _SessionMenuAction(
+            key: const Key('skills_menu_item'),
+            icon: Icons.extension_rounded,
+            label: strings.skillsTitle,
+            selected: widget.primaryView == _ChatPrimaryView.skills,
+            selectedKey: const Key('skills_menu_selected'),
+            onTap: () {
+              _skillsInitialTab = _SkillsInitialTab.installed;
+              widget.onSkillsSelected();
+            },
+          ),
+          _SessionMenuAction(
+            key: const Key('projects_menu_item'),
+            icon: Icons.folder_copy_outlined,
+            label: _projectCopy(context, english: 'Projects', chinese: '项目'),
+            selected:
+                widget.primaryView == _ChatPrimaryView.projects ||
+                widget.primaryView == _ChatPrimaryView.projectDetail,
+            selectedKey: const Key('projects_menu_selected'),
+            onTap: widget.onProjectsSelected,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCurrentView({
     required BuildContext context,
     required AppStrings strings,
@@ -573,6 +1033,10 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     required bool hasAnyContent,
   }) {
     switch (_view) {
+      case _SessionHistoryView.projects:
+        return _buildProjectsPage(context);
+      case _SessionHistoryView.projectDetail:
+        return _buildProjectDetailPage(context);
       case _SessionHistoryView.files:
         _filesClientFuture ??= widget.createFilesClientFuture();
         return _FilesPage(
@@ -664,244 +1128,125 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
       case _SessionHistoryView.menu:
         return Stack(
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  child: _isSearching
-                      ? Padding(
-                          key: const ValueKey('session_search_header'),
-                          padding: const EdgeInsets.fromLTRB(20, 14, 12, 10),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  key: const Key(
-                                    'session_history_search_field',
-                                  ),
-                                  controller: _searchController,
-                                  focusNode: _searchFocusNode,
-                                  textInputAction: TextInputAction.search,
-                                  decoration: InputDecoration(
-                                    hintText: strings.searchHistoryHint,
-                                    prefixIcon: const Icon(
-                                      Icons.search_rounded,
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 12,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFE5E7EB),
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFFE5E7EB),
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                      borderSide: const BorderSide(
-                                        color: Color(0xFF333333),
-                                        width: 1.2,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                key: const Key('session_history_search_close'),
-                                tooltip: MaterialLocalizations.of(
-                                  context,
-                                ).closeButtonTooltip,
-                                onPressed: _toggleSearch,
-                                icon: const Icon(Icons.close_rounded),
-                              ),
-                            ],
-                          ),
-                        )
-                      : Padding(
-                          key: const ValueKey('session_title_header'),
-                          padding: const EdgeInsets.fromLTRB(24, 24, 20, 18),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  widget.activeAgent.label(
-                                    _AppLanguageScope.languageOf(context),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: _sessionMenuText,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.5,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                key: const Key('session_history_search_button'),
-                                tooltip: strings.searchHistoryTooltip,
-                                onPressed: _toggleSearch,
-                                icon: const Icon(Icons.search_rounded),
-                              ),
-                              IconButton(
-                                key: const Key('settings_menu_button'),
-                                tooltip: strings.settingsTooltip,
-                                onPressed: () {
-                                  setState(() {
-                                    _settingsInitialSection =
-                                        _SettingsSection.menu;
-                                    _viewStack.add(_view);
-                                    _view = _SessionHistoryView.settings;
-                                  });
-                                },
-                                icon: const Icon(Icons.settings_outlined),
-                              ),
-                            ],
-                          ),
-                        ),
+            Positioned.fill(
+              child: ListView(
+                key: const Key('session_history_list'),
+                padding: EdgeInsets.fromLTRB(
+                  0,
+                  _isSearching ? 72 : 92,
+                  0,
+                  _isSearching ? 20 : 104,
                 ),
-                if (!_isSearching)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 18),
-                    child: Column(
-                      children: [
-                        _SessionMenuAction(
-                          key: const Key('files_menu_item'),
-                          icon: Icons.folder_open_rounded,
-                          label: strings.filesTitle,
-                          onTap: () => _navigateTo(_SessionHistoryView.files),
-                        ),
-                        _buildRepoWorkbenchMenuAction(),
-                        _buildEnvironmentMenuAction(),
-                        _SessionMenuAction(
-                          key: const Key('skills_menu_item'),
-                          icon: Icons.extension_rounded,
-                          label: strings.skillsTitle,
-                          onTap: () {
-                            _skillsInitialTab = _SkillsInitialTab.installed;
-                            _navigateTo(_SessionHistoryView.skills);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                Expanded(
-                  child: !hasAnyContent
-                      ? const _EmptySessionHistory()
-                      : _isSearching && !hasSearchResults
-                      ? const _EmptySessionSearchResults()
-                      : ListView(
-                          key: const Key('session_history_list'),
-                          padding: EdgeInsets.fromLTRB(
-                            14,
-                            _isSearching ? 4 : 0,
-                            14,
-                            _isSearching ? 20 : 104,
-                          ),
-                          children: [
-                            if (visibleFavorites.isNotEmpty) ...[
-                              if (!_isSearching)
-                                _SessionSectionHeader(
-                                  label: strings.favorites,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    10,
-                                    4,
-                                    10,
-                                    10,
-                                  ),
-                                ),
-                              for (final favorite in visibleFavorites) ...[
-                                _FavoriteAttachmentTile(
-                                  favorite: favorite,
-                                  onTap: () =>
-                                      widget.onFavoriteTap(favorite.attachment),
-                                  onRemove: () => widget.onFavoriteRemove(
-                                    favorite.attachment,
-                                  ),
-                                  onLongPress: () =>
-                                      _showFavoriteActions(context, favorite),
-                                ),
-                                const SizedBox(height: 4),
-                              ],
-                            ],
+                children: [
+                  if (!_isSearching)
+                    _buildSessionMenuNavigation(context, strings),
+                  if (!hasAnyContent && !_isSearching)
+                    const SizedBox(height: 260, child: _EmptySessionHistory())
+                  else if (_isSearching && !hasSearchResults)
+                    const SizedBox(
+                      height: 260,
+                      child: _EmptySessionSearchResults(),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Column(
+                        children: [
+                          if (visibleFavorites.isNotEmpty) ...[
                             if (!_isSearching)
-                              if (visibleSessions.any(
-                                (session) => session.isPinned,
-                              ))
-                                _SessionSectionHeader(
-                                  label: strings.pinned,
-                                  padding: EdgeInsets.fromLTRB(
-                                    10,
-                                    visibleFavorites.isEmpty ? 4 : 10,
-                                    10,
-                                    10,
-                                  ),
-                                  onRefresh: widget.onRefreshSessions,
-                                )
-                              else
-                                _SessionSectionHeader(
-                                  label: strings.recent,
-                                  padding: EdgeInsets.fromLTRB(
-                                    10,
-                                    visibleFavorites.isEmpty ? 4 : 10,
-                                    10,
-                                    10,
-                                  ),
-                                  onRefresh: widget.onRefreshSessions,
+                              _SessionSectionHeader(
+                                label: strings.favorites,
+                                padding: const EdgeInsets.fromLTRB(
+                                  10,
+                                  4,
+                                  10,
+                                  10,
                                 ),
-                            for (final session in visibleSessions) ...[
-                              if (!_isSearching &&
-                                  session.isPinned == false &&
-                                  visibleSessions.any(
-                                    (item) => item.isPinned,
-                                  ) &&
-                                  visibleSessions.indexOf(session) ==
-                                      visibleSessions.indexWhere(
-                                        (item) => !item.isPinned,
-                                      ))
-                                _SessionSectionHeader(
-                                  label: strings.recent,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    10,
-                                    10,
-                                    10,
-                                    10,
-                                  ),
-                                  onRefresh: widget.onRefreshSessions,
-                                ),
-                              _SessionHistoryTile(
-                                session: session,
-                                runState: widget.sessionRuns[session.id],
-                                hasA2AUnread: widget.a2aUnreadSessionIds
-                                    .contains(session.id),
-                                timeLabel: _formatRelativeTime(
-                                  context,
-                                  session.updatedAt,
-                                ),
-                                isActive: session.id == widget.activeSessionId,
+                              ),
+                            for (final favorite in visibleFavorites) ...[
+                              _FavoriteAttachmentTile(
+                                favorite: favorite,
                                 onTap: () =>
-                                    widget.onSessionSelected(session.id),
+                                    widget.onFavoriteTap(favorite.attachment),
+                                onRemove: () => widget.onFavoriteRemove(
+                                  favorite.attachment,
+                                ),
                                 onLongPress: () =>
-                                    _showSessionActions(context, session),
+                                    _showFavoriteActions(context, favorite),
                               ),
                               const SizedBox(height: 4),
                             ],
                           ],
-                        ),
-                ),
-              ],
+                          if (!_isSearching)
+                            if (visibleSessions.any(
+                              (session) => session.isPinned,
+                            ))
+                              _SessionSectionHeader(
+                                label: strings.pinned,
+                                fontWeight: FontWeight.w600,
+                                padding: EdgeInsets.fromLTRB(
+                                  10,
+                                  visibleFavorites.isEmpty ? 4 : 10,
+                                  10,
+                                  10,
+                                ),
+                              )
+                            else
+                              _SessionSectionHeader(
+                                label: strings.recent,
+                                fontWeight: FontWeight.w600,
+                                padding: EdgeInsets.fromLTRB(
+                                  10,
+                                  visibleFavorites.isEmpty ? 4 : 10,
+                                  10,
+                                  10,
+                                ),
+                              ),
+                          for (final session in visibleSessions) ...[
+                            if (!_isSearching &&
+                                session.isPinned == false &&
+                                visibleSessions.any((item) => item.isPinned) &&
+                                visibleSessions.indexOf(session) ==
+                                    visibleSessions.indexWhere(
+                                      (item) => !item.isPinned,
+                                    ))
+                              _SessionSectionHeader(
+                                label: strings.recent,
+                                fontWeight: FontWeight.w600,
+                                padding: const EdgeInsets.fromLTRB(
+                                  10,
+                                  10,
+                                  10,
+                                  10,
+                                ),
+                              ),
+                            _SessionHistoryTile(
+                              session: session,
+                              runState: widget.sessionRuns[session.id],
+                              hasA2AUnread: widget.a2aUnreadSessionIds.contains(
+                                session.id,
+                              ),
+                              isActive: session.id == widget.activeSessionId,
+                              onTap: () => widget.onSessionSelected(session.id),
+                              onLongPress: () {
+                                unawaited(
+                                  _showSessionActions(context, session),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: _buildSessionMenuHeader(context, strings),
             ),
             if (!_isSearching)
               Positioned(
@@ -923,59 +1268,385 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     }
   }
 
-  void _showSessionActions(BuildContext context, ChatSession session) {
+  Future<void> _showSessionActions(
+    BuildContext context,
+    ChatSession session,
+  ) async {
     final strings = AppStrings.of(context);
-    showModalBottomSheet<void>(
+    final isTerminalSession = session.id.startsWith('terminal-');
+    final previewEntries = isTerminalSession
+        ? <String>[strings.terminalSessionPreview]
+        : _sessionHistoryExpandedPreview(context, session);
+    ModalRoute<dynamic>? bottomSheetRoute;
+    final action = await showModalBottomSheet<_SessionAction>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) {
+      builder: (sheetContext) {
+        bottomSheetRoute ??= ModalRoute.of(sheetContext);
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    key: Key('session_pin_action_${session.id}'),
-                    leading: Icon(
-                      session.isPinned
-                          ? Icons.push_pin_outlined
-                          : Icons.push_pin_rounded,
-                    ),
-                    title: Text(
-                      session.isPinned ? strings.unpinChat : strings.pinChat,
-                    ),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      widget.onSessionPinToggle(session.id);
-                    },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Material(
+                  color: _appSurfaceColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: const BorderSide(color: _appSurfaceBorderColor),
                   ),
-                  ListTile(
-                    key: Key('session_delete_action_${session.id}'),
-                    leading: const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Color(0xFFDC2626),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    key: Key('session_preview_action_${session.id}'),
+                    onTap: () =>
+                        Navigator.of(sheetContext).pop(_SessionAction.open),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 18, 14, 20),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  strings.latestMessage,
+                                  style: const TextStyle(
+                                    color: _sessionMenuMuted,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 7),
+                                Text(
+                                  _sessionHistoryDisplayTitle(session),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: _sessionMenuText,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    minHeight: 72,
+                                  ),
+                                  child: Align(
+                                    alignment: Alignment.topLeft,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        for (
+                                          var index = 0;
+                                          index < previewEntries.length;
+                                          index++
+                                        ) ...[
+                                          if (index > 0)
+                                            const SizedBox(height: 5),
+                                          Text(
+                                            previewEntries[index],
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              color: Color(0xFF5F5F5F),
+                                              fontSize: 14,
+                                              height: 1.45,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            color: Color(0xFF989898),
+                            size: 17,
+                          ),
+                        ],
+                      ),
                     ),
-                    title: Text(
-                      strings.deleteChat,
-                      style: const TextStyle(color: Color(0xFFDC2626)),
-                    ),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      widget.onSessionDelete(session.id);
-                    },
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 10),
+                Material(
+                  color: _appSurfaceColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: const BorderSide(color: _appSurfaceBorderColor),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _SessionSheetAction(
+                          key: Key('session_pin_action_${session.id}'),
+                          icon: session.isPinned
+                              ? Icons.push_pin_outlined
+                              : Icons.push_pin_rounded,
+                          label: session.isPinned
+                              ? strings.unpinChat
+                              : strings.pinChat,
+                          onTap: () => Navigator.of(
+                            sheetContext,
+                          ).pop(_SessionAction.pinToggle),
+                        ),
+                        const SizedBox(height: 2),
+                        _SessionSheetAction(
+                          key: Key('session_rename_action_${session.id}'),
+                          icon: Icons.edit_outlined,
+                          label: strings.renameChat,
+                          onTap: () => Navigator.of(
+                            sheetContext,
+                          ).pop(_SessionAction.rename),
+                        ),
+                        const SizedBox(height: 2),
+                        _SessionSheetAction(
+                          key: Key('session_delete_action_${session.id}'),
+                          icon: Icons.delete_outline_rounded,
+                          label: strings.deleteChat,
+                          isDestructive: true,
+                          onTap: () => Navigator.of(
+                            sheetContext,
+                          ).pop(_SessionAction.delete),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
       },
     );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _SessionAction.open:
+        // Opening a chat removes the history panel that owns this route, so
+        // wait until the action sheet is fully detached first.
+        await bottomSheetRoute?.completed;
+        if (!mounted) return;
+        widget.onSessionSelected(session.id);
+        return;
+      case _SessionAction.pinToggle:
+        widget.onSessionPinToggle(session.id);
+        return;
+      case _SessionAction.rename:
+        // Keep the history panel mounted and let the two route transitions
+        // overlap, avoiding a visible pause before the rename field appears.
+        await _showRenameSessionDialog(session);
+        return;
+      case _SessionAction.delete:
+        widget.onSessionDelete(session.id);
+        return;
+    }
+  }
+
+  Future<void> _showRenameSessionDialog(ChatSession session) async {
+    final strings = AppStrings.of(context);
+    final appView = View.of(context);
+    final controller = TextEditingController(
+      text: _sessionHistoryDisplayTitle(session),
+    );
+    controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: controller.text.length,
+    );
+    widget.onSessionRenameEditingChanged(true);
+    ModalRoute<dynamic>? renameSheetRoute;
+    String? renamedTitle;
+    try {
+      renamedTitle = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.22),
+        isScrollControlled: true,
+        sheetAnimationStyle: AnimationStyle.noAnimation,
+        builder: (sheetContext) {
+          renameSheetRoute ??= ModalRoute.of(sheetContext);
+          var canSave = controller.text.trim().isNotEmpty;
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              void closeSheet([String? result]) {
+                FocusScope.of(sheetContext).unfocus();
+                if (sheetContext.mounted) {
+                  Navigator.of(sheetContext).pop(result);
+                }
+              }
+
+              void submit() {
+                final title = controller.text.trim();
+                if (title.isNotEmpty) closeSheet(title);
+              }
+
+              final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+              return SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(12, 12, 12, 12 + keyboardInset),
+                  child: Material(
+                    color: _appSurfaceColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      side: const BorderSide(color: _appSurfaceBorderColor),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  strings.renameChatTitle,
+                                  style: const TextStyle(
+                                    color: _sessionMenuText,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: strings.cancel,
+                                onPressed: closeSheet,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: const Color(0xFFEDEEF0),
+                                  foregroundColor: const Color(0xFF525252),
+                                ),
+                                icon: const Icon(Icons.close_rounded, size: 20),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            key: Key('session_rename_field_${session.id}'),
+                            controller: controller,
+                            autofocus: true,
+                            maxLength: 80,
+                            textInputAction: TextInputAction.done,
+                            style: const TextStyle(
+                              color: _sessionMenuText,
+                              fontSize: 16,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: strings.renameChatHint,
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF9CA3AF),
+                              ),
+                              counterText: '',
+                              filled: true,
+                              fillColor: _appSurfaceColor,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 15,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: const BorderSide(
+                                  color: _appSurfaceBorderColor,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(18),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF9CA3AF),
+                                  width: 1.2,
+                                ),
+                              ),
+                            ),
+                            onChanged: (value) {
+                              final nextCanSave = value.trim().isNotEmpty;
+                              if (nextCanSave != canSave) {
+                                setDialogState(() => canSave = nextCanSave);
+                              }
+                            },
+                            onSubmitted: (_) => submit(),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: SizedBox(
+                                  height: 48,
+                                  child: OutlinedButton(
+                                    onPressed: closeSheet,
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _sessionMenuText,
+                                      side: const BorderSide(
+                                        color: _appSurfaceBorderColor,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    child: Text(strings.cancel),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: SizedBox(
+                                  height: 48,
+                                  child: FilledButton(
+                                    key: Key(
+                                      'confirm_rename_session_${session.id}',
+                                    ),
+                                    onPressed: canSave ? submit : null,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFF111827),
+                                      disabledBackgroundColor: const Color(
+                                        0xFFD1D5DB,
+                                      ),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                    child: Text(strings.save),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+      await renameSheetRoute?.completed;
+      await _waitForKeyboardToHide(appView);
+    } finally {
+      controller.dispose();
+      if (mounted) widget.onSessionRenameEditingChanged(false);
+    }
+    if (!mounted || renamedTitle == null) return;
+    widget.onSessionRename(session.id, renamedTitle);
+  }
+
+  Future<void> _waitForKeyboardToHide(ui.FlutterView view) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 1));
+    while (view.viewInsets.bottom > 0 && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
   }
 
   void _showFavoriteActions(BuildContext context, FavoriteAttachment favorite) {
@@ -1026,6 +1697,8 @@ enum _SessionHistoryView {
   environment,
   scenarios,
   skills,
+  projects,
+  projectDetail,
   settings,
   feedback,
   contact,
@@ -2075,7 +2748,11 @@ class _ChannelProviderCard extends StatelessWidget {
                                       zh: '检测连接',
                                       en: 'Check connection',
                                     )
-                                  : _channelText(context, zh: '刷新', en: 'Refresh')
+                                  : _channelText(
+                                      context,
+                                      zh: '刷新',
+                                      en: 'Refresh',
+                                    )
                             : _channelText(context, zh: '连接', en: 'Connect'),
                       ),
                     ),
@@ -4474,12 +5151,12 @@ class _SessionSectionHeader extends StatelessWidget {
   const _SessionSectionHeader({
     required this.label,
     required this.padding,
-    this.onRefresh,
+    this.fontWeight = FontWeight.w800,
   });
 
   final String label;
   final EdgeInsetsGeometry padding;
-  final Future<void> Function()? onRefresh;
+  final FontWeight fontWeight;
 
   @override
   Widget build(BuildContext context) {
@@ -4489,30 +5166,12 @@ class _SessionSectionHeader extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: _sessionMenuText,
               fontSize: 15,
-              fontWeight: FontWeight.w800,
+              fontWeight: fontWeight,
             ),
           ),
-          const Spacer(),
-          if (onRefresh != null) ...[
-            SizedBox(
-              width: 28,
-              height: 28,
-              child: IconButton(
-                tooltip: 'Refresh sessions',
-                padding: EdgeInsets.zero,
-                splashRadius: 16,
-                onPressed: () => unawaited(onRefresh!.call()),
-                icon: const Icon(
-                  Icons.refresh_rounded,
-                  size: 18,
-                  color: _sessionMenuMuted,
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -4732,7 +5391,6 @@ class _SessionHistoryTile extends StatelessWidget {
     required this.session,
     required this.runState,
     required this.hasA2AUnread,
-    required this.timeLabel,
     required this.isActive,
     required this.onTap,
     required this.onLongPress,
@@ -4741,7 +5399,6 @@ class _SessionHistoryTile extends StatelessWidget {
   final ChatSession session;
   final ChatSessionRunState? runState;
   final bool hasA2AUnread;
-  final String timeLabel;
   final bool isActive;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
@@ -4750,10 +5407,6 @@ class _SessionHistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final runState = this.runState;
     final isTerminalSession = session.id.startsWith('terminal-');
-    final strings = AppStrings.of(context);
-    final preview = isTerminalSession
-        ? strings.terminalSessionPreview
-        : _sessionHistoryPreview(session);
     final tileBackground = isActive
         ? isTerminalSession
               ? const Color(0xFFF4F4F4)
@@ -4770,17 +5423,13 @@ class _SessionHistoryTile extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         child: DecoratedBox(
+          key: Key('session_tile_background_${session.id}'),
           decoration: BoxDecoration(
             color: tileBackground,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              12,
-              isTerminalSession ? 8 : 10,
-              12,
-              10,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
               children: [
                 if (isTerminalSession) ...[
@@ -4801,56 +5450,25 @@ class _SessionHistoryTile extends StatelessWidget {
                   const SizedBox(width: 10),
                 ],
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _sessionHistoryDisplayTitle(session),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _sessionMenuText,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        preview,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _sessionMenuMuted,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    _sessionHistoryDisplayTitle(session),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _sessionMenuText,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 14),
-                if (session.isPinned) ...[
-                  const Icon(
-                    Icons.push_pin_rounded,
-                    color: Color(0xFF858585),
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                ],
+                const SizedBox(width: 10),
                 if (runState != null &&
                     (!runState.isTerminal || runState.needsAttention)) ...[
                   _SessionRunBadge(runState: runState),
                   const SizedBox(width: 8),
                 ] else if (hasA2AUnread && !isActive) ...[
                   const _A2AUnreadBadge(),
-                  const SizedBox(width: 8),
                 ],
-                Text(
-                  timeLabel,
-                  style: const TextStyle(
-                    color: _sessionMenuMuted,
-                    fontSize: 12,
-                  ),
-                ),
               ],
             ),
           ),

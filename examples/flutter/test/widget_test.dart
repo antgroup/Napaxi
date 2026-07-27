@@ -2542,9 +2542,7 @@ void main() {
     expect(find.textContaining('/private/raw'), findsNothing);
   });
 
-  testWidgets('returns to the side menu when backing out of files', (
-    tester,
-  ) async {
+  testWidgets('opens files as a selected primary page', (tester) async {
     final fakeClient = FakeNapaxiChatClient(
       memoryFilesByDirectory: {
         '': const [sdk.WorkspaceEntry(path: 'MEMORY.md')],
@@ -2565,14 +2563,109 @@ void main() {
     await pumpUntilFound(tester, find.text('MEMORY.md'));
 
     expect(find.text('Files'), findsOneWidget);
+    expect(find.byKey(const Key('files_menu_button')), findsOneWidget);
+    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
 
-    await tester.pageBack();
+    await tester.tap(find.byKey(const Key('files_menu_button')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('files_menu_item')), findsOneWidget);
     expect(find.byKey(const Key('skills_menu_item')), findsOneWidget);
-    expect(find.text('MEMORY.md'), findsNothing);
+    expect(find.byKey(const Key('files_menu_selected')), findsOneWidget);
+    expect(find.byKey(const Key('skills_menu_selected')), findsNothing);
   });
+
+  testWidgets(
+    'opens the side menu after files and skills reach their first tab',
+    (tester) async {
+      final fakeClient = FakeNapaxiChatClient(
+        memoryFilesByDirectory: {
+          '': const [sdk.WorkspaceEntry(path: 'MEMORY.md')],
+        },
+        skills: const [
+          sdk.SkillInfo(
+            name: 'research',
+            version: '1.0.0',
+            description: 'Research skill.',
+            source: 'local',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        _testApp(chatClientFactory: () async => fakeClient),
+      );
+      await configureSingleModel(tester);
+
+      await tester.tap(find.byKey(const Key('session_history_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('files_menu_item')));
+      await tester.pumpAndSettle();
+      await pumpUntilFound(tester, find.text('Workspace'));
+
+      var tabController = DefaultTabController.of(
+        tester.element(find.byType(TabBarView)),
+      );
+      expect(tabController.index, 0);
+
+      await tester.drag(find.byType(TabBarView), const Offset(-260, 0));
+      await tester.pumpAndSettle();
+
+      tabController = DefaultTabController.of(
+        tester.element(find.byType(TabBarView)),
+      );
+      expect(tabController.index, 1);
+      expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+
+      await tester.drag(find.byType(TabBarView), const Offset(260, 0));
+      await tester.pumpAndSettle();
+
+      tabController = DefaultTabController.of(
+        tester.element(find.byType(TabBarView)),
+      );
+      expect(tabController.index, 0);
+      expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+
+      await tester.drag(find.byType(TabBarView), const Offset(320, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
+      expect(find.byKey(const Key('files_menu_selected')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('skills_menu_item')));
+      await tester.pumpAndSettle();
+      await pumpUntilFound(tester, find.text('Installed'));
+
+      tabController = DefaultTabController.of(
+        tester.element(find.byType(TabBarView)),
+      );
+      expect(tabController.index, 0);
+
+      await tester.drag(find.byType(TabBarView), const Offset(-260, 0));
+      await tester.pumpAndSettle();
+
+      tabController = DefaultTabController.of(
+        tester.element(find.byType(TabBarView)),
+      );
+      expect(tabController.index, 1);
+      expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+
+      await tester.drag(find.byType(TabBarView), const Offset(260, 0));
+      await tester.pumpAndSettle();
+
+      tabController = DefaultTabController.of(
+        tester.element(find.byType(TabBarView)),
+      );
+      expect(tabController.index, 0);
+      expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+
+      await tester.drag(find.byType(TabBarView), const Offset(320, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
+      expect(find.byKey(const Key('skills_menu_selected')), findsOneWidget);
+    },
+  );
 
   testWidgets('opens localized scenarios from settings', (tester) async {
     const generalScenario = sdk.NapaxiScenarioPack(
@@ -3002,7 +3095,9 @@ void main() {
             current: false,
           ),
         ],
-        'napaxi': [DemoGitBranchInfo(name: 'dev', remote: false, current: true)],
+        'napaxi': [
+          DemoGitBranchInfo(name: 'dev', remote: false, current: true),
+        ],
       },
       gitRemotes: const {
         'openclaw': [
@@ -3617,9 +3712,7 @@ void main() {
     expect(find.text('Currently disabled.'), findsNothing);
   });
 
-  testWidgets('returns to the side menu when backing out of skills', (
-    tester,
-  ) async {
+  testWidgets('opens skills as a selected primary page', (tester) async {
     final fakeClient = FakeNapaxiChatClient(
       skills: const [
         sdk.SkillInfo(
@@ -3644,13 +3737,16 @@ void main() {
     await pumpUntilFound(tester, find.text('research'));
 
     expect(find.text('Skills'), findsOneWidget);
+    expect(find.byKey(const Key('skills_menu_button')), findsOneWidget);
+    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
 
-    await tester.pageBack();
+    await tester.tap(find.byKey(const Key('skills_menu_button')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('files_menu_item')), findsOneWidget);
     expect(find.byKey(const Key('skills_menu_item')), findsOneWidget);
-    expect(find.text('research'), findsNothing);
+    expect(find.byKey(const Key('skills_menu_selected')), findsOneWidget);
+    expect(find.byKey(const Key('files_menu_selected')), findsNothing);
   });
 
   testWidgets('browses the skill store and installs catalog skills inline', (
@@ -5639,6 +5735,24 @@ void main() {
     expect(find.text('just now'), findsOneWidget);
     expect(find.byKey(const Key('new_session_button')), findsOneWidget);
     expect(find.text('Chat'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_history_list')),
+        matching: find.byKey(const Key('files_menu_item')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_history_list')),
+        matching: find.byKey(const Key('projects_menu_item')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('session_history_frosted_header')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const Key('new_session_button')));
     await tester.pumpAndSettle();
@@ -5650,6 +5764,11 @@ void main() {
       ),
       findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session_tile_session-1')), findsOneWidget);
+    expect(find.byKey(const Key('session_tile_session-2')), findsNothing);
   });
 
   testWidgets('shows about page with current version and update action', (
@@ -5872,7 +5991,9 @@ void main() {
     expect(find.byKey(const Key('update_later_button')), findsNothing);
   });
 
-  testWidgets('failed install can fall back to GitHub releases', (tester) async {
+  testWidgets('failed install can fall back to GitHub releases', (
+    tester,
+  ) async {
     final updates = FakeDemoUpdateService(
       supportsExternalUpdatePage: true,
       installResult: const DemoUpdateInstallResult(
@@ -5929,7 +6050,10 @@ void main() {
     await tester.tap(find.byKey(const Key('install_update_button')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('open_pgyer_install_page_button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('open_pgyer_install_page_button')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('open_release_page_button')), findsOneWidget);
   });
 
@@ -6414,7 +6538,7 @@ void main() {
     expect(newerTop, lessThan(olderTop));
   });
 
-  testWidgets('long-presses chat history to pin and delete sessions', (
+  testWidgets('previews, renames, pins, and deletes chat history sessions', (
     tester,
   ) async {
     final fakeClient = FakeNapaxiChatClient();
@@ -6446,6 +6570,73 @@ void main() {
 
     await tester.tap(find.byKey(const Key('session_history_button')));
     await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_tile_session-1')),
+        matching: find.textContaining('Fake SDK reply'),
+      ),
+      findsNothing,
+    );
+    await tester.longPress(find.byKey(const Key('session_tile_session-1')));
+    await tester.pumpAndSettle();
+
+    final previewCard = find.byKey(
+      const Key('session_preview_action_session-1'),
+    );
+    expect(previewCard, findsOneWidget);
+    expect(
+      find.descendant(
+        of: previewCard,
+        matching: find.textContaining('Older conversation'),
+      ),
+      findsWidgets,
+    );
+    expect(
+      find.descendant(
+        of: previewCard,
+        matching: find.textContaining('napaxi: Fake SDK reply'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: previewCard,
+        matching: find.textContaining('You: Older conversation'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(previewCard);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining(
+        'Fake SDK reply from napaxi-model: Older conversation',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.byKey(const Key('session_tile_session-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('session_rename_action_session-1')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('session_rename_field_session-1')),
+      'Project Alpha',
+    );
+    await tester.tap(find.byKey(const Key('confirm_rename_session_session-1')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('session_tile_session-1')),
+        matching: find.text('Project Alpha'),
+      ),
+      findsOneWidget,
+    );
+
     await tester.longPress(find.byKey(const Key('session_tile_session-1')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('session_pin_action_session-1')));
@@ -6480,6 +6671,113 @@ void main() {
 
     expect(fakeClient.deletedSession?.threadId, 'session-2');
     expect(fakeClient.deleteCount, 1);
+    expect(find.byKey(const Key('session_tile_session-2')), findsNothing);
+  });
+
+  testWidgets('creates a project and starts a project chat', (tester) async {
+    final fakeClient = FakeNapaxiChatClient();
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await configureSingleModel(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('chat_input_field')),
+      'Existing conversation',
+    );
+    await tester.tap(find.byKey(const Key('send_message_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('projects_menu_item')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('projects_page')), findsOneWidget);
+    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+    await tester.tap(find.byKey(const Key('projects_menu_button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session_history_sheet')), findsOneWidget);
+    final historyTileBackground = tester.widget<DecoratedBox>(
+      find.byKey(const Key('session_tile_background_session-1')),
+    );
+    expect(
+      (historyTileBackground.decoration as BoxDecoration).color,
+      Colors.transparent,
+    );
+    await tester.tap(find.byKey(const Key('projects_menu_item')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+    expect(find.byKey(const Key('projects_page')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('add_project_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('new_project_name_field')),
+      'Launch plan',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('confirm_create_project_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Launch plan'), findsOneWidget);
+    await tester.tap(find.text('Launch plan'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project_chat_input')), findsOneWidget);
+    expect(find.byKey(const Key('chat_input_container')), findsOneWidget);
+    expect(find.byKey(const Key('add_attachment_button')), findsOneWidget);
+    expect(find.byKey(const Key('context_status_button')), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('project_chat_input')),
+      'Prepare the release checklist',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('project_start_chat_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Prepare the release checklist'), findsOneWidget);
+    expect(
+      find.textContaining(
+        'Fake SDK reply from napaxi-model: Prepare the release checklist',
+      ),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('project_chat_back_button')), findsOneWidget);
+    expect(find.byKey(const Key('session_history_button')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('project_chat_back_button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project_sessions_list')), findsOneWidget);
+    expect(find.text('Prepare the release checklist'), findsOneWidget);
+    expect(find.byKey(const Key('project_detail_back_button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('project_detail_back_button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('projects_page')), findsOneWidget);
+    expect(find.byKey(const Key('projects_menu_button')), findsOneWidget);
+
+    await tester.tap(find.text('Launch plan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prepare the release checklist'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project_chat_back_button')), findsOneWidget);
+
+    await tester.dragFrom(const Offset(20, 300), const Offset(220, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project_sessions_list')), findsOneWidget);
+    expect(find.text('Prepare the release checklist'), findsOneWidget);
+
+    await tester.dragFrom(const Offset(20, 300), const Offset(220, 0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('projects_page')), findsOneWidget);
+    expect(find.byKey(const Key('projects_menu_button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('projects_menu_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('projects_menu_selected')), findsOneWidget);
+    expect(find.byKey(const Key('session_tile_session-1')), findsOneWidget);
     expect(find.byKey(const Key('session_tile_session-2')), findsNothing);
   });
 
@@ -6554,9 +6852,7 @@ void main() {
     );
     expect(
       tester
-          .widget<PhysicalModel>(
-            find.byKey(const Key('chat_primary_surface')),
-          )
+          .widget<PhysicalModel>(find.byKey(const Key('chat_primary_surface')))
           .color,
       const Color(0xFFF7F8FA),
     );
@@ -6595,9 +6891,7 @@ void main() {
     );
     expect(
       tester
-          .widget<Material>(
-            find.byKey(const Key('session_history_sheet')),
-          )
+          .widget<Material>(find.byKey(const Key('session_history_sheet')))
           .color,
       const Color(0xFFF7F8FA),
     );

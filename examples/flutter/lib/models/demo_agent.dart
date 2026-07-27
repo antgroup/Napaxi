@@ -22,7 +22,10 @@ class DemoAgent {
   final String systemPrompt;
   final String? modelProfileId;
 
-  String label(AppLanguage language) => name;
+  String label(AppLanguage language) {
+    final displayName = name.trim();
+    return displayName.toLowerCase() == 'napaxi' ? 'Napaxi' : displayName;
+  }
 
   bool get isDefault => id == sdk.NapaxiEngine.defaultAgentId;
 

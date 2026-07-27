@@ -231,6 +231,10 @@ class _ChatInputBar extends StatefulWidget {
     this.onChannelInputSelected,
     this.chatClient,
     this.agentId = '',
+    this.showContextStatus = true,
+    this.inputFieldKey = const Key('chat_input_field'),
+    this.sendButtonKey = const Key('send_message_button'),
+    this.stopButtonKey = const Key('stop_message_button'),
   });
 
   final TextEditingController controller;
@@ -255,6 +259,10 @@ class _ChatInputBar extends StatefulWidget {
   final ValueChanged<DemoChannelInputSource>? onChannelInputSelected;
   final NapaxiChatClient? chatClient;
   final String agentId;
+  final bool showContextStatus;
+  final Key inputFieldKey;
+  final Key sendButtonKey;
+  final Key stopButtonKey;
 
   @override
   State<_ChatInputBar> createState() => _ChatInputBarState();
@@ -600,7 +608,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                   child: Scrollbar(
                     controller: _inputScrollController,
                     child: TextField(
-                      key: const Key('chat_input_field'),
+                      key: widget.inputFieldKey,
                       controller: widget.controller,
                       focusNode: widget.focusNode,
                       scrollController: _inputScrollController,
@@ -643,20 +651,22 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                       ),
                     ],
                     const Spacer(),
-                    _ContextStatusButton(
-                      status: widget.contextStatus,
-                      isLoading: widget.isContextStatusLoading,
-                      hasSession: widget.hasContextSession,
-                      onTap: widget.onContextStatusTap,
-                    ),
-                    const SizedBox(width: 6),
+                    if (widget.showContextStatus) ...[
+                      _ContextStatusButton(
+                        status: widget.contextStatus,
+                        isLoading: widget.isContextStatusLoading,
+                        hasSession: widget.hasContextSession,
+                        onTap: widget.onContextStatusTap,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     SizedBox(
                       width: 40,
                       height: 40,
                       child: IconButton.filled(
                         key: isSendAction
-                            ? const Key('send_message_button')
-                            : const Key('stop_message_button'),
+                            ? widget.sendButtonKey
+                            : widget.stopButtonKey,
                         tooltip: isSendAction
                             ? strings.sendTooltip
                             : strings.stopTooltip,
