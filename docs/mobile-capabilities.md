@@ -252,6 +252,16 @@ preflight: an explicit missing model, authentication error, timeout, or server
 failure blocks Codex; endpoints that return `404`, `405`, or `501` for model
 listing fall back to core's local protocol validation.
 
+Codex conversation recovery uses the same core-owned app-server boundary as
+turn execution. On Android, `listCodexAgentEngineThreads` calls `thread/list`,
+`readCodexAgentEngineThread` resumes or reads the native thread and maps its
+items to SDK `ChatMessage` values, and `bindCodexAgentEngineThread` associates a
+recovered native thread with an SDK session before the next turn. This retains
+the working native history behavior without restoring the removed developer
+workbench configuration or Flutter-owned Codex PTY runtime. Other platforms
+return `unsupported_platform` through the same typed result. History-specific
+failures use `history_query_failed` and `missing_native_thread`.
+
 Hosts may declare `napaxi.agent_engine.external_host` when they carry an
 external agent loop executor. The external executor owns turn planning and
 model interaction, but it must call back through the Napaxi ToolBroker for tool

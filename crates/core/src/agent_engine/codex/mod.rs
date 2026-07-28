@@ -8,6 +8,7 @@
 mod config;
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod events;
+mod history;
 mod process;
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod protocol;

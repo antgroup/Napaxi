@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'api/json_codec.dart';
 import 'models/chat_event.dart';
 import 'models/custom_tool.dart';
+import 'models/session.dart';
 
 /// Engine id identifying the built-in Napaxi core agent loop.
 const String napaxiCoreAgentEngineId = 'napaxi_core';
@@ -439,6 +440,105 @@ class CodexAgentEngineConfigResult {
       error: map['error'] as String?,
       model: map['model'] as String? ?? '',
       configChanged: map['configChanged'] == true,
+    );
+  }
+}
+
+/// One conversation persisted in the Codex sandbox native thread store.
+class CodexAgentEngineThread {
+  /// Creates a native Codex thread summary.
+  const CodexAgentEngineThread({
+    required this.id,
+    this.name = '',
+    this.preview = '',
+    this.createdAtMs = 0,
+    this.updatedAtMs = 0,
+  });
+
+  /// Codex app-server thread identifier.
+  final String id;
+
+  /// Codex-generated conversation name, when available.
+  final String name;
+
+  /// Native conversation preview.
+  final String preview;
+
+  /// Creation timestamp in Unix milliseconds.
+  final int createdAtMs;
+
+  /// Last-update timestamp in Unix milliseconds.
+  final int updatedAtMs;
+
+  /// Decodes a native thread summary from bridge JSON.
+  factory CodexAgentEngineThread.fromMap(Map<String, dynamic> map) {
+    return CodexAgentEngineThread(
+      id: map['id'] as String? ?? '',
+      name: map['name'] as String? ?? '',
+      preview: map['preview'] as String? ?? '',
+      createdAtMs: (map['createdAt'] as num?)?.toInt() ?? 0,
+      updatedAtMs: (map['updatedAt'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// Result of listing, reading, or binding Codex native history.
+class CodexAgentEngineHistoryResult {
+  /// Creates a Codex native history result.
+  const CodexAgentEngineHistoryResult({
+    required this.success,
+    required this.providerAvailable,
+    this.errorCode,
+    this.error,
+    this.threads = const [],
+    this.messages = const [],
+    this.nativeThreadId = '',
+  });
+
+  /// Whether the history operation succeeded.
+  final bool success;
+
+  /// Whether the current platform provides the Codex runtime.
+  final bool providerAvailable;
+
+  /// Stable machine-readable failure code.
+  final String? errorCode;
+
+  /// Human-readable failure details.
+  final String? error;
+
+  /// Native threads returned by a list operation.
+  final List<CodexAgentEngineThread> threads;
+
+  /// Native messages returned by a read operation.
+  final List<ChatMessage> messages;
+
+  /// Native thread affected by a read or bind operation.
+  final String nativeThreadId;
+
+  /// Decodes a native history result from bridge JSON.
+  factory CodexAgentEngineHistoryResult.fromMap(Map<String, dynamic> map) {
+    return CodexAgentEngineHistoryResult(
+      success: map['success'] == true,
+      providerAvailable: map['providerAvailable'] == true,
+      errorCode: map['errorCode'] as String?,
+      error: map['error'] as String?,
+      threads: (map['threads'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (thread) => CodexAgentEngineThread.fromMap(
+              Map<String, dynamic>.from(thread),
+            ),
+          )
+          .toList(growable: false),
+      messages: (map['messages'] as List? ?? const [])
+          .whereType<Map>()
+          .map(
+            (message) =>
+                ChatMessage.fromMap(Map<String, dynamic>.from(message)),
+          )
+          .toList(growable: false),
+      nativeThreadId: map['nativeThreadId'] as String? ?? '',
     );
   }
 }

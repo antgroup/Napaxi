@@ -22,6 +22,7 @@ use super::protocol::{
 use super::state::{
     PendingCodexHumanRequest, active_sessions, clear_state, invalidate_sessions_for_config,
     load_state, native_library_dir_for, pending_human_requests, save_state, session_key,
+    set_current_config_fingerprint,
 };
 
 #[cfg(not(target_os = "android"))]
@@ -49,6 +50,9 @@ struct ConfigureCodexRequest {
 }
 
 pub(crate) fn configure_codex_agent_engine_json(_handle: i64, request_json: &str) -> String {
+    if super::history::is_history_request(request_json) {
+        return super::history::handle_request_json(_handle, request_json);
+    }
     let mut request = match serde_json::from_str::<ConfigureCodexRequest>(request_json) {
         Ok(request) => request,
         Err(error) => {
@@ -101,6 +105,7 @@ fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
     if request.clear {
         return match config::clear(&request.files_dir) {
             Ok(result) => {
+                set_current_config_fingerprint(&request.files_dir, None);
                 invalidate_sessions_for_config(&request.files_dir, None);
                 config_result_json(true, true, false, None, None, "", result.changed)
             }
@@ -149,6 +154,7 @@ fn configure_legacy_raw(request: &ConfigureCodexRequest) -> String {
                 && before_config.as_deref() != Some(request.config_toml.as_str()))
                 || (!request.auth_json.is_empty()
                     && before_auth.as_deref() != Some(request.auth_json.as_str()));
+            set_current_config_fingerprint(&request.files_dir, None);
             if changed {
                 invalidate_sessions_for_config(&request.files_dir, None);
             }
@@ -172,6 +178,7 @@ fn sync_prepared_config(
     prepared: &PreparedCodexConfig,
 ) -> Result<bool, CodexConfigError> {
     let result = config::write_prepared(files_dir, prepared)?;
+    set_current_config_fingerprint(files_dir, Some(&prepared.fingerprint));
     invalidate_sessions_for_config(files_dir, Some(&prepared.fingerprint));
     Ok(result.changed)
 }
@@ -179,6 +186,7 @@ fn sync_prepared_config(
 #[cfg(target_os = "android")]
 fn clear_config_and_sessions(files_dir: &str) -> Result<bool, CodexConfigError> {
     let result = config::clear(files_dir)?;
+    set_current_config_fingerprint(files_dir, None);
     invalidate_sessions_for_config(files_dir, None);
     Ok(result.changed)
 }

@@ -165,4 +165,34 @@ void main() {
     expect(unsupported.model, isEmpty);
     expect(unsupported.configChanged, isFalse);
   });
+
+  test('Codex native history result decodes threads and messages', () {
+    final result = CodexAgentEngineHistoryResult.fromMap({
+      'success': true,
+      'providerAvailable': true,
+      'nativeThreadId': 'thread-1',
+      'threads': [
+        {
+          'id': 'thread-1',
+          'name': 'Greeting',
+          'preview': 'hello',
+          'createdAt': 1700000000000,
+          'updatedAt': 1700000001000,
+        },
+      ],
+      'messages': [
+        {'id': 'message-1', 'role': 'user', 'content': 'hello'},
+        {'id': 'message-2', 'role': 'assistant', 'content': 'world'},
+      ],
+    });
+
+    expect(result.success, isTrue);
+    expect(result.threads.single.id, 'thread-1');
+    expect(result.threads.single.updatedAtMs, 1700000001000);
+    expect(result.messages.map((message) => message.role), [
+      'user',
+      'assistant',
+    ]);
+    expect(result.nativeThreadId, 'thread-1');
+  });
 }

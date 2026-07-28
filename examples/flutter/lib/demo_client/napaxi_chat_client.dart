@@ -1284,6 +1284,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   final FlutterSecureStorage _channelCredentialStore =
       const FlutterSecureStorage();
   _CliEngineBridge? _ccBridge;
+  final Map<String, String> _codexNativeThreadIds = {};
   Future<String?>? _cliWorkspaceHostPathFuture;
 
   DemoScenarioRuntimeProfile get _activeRuntimeProfile {
@@ -3935,12 +3936,26 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     required String agentId,
   }) async {
     await _ensureAgent(agentId);
-    final session = await _requireEngine().createSession(
+    final engine = _requireEngine();
+    final session = await engine.createSession(
       channelType: 'app',
       accountId: _activeAccountId,
       threadId: threadId,
       agentId: agentId,
     );
+    if (agentId == 'engine.codex' && threadId.trim().isNotEmpty) {
+      _codexNativeThreadIds[session.threadId] = threadId;
+      final binding = engine.bindCodexAgentEngineThread(
+        session: session,
+        nativeThreadId: threadId,
+        agentId: agentId,
+      );
+      if (!binding.success) {
+        debugPrint(
+          '[$_codexHistoryLogTag] bind thread=$threadId session=${session.threadId} error=${binding.errorCode}:${binding.error}',
+        );
+      }
+    }
     return session;
   }
 
@@ -4178,10 +4193,64 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       return sessions;
     }
     await _ensureAgent(agentId);
-    return (await _ensureManagementEngine()).listSessions(
+    final engine = await _ensureManagementEngine();
+    final stored = await engine.listSessions(
       accountId: _activeAccountId,
       agentId: agentId,
     );
+    if (agentId != 'engine.codex') return stored;
+
+    final native = engine.listCodexAgentEngineThreads(
+      accountId: _activeAccountId,
+      agentId: agentId,
+    );
+    if (!native.success) {
+      debugPrint(
+        '[$_codexHistoryLogTag] thread/list failed error=${native.errorCode}:${native.error}',
+      );
+      return stored;
+    }
+    if (native.threads.isEmpty) return stored;
+    final now = DateTime.now();
+    final nativeSessions = <sdk.SessionInfo>[];
+    for (final thread in native.threads) {
+      final session = await engine.createSession(
+        agentId: agentId,
+        channelType: 'cli',
+        accountId: _activeAccountId,
+        threadId: thread.id,
+      );
+      _codexNativeThreadIds[session.threadId] = thread.id;
+      final binding = engine.bindCodexAgentEngineThread(
+        session: session,
+        nativeThreadId: thread.id,
+        agentId: agentId,
+      );
+      if (!binding.success) {
+        debugPrint(
+          '[$_codexHistoryLogTag] restore bind native=${thread.id} session=${session.threadId} error=${binding.errorCode}:${binding.error}',
+        );
+      }
+      final createdAt = thread.createdAtMs > 0
+          ? DateTime.fromMillisecondsSinceEpoch(thread.createdAtMs)
+          : now;
+      final updatedAt = thread.updatedAtMs > 0
+          ? DateTime.fromMillisecondsSinceEpoch(thread.updatedAtMs)
+          : createdAt;
+      final title = thread.name.trim().isNotEmpty
+          ? thread.name
+          : thread.preview;
+      nativeSessions.add(
+        sdk.SessionInfo(
+          key: session,
+          title: title,
+          preview: thread.preview,
+          createdAt: createdAt.toIso8601String(),
+          updatedAt: updatedAt.toIso8601String(),
+        ),
+      );
+    }
+    return nativeSessions;
   }
 
   @override
@@ -4192,10 +4261,19 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (agentId == 'engine.cc') {
       return _getCliEngineHistory(threadId, agentId);
     }
-    return (await _ensureManagementEngine()).getHistory(
-      threadId,
-      agentId: agentId,
-    );
+    final engine = await _ensureManagementEngine();
+    if (agentId == 'engine.codex') {
+      final nativeThreadId = _codexNativeThreadIds[threadId] ?? threadId;
+      final native = engine.readCodexAgentEngineThread(
+        nativeThreadId,
+        accountId: _activeAccountId,
+        agentId: agentId,
+      );
+      if (native.success && native.messages.isNotEmpty) {
+        return native.messages;
+      }
+    }
+    return engine.getHistory(threadId, agentId: agentId);
   }
 
   @override
@@ -4209,7 +4287,19 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       final messages = await _getCliEngineHistory(threadId, agentId);
       return sdk.HistoryPage(messages: messages, hasMore: false);
     }
-    return (await _ensureManagementEngine()).getHistoryPage(
+    final engine = await _ensureManagementEngine();
+    if (agentId == 'engine.codex' && before == null) {
+      final nativeThreadId = _codexNativeThreadIds[threadId] ?? threadId;
+      final native = engine.readCodexAgentEngineThread(
+        nativeThreadId,
+        accountId: _activeAccountId,
+        agentId: agentId,
+      );
+      if (native.success && native.messages.isNotEmpty) {
+        return sdk.HistoryPage(messages: native.messages, hasMore: false);
+      }
+    }
+    return engine.getHistoryPage(
       threadId,
       agentId: agentId,
       before: before,

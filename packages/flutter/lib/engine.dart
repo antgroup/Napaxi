@@ -500,6 +500,57 @@ class NapaxiEngine {
     return CodexAgentEngineConfigResult.fromMap(decodeJsonObject(raw));
   }
 
+  /// Lists conversations persisted by Codex inside the Android sandbox.
+  CodexAgentEngineHistoryResult listCodexAgentEngineThreads({
+    String accountId = 'default',
+    String agentId = 'engine.codex',
+  }) {
+    return _queryCodexAgentEngineHistory({
+      'operation': 'history_list_threads',
+      'account_id': accountId,
+      'agent_id': agentId,
+    });
+  }
+
+  /// Reads a Codex native thread and maps its items to SDK chat messages.
+  CodexAgentEngineHistoryResult readCodexAgentEngineThread(
+    String threadId, {
+    String accountId = 'default',
+    String agentId = 'engine.codex',
+  }) {
+    return _queryCodexAgentEngineHistory({
+      'operation': 'history_read_thread',
+      'thread_id': threadId,
+      'account_id': accountId,
+      'agent_id': agentId,
+    });
+  }
+
+  /// Binds an SDK session to a recovered Codex native thread for resume.
+  CodexAgentEngineHistoryResult bindCodexAgentEngineThread({
+    required SessionKey session,
+    required String nativeThreadId,
+    String agentId = 'engine.codex',
+  }) {
+    return _queryCodexAgentEngineHistory({
+      'operation': 'history_bind_thread',
+      'thread_id': nativeThreadId,
+      'account_id': session.accountId,
+      'agent_id': agentId,
+      'session_key_json': session.toJson(),
+    });
+  }
+
+  CodexAgentEngineHistoryResult _queryCodexAgentEngineHistory(
+    Map<String, dynamic> request,
+  ) {
+    final raw = rust_agent_engine.configureCodexAgentEngineJson(
+      handle: _handle,
+      requestJson: jsonEncode(request),
+    );
+    return CodexAgentEngineHistoryResult.fromMap(decodeJsonObject(raw));
+  }
+
   /// 预创建默认 Agent（"napaxi"），确保 listSkills 等 API 可立即使用。
   ///
   /// 如果 Agent 已存在则立即返回 true。通常在进入 Agent 页面时调用。

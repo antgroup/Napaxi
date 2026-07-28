@@ -61,6 +61,11 @@ selected main model into its Linux sandbox; iOS and other platforms return
 `unsupported_platform`. The raw TOML method remains deprecated compatibility
 surface and is not a second configuration source.
 
+The same adapters expose `listCodexAgentEngineThreads`,
+`readCodexAgentEngineThread`, and `bindCodexAgentEngineThread`. Android queries
+the core-owned app-server native thread store; iOS returns the typed
+`unsupported_platform` result.
+
 ## Avoid
 
 - Calling `mobile_*` implementation modules directly from adapters.

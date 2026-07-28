@@ -587,6 +587,56 @@ public final class NapaxiEngine: @unchecked Sendable {
         return NapaxiCodexAgentEngineConfigResult(json: object)
     }
 
+    public func listCodexAgentEngineThreads(
+        accountId: String = "default",
+        agentId: String = "engine.codex"
+    ) throws -> NapaxiCodexAgentEngineHistoryResult {
+        try queryCodexAgentEngineHistory([
+            "operation": .string("history_list_threads"),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+        ])
+    }
+
+    public func readCodexAgentEngineThread(
+        _ threadId: String,
+        accountId: String = "default",
+        agentId: String = "engine.codex"
+    ) throws -> NapaxiCodexAgentEngineHistoryResult {
+        try queryCodexAgentEngineHistory([
+            "operation": .string("history_read_thread"),
+            "thread_id": .string(threadId),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+        ])
+    }
+
+    public func bindCodexAgentEngineThread(
+        session: NapaxiSessionKey,
+        nativeThreadId: String,
+        agentId: String = "engine.codex"
+    ) throws -> NapaxiCodexAgentEngineHistoryResult {
+        try queryCodexAgentEngineHistory([
+            "operation": .string("history_bind_thread"),
+            "thread_id": .string(nativeThreadId),
+            "account_id": .string(session.accountId),
+            "agent_id": .string(agentId),
+            "session_key_json": .string(try session.jsonString()),
+        ])
+    }
+
+    private func queryCodexAgentEngineHistory(
+        _ request: [String: NapaxiJSONValue]
+    ) throws -> NapaxiCodexAgentEngineHistoryResult {
+        try ensureNotDisposed()
+        let raw = try configureCodexAgentEngineJson(
+            handle: handle,
+            requestJson: request.jsonString()
+        )
+        let object = (try NapaxiRawJSON(jsonString: raw).value.objectValue) ?? [:]
+        return NapaxiCodexAgentEngineHistoryResult(json: object)
+    }
+
     public func ensureAgentReady() throws -> Bool {
         try ensureNotDisposed()
         return try NapaxiNativeBridge.ensureAgentReady(handle: handle, configJSON: config.jsonString())

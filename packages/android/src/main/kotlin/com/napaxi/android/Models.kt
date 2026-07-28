@@ -2268,6 +2268,60 @@ public class CodexAgentEngineConfigResult(rawJson: String = "{}") : RawJsonModel
     }
 }
 
+public class CodexAgentEngineThread(rawJson: String = "{}") : RawJsonModel(rawJson) {
+    public val id: String get() = obj.optString("id")
+    public val name: String get() = obj.optString("name")
+    public val preview: String get() = obj.optString("preview")
+    public val createdAtMs: Long get() = obj.optLong("createdAt", 0L)
+    public val updatedAtMs: Long get() = obj.optLong("updatedAt", 0L)
+
+    public companion object {
+        @JvmStatic
+        public fun fromJson(rawJson: String): CodexAgentEngineThread =
+            CodexAgentEngineThread(rawJson)
+
+        @JvmStatic
+        public fun fromJsonObject(obj: JSONObject): CodexAgentEngineThread =
+            CodexAgentEngineThread(obj.toString())
+
+        @JvmStatic
+        public fun fromMap(map: Map<String, *>): CodexAgentEngineThread =
+            fromJsonObject(JSONObject(map))
+    }
+}
+
+public class CodexAgentEngineHistoryResult(rawJson: String = "{}") : RawJsonModel(rawJson) {
+    public val success: Boolean get() = obj.optBoolean("success", false)
+    public val providerAvailable: Boolean get() = obj.optBoolean("providerAvailable", false)
+    public val errorCode: String? get() = obj.optNullableString("errorCode")
+    public val error: String? get() = obj.optNullableString("error")
+    public val threads: List<CodexAgentEngineThread>
+        get() = obj.optJSONArray("threads")
+            ?.toJsonObjectList()
+            ?.map { CodexAgentEngineThread(it.toString()) }
+            .orEmpty()
+    public val messages: List<ChatMessage>
+        get() = obj.optJSONArray("messages")
+            ?.toJsonObjectList()
+            ?.map { ChatMessage(it.toString()) }
+            .orEmpty()
+    public val nativeThreadId: String get() = obj.optString("nativeThreadId")
+
+    public companion object {
+        @JvmStatic
+        public fun fromJson(rawJson: String): CodexAgentEngineHistoryResult =
+            CodexAgentEngineHistoryResult(rawJson)
+
+        @JvmStatic
+        public fun fromJsonObject(obj: JSONObject): CodexAgentEngineHistoryResult =
+            CodexAgentEngineHistoryResult(obj.toString())
+
+        @JvmStatic
+        public fun fromMap(map: Map<String, *>): CodexAgentEngineHistoryResult =
+            fromJsonObject(JSONObject(map))
+    }
+}
+
 public class ToolInfo(rawJson: String) : RawJsonModel(rawJson) {
     public val name: String get() = obj.optString("name")
     public val description: String get() = obj.optString("description")

@@ -115,10 +115,57 @@ pub(crate) fn native_library_dir_for(files_dir: &str) -> Option<String> {
 }
 
 pub(crate) fn session_key(request: &AgentEngineTurnRequest) -> String {
-    format!(
-        "{}::{}::{}",
-        request.account_id, request.agent_id, request.session_key_json
+    session_key_parts(
+        &request.account_id,
+        &request.agent_id,
+        &request.session_key_json,
     )
+}
+
+pub(crate) fn session_key_parts(
+    account_id: &str,
+    agent_id: &str,
+    session_key_json: &str,
+) -> String {
+    format!("{account_id}::{agent_id}::{session_key_json}")
+}
+
+pub(crate) fn bind_native_thread(
+    files_dir: &str,
+    account_id: &str,
+    agent_id: &str,
+    session_key_json: &str,
+    native_thread_id: &str,
+    config_fingerprint: &str,
+) {
+    let key = session_key_parts(account_id, agent_id, session_key_json);
+    save_state(
+        files_dir,
+        &key,
+        &CodexSessionState {
+            native_thread_id: Some(native_thread_id.to_string()),
+            config_fingerprint: config_fingerprint.to_string(),
+        },
+    );
+}
+
+pub(crate) fn set_current_config_fingerprint(files_dir: &str, fingerprint: Option<&str>) {
+    let path = state_dir(files_dir).join("config_fingerprint");
+    let Some(fingerprint) = fingerprint else {
+        let _ = fs::remove_file(path);
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(path, fingerprint);
+}
+
+pub(crate) fn current_config_fingerprint(files_dir: &str) -> Option<String> {
+    fs::read_to_string(state_dir(files_dir).join("config_fingerprint"))
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 pub(crate) fn load_state(files_dir: &str, key: &str) -> CodexSessionState {
@@ -239,5 +286,47 @@ mod tests {
             Some("thread-current")
         );
         assert!(load_state(&files_dir, "stale").native_thread_id.is_none());
+    }
+
+    #[test]
+    fn binds_recovered_native_thread_to_runtime_session_key() {
+        let temp = tempfile::tempdir().unwrap();
+        let files_dir = temp.path().to_string_lossy();
+        let session_json = r#"{"channel_type":"app","account_id":"user","thread_id":"ui"}"#;
+
+        bind_native_thread(
+            &files_dir,
+            "user",
+            "engine.codex",
+            session_json,
+            "native-thread",
+            "fingerprint",
+        );
+
+        let state = load_state(
+            &files_dir,
+            &session_key_parts("user", "engine.codex", session_json),
+        );
+        assert_eq!(state.native_thread_id.as_deref(), Some("native-thread"));
+        assert_eq!(state.config_fingerprint, "fingerprint");
+        let mut rpc = super::super::protocol::JsonRpcClient::new();
+        let (_, request, is_resume) = super::super::protocol::thread_open_request(&mut rpc, &state);
+        let request: serde_json::Value = serde_json::from_str(&request).unwrap();
+        assert!(is_resume);
+        assert_eq!(request["method"], "thread/resume");
+        assert_eq!(request["params"]["threadId"], "native-thread");
+    }
+
+    #[test]
+    fn persists_and_clears_current_config_fingerprint() {
+        let temp = tempfile::tempdir().unwrap();
+        let files_dir = temp.path().to_string_lossy();
+        set_current_config_fingerprint(&files_dir, Some("current"));
+        assert_eq!(
+            current_config_fingerprint(&files_dir).as_deref(),
+            Some("current")
+        );
+        set_current_config_fingerprint(&files_dir, None);
+        assert!(current_config_fingerprint(&files_dir).is_none());
     }
 }

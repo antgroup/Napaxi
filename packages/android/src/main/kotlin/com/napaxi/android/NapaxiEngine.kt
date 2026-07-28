@@ -1514,6 +1514,49 @@ public class NapaxiEngine private constructor(
         )
     }
 
+    public fun listCodexAgentEngineThreads(
+        accountId: String = DEFAULT_ACCOUNT_ID,
+        agentId: String = "engine.codex",
+    ): CodexAgentEngineHistoryResult = queryCodexAgentEngineHistory(
+        JSONObject()
+            .put("operation", "history_list_threads")
+            .put("account_id", accountId)
+            .put("agent_id", agentId),
+    )
+
+    public fun readCodexAgentEngineThread(
+        threadId: String,
+        accountId: String = DEFAULT_ACCOUNT_ID,
+        agentId: String = "engine.codex",
+    ): CodexAgentEngineHistoryResult = queryCodexAgentEngineHistory(
+        JSONObject()
+            .put("operation", "history_read_thread")
+            .put("thread_id", threadId)
+            .put("account_id", accountId)
+            .put("agent_id", agentId),
+    )
+
+    public fun bindCodexAgentEngineThread(
+        session: SessionKey,
+        nativeThreadId: String,
+        agentId: String = "engine.codex",
+    ): CodexAgentEngineHistoryResult = queryCodexAgentEngineHistory(
+        JSONObject()
+            .put("operation", "history_bind_thread")
+            .put("thread_id", nativeThreadId)
+            .put("account_id", session.accountId)
+            .put("agent_id", agentId)
+            .put("session_key_json", session.toJson()),
+    )
+
+    private fun queryCodexAgentEngineHistory(request: JSONObject): CodexAgentEngineHistoryResult =
+        CodexAgentEngineHistoryResult(
+            bridge(
+                "agent_engine.configure_codex",
+                JSONObject().put("request_json", request.toString()),
+            ),
+        )
+
     internal fun bridge(method: String, args: JSONObject = JSONObject(), handle: Long = this.handle): String {
         checkNotDisposed()
         return unwrapBridgeResult(NapaxiNative.callBridge(method, handle, args.toString()))

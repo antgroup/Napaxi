@@ -83,6 +83,51 @@ pub(crate) fn thread_start_request(client: &mut JsonRpcClient) -> (u64, String) 
     )
 }
 
+pub(crate) fn thread_list_request(client: &mut JsonRpcClient, cwd: Option<&str>) -> (u64, String) {
+    let mut params = json!({
+        "limit": 50,
+        "sortDirection": "desc",
+        "sortKey": "updated_at",
+        "sourceKinds": [
+            "cli",
+            "vscode",
+            "exec",
+            "appServer",
+            "subAgent",
+            "subAgentReview",
+            "subAgentCompact",
+            "subAgentThreadSpawn",
+            "subAgentOther",
+            "unknown"
+        ]
+    });
+    if let Some(cwd) = cwd {
+        params["cwd"] = Value::String(cwd.to_string());
+    }
+    client.request("thread/list", params)
+}
+
+pub(crate) fn thread_history_resume_request(
+    client: &mut JsonRpcClient,
+    thread_id: &str,
+) -> (u64, String) {
+    client.request(
+        "thread/resume",
+        json!({
+            "threadId": thread_id,
+            "approvalPolicy": "never",
+            "sandbox": "danger-full-access",
+        }),
+    )
+}
+
+pub(crate) fn thread_read_request(client: &mut JsonRpcClient, thread_id: &str) -> (u64, String) {
+    client.request(
+        "thread/read",
+        json!({"threadId": thread_id, "includeTurns": true}),
+    )
+}
+
 pub(crate) fn turn_start_request(
     client: &mut JsonRpcClient,
     request: &AgentEngineTurnRequest,
@@ -240,5 +285,18 @@ mod tests {
             "params": {"thread": {"id": "thread-1"}}
         });
         assert_eq!(extract_thread_id(&message).as_deref(), Some("thread-1"));
+    }
+
+    #[test]
+    fn history_requests_match_codex_app_server_contract() {
+        let mut client = JsonRpcClient::new();
+        let (_, list) = thread_list_request(&mut client, Some("/workspace/codex"));
+        let (_, read) = thread_read_request(&mut client, "thread-1");
+        let list: Value = serde_json::from_str(&list).unwrap();
+        let read: Value = serde_json::from_str(&read).unwrap();
+        assert_eq!(list["method"], "thread/list");
+        assert_eq!(list["params"]["cwd"], "/workspace/codex");
+        assert_eq!(read["method"], "thread/read");
+        assert_eq!(read["params"]["includeTurns"], true);
     }
 }

@@ -43,6 +43,10 @@ void main() {
       isNot(contains('recordNativeThreadId(session.threadId')),
     );
     expect(clientSource, isNot(contains('_getOrCreateBridge(\'codex\')')));
+    expect(clientSource, contains('listCodexAgentEngineThreads'));
+    expect(clientSource, contains('readCodexAgentEngineThread'));
+    expect(clientSource, contains('bindCodexAgentEngineThread'));
+    expect(clientSource, contains('_codexNativeThreadIds'));
     expect(clientSource, contains('_CliEngineSpec.codex.workspacePath'));
 
     expect(

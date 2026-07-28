@@ -31,6 +31,15 @@ namespaces:
       clear_codex_model:
         params: []
         return: CodexAgentEngineConfigResult
+      list_codex_threads:
+        params: [account_id, agent_id]
+        return: CodexAgentEngineHistoryResult
+      read_codex_thread:
+        params: [thread_id, account_id, agent_id]
+        return: CodexAgentEngineHistoryResult
+      bind_codex_thread:
+        params: [session_key, native_thread_id, agent_id]
+        return: CodexAgentEngineHistoryResult
   chat:
     status: stable
     adapters: [flutter, ios, android]
