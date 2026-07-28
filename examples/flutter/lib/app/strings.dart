@@ -231,6 +231,10 @@ class AppStrings {
     required this.recallFilesTitle,
     required this.noFilesTitle,
     required this.noFilesDescription,
+    required this.searchFilesTooltip,
+    required this.searchFilesHint,
+    required this.searchFilesNoResultsTitle,
+    required this.searchFilesNoResultsDescription,
     required this.fileLoadFailed,
     required this.fileOpenFailed,
     required this.deleteFile,
@@ -565,6 +569,10 @@ class AppStrings {
   final String recallFilesTitle;
   final String noFilesTitle;
   final String noFilesDescription;
+  final String searchFilesTooltip;
+  final String searchFilesHint;
+  final String searchFilesNoResultsTitle;
+  final String searchFilesNoResultsDescription;
   final String Function(String message) fileLoadFailed;
   final String Function(String message) fileOpenFailed;
   final String deleteFile;
@@ -930,6 +938,10 @@ class AppStrings {
     recallFilesTitle: 'Recall',
     noFilesTitle: 'No files yet',
     noFilesDescription: 'Files created by the agent will appear here.',
+    searchFilesTooltip: 'Search files',
+    searchFilesHint: 'Search by name or path',
+    searchFilesNoResultsTitle: 'No matching files',
+    searchFilesNoResultsDescription: 'Try a different file name or path.',
     fileLoadFailed: (message) => 'Could not load files: $message',
     fileOpenFailed: (message) => 'Could not open file: $message',
     deleteFile: 'Delete',
@@ -1281,6 +1293,10 @@ class AppStrings {
     recallFilesTitle: '召回',
     noFilesTitle: '暂无文件',
     noFilesDescription: 'Agent 创建的文件会显示在这里。',
+    searchFilesTooltip: '搜索文件',
+    searchFilesHint: '搜索文件名或路径',
+    searchFilesNoResultsTitle: '没有匹配文件',
+    searchFilesNoResultsDescription: '换一个文件名或路径试试。',
     fileLoadFailed: (message) => '无法加载文件：$message',
     fileOpenFailed: (message) => '无法打开文件：$message',
     deleteFile: '删除',

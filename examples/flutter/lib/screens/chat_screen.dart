@@ -545,6 +545,7 @@ class _ChatScreenState extends State<ChatScreen>
   static const String _activeScenarioKey = 'napaxi_demo.active_scenario.v1';
   static const double _sessionMenuFlingVelocity = 650;
   static const double _bottomFollowThreshold = 72;
+  static const double _bottomPinnedTolerance = 1;
   static const double _historyTopLoadThreshold = 360;
   static const int _initialHistoryPageLimit = 30;
   static const int _olderHistoryPageLimit = 24;
@@ -611,6 +612,7 @@ class _ChatScreenState extends State<ChatScreen>
   bool _isPinnedToBottom = true;
   bool _showJumpToLatest = false;
   bool _isProgrammaticScrollInFlight = false;
+  bool _isUserDraggingChat = false;
   bool _isPrependingHistory = false;
   int _autoFollowSyncToken = 0;
 
@@ -1076,7 +1078,7 @@ class _ChatScreenState extends State<ChatScreen>
       });
       return;
     }
-    final nextAutoFollowEnabled = isNearBottom;
+    final nextAutoFollowEnabled = _isUserDraggingChat ? false : isNearBottom;
     final nextShowJumpToLatest = isNearBottom ? false : _showJumpToLatest;
     if (isNearBottom == _isPinnedToBottom &&
         nextAutoFollowEnabled == _autoFollowEnabled &&
@@ -1091,6 +1093,33 @@ class _ChatScreenState extends State<ChatScreen>
       _showJumpToLatest = nextShowJumpToLatest;
     });
     _maybeLoadOlderHistory();
+  }
+
+  bool _handleChatScrollNotification(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _autoFollowSyncToken += 1;
+      if (!_isUserDraggingChat || _autoFollowEnabled) {
+        setState(() {
+          _isUserDraggingChat = true;
+          _autoFollowEnabled = false;
+        });
+      }
+    } else if (notification is ScrollEndNotification && _isUserDraggingChat) {
+      final isAtBottom =
+          notification.metrics.maxScrollExtent - notification.metrics.pixels <=
+          _bottomPinnedTolerance;
+      setState(() {
+        _isUserDraggingChat = false;
+        if (isAtBottom) {
+          _autoFollowEnabled = true;
+          _isPinnedToBottom = true;
+          _showJumpToLatest = false;
+        }
+      });
+    }
+    return false;
   }
 
   bool _isNearBottom() {
@@ -1131,6 +1160,10 @@ class _ChatScreenState extends State<ChatScreen>
     bool force = false,
     int stablePassesRequired = 2,
   }) {
+    if (_isUserDraggingChat) {
+      _markNewContentAvailable();
+      return;
+    }
     if (_isPrependingHistory && !force) return;
     if (!force && !_autoFollowEnabled) {
       _markNewContentAvailable();
@@ -5772,7 +5805,9 @@ class _ChatScreenState extends State<ChatScreen>
       );
     }
     if (!isLocalA2A || event.openAssistant || previousSessionId == sessionId) {
-      _scrollToBottom(force: inboundText.isNotEmpty || event.openAssistant);
+      _scrollToBottom(
+        force: inboundText.isNotEmpty || previousSessionId != sessionId,
+      );
     }
     if (inboundText.isNotEmpty ||
         event.completeAssistant ||
@@ -5853,7 +5888,7 @@ class _ChatScreenState extends State<ChatScreen>
       unawaited(_persistA2AConversationSessions());
     }
     if (_activeSessionId == sessionId) {
-      _scrollToBottom(force: event.chatEvent != null);
+      _scrollToBottom();
     }
   }
 
@@ -9369,11 +9404,18 @@ $candidate
                                       onTap: _dismissKeyboard,
                                       child: Stack(
                                         children: [
-                                          NotificationListener<
-                                            SizeChangedLayoutNotification
-                                          >(
-                                            onNotification: (_) {
-                                              _handleMessageListSizeChanged();
+                                          NotificationListener<Notification>(
+                                            onNotification: (notification) {
+                                              if (notification
+                                                  is ScrollNotification) {
+                                                return _handleChatScrollNotification(
+                                                  notification,
+                                                );
+                                              }
+                                              if (notification
+                                                  is SizeChangedLayoutNotification) {
+                                                _handleMessageListSizeChanged();
+                                              }
                                               return false;
                                             },
                                             child: SizeChangedLayoutNotifier(

@@ -1,6 +1,6 @@
 part of '../main.dart';
 
-class _FilesPage extends StatelessWidget {
+class _FilesPage extends StatefulWidget {
   const _FilesPage({
     required this.clientFuture,
     required this.agentId,
@@ -14,38 +14,169 @@ class _FilesPage extends StatelessWidget {
   final VoidCallback? onMenu;
 
   @override
+  State<_FilesPage> createState() => _FilesPageState();
+}
+
+class _FilesPageState extends State<_FilesPage> {
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  bool _isSearching = false;
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _openSearch() {
+    setState(() => _isSearching = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocusNode.requestFocus();
+    });
+  }
+
+  void _closeSearch() {
+    _searchFocusNode.unfocus();
+    _searchController.clear();
+    setState(() {
+      _isSearching = false;
+      _searchQuery = '';
+    });
+  }
+
+  Widget _buildTitle(AppStrings strings) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      reverseDuration: const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: SizeTransition(
+            axis: Axis.horizontal,
+            axisAlignment: -1,
+            sizeFactor: curved,
+            child: child,
+          ),
+        );
+      },
+      child: _isSearching
+          ? Container(
+              key: const ValueKey('files_search_title'),
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.82),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.96)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.045),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: TextField(
+                key: const Key('files_search_field'),
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                textInputAction: TextInputAction.search,
+                cursorColor: _configTextPrimary,
+                style: const TextStyle(
+                  color: _configTextPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                ),
+                onChanged: (value) => setState(() => _searchQuery = value),
+                decoration: InputDecoration(
+                  hintText: strings.searchFilesHint,
+                  hintStyle: const TextStyle(
+                    color: _configTextSecondary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: _configTextPrimary,
+                    size: 21,
+                  ),
+                  prefixIconConstraints: const BoxConstraints(
+                    minWidth: 42,
+                    minHeight: 40,
+                  ),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.fromLTRB(0, 10, 12, 9),
+                ),
+              ),
+            )
+          : Text(
+              strings.filesTitle,
+              key: const ValueKey('files_page_title'),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
 
     return Scaffold(
       backgroundColor: _configPageBackground,
       appBar: AppBar(
-        title: Text(
-          strings.filesTitle,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+        title: _buildTitle(strings),
         backgroundColor: _configPageBackground,
         foregroundColor: _configTextPrimary,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: onMenu != null
+        leading: widget.onMenu != null
             ? IconButton(
                 key: const Key('files_menu_button'),
                 tooltip: MaterialLocalizations.of(context).openAppDrawerTooltip,
-                onPressed: onMenu,
+                onPressed: widget.onMenu,
                 icon: const Icon(Icons.menu_rounded),
               )
             : BackButton(
                 onPressed: () async {
-                  final handled = await onBack?.call();
+                  final handled = await widget.onBack?.call();
                   if (handled != false && context.mounted) {
                     Navigator.of(context).pop();
                   }
                 },
               ),
+        actions: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: _isSearching
+                ? IconButton(
+                    key: const Key('files_search_close_button'),
+                    tooltip: strings.cancel,
+                    onPressed: _closeSearch,
+                    icon: const Icon(Icons.close_rounded),
+                  )
+                : IconButton(
+                    key: const Key('files_search_button'),
+                    tooltip: strings.searchFilesTooltip,
+                    onPressed: _openSearch,
+                    icon: const Icon(Icons.search_rounded),
+                  ),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: FutureBuilder<NapaxiChatClient>(
-        future: clientFuture,
+        future: widget.clientFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
@@ -59,7 +190,12 @@ class _FilesPage extends StatelessWidget {
               description: null,
             );
           }
-          return _FilesBrowser(client: snapshot.data!, agentId: agentId);
+          return _FilesBrowser(
+            client: snapshot.data!,
+            agentId: widget.agentId,
+            searchQuery: _searchQuery,
+            onCloseSearch: _closeSearch,
+          );
         },
       ),
     );
@@ -67,10 +203,17 @@ class _FilesPage extends StatelessWidget {
 }
 
 class _FilesBrowser extends StatelessWidget {
-  const _FilesBrowser({required this.client, required this.agentId});
+  const _FilesBrowser({
+    required this.client,
+    required this.agentId,
+    required this.searchQuery,
+    required this.onCloseSearch,
+  });
 
   final NapaxiChatClient client;
   final String agentId;
+  final String searchQuery;
+  final VoidCallback onCloseSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -137,16 +280,22 @@ class _FilesBrowser extends StatelessWidget {
                   client: client,
                   source: _FileSource.workspace,
                   agentId: agentId,
+                  searchQuery: searchQuery,
+                  onCloseSearch: onCloseSearch,
                 ),
                 _FileSourceView(
                   client: client,
                   source: _FileSource.memory,
                   agentId: agentId,
+                  searchQuery: searchQuery,
+                  onCloseSearch: onCloseSearch,
                 ),
                 _FileSourceView(
                   client: client,
                   source: _FileSource.journal,
                   agentId: agentId,
+                  searchQuery: searchQuery,
+                  onCloseSearch: onCloseSearch,
                 ),
               ],
             ),
@@ -164,11 +313,15 @@ class _FileSourceView extends StatefulWidget {
     required this.client,
     required this.source,
     required this.agentId,
+    required this.searchQuery,
+    required this.onCloseSearch,
   });
 
   final NapaxiChatClient client;
   final _FileSource source;
   final String agentId;
+  final String searchQuery;
+  final VoidCallback onCloseSearch;
 
   @override
   State<_FileSourceView> createState() => _FileSourceViewState();
@@ -180,11 +333,28 @@ class _FileSourceViewState extends State<_FileSourceView> {
   String _currentDirectory = '';
 
   bool get _isSelecting => _selectedItemKeys.isNotEmpty;
+  bool get _hasSearchQuery => widget.searchQuery.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     _filesFuture = _loadFiles();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FileSourceView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final searchStarted =
+        oldWidget.searchQuery.trim().isEmpty && _hasSearchQuery;
+    final searchEnded =
+        oldWidget.searchQuery.trim().isNotEmpty && !_hasSearchQuery;
+    if (widget.source == _FileSource.workspace &&
+        (searchStarted || searchEnded)) {
+      _selectedItemKeys.clear();
+      _filesFuture = _loadFiles();
+    } else if (oldWidget.searchQuery != widget.searchQuery) {
+      _selectedItemKeys.clear();
+    }
   }
 
   Future<List<_FileBrowserItem>> _loadFiles() async {
@@ -238,15 +408,38 @@ class _FileSourceViewState extends State<_FileSourceView> {
   }
 
   Future<List<_FileBrowserItem>> _loadWorkspaceFiles() async {
+    final searching = _hasSearchQuery;
     final files = await widget.client.listSandboxWorkspaceFiles(
       agentId: widget.agentId,
-      subdir: _currentDirectory.isEmpty ? null : _currentDirectory,
-      recursive: false,
+      subdir: searching || _currentDirectory.isEmpty ? null : _currentDirectory,
+      recursive: searching,
     );
     final itemsByPath = <String, _FileBrowserItem>{};
 
     for (final file in files) {
       final logicalPath = _workspaceLogicalPath(file.sandboxPath);
+      if (searching) {
+        if (logicalPath.isEmpty) continue;
+        final isDirectory = file.isDirectory;
+        itemsByPath.putIfAbsent(
+          logicalPath,
+          () => _FileBrowserItem(
+            source: _FileSource.workspace,
+            path: isDirectory ? logicalPath : file.sandboxPath,
+            name: _fileNameFromPath(logicalPath),
+            isDirectory: isDirectory,
+            browsePath: isDirectory ? logicalPath : null,
+            deletePath: isDirectory
+                ? _workspaceSandboxPath(logicalPath)
+                : file.sandboxPath,
+            realPath: isDirectory ? null : file.realPath,
+            mimeType: isDirectory ? null : file.mimeType,
+            sizeBytes: isDirectory ? null : file.sizeBytes,
+            modified: file.modified,
+          ),
+        );
+        continue;
+      }
       final childPath = _directChildPath(
         directory: _currentDirectory,
         path: logicalPath,
@@ -293,8 +486,9 @@ class _FileSourceViewState extends State<_FileSourceView> {
       setState(() {
         _currentDirectory = item.browsePath ?? item.path;
         _selectedItemKeys.clear();
-        _filesFuture = _loadFiles();
+        if (!_hasSearchQuery) _filesFuture = _loadFiles();
       });
+      if (_hasSearchQuery) widget.onCloseSearch();
       return;
     }
     final deleted = await Navigator.of(context).push<bool>(
@@ -389,7 +583,16 @@ class _FileSourceViewState extends State<_FileSourceView> {
           );
         }
 
-        final files = snapshot.data ?? const [];
+        final allFiles = snapshot.data ?? const [];
+        final normalizedQuery = widget.searchQuery.trim().toLowerCase();
+        final files = normalizedQuery.isEmpty
+            ? allFiles
+            : [
+                for (final item in allFiles)
+                  if (item.name.toLowerCase().contains(normalizedQuery) ||
+                      item.path.toLowerCase().contains(normalizedQuery))
+                    item,
+              ];
         final selectedItems = [
           for (final item in files)
             if (_selectedItemKeys.contains(_itemKey(item))) item,
@@ -400,11 +603,20 @@ class _FileSourceViewState extends State<_FileSourceView> {
         final canDeleteSelected =
             selectedItems.isNotEmpty &&
             selectedItems.every((item) => item.canDelete);
-        if (files.isEmpty && _currentDirectory.isEmpty) {
+        if (allFiles.isEmpty &&
+            _currentDirectory.isEmpty &&
+            normalizedQuery.isEmpty) {
           return _FilesMessage(
             icon: Icons.folder_open_rounded,
             title: strings.noFilesTitle,
             description: strings.noFilesDescription,
+          );
+        }
+        if (files.isEmpty && normalizedQuery.isNotEmpty) {
+          return _FilesMessage(
+            icon: Icons.manage_search_rounded,
+            title: strings.searchFilesNoResultsTitle,
+            description: strings.searchFilesNoResultsDescription,
           );
         }
 
@@ -431,24 +643,37 @@ class _FileSourceViewState extends State<_FileSourceView> {
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
                   itemCount:
                       files.length +
-                      (_currentDirectory.isEmpty ? 0 : 1) +
-                      (files.isEmpty && _currentDirectory.isNotEmpty ? 1 : 0),
+                      (_currentDirectory.isEmpty || normalizedQuery.isNotEmpty
+                          ? 0
+                          : 1) +
+                      (files.isEmpty &&
+                              _currentDirectory.isNotEmpty &&
+                              normalizedQuery.isEmpty
+                          ? 1
+                          : 0),
                   separatorBuilder: (_, _) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
-                    if (_currentDirectory.isNotEmpty && index == 0) {
+                    if (_currentDirectory.isNotEmpty &&
+                        normalizedQuery.isEmpty &&
+                        index == 0) {
                       return _ParentDirectoryTile(
                         directory: _currentDirectory,
                         onTap: _openParentDirectory,
                       );
                     }
-                    if (files.isEmpty && _currentDirectory.isNotEmpty) {
+                    if (files.isEmpty &&
+                        _currentDirectory.isNotEmpty &&
+                        normalizedQuery.isEmpty) {
                       return _EmptyDirectoryTile(
                         title: strings.noFilesTitle,
                         description: strings.noFilesDescription,
                       );
                     }
                     final fileIndex =
-                        index - (_currentDirectory.isEmpty ? 0 : 1);
+                        index -
+                        (_currentDirectory.isEmpty || normalizedQuery.isNotEmpty
+                            ? 0
+                            : 1);
                     final item = files[fileIndex];
                     return _FileTile(
                       item: item,

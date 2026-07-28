@@ -731,15 +731,8 @@ void main() {
   testWidgets('pauses auto-follow when user scrolls up during streaming', (
     tester,
   ) async {
-    Stream<sdk.ChatEvent> streamEvents() async* {
-      yield const sdk.ResponseDeltaEvent(
-        content: 'line 1\nline 2\nline 3\nline 4\nline 5\n',
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 900));
-      yield const sdk.ResponseDeltaEvent(
-        content: 'line 6\nline 7\nline 8\nline 9\nline 10\n',
-      );
-    }
+    final events = StreamController<sdk.ChatEvent>();
+    addTearDown(events.close);
 
     final history = <sdk.ChatMessage>[
       for (var i = 0; i < 18; i++) ...[
@@ -763,7 +756,7 @@ void main() {
       threadId: 'session-42',
     );
     final fakeClient = FakeNapaxiChatClient(
-      eventStreamsByThreadId: {'session-42': streamEvents()},
+      eventStreamsByThreadId: {'session-42': events.stream},
       sessions: const [
         sdk.SessionInfo(
           key: sessionKey,
@@ -789,22 +782,33 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('send_message_button')));
     await _pumpUntilSent(tester, fakeClient);
-    await tester.pump(const Duration(milliseconds: 50));
+    events.add(
+      const sdk.ResponseDeltaEvent(
+        content: 'line 1\nline 2\nline 3\nline 4\nline 5\n',
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     final scrollable = find.byKey(const Key('chat_message_list'));
-    await tester.drag(scrollable, const Offset(0, 300));
+    final gesture = await tester.startGesture(tester.getCenter(scrollable));
+    await gesture.moveBy(const Offset(0, 48));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
 
     final scrollableWidget = tester.widget<Scrollable>(
       find.descendant(of: scrollable, matching: find.byType(Scrollable)),
     );
     final before = scrollableWidget.controller!.position.pixels;
 
-    await tester.pump(const Duration(milliseconds: 1000));
+    events.add(
+      const sdk.ResponseDeltaEvent(
+        content: 'line 6\nline 7\nline 8\nline 9\nline 10\n',
+      ),
+    );
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await gesture.up();
+    await tester.pump();
 
     final after = scrollableWidget.controller!.position.pixels;
     expect((after - before).abs(), lessThan(4));
@@ -4408,6 +4412,81 @@ void main() {
 
     expect(find.text('2026-05-13.md'), findsOneWidget);
     expect(find.text('README.md'), findsNothing);
+  });
+
+  testWidgets('searches workspace files recursively by name and path', (
+    tester,
+  ) async {
+    final modified = DateTime(2026, 5, 13, 10);
+    final fakeClient = FakeNapaxiChatClient(
+      workspaceFiles: [
+        sdk.WorkspaceFileInfo(
+          name: 'notes',
+          sandboxPath: '/workspace/notes',
+          realPath: '',
+          mimeType: 'inode/directory',
+          isDirectory: true,
+          sizeBytes: 0,
+          modified: modified,
+        ),
+        sdk.WorkspaceFileInfo(
+          name: 'roadmap.md',
+          sandboxPath: '/workspace/notes/roadmap.md',
+          realPath: '/tmp/roadmap.md',
+          mimeType: 'text/markdown',
+          isDirectory: false,
+          sizeBytes: 42,
+          modified: modified,
+        ),
+        sdk.WorkspaceFileInfo(
+          name: 'README.md',
+          sandboxPath: '/workspace/README.md',
+          realPath: '/tmp/README.md',
+          mimeType: 'text/markdown',
+          isDirectory: false,
+          sizeBytes: 8,
+          modified: modified,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await configureSingleModel(tester);
+
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('files_menu_item')));
+    await tester.pumpAndSettle();
+    await pumpUntilFound(tester, find.text('README.md'));
+
+    expect(find.text('roadmap.md'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('files_search_button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('files_search_field')),
+      'roadmap',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('roadmap.md'), findsOneWidget);
+    expect(find.text('README.md'), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('files_search_field')),
+      'missing',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('No matching files'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('files_search_close_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('README.md'), findsOneWidget);
+    expect(find.text('roadmap.md'), findsNothing);
   });
 
   testWidgets('shows parent directory entry inside an empty workspace folder', (
