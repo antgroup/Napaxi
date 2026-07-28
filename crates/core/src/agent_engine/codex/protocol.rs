@@ -48,11 +48,6 @@ pub(crate) fn initialized_notification(client: &JsonRpcClient) -> String {
     client.notification("initialized", None)
 }
 
-pub(crate) fn startup_requests(client: &mut JsonRpcClient) -> Vec<String> {
-    let (_, initialize) = initialize_request(client);
-    vec![initialize, initialized_notification(client)]
-}
-
 pub(crate) fn thread_open_request(
     client: &mut JsonRpcClient,
     state: &CodexSessionState,
@@ -175,7 +170,7 @@ pub(crate) fn response_id(message: &Value) -> Option<u64> {
 }
 
 pub(crate) fn response_error(message: &Value) -> Option<String> {
-    let error = message.get("error")?;
+    let error = message.get("error").filter(|value| !value.is_null())?;
     Some(
         error
             .get("message")
@@ -293,6 +288,15 @@ mod tests {
             "params": {"thread": {"id": "thread-1"}}
         });
         assert_eq!(extract_thread_id(&message).as_deref(), Some("thread-1"));
+    }
+
+    #[test]
+    fn ignores_null_json_rpc_error_fields() {
+        assert!(response_error(&json!({"id": 1, "result": {}, "error": null})).is_none());
+        assert_eq!(
+            response_error(&json!({"id": 1, "error": {"message": "not initialized"}})).as_deref(),
+            Some("not initialized")
+        );
     }
 
     #[test]

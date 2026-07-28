@@ -85,6 +85,23 @@ mod tests {
     }
 
     #[test]
+    fn maps_turn_completed_with_null_error_as_success() {
+        let outcome = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "turn/completed",
+            "params": {
+                "turn": {
+                    "status": "completed",
+                    "error": null
+                }
+            }
+        }));
+        assert!(outcome.completed);
+        assert!(!outcome.failed);
+        assert!(outcome.event.is_none());
+    }
+
+    #[test]
     fn maps_failed_turn_completed_as_error() {
         let outcome = map_app_server_message(&json!({
             "jsonrpc": "2.0",

@@ -15,8 +15,9 @@ use super::config::{self, CodexConfigError, PreparedCodexConfig};
 use super::events::map_app_server_message;
 #[cfg(target_os = "android")]
 use super::protocol::{
-    JsonRpcClient, extract_thread_id, parse_json_lines, response_error, response_id,
-    startup_requests, thread_open_request, thread_start_request, turn_start_request,
+    JsonRpcClient, extract_thread_id, initialize_request, initialized_notification,
+    parse_json_lines, response_error, response_id, thread_open_request, thread_start_request,
+    turn_start_request,
 };
 #[cfg(target_os = "android")]
 use super::state::{
@@ -345,9 +346,35 @@ where
         }
     };
 
+    let mut pending_initialize = None;
     let mut pending_thread_open = None;
     let mut sent_turn = false;
     match start_action {
+        StartAction::InitializeThenOpen {
+            initialize_id,
+            initialize_line,
+            initialized_line,
+            open_request_id,
+            open_line,
+            is_resume,
+        } => {
+            // Codex rejects thread/start until initialize has been acknowledged.
+            pending_initialize = Some(InitializePendingOpen {
+                initialize_id,
+                initialized_line,
+                open_request_id,
+                open_line,
+                is_resume,
+            });
+            if let Err(error) = write_line(pty, &initialize_line) {
+                release_session_process(&key, true);
+                let event = ChatEvent::Error {
+                    message: error.to_string(),
+                };
+                emit(event.clone());
+                return vec![event];
+            }
+        }
         StartAction::OpenThread {
             request_id,
             line,
@@ -424,6 +451,37 @@ where
                             };
                             for message in messages {
                                 log_codex_runtime_message(&message);
+                                if let Some(pending) = pending_initialize.take() {
+                                    if response_id(&message) == Some(pending.initialize_id) {
+                                        if let Some(error) = response_error(&message) {
+                                            let event = ChatEvent::Error {
+                                                message: format!("initialize failed: {error}"),
+                                            };
+                                            emit(event.clone());
+                                            events.push(event);
+                                            saw_completion = true;
+                                            should_close = true;
+                                            break;
+                                        }
+                                        if let Err(error) =
+                                            write_line(pty, &pending.initialized_line)
+                                                .and_then(|()| write_line(pty, &pending.open_line))
+                                        {
+                                            let event = ChatEvent::Error {
+                                                message: error.to_string(),
+                                            };
+                                            emit(event.clone());
+                                            events.push(event);
+                                            saw_completion = true;
+                                            should_close = true;
+                                            break;
+                                        }
+                                        pending_thread_open =
+                                            Some((pending.open_request_id, pending.is_resume));
+                                        continue;
+                                    }
+                                    pending_initialize = Some(pending);
+                                }
                                 if let Some((open_id, is_resume)) = pending_thread_open {
                                     if response_id(&message) == Some(open_id) {
                                         if let Some(error) = response_error(&message) {
@@ -560,11 +618,16 @@ where
                 break;
             }
         }
-        if !sent_turn && started.elapsed() > CODEX_STARTUP_TIMEOUT && pending_thread_open.is_some()
+        if !sent_turn
+            && started.elapsed() > CODEX_STARTUP_TIMEOUT
+            && (pending_initialize.is_some() || pending_thread_open.is_some())
         {
             let event = ChatEvent::Error {
-                message: "Codex app-server did not open a thread before startup timeout"
-                    .to_string(),
+                message: if pending_initialize.is_some() {
+                    "Codex app-server did not initialize before startup timeout".to_string()
+                } else {
+                    "Codex app-server did not open a thread before startup timeout".to_string()
+                },
             };
             emit(event.clone());
             events.push(event);
@@ -582,6 +645,14 @@ where
 
 #[cfg(target_os = "android")]
 enum StartAction {
+    InitializeThenOpen {
+        initialize_id: u64,
+        initialize_line: String,
+        initialized_line: String,
+        open_request_id: u64,
+        open_line: String,
+        is_resume: bool,
+    },
     OpenThread {
         request_id: u64,
         line: String,
@@ -590,6 +661,15 @@ enum StartAction {
     StartTurn {
         line: String,
     },
+}
+
+#[cfg(target_os = "android")]
+struct InitializePendingOpen {
+    initialize_id: u64,
+    initialized_line: String,
+    open_request_id: u64,
+    open_line: String,
+    is_resume: bool,
 }
 
 #[cfg(target_os = "android")]
@@ -646,13 +726,15 @@ fn acquire_session_process(
         40,
     )?;
     let mut rpc = JsonRpcClient::new();
-    for request_line in startup_requests(&mut rpc) {
-        let _ = crate::android_linux_env::pty::write_pty_session(pty, &(request_line + "\n"));
-    }
-    let (request_id, line, is_resume) = thread_open_request(&mut rpc, state);
-    let action = StartAction::OpenThread {
-        request_id,
-        line,
+    let (initialize_id, initialize_line) = initialize_request(&mut rpc);
+    let initialized_line = initialized_notification(&rpc);
+    let (open_request_id, open_line, is_resume) = thread_open_request(&mut rpc, state);
+    let action = StartAction::InitializeThenOpen {
+        initialize_id,
+        initialize_line,
+        initialized_line,
+        open_request_id,
+        open_line,
         is_resume,
     };
     guard.insert(

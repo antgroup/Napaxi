@@ -90,7 +90,7 @@ pub(crate) fn map_app_server_message(message: &Value) -> CodexTurnOutcome {
 fn completed_outcome(event: &Value) -> CodexTurnOutcome {
     let turn = event.get("turn").unwrap_or(event);
     let status = turn.get("status").and_then(Value::as_str);
-    let error = turn.get("error");
+    let error = turn.get("error").filter(|value| !value.is_null());
     if status == Some("failed") || error.is_some() {
         return CodexTurnOutcome {
             event: Some(ChatEvent::Error {

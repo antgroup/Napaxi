@@ -518,7 +518,11 @@ fn tool_call_content(item: &Value, kind: &str, id: &str) -> String {
 }
 
 fn string_field(value: &Value, key: &str) -> String {
-    value.get(key).map(value_text).unwrap_or_default()
+    match value.get(key) {
+        Some(Value::String(value)) => value.clone(),
+        Some(Value::Null) | None => String::new(),
+        Some(value) => value_text(value),
+    }
 }
 
 fn value_text(value: &Value) -> String {
@@ -598,6 +602,20 @@ mod tests {
         .unwrap();
         assert_eq!(summary["id"], "thread-1");
         assert_eq!(summary["createdAt"], 1_700_000_000_000_i64);
+    }
+
+    #[test]
+    fn maps_null_native_thread_name_to_empty_for_preview_fallback() {
+        let summary = map_thread_summary(&json!({
+            "id": "thread-1",
+            "name": null,
+            "preview": "first user message",
+            "createdAt": 1_700_000_000,
+            "updatedAt": 1_700_000_001,
+        }))
+        .unwrap();
+        assert_eq!(summary["name"], "");
+        assert_eq!(summary["preview"], "first user message");
     }
 
     #[test]
