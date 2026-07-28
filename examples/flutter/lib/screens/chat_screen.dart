@@ -9242,6 +9242,19 @@ $candidate
               return;
             }
 
+            var isAssistantMarkdownScrollable = false;
+            element.visitAncestorElements((ancestor) {
+              if (ancestor.widget is AssistantMarkdownHorizontalScrollable) {
+                isAssistantMarkdownScrollable = true;
+                return false;
+              }
+              return true;
+            });
+            if (isAssistantMarkdownScrollable) {
+              found = scrollableState.position.maxScrollExtent > 0.5;
+              if (found) return;
+            }
+
             // A rightward drag should stay with the child pager while it has a
             // previous tab. At its leading edge, let the parent open the menu.
             found = scrollableState.position.extentBefore > 0.5;

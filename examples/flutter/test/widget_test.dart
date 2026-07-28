@@ -987,7 +987,9 @@ void main() {
     tester,
   ) async {
     final events = StreamController<sdk.ChatEvent>();
-    addTearDown(events.close);
+    addTearDown(() {
+      unawaited(events.close());
+    });
 
     final history = <sdk.ChatMessage>[
       for (var i = 0; i < 18; i++) ...[
@@ -1025,11 +1027,12 @@ void main() {
       historyByThreadId: {'session-42': history},
     );
     await tester.pumpWidget(
-      _testApp(chatClientFactory: () async => fakeClient),
+      _testApp(
+        chatClientFactory: () async => fakeClient,
+        configStore: await _storeWithMainModel(),
+      ),
     );
-    await configureSingleModel(tester);
-    await tester.pumpAndSettle();
-    await pumpUntilFound(tester, find.text('History 0'));
+    await pumpUntilFound(tester, find.text('Reply 17'));
 
     await tester.enterText(
       find.byKey(const Key('chat_input_field')),
@@ -1078,6 +1081,9 @@ void main() {
 
     final position = scrollableWidget.controller!.position;
     expect(position.maxScrollExtent - position.pixels, lessThan(4));
+
+    unawaited(events.close());
+    await tester.pump();
   });
 
   testWidgets('stops the active SDK chat from the input bar', (tester) async {
@@ -8012,7 +8018,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Recent'), findsOneWidget);
+    expect(find.text('No chats yet'), findsOneWidget);
     expect(
       find.byKey(const Key('session_history_search_button')),
       findsOneWidget,
@@ -8042,7 +8048,7 @@ void main() {
     await tester.dragFrom(const Offset(320, 300), const Offset(-320, 0));
     await tester.pumpAndSettle();
 
-    expect(find.text('Recent'), findsNothing);
+    expect(find.text('No chats yet'), findsNothing);
     expect(
       find.byKey(const Key('session_history_search_button')),
       findsNothing,

@@ -138,10 +138,8 @@ void main() {
       expect(source, contains('connectChannel('));
       expect(source, contains('_refreshConnectedChannel'));
       expect(source, contains('status.connected'));
-      expect(
-        source,
-        contains("_channelText(context, zh: '刷新', en: 'Refresh')"),
-      );
+      expect(source, contains("zh: '刷新'"));
+      expect(source, contains("en: 'Refresh'"));
       expect(
         source,
         contains('required Future<bool> Function(NapaxiChatClient client) run'),

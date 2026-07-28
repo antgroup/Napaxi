@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
@@ -56,6 +55,9 @@ class AssistantMarkdown extends StatelessWidget {
         },
         orderedListBuilder: (context, no, child, config) {
           return _OrderedListItemView(number: no, child: child);
+        },
+        tableBuilder: (context, rows, textStyle, config) {
+          return _MarkdownTableView(rows: rows, textStyle: textStyle);
         },
       ),
     );
@@ -169,20 +171,83 @@ class _CodeBlockViewState extends State<_CodeBlockView> {
             ],
           ),
           const Divider(height: 1),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(16),
-            child: language == null
-                ? Text(widget.code, style: codeStyle)
-                : HighlightView(
-                    widget.code,
-                    language: language,
-                    theme: theme,
-                    padding: EdgeInsets.zero,
-                    textStyle: codeStyle,
-                  ),
+          AssistantMarkdownHorizontalScrollable(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.all(16),
+              child: language == null
+                  ? Text(widget.code, style: codeStyle)
+                  : HighlightView(
+                      widget.code,
+                      language: language,
+                      theme: theme,
+                      padding: EdgeInsets.zero,
+                      textStyle: codeStyle,
+                    ),
+            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class AssistantMarkdownHorizontalScrollable extends StatelessWidget {
+  const AssistantMarkdownHorizontalScrollable({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
+class _MarkdownTableView extends StatelessWidget {
+  const _MarkdownTableView({required this.rows, required this.textStyle});
+
+  final List<CustomTableRow> rows;
+  final TextStyle textStyle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return AssistantMarkdownHorizontalScrollable(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Table(
+          defaultColumnWidth: const IntrinsicColumnWidth(),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          border: TableBorder.all(color: colorScheme.outlineVariant),
+          children: rows
+              .map(
+                (row) => TableRow(
+                  decoration: row.isHeader
+                      ? BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                        )
+                      : null,
+                  children: row.fields
+                      .map(
+                        (field) => Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            field.data.trim(),
+                            textAlign: field.alignment,
+                            style: row.isHeader
+                                ? textStyle.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  )
+                                : textStyle,
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              )
+              .toList(growable: false),
+        ),
       ),
     );
   }
