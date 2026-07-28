@@ -233,4 +233,150 @@ mod tests {
         );
         assert!(!outcome.completed);
     }
+
+    #[test]
+    fn maps_codex_command_items_to_existing_tool_trace_events() {
+        let started = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "item/started",
+            "params": {"item": {
+                "id": "cmd1",
+                "type": "commandExecution",
+                "command": "pwd",
+                "cwd": "/workspace"
+            }}
+        }));
+        assert!(
+            matches!(started.event, Some(ChatEvent::ToolCall { call_id, name, arguments }) if call_id == "cmd1" && name == "shell" && arguments.contains("pwd"))
+        );
+
+        let completed = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "item/completed",
+            "params": {"item": {
+                "id": "cmd1",
+                "type": "commandExecution",
+                "aggregatedOutput": "/workspace\n",
+                "status": "completed",
+                "exitCode": 0
+            }}
+        }));
+        assert!(
+            matches!(completed.event, Some(ChatEvent::ToolResult { call_id, name, output, is_error }) if call_id == "cmd1" && name == "shell" && output == "/workspace\n" && !is_error)
+        );
+    }
+
+    #[test]
+    fn maps_codex_dynamic_mcp_and_web_items_to_tool_events() {
+        let dynamic_started = map_app_server_message(&json!({
+            "method": "item/started",
+            "params": {"item": {
+                "id": "dyn1",
+                "type": "dynamicToolCall",
+                "namespace": "browser",
+                "tool": "open",
+                "arguments": {"url": "https://example.com"}
+            }}
+        }));
+        assert!(
+            matches!(dynamic_started.event, Some(ChatEvent::ToolCall { call_id, name, arguments }) if call_id == "dyn1" && name == "browser.open" && arguments.contains("example.com"))
+        );
+
+        let mcp_completed = map_app_server_message(&json!({
+            "method": "item/completed",
+            "params": {"item": {
+                "id": "mcp1",
+                "type": "mcpToolCall",
+                "server": "filesystem",
+                "tool": "read_file",
+                "result": {"content": "hello"},
+                "status": "completed"
+            }}
+        }));
+        assert!(
+            matches!(mcp_completed.event, Some(ChatEvent::ToolResult { call_id, name, output, is_error }) if call_id == "mcp1" && name == "filesystem.read_file" && output.contains("hello") && !is_error)
+        );
+
+        let web_started = map_app_server_message(&json!({
+            "method": "item/started",
+            "params": {"item": {
+                "id": "web1",
+                "type": "webSearch",
+                "query": "napaxi codex"
+            }}
+        }));
+        assert!(
+            matches!(web_started.event, Some(ChatEvent::ToolCall { call_id, name, arguments }) if call_id == "web1" && name == "web_search" && arguments.contains("napaxi codex"))
+        );
+    }
+
+    #[test]
+    fn maps_codex_file_changes_to_apply_patch_for_existing_write_renderer() {
+        let started = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "item/started",
+            "params": {"item": {
+                "id": "file1",
+                "type": "fileChange",
+                "changes": [{
+                    "path": "lib/main.dart",
+                    "action": "update",
+                    "additions": 2,
+                    "deletions": 1
+                }]
+            }}
+        }));
+        assert!(
+            matches!(started.event, Some(ChatEvent::ToolCall { call_id, name, arguments }) if call_id == "file1" && name == "apply_patch" && arguments.contains("lib/main.dart"))
+        );
+        assert_eq!(started.extra_events.len(), 1);
+        let ChatEvent::ToolOutputChunk {
+            call_id,
+            stream,
+            content,
+        } = &started.extra_events[0]
+        else {
+            panic!("expected apply_patch progress chunk");
+        };
+        assert_eq!(call_id, "file1");
+        assert_eq!(stream, "patch");
+        let progress: serde_json::Value = serde_json::from_str(content).unwrap();
+        assert_eq!(progress["type"], "apply_patch_progress");
+        assert_eq!(progress["path"], "lib/main.dart");
+        assert_eq!(progress["added_lines"], 2);
+        assert_eq!(progress["removed_lines"], 1);
+
+        let completed = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "item/completed",
+            "params": {"item": {
+                "id": "file1",
+                "type": "fileChange",
+                "status": "completed",
+                "changes": [{
+                    "path": "lib/main.dart",
+                    "action": "update",
+                    "additions": 2,
+                    "deletions": 1
+                }]
+            }}
+        }));
+        let Some(ChatEvent::ToolResult {
+            call_id,
+            name,
+            output,
+            is_error,
+        }) = completed.event
+        else {
+            panic!("expected fileChange ToolResult");
+        };
+        assert_eq!(call_id, "file1");
+        assert_eq!(name, "apply_patch");
+        assert!(!is_error);
+        let output: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(output["status"], "ok");
+        assert_eq!(output["files"][0]["path"], "lib/main.dart");
+        assert_eq!(output["files"][0]["added_lines"], 2);
+        assert_eq!(output["files"][0]["removed_lines"], 1);
+    }
 }

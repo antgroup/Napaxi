@@ -4090,8 +4090,25 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   Future<bool> deleteSession(
     sdk.SessionKey session, {
     required String agentId,
-  }) {
-    return _requireEngine().deleteSession(session, agentId: agentId);
+  }) async {
+    final engine = _requireEngine();
+    if (agentId == 'engine.codex') {
+      final nativeThreadId =
+          _codexNativeThreadIds[session.threadId] ?? session.threadId;
+      final native = await engine.deleteCodexAgentEngineThread(
+        nativeThreadId,
+        session: session,
+        agentId: agentId,
+      );
+      if (!native.success) {
+        debugPrint(
+          '[$_codexHistoryLogTag] thread/delete failed native=$nativeThreadId session=${session.threadId} error=${native.errorCode}:${native.error}',
+        );
+        return false;
+      }
+      _codexNativeThreadIds.remove(session.threadId);
+    }
+    return engine.deleteSession(session, agentId: agentId);
   }
 
   @override

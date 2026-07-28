@@ -582,6 +582,10 @@ where
                                     emit(event.clone());
                                     events.push(event);
                                 }
+                                for event in mapped.extra_events {
+                                    emit(event.clone());
+                                    events.push(event);
+                                }
                                 if mapped.completed {
                                     saw_completion = true;
                                     if mapped.failed {

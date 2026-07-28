@@ -526,6 +526,21 @@ class NapaxiEngine {
     });
   }
 
+  /// Deletes a conversation persisted by Codex inside the Android sandbox.
+  Future<CodexAgentEngineHistoryResult> deleteCodexAgentEngineThread(
+    String threadId, {
+    required SessionKey session,
+    String agentId = 'engine.codex',
+  }) async {
+    return _queryCodexAgentEngineHistory({
+      'operation': 'history_delete_thread',
+      'thread_id': threadId,
+      'account_id': session.accountId,
+      'agent_id': agentId,
+      'session_key_json': session.toJson(),
+    });
+  }
+
   /// Binds an SDK session to a recovered Codex native thread for resume.
   Future<CodexAgentEngineHistoryResult> bindCodexAgentEngineThread({
     required SessionKey session,

@@ -255,10 +255,12 @@ listing fall back to core's local protocol validation.
 Codex conversation recovery uses the same core-owned app-server boundary as
 turn execution. On Android, `listCodexAgentEngineThreads` calls `thread/list`,
 `readCodexAgentEngineThread` resumes or reads the native thread and maps its
-items to SDK `ChatMessage` values, and `bindCodexAgentEngineThread` associates a
-recovered native thread with an SDK session before the next turn. This retains
-the working native history behavior without restoring the removed developer
-workbench configuration or Flutter-owned Codex PTY runtime. Other platforms
+items to SDK `ChatMessage` values, `bindCodexAgentEngineThread` associates a
+recovered native thread with an SDK session before the next turn, and
+`deleteCodexAgentEngineThread` forwards deletes to Codex `thread/delete` so
+removed conversations do not reappear on the next native history restore. This
+retains the working native history behavior without restoring the removed
+developer workbench configuration or Flutter-owned Codex PTY runtime. Other platforms
 return `unsupported_platform` through the same typed result. History-specific
 failures use `history_query_failed` and `missing_native_thread`.
 Flutter dispatches these potentially blocking app-server history operations on

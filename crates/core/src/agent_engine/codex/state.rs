@@ -58,6 +58,22 @@ pub(crate) fn active_sessions() -> &'static Mutex<HashMap<String, ActiveCodexSes
 }
 
 #[cfg(target_os = "android")]
+pub(crate) fn remove_active_session(key: &str) -> Option<ActiveCodexSession> {
+    let active = active_sessions().lock().ok()?.remove(key);
+    if active.is_some() {
+        remove_pending_human_requests_for_session(key);
+    }
+    active
+}
+
+#[cfg(target_os = "android")]
+fn remove_pending_human_requests_for_session(key: &str) {
+    if let Ok(mut guard) = pending_human_requests().lock() {
+        guard.retain(|_, pending| pending.session_key != key);
+    }
+}
+
+#[cfg(target_os = "android")]
 pub(crate) fn invalidate_sessions_for_config(files_dir: &str, fingerprint: Option<&str>) {
     clear_stale_native_thread_mappings(files_dir, fingerprint);
     let (stale, running_marked) = {

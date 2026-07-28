@@ -1,10 +1,11 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::types::ChatEvent;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct CodexTurnOutcome {
     pub(crate) event: Option<ChatEvent>,
+    pub(crate) extra_events: Vec<ChatEvent>,
     pub(crate) completed: bool,
     pub(crate) failed: bool,
     pub(crate) human_request: Option<CodexHumanRequest>,
@@ -48,18 +49,29 @@ pub(crate) fn map_app_server_message(message: &Value) -> CodexTurnOutcome {
             let content = first_string(event, &["delta", "content", "text"]);
             event_from_text(content, |content| ChatEvent::ReasoningDelta { content })
         }
+        Some("item/started") => item_started_outcome(event),
+        Some("item/completed") => item_completed_outcome(event),
         Some("item/commandExecution/outputDelta")
+        | Some("item/commandExecution/terminalInteraction")
         | Some("command_output_delta")
         | Some("tool_output_delta")
         | Some("exec_output_delta") => {
-            let content = first_string(event, &["delta", "content", "output"]).unwrap_or_default();
+            let content =
+                first_string(event, &["delta", "stdin", "content", "output"]).unwrap_or_default();
             CodexTurnOutcome {
                 event: Some(ChatEvent::ToolOutputChunk {
                     call_id: first_string(event, &["call_id", "callId", "itemId", "id"])
                         .unwrap_or_else(|| "codex-command".to_string()),
                     content,
-                    stream: first_string(event, &["stream"])
-                        .unwrap_or_else(|| "stdout".to_string()),
+                    stream: first_string(event, &["stream"]).unwrap_or_else(|| {
+                        if event_type.as_deref()
+                            == Some("item/commandExecution/terminalInteraction")
+                        {
+                            "stdin".to_string()
+                        } else {
+                            "stdout".to_string()
+                        }
+                    }),
                 }),
                 ..CodexTurnOutcome::default()
             }
@@ -85,6 +97,349 @@ pub(crate) fn map_app_server_message(message: &Value) -> CodexTurnOutcome {
         | Some("input_request") => user_input_outcome(message, event),
         _ => CodexTurnOutcome::default(),
     }
+}
+
+fn item_started_outcome(event: &Value) -> CodexTurnOutcome {
+    let item = thread_item(event);
+    let Some((call_id, name, arguments)) = tool_call_start(&item) else {
+        return CodexTurnOutcome::default();
+    };
+    let extra_events = if string_field(&item, "type") == "fileChange" {
+        file_change_progress_events(&call_id, &item)
+    } else {
+        Vec::new()
+    };
+    CodexTurnOutcome {
+        event: Some(ChatEvent::ToolCall {
+            call_id,
+            name,
+            arguments,
+        }),
+        extra_events,
+        ..CodexTurnOutcome::default()
+    }
+}
+
+fn item_completed_outcome(event: &Value) -> CodexTurnOutcome {
+    let item = thread_item(event);
+    let kind = string_field(&item, "type");
+    match kind.as_str() {
+        // Codex streams assistant/reasoning text through delta notifications.
+        // The completed item repeats the full text, so do not map it here or
+        // the existing frontend renderer would display duplicate content.
+        "agentMessage" | "reasoning" => CodexTurnOutcome::default(),
+        "imageGeneration" => image_generation_outcome(&item),
+        "imageView" => image_view_outcome(&item),
+        _ => {
+            let Some((call_id, name, output, is_error)) = tool_call_result(&item) else {
+                return CodexTurnOutcome::default();
+            };
+            CodexTurnOutcome {
+                event: Some(ChatEvent::ToolResult {
+                    call_id,
+                    name,
+                    output,
+                    is_error,
+                }),
+                ..CodexTurnOutcome::default()
+            }
+        }
+    }
+}
+
+fn thread_item(event: &Value) -> Value {
+    event.get("item").cloned().unwrap_or_else(|| event.clone())
+}
+
+fn tool_call_start(item: &Value) -> Option<(String, String, String)> {
+    let kind = string_field(item, "type");
+    let call_id = item_id(item);
+    if call_id.is_empty() {
+        return None;
+    }
+    let (name, arguments) = match kind.as_str() {
+        "commandExecution" => ("shell".to_string(), command_execution_arguments(item)),
+        "dynamicToolCall" => (dynamic_tool_name(item), dynamic_tool_arguments(item)),
+        "mcpToolCall" => (mcp_tool_name(item)?, json_arguments(item.get("arguments"))),
+        "fileChange" => ("apply_patch".to_string(), file_change_arguments(item)),
+        "webSearch" => (
+            "web_search".to_string(),
+            json!({"query": string_field(item, "query")}).to_string(),
+        ),
+        _ => return None,
+    };
+    if name.trim().is_empty() {
+        None
+    } else {
+        Some((call_id, name, arguments))
+    }
+}
+
+fn tool_call_result(item: &Value) -> Option<(String, String, String, bool)> {
+    let kind = string_field(item, "type");
+    let call_id = item_id(item);
+    if call_id.is_empty() {
+        return None;
+    }
+    match kind.as_str() {
+        "commandExecution" => Some((
+            call_id,
+            "shell".to_string(),
+            command_execution_output(item),
+            status_failed(item)
+                || item
+                    .get("exitCode")
+                    .and_then(Value::as_i64)
+                    .is_some_and(|code| code != 0),
+        )),
+        "dynamicToolCall" => {
+            let name = dynamic_tool_name(item);
+            if name.trim().is_empty() {
+                return None;
+            }
+            Some((
+                call_id,
+                name,
+                dynamic_tool_output(item),
+                status_failed(item) || item.get("success").and_then(Value::as_bool) == Some(false),
+            ))
+        }
+        "mcpToolCall" => Some((
+            call_id,
+            mcp_tool_name(item)?,
+            item.get("result")
+                .or_else(|| item.get("error"))
+                .map(value_text)
+                .unwrap_or_default(),
+            status_failed(item) || item.get("error").is_some_and(|value| !value.is_null()),
+        )),
+        "fileChange" => Some((
+            call_id,
+            "apply_patch".to_string(),
+            file_change_output(item),
+            status_failed(item),
+        )),
+        "webSearch" => Some((call_id, "web_search".to_string(), String::new(), false)),
+        _ => None,
+    }
+}
+
+fn command_execution_arguments(item: &Value) -> String {
+    json!({
+        "cmd": string_field(item, "command"),
+        "cwd": string_field(item, "cwd"),
+    })
+    .to_string()
+}
+
+fn command_execution_output(item: &Value) -> String {
+    first_string(item, &["aggregatedOutput", "output", "stdout", "stderr"])
+        .or_else(|| item.get("contentItems").map(value_text))
+        .unwrap_or_default()
+}
+
+fn item_id(item: &Value) -> String {
+    first_string(item, &["id", "call_id", "callId", "itemId"]).unwrap_or_default()
+}
+
+fn dynamic_tool_name(item: &Value) -> String {
+    let namespace = string_field(item, "namespace");
+    let tool = string_field(item, "tool");
+    if namespace.is_empty() {
+        tool
+    } else if tool.is_empty() {
+        namespace
+    } else {
+        format!("{namespace}.{tool}")
+    }
+}
+
+fn dynamic_tool_arguments(item: &Value) -> String {
+    json_arguments(item.get("arguments"))
+}
+
+fn dynamic_tool_output(item: &Value) -> String {
+    item.get("contentItems")
+        .or_else(|| item.get("result"))
+        .or_else(|| item.get("output"))
+        .map(value_text)
+        .unwrap_or_default()
+}
+
+fn mcp_tool_name(item: &Value) -> Option<String> {
+    let server = string_field(item, "server");
+    let tool = string_field(item, "tool");
+    if server.is_empty() || tool.is_empty() {
+        None
+    } else {
+        Some(format!("{server}.{tool}"))
+    }
+}
+
+fn file_change_arguments(item: &Value) -> String {
+    let patch = file_change_patch(item);
+    if patch.is_empty() {
+        json!({"changes": item.get("changes").cloned().unwrap_or(Value::Null)}).to_string()
+    } else {
+        json!({"patch": patch}).to_string()
+    }
+}
+
+fn file_change_output(item: &Value) -> String {
+    json!({
+        "status": if status_failed(item) { "error" } else { "ok" },
+        "files": file_change_files(item),
+    })
+    .to_string()
+}
+
+fn file_change_progress_events(call_id: &str, item: &Value) -> Vec<ChatEvent> {
+    file_change_files(item)
+        .into_iter()
+        .filter(|file| {
+            file.get("path")
+                .and_then(Value::as_str)
+                .is_some_and(|path| !path.trim().is_empty())
+        })
+        .map(|file| ChatEvent::ToolOutputChunk {
+            call_id: call_id.to_string(),
+            stream: "patch".to_string(),
+            content: json!({
+                "type": "apply_patch_progress",
+                "path": file.get("path").and_then(Value::as_str).unwrap_or_default(),
+                "action": file.get("action").and_then(Value::as_str).unwrap_or("updated"),
+                "added_lines": file.get("added_lines").and_then(Value::as_i64).unwrap_or_default(),
+                "removed_lines": file.get("removed_lines").and_then(Value::as_i64).unwrap_or_default(),
+            })
+            .to_string(),
+        })
+        .collect()
+}
+
+fn file_change_patch(item: &Value) -> String {
+    if let Some(patch) = first_string(item, &["patch", "diff"]) {
+        return patch;
+    }
+    file_change_files(item)
+        .into_iter()
+        .map(|file| {
+            let action = file
+                .get("action")
+                .and_then(Value::as_str)
+                .unwrap_or("updated");
+            let path = file.get("path").and_then(Value::as_str).unwrap_or_default();
+            let header = match action {
+                "added" => "Add",
+                "deleted" => "Delete",
+                _ => "Update",
+            };
+            format!("*** {header} File: {path}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn file_change_files(item: &Value) -> Vec<Value> {
+    let Some(changes) = item.get("changes").and_then(Value::as_array) else {
+        let path = first_string(item, &["path", "file", "filePath"]).unwrap_or_default();
+        return if path.is_empty() {
+            Vec::new()
+        } else {
+            vec![json!({"action": "updated", "path": path, "added_lines": 0, "removed_lines": 0})]
+        };
+    };
+    changes
+        .iter()
+        .filter_map(|change| {
+            let path = first_string(change, &["path", "file", "filePath", "oldPath", "newPath"])
+                .or_else(|| first_string(change, &["oldPath", "newPath"]))?;
+            let action = first_string(change, &["action", "type", "operation"])
+                .unwrap_or_else(|| "updated".to_string());
+            Some(json!({
+                "action": normalize_file_action(&action),
+                "path": path,
+                "added_lines": int_field(change, &["added_lines", "addedLines", "additions", "added", "insertions"]),
+                "removed_lines": int_field(change, &["removed_lines", "removedLines", "deletions", "removed", "deletes"]),
+            }))
+        })
+        .collect()
+}
+
+fn normalize_file_action(action: &str) -> &str {
+    match action.trim().to_ascii_lowercase().as_str() {
+        "add" | "added" | "create" | "created" => "added",
+        "delete" | "deleted" | "remove" | "removed" => "deleted",
+        _ => "updated",
+    }
+}
+
+fn int_field(value: &Value, keys: &[&str]) -> i64 {
+    for key in keys {
+        if let Some(number) = value.get(*key).and_then(Value::as_i64) {
+            return number;
+        }
+        if let Some(text) = value.get(*key).and_then(Value::as_str) {
+            if let Ok(number) = text.parse::<i64>() {
+                return number;
+            }
+        }
+    }
+    0
+}
+
+fn status_failed(item: &Value) -> bool {
+    matches!(
+        string_field(item, "status").to_ascii_lowercase().as_str(),
+        "failed" | "rejected" | "error" | "cancelled" | "canceled"
+    )
+}
+
+fn image_generation_outcome(item: &Value) -> CodexTurnOutcome {
+    if string_field(item, "status").to_ascii_lowercase() != "completed" {
+        return CodexTurnOutcome::default();
+    }
+    let path = first_string(item, &["savedPath", "saved_path", "path"]);
+    let result = string_field(item, "result");
+    if result.starts_with("data:image/") {
+        return CodexTurnOutcome {
+            event: Some(ChatEvent::ImageGenerated {
+                data_url: result,
+                path,
+            }),
+            ..CodexTurnOutcome::default()
+        };
+    }
+    event_from_text(
+        path.map(|path| format!("\n![Image]({path})\n")),
+        |content| ChatEvent::ResponseDelta { content },
+    )
+}
+
+fn image_view_outcome(item: &Value) -> CodexTurnOutcome {
+    event_from_text(first_string(item, &["path"]), |path| {
+        ChatEvent::ResponseDelta {
+            content: format!("\n![Image]({path})\n"),
+        }
+    })
+}
+
+fn string_field(value: &Value, key: &str) -> String {
+    match value.get(key) {
+        Some(Value::String(value)) => value.clone(),
+        Some(Value::Null) | None => String::new(),
+        Some(value) => value_text(value),
+    }
+}
+
+fn value_text(value: &Value) -> String {
+    value
+        .as_str()
+        .map(str::to_string)
+        .unwrap_or_else(|| value.to_string())
+}
+
+fn json_arguments(value: Option<&Value>) -> String {
+    value.cloned().unwrap_or_else(|| json!({})).to_string()
 }
 
 fn completed_outcome(event: &Value) -> CodexTurnOutcome {

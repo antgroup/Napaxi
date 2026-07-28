@@ -131,6 +131,10 @@ pub(crate) fn thread_read_request(client: &mut JsonRpcClient, thread_id: &str) -
     )
 }
 
+pub(crate) fn thread_delete_request(client: &mut JsonRpcClient, thread_id: &str) -> (u64, String) {
+    client.request("thread/delete", json!({"threadId": thread_id}))
+}
+
 pub(crate) fn turn_start_request(
     client: &mut JsonRpcClient,
     request: &AgentEngineTurnRequest,
@@ -304,11 +308,15 @@ mod tests {
         let mut client = JsonRpcClient::new();
         let (_, list) = thread_list_request(&mut client, Some("/workspace"));
         let (_, read) = thread_read_request(&mut client, "thread-1");
+        let (_, delete) = thread_delete_request(&mut client, "thread-1");
         let list: Value = serde_json::from_str(&list).unwrap();
         let read: Value = serde_json::from_str(&read).unwrap();
+        let delete: Value = serde_json::from_str(&delete).unwrap();
         assert_eq!(list["method"], "thread/list");
         assert_eq!(list["params"]["cwd"], "/workspace");
         assert_eq!(read["method"], "thread/read");
         assert_eq!(read["params"]["includeTurns"], true);
+        assert_eq!(delete["method"], "thread/delete");
+        assert_eq!(delete["params"]["threadId"], "thread-1");
     }
 }
