@@ -8565,10 +8565,6 @@ $candidate
           settingsSection: _SettingsSection.configuration,
         );
         return;
-      case 'model_editor':
-      case 'active_model':
-        unawaited(_openActiveContextModelConfig());
-        return;
     }
   }
 
@@ -8639,13 +8635,6 @@ $candidate
                 _SessionHistoryView.settings,
                 settingsSection: _SettingsSection.configuration,
               ),
-            ),
-            _DebugJumpDestination(
-              section: '模型与 Agent',
-              icon: Icons.edit_note_rounded,
-              title: '当前模型编辑器',
-              subtitle: '打开当前上下文模型的编辑页；未配置时回到模型配置',
-              onOpen: () => unawaited(_openActiveContextModelConfig()),
             ),
             _DebugJumpDestination(
               section: '隐藏设置页',
