@@ -47,12 +47,41 @@ Future<void> _pumpUntilBackgroundStopped(
   }
 }
 
+Future<sdk.NapaxiConfigStore> _storeWithMainModel({
+  String model = 'gpt-main',
+}) async {
+  final store = sdk.NapaxiConfigStore.memory();
+  await store.saveProfile(
+    sdk.NapaxiConfigProfile(
+      id: 'main',
+      name: 'Main',
+      provider: 'openai',
+      model: model,
+      metadata: {
+        'model_entries': [
+          {
+            'id': model,
+            'display_name': '',
+            'capabilities': ['chat'],
+          },
+        ],
+      },
+    ),
+    apiKey: 'sk-main',
+  );
+  await store.saveSelection(
+    const sdk.NapaxiConfigSelection(selectedProfileId: 'main'),
+  );
+  return store;
+}
+
 Widget _testApp({
   NapaxiChatClientFactory? chatClientFactory,
   sdk.NapaxiConfigStore? configStore,
   DemoPreferencesStore? preferencesStore,
   DemoUpdateService? updateService,
   DemoFeedbackService? feedbackService,
+  CodexModelCatalogFetcher? codexModelCatalogFetcher,
   AppLanguage language = AppLanguage.english,
   TerminalBackend Function()? terminalBackendFactory,
 }) {
@@ -67,6 +96,7 @@ Widget _testApp({
     preferencesStore: preferencesStore ?? MemoryDemoPreferencesStore(),
     updateService: updateService,
     feedbackService: feedbackService,
+    codexModelCatalogFetcher: codexModelCatalogFetcher,
     terminalBackendFactory: terminalBackendFactory,
   );
 }
@@ -347,6 +377,185 @@ void main() {
     );
   });
 
+  for (final testCase in <
+    ({
+      String name,
+      int? statusCode,
+      List<String> models,
+      bool shouldSwitch,
+    })
+  >[
+    (
+      name: 'accepts a listed Codex main model',
+      statusCode: null,
+      models: ['gpt-main'],
+      shouldSwitch: true,
+    ),
+    (
+      name: 'blocks a Codex main model missing from the catalog',
+      statusCode: null,
+      models: ['gpt-other'],
+      shouldSwitch: false,
+    ),
+    (
+      name: 'blocks Codex when model catalog authentication fails',
+      statusCode: 401,
+      models: const [],
+      shouldSwitch: false,
+    ),
+    (
+      name: 'blocks Codex when the model catalog server fails',
+      statusCode: 503,
+      models: const [],
+      shouldSwitch: false,
+    ),
+    (
+      name: 'allows Codex when model listing is unsupported',
+      statusCode: 404,
+      models: const [],
+      shouldSwitch: true,
+    ),
+  ]) {
+    testWidgets(testCase.name, (tester) async {
+      SharedPreferences.setMockInitialValues({
+        'napaxi_demo.active_scenario.v1': 'napaxi.scenario.general',
+      });
+      final store = await _storeWithMainModel();
+      final fakeClient = FakeNapaxiChatClient();
+      var catalogCalls = 0;
+
+      await tester.pumpWidget(
+        _testApp(
+          configStore: store,
+          chatClientFactory: () async => fakeClient,
+          codexModelCatalogFetcher:
+              ({
+                required provider,
+                required baseUrl,
+                required apiKey,
+              }) async {
+                catalogCalls += 1;
+                final statusCode = testCase.statusCode;
+                if (statusCode != null) {
+                  throw CodexModelCatalogHttpException(
+                    statusCode,
+                    'catalog failure',
+                  );
+                }
+                return testCase.models;
+              },
+        ),
+      );
+      await pumpUntilFound(
+        tester,
+        find.byKey(const Key('engine_selector_button')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('engine_selector_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Codex(beta)'));
+      await tester.pumpAndSettle();
+
+      expect(catalogCalls, 1);
+      final selection = fakeClient.appliedCapabilitySelection;
+      if (testCase.shouldSwitch) {
+        expect(selection?.config['agent_id'], 'engine.codex');
+        expect(find.text('Codex(beta)'), findsOneWidget);
+      } else {
+        expect(selection?.config['agent_id'], isNot('engine.codex'));
+        expect(find.text('Napaxi'), findsWidgets);
+      }
+    });
+  }
+
+  testWidgets('blocks a Codex send before appending the user message', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'scenario.developer.active_engine.v1': 'codex',
+    });
+    final store = await _storeWithMainModel();
+    final fakeClient = FakeNapaxiChatClient();
+
+    await tester.pumpWidget(
+      _testApp(
+        configStore: store,
+        chatClientFactory: () async => fakeClient,
+        codexModelCatalogFetcher:
+            ({
+              required provider,
+              required baseUrl,
+              required apiKey,
+            }) async => throw const CodexModelCatalogHttpException(
+              401,
+              'unauthorized',
+            ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('chat_input_field')),
+      'must not append',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('send_message_button')));
+    await tester.pumpAndSettle();
+
+    expect(fakeClient.sentThreadIds, isEmpty);
+    final input = tester.widget<TextField>(
+      find.byKey(const Key('chat_input_field')),
+    );
+    expect(input.controller?.text, 'must not append');
+    expect(find.textContaining('unauthorized'), findsOneWidget);
+  });
+
+  testWidgets('uses one main model for Codex sync and SDK turns', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'scenario.developer.active_engine.v1': 'codex',
+    });
+    final store = await _storeWithMainModel();
+    final fakeClient = FakeNapaxiChatClient(
+      events: const [sdk.ResponseEvent(content: 'done')],
+    );
+    var catalogCalls = 0;
+
+    await tester.pumpWidget(
+      _testApp(
+        configStore: store,
+        chatClientFactory: () async => fakeClient,
+        codexModelCatalogFetcher:
+            ({
+              required provider,
+              required baseUrl,
+              required apiKey,
+            }) async {
+              catalogCalls += 1;
+              return ['gpt-main'];
+            },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final message in ['first', 'second']) {
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        message,
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pumpAndSettle();
+    }
+
+    expect(catalogCalls, 1, reason: 'successful checks are fingerprint-cached');
+    expect(fakeClient.codexSyncedProfiles.last.model, 'gpt-main');
+    expect(fakeClient.configuredProfile?.model, 'gpt-main');
+    expect(fakeClient.sentThreadIds, hasLength(2));
+  });
+
   testWidgets('renders source-aware context status details', (tester) async {
     final store = sdk.NapaxiConfigStore.memory();
     await store.saveProfile(
@@ -506,8 +715,7 @@ void main() {
     );
     expect(find.text('编辑模型'), findsNothing);
 
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    await closeSettingsSheet(tester);
     await tester.tap(find.byKey(const Key('context_status_button')));
     await tester.pumpAndSettle();
 
@@ -690,6 +898,53 @@ void main() {
       ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('syncs the selected main model into the Codex configuration', (
+    tester,
+  ) async {
+    final fakeClient = FakeNapaxiChatClient();
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+
+    await configureSingleModel(
+      tester,
+      name: 'Codex main',
+      provider: 'openai',
+      model: 'gpt-main',
+      apiKey: 'sk-main',
+    );
+    await tester.pumpAndSettle();
+
+    expect(fakeClient.codexSyncedProfiles, isNotEmpty);
+    expect(fakeClient.codexSyncedProfiles.last.model, 'gpt-main');
+    expect(fakeClient.codexSyncedProfiles.last.apiKey, 'sk-main');
+  });
+
+  testWidgets('keeps the main model when Codex configuration sync fails', (
+    tester,
+  ) async {
+    final store = sdk.NapaxiConfigStore.memory();
+    final fakeClient = FakeNapaxiChatClient(
+      codexSyncResult: const sdk.CodexAgentEngineConfigResult(
+        success: false,
+        providerAvailable: true,
+        modelUsable: false,
+        errorCode: 'config_write_failed',
+        error: 'disk full',
+      ),
+    );
+    await tester.pumpWidget(
+      _testApp(configStore: store, chatClientFactory: () async => fakeClient),
+    );
+
+    await configureSingleModel(tester, model: 'persisted-main');
+    await tester.pumpAndSettle();
+
+    final profiles = await store.loadProfiles();
+    expect(profiles.single.model, 'persisted-main');
+    expect(await store.readApiKey(profiles.single.id), 'sk-napaxi');
   });
 
   testWidgets('scrolls latest messages into view when input gains focus', (

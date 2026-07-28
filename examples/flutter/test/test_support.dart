@@ -72,6 +72,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     this.catalogPackages = const [],
     this.supportsBackgroundExecution = true,
     this.backgroundPermissionGranted = true,
+    this.codexSyncResult,
   }) : pendingEvolution = List<Map<String, dynamic>>.from(pendingEvolution);
 
   final List<sdk.ChatEvent>? events;
@@ -111,6 +112,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   @override
   final bool supportsBackgroundExecution;
   bool backgroundPermissionGranted;
+  final sdk.CodexAgentEngineConfigResult? codexSyncResult;
   LlmModelProfile? configuredProfile;
   String configuredResponseLanguage = 'en';
   sdk.NapaxiCapabilitySelection? configuredCapabilitySelection;
@@ -201,6 +203,8 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
       StreamController<sdk.A2ALocalTransportEvent>.broadcast();
   final Map<String, DemoChannelCredentials> channelCredentials = {};
   var managementConfigureCount = 0;
+  final List<LlmModelProfile> codexSyncedProfiles = [];
+  var codexClearCount = 0;
 
   @override
   sdk.NapaxiBrowserController? get browserController => null;
@@ -225,13 +229,25 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   }
 
   @override
-  Future<sdk.CodexAgentEngineConfigResult> configureCodexAgentEngine({
-    String configToml = '',
-    String authJson = '',
-  }) async {
+  Future<sdk.CodexAgentEngineConfigResult> syncCodexAgentEngineModel(
+    LlmModelProfile profile,
+  ) async {
+    codexSyncedProfiles.add(profile);
+    return codexSyncResult ??
+        const sdk.CodexAgentEngineConfigResult(
+          success: true,
+          providerAvailable: true,
+          modelUsable: true,
+        );
+  }
+
+  @override
+  Future<sdk.CodexAgentEngineConfigResult>
+  clearCodexAgentEngineModelConfig() async {
+    codexClearCount += 1;
     return const sdk.CodexAgentEngineConfigResult(
       success: true,
-      providerAvailable: false,
+      providerAvailable: true,
     );
   }
 
@@ -2070,25 +2086,30 @@ Future<void> configureSingleModel(
 /// management row to Settings.
 Future<void> openModelConfiguration(WidgetTester tester) async {
   await tester.enterText(find.byKey(const Key('chat_input_field')), '/model');
+  await tester.pump();
   await tester.tap(find.byKey(const Key('send_message_button')));
   await tester.pumpAndSettle();
+  await pumpUntilFound(tester, find.byKey(const Key('add_model_button')));
 }
 
-/// Closes the side-menu Settings page and the inline side sheet, returning to
-/// chat.
+/// Closes the modal Settings sheet and returns to chat.
 Future<void> closeSettingsSheet(WidgetTester tester) async {
-  // Settings now nests: an editor/basic page sits under the Settings list page,
-  // which itself sits under the side-menu root. Pop pages until the side-menu
-  // root (identified by `session_title_header`) is reached.
-  final header = find.byKey(const ValueKey('session_title_header'));
-  for (var i = 0; i < 4 && header.evaluate().isEmpty; i++) {
-    await tester.pageBack();
+  final sheet = find.byKey(const Key('settings_bottom_sheet'));
+  if (sheet.evaluate().isNotEmpty) {
+    final closeButton = find
+        .byKey(const Key('settings_bottom_sheet_close_button'))
+        .hitTestable();
+    for (var i = 0; i < 4 && closeButton.evaluate().isEmpty; i++) {
+      final backButton = find.byType(BackButton).hitTestable();
+      expect(backButton, findsWidgets);
+      await tester.tap(backButton.first);
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(closeButton);
     await tester.pumpAndSettle();
   }
-  // The side-menu root is a full-width inline sheet with no back affordance; the
-  // app dismisses it with a left swipe, so fling the header past the threshold.
-  await tester.fling(header, const Offset(-400, 0), 1200);
-  await tester.pumpAndSettle();
+  expect(sheet, findsNothing);
+  await pumpUntilFound(tester, find.byKey(const Key('chat_input_field')));
 }
 
 /// Opens the About surface.

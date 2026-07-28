@@ -989,18 +989,38 @@ public enum NapaxiChannelContentFormat {
 public struct NapaxiCodexAgentEngineConfigResult: Codable, Equatable, Sendable {
     public var success: Bool
     public var providerAvailable: Bool
+    public var modelUsable: Bool
+    public var errorCode: String?
     public var error: String?
+    public var model: String
+    public var configChanged: Bool
 
-    public init(success: Bool, providerAvailable: Bool, error: String? = nil) {
+    public init(
+        success: Bool,
+        providerAvailable: Bool,
+        modelUsable: Bool = false,
+        errorCode: String? = nil,
+        error: String? = nil,
+        model: String = "",
+        configChanged: Bool = false
+    ) {
         self.success = success
         self.providerAvailable = providerAvailable
+        self.modelUsable = modelUsable
+        self.errorCode = errorCode
         self.error = error
+        self.model = model
+        self.configChanged = configChanged
     }
 
     public init(json: [String: NapaxiJSONValue]) {
         self.success = json["success"]?.boolValue ?? false
         self.providerAvailable = json["providerAvailable"]?.boolValue ?? json["provider_available"]?.boolValue ?? false
+        self.modelUsable = json["modelUsable"]?.boolValue ?? json["model_usable"]?.boolValue ?? false
+        self.errorCode = json["errorCode"]?.stringValue ?? json["error_code"]?.stringValue
         self.error = json["error"]?.stringValue
+        self.model = json["model"]?.stringValue ?? ""
+        self.configChanged = json["configChanged"]?.boolValue ?? json["config_changed"]?.boolValue ?? false
     }
 }
 

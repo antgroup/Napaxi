@@ -44,10 +44,7 @@ void main() {
     final request = AgentEngineRunEventRequest(
       runId: 'run-1',
       sessionKeyJson: '{"thread_id":"t1"}',
-      event: {
-        'type': 'completed',
-        'tool_call_count': 1,
-      },
+      event: {'type': 'completed', 'tool_call_count': 1},
     );
 
     final encoded = jsonDecode(request.toJsonString()) as Map;
@@ -113,7 +110,10 @@ void main() {
   test(
     'agent definition engine fields preserve old default and new config',
     () {
-      final legacy = AgentDefinition.fromMap({'id': 'napaxi', 'name': 'Napaxi'});
+      final legacy = AgentDefinition.fromMap({
+        'id': 'napaxi',
+        'name': 'Napaxi',
+      });
       expect(legacy.engineId, napaxiCoreAgentEngineId);
       expect(legacy.engineProfileId, isEmpty);
       expect(legacy.engineConfig, isEmpty);
@@ -136,4 +136,33 @@ void main() {
       expect(decoded.engineConfig['binary'], 'custom-agent');
     },
   );
+
+  test('Codex model sync result decodes validation and write status', () {
+    final result = CodexAgentEngineConfigResult.fromMap({
+      'success': true,
+      'providerAvailable': true,
+      'modelUsable': true,
+      'errorCode': null,
+      'model': 'gpt-5',
+      'configChanged': true,
+    });
+
+    expect(result.success, isTrue);
+    expect(result.providerAvailable, isTrue);
+    expect(result.modelUsable, isTrue);
+    expect(result.errorCode, isNull);
+    expect(result.model, 'gpt-5');
+    expect(result.configChanged, isTrue);
+
+    final unsupported = CodexAgentEngineConfigResult.fromMap({
+      'success': false,
+      'providerAvailable': false,
+      'modelUsable': false,
+      'errorCode': 'unsupported_platform',
+      'error': 'unsupported',
+    });
+    expect(unsupported.errorCode, 'unsupported_platform');
+    expect(unsupported.model, isEmpty);
+    expect(unsupported.configChanged, isFalse);
+  });
 }

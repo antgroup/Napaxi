@@ -4,6 +4,8 @@
 //! the Napaxi Linux sandbox PTY. Other platforms keep the same API surface and
 //! return an explicit unsupported error.
 
+#[cfg(any(target_os = "android", test))]
+mod config;
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod events;
 mod process;

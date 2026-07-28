@@ -401,7 +401,11 @@ class CodexAgentEngineConfigResult {
   const CodexAgentEngineConfigResult({
     required this.success,
     required this.providerAvailable,
+    this.modelUsable = false,
+    this.errorCode,
     this.error,
+    this.model = '',
+    this.configChanged = false,
   });
 
   /// Whether the configuration request succeeded.
@@ -410,15 +414,31 @@ class CodexAgentEngineConfigResult {
   /// Whether this platform has a Codex provider/runtime implementation.
   final bool providerAvailable;
 
+  /// Whether the selected main model is compatible with the Codex runtime.
+  final bool modelUsable;
+
+  /// Stable machine-readable failure code.
+  final String? errorCode;
+
   /// Error message when [success] is false.
   final String? error;
+
+  /// Main model ID validated by Core.
+  final String model;
+
+  /// Whether the sandbox configuration changed during this request.
+  final bool configChanged;
 
   /// Decodes a configuration result from the bridge JSON map.
   factory CodexAgentEngineConfigResult.fromMap(Map<String, dynamic> map) {
     return CodexAgentEngineConfigResult(
       success: map['success'] == true,
       providerAvailable: map['providerAvailable'] == true,
+      modelUsable: map['modelUsable'] == true,
+      errorCode: map['errorCode'] as String?,
       error: map['error'] as String?,
+      model: map['model'] as String? ?? '',
+      configChanged: map['configChanged'] == true,
     );
   }
 }

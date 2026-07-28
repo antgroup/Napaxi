@@ -20,6 +20,17 @@ namespaces:
       ensure_agent_ready:
         params: [agent_id, account_id]
         return: bool
+  agent_engine:
+    status: experimental
+    adapters: [flutter, ios, android]
+    contract: typed Codex model synchronization with explicit unsupported states
+    methods:
+      sync_codex_model:
+        params: [llm_config]
+        return: CodexAgentEngineConfigResult
+      clear_codex_model:
+        params: []
+        return: CodexAgentEngineConfigResult
   chat:
     status: stable
     adapters: [flutter, ios, android]

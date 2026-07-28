@@ -2243,7 +2243,11 @@ public fun agentEngineRunEvent(
 public class CodexAgentEngineConfigResult(rawJson: String = "{}") : RawJsonModel(rawJson) {
     public val success: Boolean get() = obj.optBoolean("success", false)
     public val providerAvailable: Boolean get() = obj.optBoolean("providerAvailable", false)
+    public val modelUsable: Boolean get() = obj.optBoolean("modelUsable", false)
+    public val errorCode: String? get() = obj.optString("errorCode").takeIf { it.isNotBlank() }
     public val error: String? get() = obj.optString("error").takeIf { it.isNotBlank() }
+    public val model: String get() = obj.optString("model")
+    public val configChanged: Boolean get() = obj.optBoolean("configChanged", false)
 
     public fun toJsonObject(): JSONObject = jsonObject()
     public fun toJson(): String = toJsonObject().toString()

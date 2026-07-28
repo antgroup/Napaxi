@@ -7,6 +7,10 @@ use serde_json::json;
 use crate::agent_engine::AgentEngineTurnRequest;
 use crate::types::ChatEvent;
 
+#[cfg(test)]
+use super::config;
+#[cfg(target_os = "android")]
+use super::config::{self, CodexConfigError, PreparedCodexConfig};
 #[cfg(target_os = "android")]
 use super::events::map_app_server_message;
 #[cfg(target_os = "android")]
@@ -16,8 +20,8 @@ use super::protocol::{
 };
 #[cfg(target_os = "android")]
 use super::state::{
-    PendingCodexHumanRequest, active_sessions, load_state, native_library_dir_for,
-    pending_human_requests, save_state, session_key,
+    PendingCodexHumanRequest, active_sessions, clear_state, invalidate_sessions_for_config,
+    load_state, native_library_dir_for, pending_human_requests, save_state, session_key,
 };
 
 #[cfg(not(target_os = "android"))]
@@ -38,13 +42,25 @@ struct ConfigureCodexRequest {
     config_toml: String,
     #[serde(default)]
     auth_json: String,
+    #[serde(default)]
+    llm_config_json: String,
+    #[serde(default)]
+    clear: bool,
 }
 
 pub(crate) fn configure_codex_agent_engine_json(_handle: i64, request_json: &str) -> String {
     let mut request = match serde_json::from_str::<ConfigureCodexRequest>(request_json) {
         Ok(request) => request,
         Err(error) => {
-            return json!({"success":false,"error":format!("Invalid Codex config request JSON: {error}")}).to_string();
+            return config_result_json(
+                false,
+                false,
+                false,
+                Some("model_check_failed"),
+                Some(format!("Invalid Codex config request JSON: {error}")),
+                "",
+                false,
+            );
         }
     };
     if let Some(files_dir) = crate::runtime::files_dir_from_handle(_handle) {
@@ -54,7 +70,11 @@ pub(crate) fn configure_codex_agent_engine_json(_handle: i64, request_json: &str
         return json!({
             "success": false,
             "providerAvailable": false,
+            "modelUsable": false,
+            "errorCode": "unsupported_platform",
             "error": "invalid engine handle or missing files_dir",
+            "model": model_from_config_json(&request.llm_config_json),
+            "configChanged": false,
         })
         .to_string();
     }
@@ -62,38 +82,151 @@ pub(crate) fn configure_codex_agent_engine_json(_handle: i64, request_json: &str
 }
 
 #[cfg(not(target_os = "android"))]
-fn configure_codex_agent_engine(_request: ConfigureCodexRequest) -> String {
-    json!({"success":false,"providerAvailable":false,"error":CODEX_UNSUPPORTED}).to_string()
-}
-
-#[cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
-fn codex_config_dir(files_dir: &str) -> std::path::PathBuf {
-    std::path::Path::new(files_dir)
-        .join("linux-env")
-        .join("rootfs")
-        .join("root")
-        .join(".codex")
+fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
+    let model = model_from_config_json(&request.llm_config_json);
+    json!({
+        "success": false,
+        "providerAvailable": false,
+        "modelUsable": false,
+        "errorCode": "unsupported_platform",
+        "error": CODEX_UNSUPPORTED,
+        "model": model,
+        "configChanged": false,
+    })
+    .to_string()
 }
 
 #[cfg(target_os = "android")]
 fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
-    let codex_dir = codex_config_dir(&request.files_dir);
+    if request.clear {
+        return match config::clear(&request.files_dir) {
+            Ok(result) => {
+                invalidate_sessions_for_config(&request.files_dir, None);
+                config_result_json(true, true, false, None, None, "", result.changed)
+            }
+            Err(error) => config_error_json(error, true),
+        };
+    }
+    if !request.llm_config_json.trim().is_empty() {
+        let prepared = match config::prepare_from_json(&request.llm_config_json) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                if let Err(clear_error) = clear_config_and_sessions(&request.files_dir) {
+                    return config_error_json(clear_error, true);
+                }
+                return config_error_json(error, true);
+            }
+        };
+        return match sync_prepared_config(&request.files_dir, &prepared) {
+            Ok(changed) => {
+                config_result_json(true, true, true, None, None, &prepared.model, changed)
+            }
+            Err(error) => config_error_json(error, true),
+        };
+    }
+
+    configure_legacy_raw(&request)
+}
+
+#[cfg(target_os = "android")]
+fn configure_legacy_raw(request: &ConfigureCodexRequest) -> String {
+    let codex_dir = config::config_dir(&request.files_dir);
+    let before_config = std::fs::read_to_string(codex_dir.join("config.toml")).ok();
+    let before_auth = std::fs::read_to_string(codex_dir.join("auth.json")).ok();
     let result = (|| -> anyhow::Result<()> {
         std::fs::create_dir_all(&codex_dir)?;
         if !request.config_toml.is_empty() {
-            std::fs::write(codex_dir.join("config.toml"), request.config_toml)?;
+            std::fs::write(codex_dir.join("config.toml"), &request.config_toml)?;
         }
         if !request.auth_json.is_empty() {
-            std::fs::write(codex_dir.join("auth.json"), request.auth_json)?;
+            std::fs::write(codex_dir.join("auth.json"), &request.auth_json)?;
         }
         Ok(())
     })();
     match result {
-        Ok(()) => json!({"success":true,"providerAvailable":true}).to_string(),
-        Err(error) => {
-            json!({"success":false,"providerAvailable":true,"error":error.to_string()}).to_string()
+        Ok(()) => {
+            let changed = (!request.config_toml.is_empty()
+                && before_config.as_deref() != Some(request.config_toml.as_str()))
+                || (!request.auth_json.is_empty()
+                    && before_auth.as_deref() != Some(request.auth_json.as_str()));
+            if changed {
+                invalidate_sessions_for_config(&request.files_dir, None);
+            }
+            config_result_json(true, true, true, None, None, "", changed)
         }
+        Err(error) => config_result_json(
+            false,
+            true,
+            false,
+            Some("config_write_failed"),
+            Some(error.to_string()),
+            "",
+            false,
+        ),
     }
+}
+
+#[cfg(target_os = "android")]
+fn sync_prepared_config(
+    files_dir: &str,
+    prepared: &PreparedCodexConfig,
+) -> Result<bool, CodexConfigError> {
+    let result = config::write_prepared(files_dir, prepared)?;
+    invalidate_sessions_for_config(files_dir, Some(&prepared.fingerprint));
+    Ok(result.changed)
+}
+
+#[cfg(target_os = "android")]
+fn clear_config_and_sessions(files_dir: &str) -> Result<bool, CodexConfigError> {
+    let result = config::clear(files_dir)?;
+    invalidate_sessions_for_config(files_dir, None);
+    Ok(result.changed)
+}
+
+#[cfg(target_os = "android")]
+fn config_error_json(error: CodexConfigError, provider_available: bool) -> String {
+    config_result_json(
+        false,
+        provider_available,
+        false,
+        Some(error.code),
+        Some(error.message),
+        &error.model,
+        false,
+    )
+}
+
+fn config_result_json(
+    success: bool,
+    provider_available: bool,
+    model_usable: bool,
+    error_code: Option<&str>,
+    error: Option<String>,
+    model: &str,
+    config_changed: bool,
+) -> String {
+    json!({
+        "success": success,
+        "providerAvailable": provider_available,
+        "modelUsable": model_usable,
+        "errorCode": error_code,
+        "error": error,
+        "model": model,
+        "configChanged": config_changed,
+    })
+    .to_string()
+}
+
+fn model_from_config_json(raw: &str) -> String {
+    serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("model")
+                .and_then(|model| model.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -103,7 +236,7 @@ mod tests {
     #[test]
     fn codex_config_dir_targets_linux_env_rootfs_home() {
         assert_eq!(
-            codex_config_dir("app_files"),
+            config::config_dir("app_files"),
             std::path::Path::new("app_files")
                 .join("linux-env")
                 .join("rootfs")
@@ -145,6 +278,27 @@ where
         return vec![ChatEvent::Interrupted];
     }
 
+    let prepared_config = match config::prepare_from_json(&request.config_json) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            let error = clear_config_and_sessions(&request.files_dir)
+                .err()
+                .unwrap_or(error);
+            let event = ChatEvent::Error {
+                message: error.message,
+            };
+            emit(event.clone());
+            return vec![event];
+        }
+    };
+    if let Err(error) = sync_prepared_config(&request.files_dir, &prepared_config) {
+        let event = ChatEvent::Error {
+            message: error.message,
+        };
+        emit(event.clone());
+        return vec![event];
+    }
+
     let native_library_dir = request
         .engine_config
         .get("native_library_dir")
@@ -161,17 +315,27 @@ where
 
     let key = session_key(&request);
     let mut state = load_state(&request.files_dir, &key);
-    let (pty, start_action) =
-        match acquire_session_process(&request, &native_library_dir, &key, &state) {
-            Ok(value) => value,
-            Err(error) => {
-                let event = ChatEvent::Error {
-                    message: error.to_string(),
-                };
-                emit(event.clone());
-                return vec![event];
-            }
-        };
+    if state.config_fingerprint != prepared_config.fingerprint {
+        state.native_thread_id = None;
+        state.config_fingerprint = prepared_config.fingerprint.clone();
+        save_state(&request.files_dir, &key, &state);
+    }
+    let (pty, start_action) = match acquire_session_process(
+        &request,
+        &native_library_dir,
+        &key,
+        &state,
+        &prepared_config.fingerprint,
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            let event = ChatEvent::Error {
+                message: error.to_string(),
+            };
+            emit(event.clone());
+            return vec![event];
+        }
+    };
 
     let mut pending_thread_open = None;
     let mut sent_turn = false;
@@ -426,6 +590,7 @@ fn acquire_session_process(
     native_library_dir: &str,
     key: &str,
     state: &super::state::CodexSessionState,
+    config_fingerprint: &str,
 ) -> anyhow::Result<(u64, StartAction)> {
     cleanup_idle_sessions();
     let sessions = active_sessions();
@@ -433,6 +598,11 @@ fn acquire_session_process(
         .lock()
         .map_err(|e| anyhow::anyhow!("Codex session registry lock poisoned: {e}"))?;
     if let Some(active) = guard.get_mut(key) {
+        if active.config_fingerprint != config_fingerprint {
+            anyhow::bail!(
+                "Codex agent engine model configuration changed while a session was active"
+            );
+        }
         if active.running {
             anyhow::bail!("Codex agent engine session already has an active turn");
         }
@@ -486,6 +656,9 @@ fn acquire_session_process(
             running: true,
             last_used: Instant::now(),
             human_responses: Vec::new(),
+            files_dir: request.files_dir.clone(),
+            config_fingerprint: config_fingerprint.to_string(),
+            close_after_turn: false,
         },
     );
     Ok((pty, action))
@@ -548,24 +721,28 @@ fn log_codex_runtime_message(message: &serde_json::Value) {
 #[cfg(target_os = "android")]
 fn release_session_process(key: &str, close: bool) {
     let sessions = active_sessions();
-    let active = {
+    let (active, did_close, clear_mapping) = {
         let Ok(mut guard) = sessions.lock() else {
             return;
         };
-        if close {
-            guard.remove(key)
+        let close_after_turn = guard.get(key).is_some_and(|active| active.close_after_turn);
+        if close || close_after_turn {
+            (guard.remove(key), true, close_after_turn)
         } else {
             if let Some(active) = guard.get_mut(key) {
                 active.running = false;
                 active.last_used = Instant::now();
             }
-            None
+            (None, false, false)
         }
     };
-    if close {
+    if did_close {
         remove_pending_human_requests_for_session(key);
     }
     if let Some(active) = active {
+        if clear_mapping {
+            clear_state(&active.files_dir, key);
+        }
         let _ = crate::android_linux_env::pty::close_pty_session(active.pty);
     }
 }

@@ -33,6 +33,7 @@ public typealias RunCompletedEvent = NapaxiChatEvent
 public typealias ToolCallEvent = NapaxiChatEvent
 public typealias ToolCallDeltaEvent = NapaxiChatEvent
 public typealias ToolResultEvent = NapaxiChatEvent
+public typealias CodexAgentEngineConfigResult = NapaxiCodexAgentEngineConfigResult
 public typealias ResponseEvent = NapaxiChatEvent
 public typealias ResponseDeltaEvent = NapaxiChatEvent
 public typealias ReasoningDeltaEvent = NapaxiChatEvent

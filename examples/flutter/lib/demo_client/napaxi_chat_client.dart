@@ -704,10 +704,11 @@ abstract class NapaxiChatClient {
     sdk.NapaxiCapabilitySelection capabilitySelection,
   );
 
-  Future<sdk.CodexAgentEngineConfigResult> configureCodexAgentEngine({
-    String configToml = '',
-    String authJson = '',
-  });
+  Future<sdk.CodexAgentEngineConfigResult> syncCodexAgentEngineModel(
+    LlmModelProfile profile,
+  );
+
+  Future<sdk.CodexAgentEngineConfigResult> clearCodexAgentEngineModelConfig();
 
   Future<List<DemoAgent>> listAgents();
 
@@ -1406,15 +1407,20 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   }
 
   @override
-  Future<sdk.CodexAgentEngineConfigResult> configureCodexAgentEngine({
-    String configToml = '',
-    String authJson = '',
-  }) async {
+  Future<sdk.CodexAgentEngineConfigResult> syncCodexAgentEngineModel(
+    LlmModelProfile profile,
+  ) async {
     final engine = await _ensureManagementEngine();
-    return engine.configureCodexAgentEngine(
-      configToml: configToml,
-      authJson: authJson,
+    return engine.syncCodexAgentEngineModel(
+      profile.toSdkConfig(responseLanguage: 'en'),
     );
+  }
+
+  @override
+  Future<sdk.CodexAgentEngineConfigResult>
+  clearCodexAgentEngineModelConfig() async {
+    final engine = await _ensureManagementEngine();
+    return engine.clearCodexAgentEngineModelConfig();
   }
 
   Future<String?> _systemUserTimezone() async {

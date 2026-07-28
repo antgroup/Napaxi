@@ -461,6 +461,9 @@ class NapaxiEngine {
   /// Android stores these values under `/root/.codex/` inside the Napaxi Linux
   /// sandbox. Other platforms keep the API surface but return an explicit
   /// unsupported result until they provide a Codex runtime.
+  @Deprecated(
+    'Use syncCodexAgentEngineModel or clearCodexAgentEngineModelConfig.',
+  )
   CodexAgentEngineConfigResult configureCodexAgentEngine({
     String configToml = '',
     String authJson = '',
@@ -472,6 +475,27 @@ class NapaxiEngine {
         'config_toml': configToml,
         'auth_json': authJson,
       }),
+    );
+    return CodexAgentEngineConfigResult.fromMap(decodeJsonObject(raw));
+  }
+
+  /// Validates the active main model and writes the matching Codex sandbox
+  /// configuration. Android provides the runtime; other platforms return an
+  /// explicit unsupported result.
+  CodexAgentEngineConfigResult syncCodexAgentEngineModel(LlmConfig config) {
+    final raw = rust_agent_engine.configureCodexAgentEngineJson(
+      handle: _handle,
+      requestJson: jsonEncode({'llm_config_json': config.toJson()}),
+    );
+    return CodexAgentEngineConfigResult.fromMap(decodeJsonObject(raw));
+  }
+
+  /// Removes materialized Codex credentials/configuration and invalidates
+  /// sandbox sessions that could otherwise continue with stale credentials.
+  CodexAgentEngineConfigResult clearCodexAgentEngineModelConfig() {
+    final raw = rust_agent_engine.configureCodexAgentEngineJson(
+      handle: _handle,
+      requestJson: jsonEncode({'clear': true}),
     );
     return CodexAgentEngineConfigResult.fromMap(decodeJsonObject(raw));
   }

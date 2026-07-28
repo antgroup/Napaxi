@@ -2,6 +2,7 @@ import Foundation
 
 public let napaxiCoreAgentEngineId = "napaxi_core"
 public let externalHostAgentEngineId = "external_host"
+public let codexAgentEngineId = "napaxi.agent_engine.codex"
 
 open class AgentEngineExecutor {
     public init() {}

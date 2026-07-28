@@ -230,6 +230,28 @@ Codex native thread mapping. iOS and other platforms return the explicit error
 `napaxi.agent_engine.codex is unsupported on this platform` until they provide a
 compatible sandbox runner.
 
+The selected main `LlmConfig` is the only supported source for Codex model and
+credential configuration. Hosts call `syncCodexAgentEngineModel` after the main
+model is persisted and `clearCodexAgentEngineModelConfig` when it is removed.
+On Android, core validates the provider and writes `config.toml` plus
+`auth.json` atomically into the Linux sandbox. OpenAI and OpenAI-compatible
+providers use the Responses wire API required by current Codex releases.
+Anthropic, Gemini, and other incompatible protocols are rejected. Every Codex
+turn repeats this sync from the turn's `config_json`, invalidates stale native
+thread mappings when the configuration fingerprint changes, and refuses to run
+if the model config is missing or invalid. The deprecated raw TOML API is
+retained only for source compatibility and must not be used by host
+applications.
+
+`CodexAgentEngineConfigResult` reports `success`, `providerAvailable`,
+`modelUsable`, `errorCode`, `error`, `model`, and `configChanged`. Stable errors
+are `missing_main_model`, `missing_api_key`, `missing_base_url`,
+`unsupported_provider`, `model_not_available`, `model_check_failed`,
+`config_write_failed`, and `unsupported_platform`. Model-list checks are a host
+preflight: an explicit missing model, authentication error, timeout, or server
+failure blocks Codex; endpoints that return `404`, `405`, or `501` for model
+listing fall back to core's local protocol validation.
+
 Hosts may declare `napaxi.agent_engine.external_host` when they carry an
 external agent loop executor. The external executor owns turn planning and
 model interaction, but it must call back through the Napaxi ToolBroker for tool

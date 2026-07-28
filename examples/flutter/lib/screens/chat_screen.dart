@@ -394,6 +394,7 @@ class ChatScreen extends StatefulWidget {
     required this.updateService,
     required this.feedbackService,
     this.chatClientFactory,
+    this.codexModelCatalogFetcher,
     this.terminalBackendFactory,
   });
 
@@ -403,6 +404,7 @@ class ChatScreen extends StatefulWidget {
   final DemoUpdateService updateService;
   final DemoFeedbackService feedbackService;
   final NapaxiChatClientFactory? chatClientFactory;
+  final CodexModelCatalogFetcher? codexModelCatalogFetcher;
 
   /// 终端后端工厂（测试注入 / 未来 PTY 替换）。为空时 [SandboxTerminalScreen]
   /// 用默认的 [ReplTerminalBackend]。
@@ -659,6 +661,10 @@ class _ChatScreenState extends State<ChatScreen>
   bool _isCheckingCodexEnvironment = false;
   Future<bool>? _codexEnvironmentPreflight;
   bool _codexEnvironmentReady = false;
+  Future<void> _configPersistenceQueue = Future.value();
+  Future<void> _codexConfigSyncQueue = Future.value();
+  int _codexConfigSyncRevision = 0;
+  String? _codexVerifiedModelFingerprint;
   bool _isEnsuringConfiguredChannels = false;
   int _channelInputRefreshSerial = 0;
   int _channelInputLoopSerial = 0;
@@ -1056,6 +1062,7 @@ class _ChatScreenState extends State<ChatScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
+      unawaited(_enqueueCodexConfigSync(_config));
       unawaited(_handlePendingProviderInstall());
       unawaited(_handlePendingAgentTrigger());
       unawaited(_ensureConfiguredChannelsConnected());
@@ -2283,14 +2290,20 @@ class _ChatScreenState extends State<ChatScreen>
   bool get _usesInjectedChatClient => widget.chatClientFactory != null;
 
   void _handleConfigChanged(LlmConfigState config) {
-    _configRevision += 1;
+    final revision = ++_configRevision;
+    _codexVerifiedModelFingerprint = null;
     setState(() {
       _config = config;
       _primaryFilesClientFuture = null;
       _primarySkillsClientFuture = null;
       _sessions = _sessions.map(_refreshWelcomeMessage).toList();
     });
-    unawaited(_persistConfig(config));
+    final previous = _configPersistenceQueue;
+    final task = previous
+        .catchError((_) {})
+        .then((_) => _persistConfig(config, revision: revision));
+    _configPersistenceQueue = task;
+    unawaited(task);
   }
 
   Future<void> _restorePersistedState() async {
@@ -2346,6 +2359,7 @@ class _ChatScreenState extends State<ChatScreen>
         _gitSettings = restoredGitSettings;
         _sessions = _sessions.map(_refreshWelcomeMessage).toList();
       });
+      unawaited(_enqueueCodexConfigSync(restoredConfig));
       await _refreshAgents();
       await _restoreSdkSessions(restoredConfig);
       if (!_usesInjectedChatClient) {
@@ -2406,6 +2420,7 @@ class _ChatScreenState extends State<ChatScreen>
         _primarySkillsClientFuture = null;
         _sessions = _sessions.map(_refreshWelcomeMessage).toList();
       });
+      unawaited(_enqueueCodexConfigSync(restoredConfig));
     } catch (_) {
       // Keep the normal no-model prompt if the config store is unavailable.
     }
@@ -3880,7 +3895,10 @@ class _ChatScreenState extends State<ChatScreen>
     });
   }
 
-  Future<void> _persistConfig(LlmConfigState config) async {
+  Future<void> _persistConfig(
+    LlmConfigState config, {
+    required int revision,
+  }) async {
     final existingProfiles = await widget.configStore.loadProfiles();
     final nextProfileIds = config.profiles.map((profile) => profile.id).toSet();
     for (final profile in existingProfiles) {
@@ -3895,6 +3913,12 @@ class _ChatScreenState extends State<ChatScreen>
       );
     }
     await widget.configStore.saveSelection(_storedSelectionFromConfig(config));
+    if (revision != _configRevision) return;
+    await _enqueueCodexConfigSync(
+      config,
+      showFailure: true,
+      sourceConfigRevision: revision,
+    );
   }
 
   void _updateSessionRun(
@@ -4049,12 +4073,193 @@ class _ChatScreenState extends State<ChatScreen>
     return nextSessionId;
   }
 
+  Future<sdk.CodexAgentEngineConfigResult?> _enqueueCodexConfigSync(
+    LlmConfigState config, {
+    bool showFailure = false,
+    int? sourceConfigRevision,
+  }) {
+    if (!Platform.isAndroid && !_usesInjectedChatClient) {
+      return Future.value(null);
+    }
+    final revision = ++_codexConfigSyncRevision;
+    final completer = Completer<sdk.CodexAgentEngineConfigResult?>();
+    final previous = _codexConfigSyncQueue;
+    final task = previous.catchError((_) {}).then((_) async {
+      if (revision != _codexConfigSyncRevision ||
+          (sourceConfigRevision != null &&
+              sourceConfigRevision != _configRevision)) {
+        completer.complete(null);
+        return;
+      }
+      try {
+        final client = await _getChatClient();
+        if (revision != _codexConfigSyncRevision ||
+            (sourceConfigRevision != null &&
+                sourceConfigRevision != _configRevision)) {
+          completer.complete(null);
+          return;
+        }
+        final profile = config.selectedRuntimeProfile;
+        final result = profile == null || !profile.hasModel
+            ? await client.clearCodexAgentEngineModelConfig()
+            : await client.syncCodexAgentEngineModel(profile);
+        if (!result.success && showFailure && mounted) {
+          _showChatSnackBar(_codexConfigFailureMessage(result));
+        }
+        completer.complete(result);
+      } catch (error) {
+        if (showFailure && mounted) {
+          _showChatSnackBar(
+            widget.language == AppLanguage.chinese
+                ? '主模型已保存，但 Codex 配置同步失败：$error'
+                : 'The main model was saved, but Codex configuration sync failed: $error',
+          );
+        }
+        completer.complete(
+          sdk.CodexAgentEngineConfigResult(
+            success: false,
+            providerAvailable: true,
+            errorCode: 'config_write_failed',
+            error: error.toString(),
+          ),
+        );
+      }
+    });
+    _codexConfigSyncQueue = task;
+    return completer.future;
+  }
+
+  Future<bool> _ensureCodexMainModelReady() async {
+    final profile = _config.selectedRuntimeProfile;
+    if (profile == null || !profile.hasModel) {
+      await _enqueueCodexConfigSync(_config);
+      _showChatSnackBar(
+        widget.language == AppLanguage.chinese
+            ? '请先在模型管理中选择主模型，再运行 Codex'
+            : 'Choose a main model before running Codex.',
+      );
+      return false;
+    }
+    if (profile.apiKey.trim().isEmpty) {
+      await _enqueueCodexConfigSync(_config);
+      _showChatSnackBar(
+        widget.language == AppLanguage.chinese
+            ? '请先为主模型配置 API Key，再运行 Codex'
+            : 'Add an API key to the main model before running Codex.',
+      );
+      return false;
+    }
+
+    final result = await _enqueueCodexConfigSync(_config);
+    if (result == null || !result.success || !result.modelUsable) {
+      if (result != null) {
+        _showChatSnackBar(_codexConfigFailureMessage(result));
+      }
+      return false;
+    }
+
+    final fingerprint = _codexModelFingerprint(profile);
+    if (_codexVerifiedModelFingerprint == fingerprint) return true;
+    final modelCatalogFetcher = widget.codexModelCatalogFetcher;
+    if (Platform.environment.containsKey('FLUTTER_TEST') &&
+        modelCatalogFetcher == null) {
+      _codexVerifiedModelFingerprint = fingerprint;
+      return true;
+    }
+
+    try {
+      final models =
+          await (modelCatalogFetcher ?? _ModelCatalogClient.fetchModels)(
+            provider: profile.provider,
+            baseUrl: profile.baseUrl.trim().isEmpty
+                ? 'https://api.openai.com/v1'
+                : profile.baseUrl,
+            apiKey: profile.apiKey,
+          );
+      if (!models.contains(profile.model.trim())) {
+        _showChatSnackBar(
+          widget.language == AppLanguage.chinese
+              ? '主模型 ${profile.model} 不在服务商返回的可用模型列表中'
+              : 'The provider did not list ${profile.model} as an available model.',
+        );
+        return false;
+      }
+    } on CodexModelCatalogHttpException catch (error) {
+      if (!_codexCatalogUnsupported(error.statusCode)) {
+        _showChatSnackBar(
+          widget.language == AppLanguage.chinese
+              ? '无法验证主模型 ${profile.model}：${error.message}'
+              : 'Could not verify ${profile.model}: ${error.message}',
+        );
+        return false;
+      }
+    } catch (error) {
+      _showChatSnackBar(
+        widget.language == AppLanguage.chinese
+            ? '无法验证主模型 ${profile.model}：${_friendlyError(error)}'
+            : 'Could not verify ${profile.model}: ${_friendlyError(error)}',
+      );
+      return false;
+    }
+
+    _codexVerifiedModelFingerprint = fingerprint;
+    return true;
+  }
+
+  bool _codexCatalogUnsupported(int statusCode) =>
+      statusCode == 404 || statusCode == 405 || statusCode == 501;
+
+  String _codexModelFingerprint(LlmModelProfile profile) {
+    return crypto.sha256
+        .convert(
+          utf8.encode(
+            [
+              profile.provider.trim().toLowerCase(),
+              profile.baseUrl.trim(),
+              profile.model.trim(),
+              profile.apiKey.trim(),
+            ].join('\u0000'),
+          ),
+        )
+        .toString();
+  }
+
+  String _codexConfigFailureMessage(sdk.CodexAgentEngineConfigResult result) {
+    if (widget.language != AppLanguage.chinese) {
+      return result.error ?? 'The selected main model cannot be used by Codex.';
+    }
+    return switch (result.errorCode) {
+      'missing_main_model' => '请先选择主模型，再运行 Codex',
+      'missing_api_key' => '请先为主模型配置 API Key，再运行 Codex',
+      'missing_base_url' => '请先为兼容服务商配置有效的 Base URL',
+      'unsupported_provider' => '当前主模型的服务商协议不受 Codex 支持',
+      'model_not_available' => '当前主模型不在服务商的可用模型列表中',
+      'model_check_failed' => '主模型可用性校验失败，请检查网络和服务商配置',
+      'config_write_failed' => '主模型已保存，但 Codex 沙箱配置写入失败',
+      'unsupported_platform' => '当前平台暂不支持 Codex 引擎',
+      _ => result.error ?? '当前主模型无法用于 Codex',
+    };
+  }
+
   Future<bool> _ensureCodexEnvironmentReady({
     String? agentId,
     bool promptToInstall = true,
   }) async {
     final targetAgentId = agentId ?? _activeAgentId;
-    if (!Platform.isAndroid || targetAgentId != 'engine.codex') return true;
+    if (targetAgentId != 'engine.codex') return true;
+    if (!Platform.isAndroid) {
+      if (_usesInjectedChatClient) {
+        if (widget.codexModelCatalogFetcher == null) return true;
+        return _ensureCodexMainModelReady();
+      }
+      _showChatSnackBar(
+        widget.language == AppLanguage.chinese
+            ? '当前平台暂不支持 Codex 引擎'
+            : 'Codex is not supported on this platform.',
+      );
+      return false;
+    }
+    if (!await _ensureCodexMainModelReady()) return false;
     if (_codexEnvironmentReady) {
       final check = await _runDemoEnvironmentShell(
         _codexCliCheckCommand,
@@ -4756,7 +4961,7 @@ class _ChatScreenState extends State<ChatScreen>
 
     try {
       final client = await _getChatClient();
-      if (!isCliEngine) {
+      if (agentId != 'engine.cc') {
         await client.configure(
           selectedProfile!,
           responseLanguage: _responseLanguageCode,
@@ -7846,9 +8051,8 @@ $candidate
       return client;
     }
 
-    // Developer CLI engines keep their credentials in the engine settings
-    // instead of LlmConfigState. Files/Skills only need an initialized SDK
-    // management engine, so accept those engine credentials as a valid setup.
+    // Claude Code keeps its credential in the external-engine settings. Codex
+    // always uses the selected main model above.
     if (await _hasConfiguredCliEngineCredential(agentId)) {
       final client = await _getChatClient();
       await client.configureForManagement(
@@ -7863,7 +8067,6 @@ $candidate
   Future<bool> _hasConfiguredCliEngineCredential(String agentId) async {
     final spec = switch (agentId) {
       'engine.cc' => _CliEngineSpec.cc,
-      'engine.codex' => _CliEngineSpec.codex,
       _ => null,
     };
     if (spec == null) return false;
@@ -8060,7 +8263,6 @@ $candidate
     if (_activeAgentId == agentId) return;
     if (agentId == 'engine.codex' &&
         !await _ensureCodexEnvironmentReady(agentId: agentId)) {
-      _showChatSnackBar('Codex 引擎未安装，已保留当前 Agent');
       return;
     }
     // CLI engines use a different session restoration mechanism
@@ -8113,13 +8315,15 @@ $candidate
         nextRuntime.agentId == _activeAgentId) {
       return;
     }
-    if (nextRuntime.agentId == 'engine.codex' && Platform.isAndroid) {
+    if (nextRuntime.agentId == 'engine.codex' &&
+        (Platform.isAndroid ||
+            !_usesInjectedChatClient ||
+            widget.codexModelCatalogFetcher != null)) {
       final ready = await _ensureCodexEnvironmentReady(
         agentId: nextRuntime.agentId,
       );
       if (!mounted) return;
       if (!ready) {
-        _showChatSnackBar('Codex 引擎未安装，已保留当前引擎');
         return;
       }
     }

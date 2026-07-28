@@ -1579,6 +1579,22 @@ class _ConnectionStatusMessage extends StatelessWidget {
   }
 }
 
+typedef CodexModelCatalogFetcher = Future<List<String>> Function({
+  required String provider,
+  required String baseUrl,
+  required String apiKey,
+});
+
+class CodexModelCatalogHttpException implements Exception {
+  const CodexModelCatalogHttpException(this.statusCode, this.message);
+
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => 'HTTP $statusCode: $message';
+}
+
 class _OpenAiCompatibleModelClient {
   const _OpenAiCompatibleModelClient._();
 
@@ -1600,8 +1616,9 @@ class _OpenAiCompatibleModelClient {
       final body = await utf8.decodeStream(response);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          'HTTP ${response.statusCode}: ${_compactModelCatalogBody(body)}',
+        throw CodexModelCatalogHttpException(
+          response.statusCode,
+          _compactModelCatalogBody(body),
         );
       }
 

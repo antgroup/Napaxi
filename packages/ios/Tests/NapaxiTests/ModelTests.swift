@@ -2,6 +2,32 @@ import XCTest
 @testable import Napaxi
 
 final class ModelTests: XCTestCase {
+    func testCodexConfigResultDecodesValidationAndWriteStatus() {
+        let result = NapaxiCodexAgentEngineConfigResult(json: [
+            "success": .bool(true),
+            "providerAvailable": .bool(true),
+            "modelUsable": .bool(true),
+            "model": .string("gpt-5"),
+            "configChanged": .bool(true),
+        ])
+        let failure = NapaxiCodexAgentEngineConfigResult(json: [
+            "success": .bool(false),
+            "providerAvailable": .bool(true),
+            "modelUsable": .bool(false),
+            "errorCode": .string("unsupported_provider"),
+            "error": .string("not compatible"),
+        ])
+
+        XCTAssertTrue(result.success)
+        XCTAssertTrue(result.providerAvailable)
+        XCTAssertTrue(result.modelUsable)
+        XCTAssertEqual(result.model, "gpt-5")
+        XCTAssertTrue(result.configChanged)
+        XCTAssertFalse(failure.success)
+        XCTAssertEqual(failure.errorCode, "unsupported_provider")
+        XCTAssertEqual(failure.error, "not compatible")
+    }
+
     func testEngineAliasesMirrorFlutterAPISurface() {
         let agentApp: (NapaxiEngine) -> NapaxiAgentAppAPI = { engine in
             engine.agentApp

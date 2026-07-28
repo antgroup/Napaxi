@@ -5504,18 +5504,11 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
   final _ccKeyCtrl = TextEditingController();
   final _ccBaseUrlCtrl = TextEditingController();
   final _ccModelCtrl = TextEditingController();
-  final _codexKeyCtrl = TextEditingController();
-  final _codexBaseUrlCtrl = TextEditingController();
-  final _codexModelCtrl = TextEditingController();
   bool _ccKeyObscured = true;
-  bool _codexKeyObscured = true;
 
   List<String> _ccModels = const [];
-  List<String> _codexModels = const [];
   bool _ccTesting = false;
   bool _ccFetching = false;
-  bool _codexTesting = false;
-  bool _codexFetching = false;
 
   @override
   void initState() {
@@ -5525,23 +5518,16 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
 
   Future<void> _loadAll() async {
     const ccSpec = _CliEngineSpec.cc;
-    const codexSpec = _CliEngineSpec.codex;
     final results = await Future.wait([
       _store.read(key: ccSpec.apiKeyStorageKey),
       _store.read(key: ccSpec.baseUrlStorageKey),
       _store.read(key: ccSpec.modelStorageKey),
-      _store.read(key: codexSpec.apiKeyStorageKey),
-      _store.read(key: codexSpec.baseUrlStorageKey),
-      _store.read(key: codexSpec.modelStorageKey),
     ]);
     if (!mounted) return;
     setState(() {
       if (results[0] != null) _ccKeyCtrl.text = results[0]!;
       if (results[1] != null) _ccBaseUrlCtrl.text = results[1]!;
       if (results[2] != null) _ccModelCtrl.text = results[2]!;
-      if (results[3] != null) _codexKeyCtrl.text = results[3]!;
-      if (results[4] != null) _codexBaseUrlCtrl.text = results[4]!;
-      if (results[5] != null) _codexModelCtrl.text = results[5]!;
     });
   }
 
@@ -5565,27 +5551,6 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
       _save(spec.baseUrlStorageKey, baseUrl),
       _save(spec.modelStorageKey, model),
     ]);
-    // Write Codex config through the SDK/core API so the core-owned
-    // `napaxi.agent_engine.codex` runner and sandbox agree on auth/config.
-    if (spec.id == 'codex' && apiKey.trim().isNotEmpty) {
-      try {
-        final result = await _configureCoreCodex(
-          apiKey: apiKey.trim(),
-          baseUrl: baseUrl,
-          model: model,
-        );
-        if (!result.success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                result.error ?? 'Codex engine configuration failed',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      } catch (_) {}
-    }
     // Write CC config into sandbox so Claude Code picks it up.
     if (spec.id == 'cc' && apiKey.trim().isNotEmpty) {
       try {
@@ -5607,45 +5572,7 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
     }
   }
 
-  Future<sdk.CodexAgentEngineConfigResult> _configureCoreCodex({
-    required String apiKey,
-    String? baseUrl,
-    String? model,
-  }) async {
-    final modelName = model?.trim().isNotEmpty == true
-        ? model!.trim()
-        : 'GLM-4.7';
-    final configToml = StringBuffer()
-      ..write('model_provider = "custom"\n')
-      ..write('model = ${_tomlString(modelName)}\n')
-      ..write(
-        'model_reasoning_effort = ${_tomlString(_CliEngineBridge._codexReasoningEffort)}\n',
-      )
-      ..write('disable_response_storage = true\n')
-      ..write('\n[model_providers.custom]\n')
-      ..write('name = "custom"\n');
-    if (baseUrl != null && baseUrl.trim().isNotEmpty) {
-      configToml.write('base_url = ${_tomlString(baseUrl.trim())}\n');
-    }
-    configToml
-      ..write('wire_api = "responses"\n')
-      ..write('requires_openai_auth = true\n')
-      ..write(
-        '\n[projects.${_tomlString(_CliEngineSpec.codex.workspacePath)}]\n',
-      )
-      ..write('trust_level = "trusted"\n');
-    final client = await widget.clientFuture;
-    return client.configureCodexAgentEngine(
-      configToml: configToml.toString(),
-      authJson: jsonEncode({'OPENAI_API_KEY': apiKey}),
-    );
-  }
-
-  String _tomlString(String value) => jsonEncode(value);
-
-  bool _isBusy(String engineId) => engineId == 'cc'
-      ? (_ccTesting || _ccFetching)
-      : (_codexTesting || _codexFetching);
+  bool _isBusy(String _) => _ccTesting || _ccFetching;
 
   void _setBusy(
     String engineId, {
@@ -5653,24 +5580,13 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
     bool fetching = false,
   }) {
     setState(() {
-      if (engineId == 'cc') {
-        _ccTesting = testing;
-        _ccFetching = fetching;
-      } else {
-        _codexTesting = testing;
-        _codexFetching = fetching;
-      }
+      _ccTesting = testing;
+      _ccFetching = fetching;
     });
   }
 
   void _setModels(String engineId, List<String> models) {
-    setState(() {
-      if (engineId == 'cc') {
-        _ccModels = models;
-      } else {
-        _codexModels = models;
-      }
-    });
+    setState(() => _ccModels = models);
   }
 
   String _normalizedKey(TextEditingController ctrl) =>
@@ -5803,9 +5719,6 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
     _ccKeyCtrl.dispose();
     _ccBaseUrlCtrl.dispose();
     _ccModelCtrl.dispose();
-    _codexKeyCtrl.dispose();
-    _codexBaseUrlCtrl.dispose();
-    _codexModelCtrl.dispose();
     super.dispose();
   }
 
@@ -5840,22 +5753,6 @@ class _EngineSettingsPageState extends State<_EngineSettingsPage> {
               setState(() => _ccKeyObscured = !_ccKeyObscured),
           models: _ccModels,
           busy: _isBusy('cc'),
-          strings: strings,
-        ),
-        const SizedBox(height: 32),
-        _buildEngineSection(
-          title: 'Codex',
-          spec: _CliEngineSpec.codex,
-          keyCtrl: _codexKeyCtrl,
-          baseUrlCtrl: _codexBaseUrlCtrl,
-          modelCtrl: _codexModelCtrl,
-          keyLabel: strings.openaiApiKeyLabel,
-          keyHint: strings.openaiApiKeyHint,
-          obscured: _codexKeyObscured,
-          onToggleObscure: () =>
-              setState(() => _codexKeyObscured = !_codexKeyObscured),
-          models: _codexModels,
-          busy: _isBusy('codex'),
           strings: strings,
         ),
       ],

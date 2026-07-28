@@ -1481,6 +1481,9 @@ public class NapaxiEngine private constructor(
     }
 
 
+    @Deprecated(
+        message = "Use syncCodexAgentEngineModel or clearCodexAgentEngineModelConfig",
+    )
     public fun configureCodexAgentEngine(
         configToml: String = "",
         authJson: String = "",
@@ -1490,6 +1493,22 @@ public class NapaxiEngine private constructor(
             .put("config_toml", configToml)
             .put("auth_json", authJson)
             .toString()
+        return CodexAgentEngineConfigResult(
+            bridge("agent_engine.configure_codex", JSONObject().put("request_json", requestJson)),
+        )
+    }
+
+    public fun syncCodexAgentEngineModel(config: LlmConfig): CodexAgentEngineConfigResult {
+        val requestJson = JSONObject()
+            .put("llm_config_json", config.toJson())
+            .toString()
+        return CodexAgentEngineConfigResult(
+            bridge("agent_engine.configure_codex", JSONObject().put("request_json", requestJson)),
+        )
+    }
+
+    public fun clearCodexAgentEngineModelConfig(): CodexAgentEngineConfigResult {
+        val requestJson = JSONObject().put("clear", true).toString()
         return CodexAgentEngineConfigResult(
             bridge("agent_engine.configure_codex", JSONObject().put("request_json", requestJson)),
         )

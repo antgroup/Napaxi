@@ -551,17 +551,37 @@ public final class NapaxiEngine: @unchecked Sendable {
         return updated
     }
 
-
+    @available(*, deprecated, message: "Use syncCodexAgentEngineModel(_:) or clearCodexAgentEngineModelConfig()")
     public func configureCodexAgentEngine(
         configToml: String = "",
         authJson: String = ""
     ) throws -> NapaxiCodexAgentEngineConfigResult {
         try ensureNotDisposed()
-        let request = try NapaxiJSONValue.object([
+        let request = try [
             "files_dir": .string(filesDir),
             "config_toml": .string(configToml),
             "auth_json": .string(authJson),
-        ]).jsonString()
+        ].jsonString()
+        let raw = try configureCodexAgentEngineJson(handle: handle, requestJson: request)
+        let object = (try NapaxiRawJSON(jsonString: raw).value.objectValue) ?? [:]
+        return NapaxiCodexAgentEngineConfigResult(json: object)
+    }
+
+    public func syncCodexAgentEngineModel(
+        _ config: NapaxiConfig
+    ) throws -> NapaxiCodexAgentEngineConfigResult {
+        try ensureNotDisposed()
+        let request = try [
+            "llm_config_json": .string(try config.jsonString()),
+        ].jsonString()
+        let raw = try configureCodexAgentEngineJson(handle: handle, requestJson: request)
+        let object = (try NapaxiRawJSON(jsonString: raw).value.objectValue) ?? [:]
+        return NapaxiCodexAgentEngineConfigResult(json: object)
+    }
+
+    public func clearCodexAgentEngineModelConfig() throws -> NapaxiCodexAgentEngineConfigResult {
+        try ensureNotDisposed()
+        let request = try ["clear": NapaxiJSONValue.bool(true)].jsonString()
         let raw = try configureCodexAgentEngineJson(handle: handle, requestJson: request)
         let object = (try NapaxiRawJSON(jsonString: raw).value.objectValue) ?? [:]
         return NapaxiCodexAgentEngineConfigResult(json: object)

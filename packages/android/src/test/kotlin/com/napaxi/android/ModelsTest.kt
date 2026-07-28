@@ -8,6 +8,31 @@ import org.junit.Test
 
 class ModelsTest {
     @Test
+    fun codexConfigResultDecodesValidationAndWriteStatus() {
+        val result = CodexAgentEngineConfigResult.fromJson(
+            """{"success":true,"providerAvailable":true,"modelUsable":true,"model":"gpt-5","configChanged":true}""",
+        )
+        val failure = CodexAgentEngineConfigResult.fromMap(
+            mapOf(
+                "success" to false,
+                "providerAvailable" to true,
+                "modelUsable" to false,
+                "errorCode" to "unsupported_provider",
+                "error" to "not compatible",
+            ),
+        )
+
+        assertTrue(result.success)
+        assertTrue(result.providerAvailable)
+        assertTrue(result.modelUsable)
+        assertEquals("gpt-5", result.model)
+        assertTrue(result.configChanged)
+        assertFalse(failure.success)
+        assertEquals("unsupported_provider", failure.errorCode)
+        assertEquals("not compatible", failure.error)
+    }
+
+    @Test
     fun llmConfigRoundTripsCoreJsonShape() {
         val config = LlmConfig(
             provider = "openai_compatible",

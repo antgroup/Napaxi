@@ -52,6 +52,15 @@ cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
 
 Native iOS checks are documented in [`sdk-integration.md`](sdk-integration.md).
 
+## Codex Model Configuration
+
+Flutter, Android, and iOS expose matching typed model sync and clear methods.
+The result contract contains `success`, `providerAvailable`, `modelUsable`,
+`errorCode`, `error`, `model`, and `configChanged`. Android materializes the
+selected main model into its Linux sandbox; iOS and other platforms return
+`unsupported_platform`. The raw TOML method remains deprecated compatibility
+surface and is not a second configuration source.
+
 ## Avoid
 
 - Calling `mobile_*` implementation modules directly from adapters.

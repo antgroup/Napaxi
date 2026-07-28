@@ -11,6 +11,7 @@ class NapaxiApp extends StatefulWidget {
     this.preferencesStore,
     this.updateService,
     this.feedbackService,
+    this.codexModelCatalogFetcher,
     this.initialLanguage,
     this.terminalBackendFactory,
   });
@@ -20,6 +21,7 @@ class NapaxiApp extends StatefulWidget {
   final DemoPreferencesStore? preferencesStore;
   final DemoUpdateService? updateService;
   final DemoFeedbackService? feedbackService;
+  final CodexModelCatalogFetcher? codexModelCatalogFetcher;
 
   /// 终端后端工厂（测试注入 / 未来 PTY 替换），透传到 [ChatScreen]。
   final TerminalBackend Function()? terminalBackendFactory;
@@ -103,6 +105,7 @@ class _NapaxiAppState extends State<NapaxiApp> {
           updateService: widget.updateService ?? PgyerDemoUpdateService(),
           feedbackService:
               widget.feedbackService ?? ConfigurableDemoFeedbackService(),
+          codexModelCatalogFetcher: widget.codexModelCatalogFetcher,
           terminalBackendFactory: widget.terminalBackendFactory,
         ),
       ),
