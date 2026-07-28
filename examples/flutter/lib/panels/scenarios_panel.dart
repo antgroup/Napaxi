@@ -8,7 +8,6 @@ const Set<String> _demoScenarioIds = {
   _mobileDevelopmentScenarioId,
 };
 const Set<String> _visibleDemoScenarioIds = _demoScenarioIds;
-const String _developerWorkbenchInviteCode = 'admin';
 
 class ScenariosPanel extends StatefulWidget {
   const ScenariosPanel({
@@ -41,8 +40,6 @@ class _ScenariosPanelState extends State<ScenariosPanel> {
   List<sdk.NapaxiScenarioStatus> _statuses = const [];
   String? _selectedScenarioId;
   String? _applyingScenarioId;
-  String _developerInviteCode = '';
-  bool _developerInviteRejected = false;
   Object? _error;
   bool _loading = true;
   NapaxiChatClient? _client;
@@ -103,17 +100,8 @@ class _ScenariosPanelState extends State<ScenariosPanel> {
   Future<void> _applySelectedScenario() async {
     final scenarioId = _selectedScenarioId;
     if (scenarioId == null || _applyingScenarioId != null) return;
-    if (scenarioId == _mobileDevelopmentScenarioId &&
-        _developerInviteCode.trim() != _developerWorkbenchInviteCode) {
-      setState(() {
-        _developerInviteRejected = true;
-        _error = null;
-      });
-      return;
-    }
     setState(() {
       _applyingScenarioId = scenarioId;
-      _developerInviteRejected = false;
       _error = null;
     });
     try {
@@ -132,7 +120,6 @@ class _ScenariosPanelState extends State<ScenariosPanel> {
   void _selectScenario(String id) {
     setState(() {
       _selectedScenarioId = id;
-      _developerInviteRejected = false;
       _error = null;
     });
   }
@@ -228,15 +215,6 @@ class _ScenariosPanelState extends State<ScenariosPanel> {
                       pack: selected,
                       isActive: selected.id == activeScenarioId,
                       isApplying: _applyingScenarioId == selected.id,
-                      requiresInvite:
-                          selected.id == _mobileDevelopmentScenarioId,
-                      inviteRejected: _developerInviteRejected,
-                      onInviteChanged: (value) {
-                        setState(() {
-                          _developerInviteCode = value;
-                          _developerInviteRejected = false;
-                        });
-                      },
                       onApply: _applySelectedScenario,
                     ),
                     if (selected.settingsContributions.isNotEmpty) ...[
@@ -384,24 +362,17 @@ class _ScenarioApplyCard extends StatelessWidget {
     required this.pack,
     required this.isActive,
     required this.isApplying,
-    required this.requiresInvite,
-    required this.inviteRejected,
-    required this.onInviteChanged,
     required this.onApply,
   });
 
   final sdk.NapaxiScenarioPack pack;
   final bool isActive;
   final bool isApplying;
-  final bool requiresInvite;
-  final bool inviteRejected;
-  final ValueChanged<String> onInviteChanged;
   final VoidCallback onApply;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
-    final language = _AppLanguageScope.languageOf(context);
     final buttonLabel = isActive
         ? strings.scenarioAppliedButton
         : isApplying
@@ -415,105 +386,30 @@ class _ScenarioApplyCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: requiresInvite
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.construction_rounded,
-                        color: _configTextSecondary,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          language == AppLanguage.chinese
-                              ? '开发中功能，需要邀请码'
-                              : 'In development, invite code required',
-                          style: const TextStyle(
-                            color: _configTextPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    language == AppLanguage.chinese
-                        ? '开发工作台仍在完善中。输入邀请码后，可以提前试用该场景。'
-                        : 'Developer Workbench is still being refined. Enter an invite code to try it early.',
-                    style: const TextStyle(
-                      color: _configTextSecondary,
-                      fontSize: 13,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          key: const Key('developer_workbench_invite_field'),
-                          enabled: !isActive && !isApplying,
-                          obscureText: true,
-                          onChanged: onInviteChanged,
-                          decoration:
-                              _configInputDecoration(
-                                labelText: language == AppLanguage.chinese
-                                    ? '邀请码'
-                                    : 'Invite code',
-                              ).copyWith(
-                                errorText: inviteRejected
-                                    ? (language == AppLanguage.chinese
-                                          ? '邀请码不正确'
-                                          : 'Invalid invite code')
-                                    : null,
-                              ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        key: const Key('scenario_apply_button'),
-                        onPressed: isActive || isApplying ? null : onApply,
-                        style: _scenarioApplyButtonStyle(),
-                        child: _ScenarioApplyButtonChild(
-                          isApplying: isApplying,
-                          label: buttonLabel,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      strings.scenarioApplyHint(_scenarioLabel(strings, pack)),
-                      style: const TextStyle(
-                        color: _configTextSecondary,
-                        fontSize: 13,
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    key: const Key('scenario_apply_button'),
-                    onPressed: isActive || isApplying ? null : onApply,
-                    style: _scenarioApplyButtonStyle(),
-                    child: _ScenarioApplyButtonChild(
-                      isApplying: isApplying,
-                      label: buttonLabel,
-                    ),
-                  ),
-                ],
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                strings.scenarioApplyHint(_scenarioLabel(strings, pack)),
+                style: const TextStyle(
+                  color: _configTextSecondary,
+                  fontSize: 13,
+                  height: 1.35,
+                ),
               ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              key: const Key('scenario_apply_button'),
+              onPressed: isActive || isApplying ? null : onApply,
+              style: _scenarioApplyButtonStyle(),
+              child: _ScenarioApplyButtonChild(
+                isApplying: isApplying,
+                label: buttonLabel,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

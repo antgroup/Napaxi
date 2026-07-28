@@ -8657,7 +8657,7 @@ $candidate
               section: '常用页面',
               icon: Icons.widgets_rounded,
               title: '场景',
-              subtitle: '打开场景选择与开发工作台邀请码页面',
+              subtitle: '打开场景选择页面',
               onOpen: () =>
                   _openDebugSessionHistoryPage(_SessionHistoryView.scenarios),
             ),
