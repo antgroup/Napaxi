@@ -60,10 +60,11 @@ pub(crate) fn active_sessions() -> &'static Mutex<HashMap<String, ActiveCodexSes
 #[cfg(target_os = "android")]
 pub(crate) fn invalidate_sessions_for_config(files_dir: &str, fingerprint: Option<&str>) {
     clear_stale_native_thread_mappings(files_dir, fingerprint);
-    let stale = {
+    let (stale, running_marked) = {
         let Ok(mut guard) = active_sessions().lock() else {
             return;
         };
+        let mut running_marked = 0usize;
         let keys = guard
             .iter_mut()
             .filter_map(|(key, active)| {
@@ -74,18 +75,32 @@ pub(crate) fn invalidate_sessions_for_config(files_dir: &str, fingerprint: Optio
                 }
                 if active.running {
                     active.close_after_turn = true;
+                    running_marked += 1;
                     None
                 } else {
                     Some(key.clone())
                 }
             })
             .collect::<Vec<_>>();
-        keys.into_iter()
+        let stale = keys
+            .into_iter()
             .filter_map(|key| guard.remove(&key))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        (stale, running_marked)
     };
+    if !stale.is_empty() || running_marked > 0 {
+        log::info!(
+            "[napaxiCodexTrace] invalidated Codex sessions for config: closed_idle={} close_after_turn={}",
+            stale.len(),
+            running_marked,
+        );
+    }
     for active in stale {
-        let _ = crate::android_linux_env::pty::close_pty_session(active.pty);
+        // This path is used by the Flutter settings save flow through a
+        // synchronous FFI call. Do not wait for proot/app-server teardown here:
+        // an uncooperative child can otherwise block the UI thread long enough
+        // to look like a settings-save freeze or trigger an Android ANR.
+        let _ = crate::android_linux_env::pty::close_pty_session_nonblocking(active.pty);
     }
 }
 
