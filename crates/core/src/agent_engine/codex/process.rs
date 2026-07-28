@@ -714,14 +714,21 @@ fn acquire_session_process(
     let argv = vec![
         "/bin/sh".to_string(),
         "-lc".to_string(),
-        "mkdir -p /workspace/codex /root/.codex && stty raw -echo -icanon -ixon -ixoff 2>/dev/null; export HOME=/root CODEX_HOME=/root/.codex PATH=\"/root/.local/bin:$PATH\"; exec codex app-server 2>&1".to_string(),
+        "mkdir -p /workspace /root/.codex && stty raw -echo -icanon -ixon -ixoff 2>/dev/null; export HOME=/root CODEX_HOME=/root/.codex PATH=\"/root/.local/bin:$PATH\"; exec codex app-server 2>&1".to_string(),
     ];
+    let workspace_dir = crate::storage::FileBridge::new_with_workspace_files_dir(
+        &request.files_dir,
+        &request.workspace_files_dir,
+    )
+    .workspace_dir()
+    .display()
+    .to_string();
     let pty = crate::android_linux_env::pty::open_pty_session(
         &request.files_dir,
         native_library_dir,
-        &request.workspace_files_dir,
+        &workspace_dir,
         &argv,
-        Some("/workspace/codex"),
+        Some("/workspace"),
         120,
         40,
     )?;

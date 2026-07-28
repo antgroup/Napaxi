@@ -4445,12 +4445,18 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (!sdk.NapaxiFileBridge.isInitialized) {
       throw StateError('napaxi file bridge has not been initialized');
     }
-    final cliWorkspace = await _cliWorkspaceFiles(
-      agentId: agentId,
-      subdir: subdir,
-      recursive: recursive,
-    );
-    if (cliWorkspace != null) return cliWorkspace;
+    // Only the legacy CC external CLI engine uses the host-side
+    // environment-workspace mirror. Codex is now core-owned and shares
+    // Napaxi's account workspace through FileBridge scoped listing; otherwise
+    // the Files panel looks at the stale environment-workspace/codex mirror.
+    if (agentId == 'engine.cc') {
+      final cliWorkspace = await _cliWorkspaceFiles(
+        agentId: agentId,
+        subdir: subdir,
+        recursive: recursive,
+      );
+      if (cliWorkspace != null) return cliWorkspace;
+    }
     return sdk.NapaxiFileBridge.instance.listFilesScoped(
       accountId: _activeAccountId,
       agentId: agentId,
@@ -4467,12 +4473,14 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (!sdk.NapaxiFileBridge.isInitialized) {
       throw StateError('napaxi file bridge has not been initialized');
     }
-    final cliDeletePath = await _cliSandboxDeletePath(
-      agentId: agentId,
-      sandboxPath: sandboxPath,
-    );
-    if (cliDeletePath != null) {
-      return sdk.NapaxiFileBridge.instance.deleteFile(cliDeletePath);
+    if (agentId == 'engine.cc') {
+      final cliDeletePath = await _cliSandboxDeletePath(
+        agentId: agentId,
+        sandboxPath: sandboxPath,
+      );
+      if (cliDeletePath != null) {
+        return sdk.NapaxiFileBridge.instance.deleteFile(cliDeletePath);
+      }
     }
     return sdk.NapaxiFileBridge.instance.deleteFileScoped(
       sandboxPath,

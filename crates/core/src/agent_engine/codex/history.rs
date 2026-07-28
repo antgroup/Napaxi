@@ -5,7 +5,7 @@ use serde_json::{Map, Value, json};
 
 const HISTORY_OPERATION_PREFIX: &str = "history_";
 #[cfg(target_os = "android")]
-const CODEX_WORKSPACE: &str = "/workspace/codex";
+const CODEX_WORKSPACE: &str = "/workspace";
 
 #[cfg(target_os = "android")]
 use std::time::{Duration, Instant};
@@ -176,21 +176,27 @@ impl HistoryRpc {
         let native_library_dir = native_library_dir_for(files_dir).ok_or_else(|| {
             anyhow::anyhow!("missing native_library_dir for Android Codex history")
         })?;
-        let workspace_files_dir = crate::runtime::scoped_workspace_files_dir_from_handle(
+        let workspace_files_dir = crate::runtime::shared_workspace_files_dir_from_handle(
             handle,
             normalized_account_id(&request.account_id),
-            normalized_agent_id(&request.agent_id),
         )
         .unwrap_or_else(|| files_dir.to_string());
+        let workspace_dir = crate::storage::FileBridge::new_with_workspace_files_dir(
+            files_dir,
+            &workspace_files_dir,
+        )
+        .workspace_dir()
+        .display()
+        .to_string();
         let argv = vec![
             "/bin/sh".to_string(),
             "-lc".to_string(),
-            "mkdir -p /workspace/codex /root/.codex && stty raw -echo -icanon -ixon -ixoff 2>/dev/null; export HOME=/root CODEX_HOME=/root/.codex PATH=\"/root/.local/bin:$PATH\"; exec codex app-server 2>&1".to_string(),
+            "mkdir -p /workspace /root/.codex && stty raw -echo -icanon -ixon -ixoff 2>/dev/null; export HOME=/root CODEX_HOME=/root/.codex PATH=\"/root/.local/bin:$PATH\"; exec codex app-server 2>&1".to_string(),
         ];
         let pty = crate::android_linux_env::pty::open_pty_session(
             files_dir,
             &native_library_dir,
-            &workspace_files_dir,
+            &workspace_dir,
             &argv,
             Some(CODEX_WORKSPACE),
             120,
@@ -624,7 +630,7 @@ mod tests {
             "id": "call-1",
             "type": "commandExecution",
             "command": "pwd",
-            "aggregatedOutput": "/workspace/codex",
+            "aggregatedOutput": "/workspace",
             "status": "completed"
         }))
         .unwrap();

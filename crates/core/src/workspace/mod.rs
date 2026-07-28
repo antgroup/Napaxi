@@ -43,7 +43,7 @@ pub use journal::{
 };
 pub use paths::{
     default_scoped_files_dir, looks_like_filesystem_path, normalize_workspace_memory_path,
-    scoped_files_dir,
+    scoped_files_dir, shared_workspace_files_dir,
 };
 pub(crate) use profile::is_profile_populated;
 pub use profile::{sync_profile_documents, write_profile_json};

@@ -8,7 +8,7 @@ use serde_json::json;
 use crate::types::PlatformLlmConfig;
 
 const CODEX_PROVIDER_NAME: &str = "napaxi_main";
-const CODEX_WORKSPACE: &str = "/workspace/codex";
+const CODEX_WORKSPACE: &str = "/workspace";
 const CODEX_WIRE_API: &str = "responses";
 const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 

@@ -66,7 +66,7 @@ pub(crate) fn thread_open_request(
         let (id, line) = client.request(
             "thread/start",
             json!({
-                "cwd": "/workspace/codex",
+                "cwd": "/workspace",
                 "approvalPolicy": "never",
                 "sandbox": "danger-full-access",
             }),
@@ -79,7 +79,7 @@ pub(crate) fn thread_start_request(client: &mut JsonRpcClient) -> (u64, String) 
     client.request(
         "thread/start",
         json!({
-            "cwd": "/workspace/codex",
+            "cwd": "/workspace",
             "approvalPolicy": "never",
             "sandbox": "danger-full-access",
         }),
@@ -302,12 +302,12 @@ mod tests {
     #[test]
     fn history_requests_match_codex_app_server_contract() {
         let mut client = JsonRpcClient::new();
-        let (_, list) = thread_list_request(&mut client, Some("/workspace/codex"));
+        let (_, list) = thread_list_request(&mut client, Some("/workspace"));
         let (_, read) = thread_read_request(&mut client, "thread-1");
         let list: Value = serde_json::from_str(&list).unwrap();
         let read: Value = serde_json::from_str(&read).unwrap();
         assert_eq!(list["method"], "thread/list");
-        assert_eq!(list["params"]["cwd"], "/workspace/codex");
+        assert_eq!(list["params"]["cwd"], "/workspace");
         assert_eq!(read["method"], "thread/read");
         assert_eq!(read["params"]["includeTurns"], true);
     }

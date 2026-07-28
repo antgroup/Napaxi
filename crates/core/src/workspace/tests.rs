@@ -16,7 +16,7 @@ use super::journal::{append_journal_turn, list_journal_days, read_journal_day};
 use super::paths::{
     MEMORY, PROFILE_SECTION_BEGIN, default_scoped_files_dir, is_system_prompt_file,
     looks_like_filesystem_path, memory_dir, normalize_workspace_memory_path,
-    normalize_workspace_path, scoped_files_dir,
+    normalize_workspace_path, scoped_files_dir, shared_workspace_files_dir,
 };
 use super::profile::write_profile_json;
 use super::prompt::{system_prompt, system_prompt_for_context, system_prompt_handle};
@@ -546,6 +546,10 @@ fn scoped_files_dir_is_account_and_agent_specific() {
     assert_ne!(first, second);
     assert_ne!(first, third);
     assert!(default_scoped_files_dir(&base, "").ends_with("agents/napaxi"));
+    assert!(
+        shared_workspace_files_dir(&base, "account/one")
+            .ends_with("accounts/account_one/workspace")
+    );
 }
 
 // ===========================================================================
