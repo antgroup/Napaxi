@@ -30,8 +30,8 @@ impl JsonRpcClient {
     }
 }
 
-pub(crate) fn startup_requests(client: &mut JsonRpcClient) -> Vec<String> {
-    let (_, initialize) = client.request(
+pub(crate) fn initialize_request(client: &mut JsonRpcClient) -> (u64, String) {
+    client.request(
         "initialize",
         json!({
             "clientInfo": {
@@ -41,8 +41,16 @@ pub(crate) fn startup_requests(client: &mut JsonRpcClient) -> Vec<String> {
             },
             "capabilities": {"experimentalApi": true}
         }),
-    );
-    vec![initialize, client.notification("initialized", None)]
+    )
+}
+
+pub(crate) fn initialized_notification(client: &JsonRpcClient) -> String {
+    client.notification("initialized", None)
+}
+
+pub(crate) fn startup_requests(client: &mut JsonRpcClient) -> Vec<String> {
+    let (_, initialize) = initialize_request(client);
+    vec![initialize, initialized_notification(client)]
 }
 
 pub(crate) fn thread_open_request(

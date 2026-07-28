@@ -22,6 +22,10 @@ pub(crate) use process::configure_codex_agent_engine_json;
 pub(crate) use process::run_codex_turn;
 pub(crate) use state::register_android_native_library_dir;
 
+pub(crate) fn query_codex_agent_engine_history_json(handle: i64, request_json: &str) -> String {
+    history::handle_request_json(handle, request_json)
+}
+
 pub const CODEX_ENGINE_ID: &str = "codex";
 pub const CODEX_ENGINE_CAPABILITY_ID: &str = "napaxi.agent_engine.codex";
 

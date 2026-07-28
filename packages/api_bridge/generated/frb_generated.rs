@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1141771631;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1788835512;
 
 // Section: executor
 
@@ -5240,6 +5240,45 @@ fn wire__crate__bridge__channel_qqbot__qqbot_should_fallback_from_markdown_impl(
         },
     )
 }
+fn wire__crate__bridge__agent_engine__query_codex_agent_engine_history_json_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "query_codex_agent_engine_history_json",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_handle = <i64>::sse_decode(&mut deserializer);
+            let api_request_json = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Result::<_, ()>::Ok(
+                        crate::bridge::agent_engine::query_codex_agent_engine_history_json(
+                            api_handle,
+                            api_request_json,
+                        ),
+                    )?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__bridge__file_bridge__read_git_identity_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -8435,153 +8474,159 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        144 => {
+        143 => wire__crate__bridge__agent_engine__query_codex_agent_engine_history_json_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        145 => {
             wire__crate__bridge__workspace__read_journal_day_impl(port, ptr, rust_vec_len, data_len)
         }
-        145 => wire__crate__bridge__skill__read_skill_support_file_impl(
+        146 => wire__crate__bridge__skill__read_skill_support_file_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        146 => wire__crate__bridge__workspace__read_workspace_file_impl(
+        147 => wire__crate__bridge__workspace__read_workspace_file_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        149 => wire__crate__bridge__workspace__rebuild_recall_index_impl(
+        150 => wire__crate__bridge__workspace__rebuild_recall_index_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        150 => wire__crate__bridge__workspace__recall_index_stats_impl(
+        151 => wire__crate__bridge__workspace__recall_index_stats_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        151 => {
+        152 => {
             wire__crate__bridge__workspace__recall_sessions_impl(port, ptr, rust_vec_len, data_len)
         }
-        155 => wire__crate__bridge__automation__record_automation_wake_impl(
+        156 => wire__crate__bridge__automation__record_automation_wake_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        156 => wire__crate__bridge__skill__record_skill_requirement_resolution_impl(
+        157 => wire__crate__bridge__skill__record_skill_requirement_resolution_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        157 => wire__crate__bridge__skill__record_skill_secret_availability_impl(
+        158 => wire__crate__bridge__skill__record_skill_secret_availability_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        158 => wire__crate__bridge__skill__record_skill_source_changed_impl(
+        159 => wire__crate__bridge__skill__record_skill_source_changed_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        162 => wire__crate__bridge__init__register_tool_request_stream_impl(
+        163 => wire__crate__bridge__init__register_tool_request_stream_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        165 => wire__crate__bridge__skill__reload_skills_impl(port, ptr, rust_vec_len, data_len),
-        168 => wire__crate__bridge__skill__remove_skill_impl(port, ptr, rust_vec_len, data_len),
-        171 => wire__crate__bridge__skill__request_skill_remediation_impl(
+        166 => wire__crate__bridge__skill__reload_skills_impl(port, ptr, rust_vec_len, data_len),
+        169 => wire__crate__bridge__skill__remove_skill_impl(port, ptr, rust_vec_len, data_len),
+        172 => wire__crate__bridge__skill__request_skill_remediation_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        172 => {
+        173 => {
             wire__crate__bridge__workspace__reseed_workspace_impl(port, ptr, rust_vec_len, data_len)
         }
-        177 => wire__crate__bridge__skill__restore_skill_impl(port, ptr, rust_vec_len, data_len),
-        178 => wire__crate__bridge__session__retract_injected_message_impl(
+        178 => wire__crate__bridge__skill__restore_skill_impl(port, ptr, rust_vec_len, data_len),
+        179 => wire__crate__bridge__session__retract_injected_message_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        180 => wire__crate__bridge__a2a__run_a2a_task_impl(port, ptr, rust_vec_len, data_len),
-        181 => wire__crate__bridge__automation__run_automation_job_impl(
+        181 => wire__crate__bridge__a2a__run_a2a_task_impl(port, ptr, rust_vec_len, data_len),
+        182 => wire__crate__bridge__automation__run_automation_job_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        182 => {
+        183 => {
             wire__crate__bridge__skill__run_skill_command_impl(port, ptr, rust_vec_len, data_len)
         }
-        184 => {
+        185 => {
             wire__crate__bridge__skill__run_skill_curator_impl(port, ptr, rust_vec_len, data_len)
         }
-        188 => wire__crate__bridge__skill__search_catalog_impl(port, ptr, rust_vec_len, data_len),
-        189 => {
+        189 => wire__crate__bridge__skill__search_catalog_impl(port, ptr, rust_vec_len, data_len),
+        190 => {
             wire__crate__bridge__workspace__search_memory_impl(port, ptr, rust_vec_len, data_len)
         }
-        190 => wire__crate__bridge__init__send_message_impl(port, ptr, rust_vec_len, data_len),
-        191 => {
+        191 => wire__crate__bridge__init__send_message_impl(port, ptr, rust_vec_len, data_len),
+        192 => {
             wire__crate__bridge__init__send_message_stream_impl(port, ptr, rust_vec_len, data_len)
         }
-        192 => wire__crate__bridge__group__send_to_group_impl(port, ptr, rust_vec_len, data_len),
-        193 => {
+        193 => wire__crate__bridge__group__send_to_group_impl(port, ptr, rust_vec_len, data_len),
+        194 => {
             wire__crate__bridge__group__send_to_group_agent_impl(port, ptr, rust_vec_len, data_len)
         }
-        194 => wire__crate__bridge__init__send_to_session_impl(port, ptr, rust_vec_len, data_len),
-        195 => wire__crate__bridge__init__send_to_session_stream_impl(
+        195 => wire__crate__bridge__init__send_to_session_impl(port, ptr, rust_vec_len, data_len),
+        196 => wire__crate__bridge__init__send_to_session_stream_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        197 => {
+        198 => {
             wire__crate__bridge__skill__set_skill_enabled_impl(port, ptr, rust_vec_len, data_len)
         }
-        199 => wire__crate__bridge__channel_agent__stream_channel_agent_pump_impl(
+        200 => wire__crate__bridge__channel_agent__stream_channel_agent_pump_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        203 => {
+        204 => {
             wire__crate__bridge__init__tool_broker_call_tool_impl(port, ptr, rust_vec_len, data_len)
         }
-        204 => wire__crate__bridge__init__tool_broker_list_tools_impl(
+        205 => wire__crate__bridge__init__tool_broker_list_tools_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        207 => wire__crate__bridge__agent_defs__update_agent_definition_impl(
+        208 => wire__crate__bridge__agent_defs__update_agent_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        211 => {
+        212 => {
             wire__crate__bridge__group__update_group_members_impl(port, ptr, rust_vec_len, data_len)
         }
-        212 => {
+        213 => {
             wire__crate__bridge__skill__update_skill_config_impl(port, ptr, rust_vec_len, data_len)
         }
-        213 => wire__crate__bridge__skill__update_skill_remediation_run_impl(
+        214 => wire__crate__bridge__skill__update_skill_remediation_run_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        218 => wire__crate__bridge__workspace__write_workspace_file_impl(
+        219 => wire__crate__bridge__workspace__write_workspace_file_impl(
             port,
             ptr,
             rust_vec_len,
@@ -8869,110 +8914,110 @@ fn pde_ffi_dispatcher_sync_impl(
             rust_vec_len,
             data_len,
         ),
-        143 => {
+        144 => {
             wire__crate__bridge__file_bridge__read_git_identity_impl(ptr, rust_vec_len, data_len)
         }
-        147 => wire__crate__bridge__file_bridge__real_to_sandbox_impl(ptr, rust_vec_len, data_len),
-        148 => wire__crate__bridge__file_bridge__real_to_sandbox_scoped_impl(
+        148 => wire__crate__bridge__file_bridge__real_to_sandbox_impl(ptr, rust_vec_len, data_len),
+        149 => wire__crate__bridge__file_bridge__real_to_sandbox_scoped_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        152 => {
+        153 => {
             wire__crate__bridge__a2a__record_a2a_delivery_status_impl(ptr, rust_vec_len, data_len)
         }
-        153 => wire__crate__bridge__a2a__record_a2a_peer_message_impl(ptr, rust_vec_len, data_len),
-        154 => {
+        154 => wire__crate__bridge__a2a__record_a2a_peer_message_impl(ptr, rust_vec_len, data_len),
+        155 => {
             wire__crate__bridge__a2a__record_a2a_result_envelope_impl(ptr, rust_vec_len, data_len)
         }
-        159 => wire__crate__bridge__agent_app__register_agent_app_package_impl(
+        160 => wire__crate__bridge__agent_app__register_agent_app_package_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        160 => wire__crate__bridge__channel__register_channel_impl(ptr, rust_vec_len, data_len),
-        161 => wire__crate__bridge__channel_agent__register_channel_agent_route_impl(
+        161 => wire__crate__bridge__channel__register_channel_impl(ptr, rust_vec_len, data_len),
+        162 => wire__crate__bridge__channel_agent__register_channel_agent_route_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        163 => wire__crate__bridge__evolution__reject_pending_evolution_impl(
+        164 => wire__crate__bridge__evolution__reject_pending_evolution_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        164 => {
+        165 => {
             wire__crate__bridge__channel__release_channel_inbound_impl(ptr, rust_vec_len, data_len)
         }
-        166 => wire__crate__bridge__channel_agent__remove_channel_agent_route_impl(
+        167 => wire__crate__bridge__channel_agent__remove_channel_agent_route_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        167 => wire__crate__bridge__capability__remove_scenario_pack_json_impl(
+        168 => wire__crate__bridge__capability__remove_scenario_pack_json_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        169 => wire__crate__bridge__group__rename_group_impl(ptr, rust_vec_len, data_len),
-        170 => {
+        170 => wire__crate__bridge__group__rename_group_impl(ptr, rust_vec_len, data_len),
+        171 => {
             wire__crate__bridge__channel__reply_channel_inbound_impl(ptr, rust_vec_len, data_len)
         }
-        173 => wire__crate__bridge__channel_agent__resolve_channel_agent_route_impl(
+        174 => wire__crate__bridge__channel_agent__resolve_channel_agent_route_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        174 => {
+        175 => {
             wire__crate__bridge__capability__resolve_scenario_json_impl(ptr, rust_vec_len, data_len)
         }
-        175 => wire__crate__bridge__skill__resolve_skill_command_impl(ptr, rust_vec_len, data_len),
-        176 => wire__crate__bridge__init__resolve_tool_execution_impl(ptr, rust_vec_len, data_len),
-        179 => wire__crate__bridge__file_bridge__rootfs_dir_impl(ptr, rust_vec_len, data_len),
-        183 => wire__crate__bridge__evolution__run_skill_consolidation_review_impl(
+        176 => wire__crate__bridge__skill__resolve_skill_command_impl(ptr, rust_vec_len, data_len),
+        177 => wire__crate__bridge__init__resolve_tool_execution_impl(ptr, rust_vec_len, data_len),
+        180 => wire__crate__bridge__file_bridge__rootfs_dir_impl(ptr, rust_vec_len, data_len),
+        184 => wire__crate__bridge__evolution__run_skill_consolidation_review_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        185 => wire__crate__bridge__file_bridge__sandbox_to_real_impl(ptr, rust_vec_len, data_len),
-        186 => wire__crate__bridge__file_bridge__sandbox_to_real_scoped_impl(
+        186 => wire__crate__bridge__file_bridge__sandbox_to_real_impl(ptr, rust_vec_len, data_len),
+        187 => wire__crate__bridge__file_bridge__sandbox_to_real_scoped_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        187 => wire__crate__bridge__file_bridge__save_message_attachments_impl(
+        188 => wire__crate__bridge__file_bridge__save_message_attachments_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        196 => {
+        197 => {
             wire__crate__bridge__group__set_group_custom_prompt_impl(ptr, rust_vec_len, data_len)
         }
-        198 => wire__crate__bridge__file_bridge__skills_dir_impl(ptr, rust_vec_len, data_len),
-        200 => wire__crate__bridge__agent_app__submit_agent_app_action_result_impl(
+        199 => wire__crate__bridge__file_bridge__skills_dir_impl(ptr, rust_vec_len, data_len),
+        201 => wire__crate__bridge__agent_app__submit_agent_app_action_result_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        201 => {
+        202 => {
             wire__crate__bridge__channel__submit_channel_inbound_impl(ptr, rust_vec_len, data_len)
         }
-        202 => wire__crate__bridge__channel__take_channel_inbound_impl(ptr, rust_vec_len, data_len),
-        205 => {
+        203 => wire__crate__bridge__channel__take_channel_inbound_impl(ptr, rust_vec_len, data_len),
+        206 => {
             wire__crate__bridge__capability__tool_capability_id_impl(ptr, rust_vec_len, data_len)
         }
-        206 => wire__crate__bridge__channel__unregister_channel_impl(ptr, rust_vec_len, data_len),
-        208 => {
+        207 => wire__crate__bridge__channel__unregister_channel_impl(ptr, rust_vec_len, data_len),
+        209 => {
             wire__crate__bridge__automation__update_automation_job_impl(ptr, rust_vec_len, data_len)
         }
-        209 => wire__crate__bridge__init__update_config_impl(ptr, rust_vec_len, data_len),
-        210 => wire__crate__bridge__init__update_custom_tools_impl(ptr, rust_vec_len, data_len),
-        214 => wire__crate__bridge__file_bridge__workspace_dir_impl(ptr, rust_vec_len, data_len),
-        215 => {
+        210 => wire__crate__bridge__init__update_config_impl(ptr, rust_vec_len, data_len),
+        211 => wire__crate__bridge__init__update_custom_tools_impl(ptr, rust_vec_len, data_len),
+        215 => wire__crate__bridge__file_bridge__workspace_dir_impl(ptr, rust_vec_len, data_len),
+        216 => {
             wire__crate__bridge__file_bridge__workspace_dir_scoped_impl(ptr, rust_vec_len, data_len)
         }
-        216 => wire__crate__bridge__file_bridge__workspace_size_impl(ptr, rust_vec_len, data_len),
-        217 => wire__crate__bridge__file_bridge__workspace_size_scoped_impl(
+        217 => wire__crate__bridge__file_bridge__workspace_size_impl(ptr, rust_vec_len, data_len),
+        218 => wire__crate__bridge__file_bridge__workspace_size_scoped_impl(
             ptr,
             rust_vec_len,
             data_len,

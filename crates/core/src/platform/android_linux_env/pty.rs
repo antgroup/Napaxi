@@ -163,16 +163,30 @@ pub fn resize_pty_session(session_id: u64, cols: u16, rows: u16) -> anyhow::Resu
 }
 
 pub fn close_pty_session(session_id: u64) -> anyhow::Result<()> {
-    let mut session = pty_sessions()
-        .lock()
-        .map_err(|e| anyhow::anyhow!("PTY session registry lock poisoned: {}", e))?
-        .remove(&session_id)
-        .ok_or_else(|| anyhow::anyhow!("PTY session {session_id} not found"))?;
+    let mut session = take_pty_session(session_id)?;
     let _ = session.tx.send(PtyCommand::Close);
     if let Some(join) = session.join.take() {
         let _ = join.join();
     }
     Ok(())
+}
+
+/// Requests PTY shutdown without waiting for its process thread to join.
+///
+/// Short-lived RPC clients use this path so an uncooperative child cannot
+/// indefinitely hold the worker that is returning a timeout to its caller.
+pub fn close_pty_session_nonblocking(session_id: u64) -> anyhow::Result<()> {
+    let session = take_pty_session(session_id)?;
+    let _ = session.tx.send(PtyCommand::Close);
+    Ok(())
+}
+
+fn take_pty_session(session_id: u64) -> anyhow::Result<PtySession> {
+    pty_sessions()
+        .lock()
+        .map_err(|e| anyhow::anyhow!("PTY session registry lock poisoned: {}", e))?
+        .remove(&session_id)
+        .ok_or_else(|| anyhow::anyhow!("PTY session {session_id} not found"))
 }
 
 pub fn drain_pty_events(session_id: u64) -> anyhow::Result<Vec<PtyEvent>> {

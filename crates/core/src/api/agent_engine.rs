@@ -29,3 +29,11 @@ mod tests {
 pub fn configure_codex_agent_engine_json(handle: i64, request_json: &str) -> String {
     crate::agent_engine::codex::configure_codex_agent_engine_json(handle, request_json)
 }
+
+/// Query the core-owned Codex native history (JSON in, JSON out).
+///
+/// This operation may launch the Codex app-server and wait for PTY RPC, so
+/// adapters must dispatch it away from their UI thread.
+pub fn query_codex_agent_engine_history_json(handle: i64, request_json: &str) -> String {
+    crate::agent_engine::codex::query_codex_agent_engine_history_json(handle, request_json)
+}

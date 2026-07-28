@@ -3945,7 +3945,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     );
     if (agentId == 'engine.codex' && threadId.trim().isNotEmpty) {
       _codexNativeThreadIds[session.threadId] = threadId;
-      final binding = engine.bindCodexAgentEngineThread(
+      final binding = await engine.bindCodexAgentEngineThread(
         session: session,
         nativeThreadId: threadId,
         agentId: agentId,
@@ -4200,7 +4200,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     );
     if (agentId != 'engine.codex') return stored;
 
-    final native = engine.listCodexAgentEngineThreads(
+    final native = await engine.listCodexAgentEngineThreads(
       accountId: _activeAccountId,
       agentId: agentId,
     );
@@ -4221,7 +4221,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
         threadId: thread.id,
       );
       _codexNativeThreadIds[session.threadId] = thread.id;
-      final binding = engine.bindCodexAgentEngineThread(
+      final binding = await engine.bindCodexAgentEngineThread(
         session: session,
         nativeThreadId: thread.id,
         agentId: agentId,
@@ -4264,7 +4264,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     final engine = await _ensureManagementEngine();
     if (agentId == 'engine.codex') {
       final nativeThreadId = _codexNativeThreadIds[threadId] ?? threadId;
-      final native = engine.readCodexAgentEngineThread(
+      final native = await engine.readCodexAgentEngineThread(
         nativeThreadId,
         accountId: _activeAccountId,
         agentId: agentId,
@@ -4290,7 +4290,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     final engine = await _ensureManagementEngine();
     if (agentId == 'engine.codex' && before == null) {
       final nativeThreadId = _codexNativeThreadIds[threadId] ?? threadId;
-      final native = engine.readCodexAgentEngineThread(
+      final native = await engine.readCodexAgentEngineThread(
         nativeThreadId,
         accountId: _activeAccountId,
         agentId: agentId,

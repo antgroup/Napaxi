@@ -501,10 +501,10 @@ class NapaxiEngine {
   }
 
   /// Lists conversations persisted by Codex inside the Android sandbox.
-  CodexAgentEngineHistoryResult listCodexAgentEngineThreads({
+  Future<CodexAgentEngineHistoryResult> listCodexAgentEngineThreads({
     String accountId = 'default',
     String agentId = 'engine.codex',
-  }) {
+  }) async {
     return _queryCodexAgentEngineHistory({
       'operation': 'history_list_threads',
       'account_id': accountId,
@@ -513,11 +513,11 @@ class NapaxiEngine {
   }
 
   /// Reads a Codex native thread and maps its items to SDK chat messages.
-  CodexAgentEngineHistoryResult readCodexAgentEngineThread(
+  Future<CodexAgentEngineHistoryResult> readCodexAgentEngineThread(
     String threadId, {
     String accountId = 'default',
     String agentId = 'engine.codex',
-  }) {
+  }) async {
     return _queryCodexAgentEngineHistory({
       'operation': 'history_read_thread',
       'thread_id': threadId,
@@ -527,11 +527,11 @@ class NapaxiEngine {
   }
 
   /// Binds an SDK session to a recovered Codex native thread for resume.
-  CodexAgentEngineHistoryResult bindCodexAgentEngineThread({
+  Future<CodexAgentEngineHistoryResult> bindCodexAgentEngineThread({
     required SessionKey session,
     required String nativeThreadId,
     String agentId = 'engine.codex',
-  }) {
+  }) async {
     return _queryCodexAgentEngineHistory({
       'operation': 'history_bind_thread',
       'thread_id': nativeThreadId,
@@ -541,10 +541,10 @@ class NapaxiEngine {
     });
   }
 
-  CodexAgentEngineHistoryResult _queryCodexAgentEngineHistory(
+  Future<CodexAgentEngineHistoryResult> _queryCodexAgentEngineHistory(
     Map<String, dynamic> request,
-  ) {
-    final raw = rust_agent_engine.configureCodexAgentEngineJson(
+  ) async {
+    final raw = await rust_agent_engine.queryCodexAgentEngineHistoryJson(
       handle: _handle,
       requestJson: jsonEncode(request),
     );

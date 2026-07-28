@@ -46,6 +46,8 @@ void main() {
     expect(clientSource, contains('listCodexAgentEngineThreads'));
     expect(clientSource, contains('readCodexAgentEngineThread'));
     expect(clientSource, contains('bindCodexAgentEngineThread'));
+    expect(clientSource, contains('await engine.listCodexAgentEngineThreads'));
+    expect(clientSource, contains('await engine.readCodexAgentEngineThread'));
     expect(clientSource, contains('_codexNativeThreadIds'));
     expect(clientSource, contains('_CliEngineSpec.codex.workspacePath'));
 
@@ -87,6 +89,31 @@ void main() {
     expect(
       chatScreenSource,
       isNot(contains('if (isCliEngine) {\n        // CLI bridges (CC/Codex)')),
+    );
+  });
+
+  test('Codex history RPC never blocks the Flutter UI isolate', () {
+    final sdkEngineSource = File(
+      '../../packages/flutter/lib/engine.dart',
+    ).readAsStringSync();
+    final generatedBridgeSource = File(
+      '../../packages/flutter/lib/generated/bridge/agent_engine.dart',
+    ).readAsStringSync();
+
+    expect(
+      sdkEngineSource,
+      contains(
+        'Future<CodexAgentEngineHistoryResult> '
+        'listCodexAgentEngineThreads',
+      ),
+    );
+    expect(
+      sdkEngineSource,
+      contains('await rust_agent_engine.queryCodexAgentEngineHistoryJson'),
+    );
+    expect(
+      generatedBridgeSource,
+      contains('Future<String> queryCodexAgentEngineHistoryJson'),
     );
   });
 }

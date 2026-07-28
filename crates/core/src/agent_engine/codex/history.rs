@@ -14,8 +14,8 @@ use std::time::{Duration, Instant};
 use super::config;
 #[cfg(target_os = "android")]
 use super::protocol::{
-    JsonRpcClient, parse_json_lines, response_error, response_id, startup_requests,
-    thread_history_resume_request, thread_list_request, thread_read_request,
+    JsonRpcClient, initialize_request, initialized_notification, parse_json_lines, response_error,
+    response_id, thread_history_resume_request, thread_list_request, thread_read_request,
 };
 #[cfg(target_os = "android")]
 use super::state::{bind_native_thread, current_config_fingerprint, native_library_dir_for};
@@ -197,14 +197,16 @@ impl HistoryRpc {
             40,
         )?;
         let mut rpc = JsonRpcClient::new();
-        for line in startup_requests(&mut rpc) {
-            crate::android_linux_env::pty::write_pty_session(pty, &(line + "\n"))?;
-        }
-        Ok(Self {
+        let (initialize_id, initialize) = initialize_request(&mut rpc);
+        let mut history_rpc = Self {
             pty,
             rpc,
             buffer: String::new(),
-        })
+        };
+        history_rpc.call(initialize_id, &initialize, Duration::from_secs(15))?;
+        let initialized = initialized_notification(&history_rpc.rpc);
+        crate::android_linux_env::pty::write_pty_session(pty, &(initialized + "\n"))?;
+        Ok(history_rpc)
     }
 
     fn list(&mut self, cwd: Option<&str>) -> anyhow::Result<Vec<Value>> {
@@ -260,7 +262,7 @@ impl HistoryRpc {
 #[cfg(target_os = "android")]
 impl Drop for HistoryRpc {
     fn drop(&mut self) {
-        let _ = crate::android_linux_env::pty::close_pty_session(self.pty);
+        let _ = crate::android_linux_env::pty::close_pty_session_nonblocking(self.pty);
     }
 }
 

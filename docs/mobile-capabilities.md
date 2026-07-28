@@ -261,6 +261,8 @@ the working native history behavior without restoring the removed developer
 workbench configuration or Flutter-owned Codex PTY runtime. Other platforms
 return `unsupported_platform` through the same typed result. History-specific
 failures use `history_query_failed` and `missing_native_thread`.
+Flutter dispatches these potentially blocking app-server history operations on
+the FRB worker pool so startup restoration never blocks the UI isolate.
 
 Hosts may declare `napaxi.agent_engine.external_host` when they carry an
 external agent loop executor. The external executor owns turn planning and
