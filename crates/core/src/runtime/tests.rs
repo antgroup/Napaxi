@@ -599,12 +599,12 @@ fn engine_handle_owns_config_tools_agents_and_workspace() {
     assert!(
         tool_context
             .workspace_files_dir
-            .ends_with("napaxi_scopes/accounts/user-a/workspace")
+            .ends_with("napaxi_scopes/accounts/default/agents/napaxi")
     );
     assert!(
-        super::shared_workspace_files_dir_from_handle(handle, "user-a")
+        super::default_engine_workspace_files_dir_from_handle(handle)
             .unwrap()
-            .ends_with("napaxi_scopes/accounts/user-a/workspace")
+            .ends_with("napaxi_scopes/accounts/default/agents/napaxi")
     );
     assert!(
         super::scoped_workspace_files_dir_from_handle(handle, "user-a", "agent-a")

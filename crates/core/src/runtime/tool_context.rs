@@ -10,7 +10,7 @@ use crate::types::PlatformLlmConfig;
 
 use super::engine::{DEFAULT_ACCOUNT_ID, Engine, normalize_agent_id};
 use super::handle::handle_to_arc;
-use super::sessions::shared_workspace_files_dir;
+use super::sessions::default_engine_workspace_files_dir;
 
 pub struct SessionToolContext {
     #[allow(dead_code)] // Carried for adapter scoping; not read by current dispatch.
@@ -76,7 +76,7 @@ pub(super) fn prepare_session_tool_context_with_config_and_thread(
         account_id.to_string()
     };
     let agent_id = normalize_agent_id(agent_id);
-    let workspace_files_dir = shared_workspace_files_dir(engine.files_dir(), &account_id);
+    let workspace_files_dir = default_engine_workspace_files_dir(engine.files_dir());
     let (mcp_tools, mcp_handler) =
         crate::builtin_tools::mcp_tools_and_handler(engine.files_dir(), &account_id);
     let tool_bridge = engine

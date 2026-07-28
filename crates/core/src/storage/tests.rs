@@ -146,7 +146,9 @@ fn scoped_handle_wrappers_map_workspace_without_moving_rootfs() {
 
     assert!(init_file_bridge_scoped_handle(handle, "acct-a", "agent-a"));
     let workspace_dir = workspace_dir_scoped_handle(handle, "acct-a", "agent-a");
-    assert!(workspace_dir.ends_with("napaxi_scopes/accounts/acct-a/workspace/linux-env/workspace"));
+    assert!(
+        workspace_dir.ends_with("napaxi_scopes/accounts/default/agents/napaxi/linux-env/workspace")
+    );
 
     let scoped_workspace_file = Path::new(&workspace_dir).join("note.txt");
     fs::create_dir_all(&workspace_dir).unwrap();
@@ -154,7 +156,7 @@ fn scoped_handle_wrappers_map_workspace_without_moving_rootfs() {
     let sandbox_path = "/workspace/note.txt".to_string();
     let scoped_real =
         sandbox_to_real_scoped_handle(handle, "acct-a", "agent-a", &sandbox_path).unwrap();
-    assert!(scoped_real.contains("napaxi_scopes/accounts/acct-a/workspace"));
+    assert!(scoped_real.contains("napaxi_scopes/accounts/default/agents/napaxi"));
     assert_eq!(
         real_to_sandbox_scoped_handle(handle, "acct-a", "agent-a", &scoped_real).as_deref(),
         Some("/workspace/note.txt")

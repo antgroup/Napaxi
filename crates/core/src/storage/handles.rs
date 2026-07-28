@@ -14,9 +14,13 @@ fn bridge_from_handle(handle: i64) -> Option<FileBridge> {
     Some(FileBridge::new(&files_dir))
 }
 
-fn scoped_bridge_from_handle(handle: i64, account_id: &str, _agent_id: &str) -> Option<FileBridge> {
+fn scoped_bridge_from_handle(
+    handle: i64,
+    _account_id: &str,
+    _agent_id: &str,
+) -> Option<FileBridge> {
     let files_dir = crate::runtime::files_dir_from_handle(handle)?;
-    let workspace_files_dir = crate::runtime::shared_workspace_files_dir(&files_dir, account_id);
+    let workspace_files_dir = crate::runtime::default_engine_workspace_files_dir(&files_dir);
     Some(FileBridge::new_with_workspace_files_dir(
         &files_dir,
         &workspace_files_dir,

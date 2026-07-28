@@ -4447,8 +4447,9 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     }
     // Only the legacy CC external CLI engine uses the host-side
     // environment-workspace mirror. Codex is now core-owned and shares
-    // Napaxi's account workspace through FileBridge scoped listing; otherwise
-    // the Files panel looks at the stale environment-workspace/codex mirror.
+    // Napaxi's default engine workspace through FileBridge scoped listing;
+    // otherwise the Files panel looks at the stale environment-workspace/codex
+    // mirror.
     if (agentId == 'engine.cc') {
       final cliWorkspace = await _cliWorkspaceFiles(
         agentId: agentId,

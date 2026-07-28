@@ -50,10 +50,10 @@ pub use agents::{
 
 // Session keys, scoped workspace dirs, cancellation, injection.
 pub use sessions::{
-    cancel_session_handle, cancel_session_handle_typed, default_session, inject_message_handle,
+    cancel_session_handle, cancel_session_handle_typed, default_engine_workspace_files_dir,
+    default_engine_workspace_files_dir_from_handle, default_session, inject_message_handle,
     retract_injected_message_handle, retract_injected_message_handle_typed,
     scoped_workspace_files_dir, scoped_workspace_files_dir_from_handle, session_account_id,
-    shared_workspace_files_dir, shared_workspace_files_dir_from_handle,
 };
 #[cfg(test)]
 pub use sessions::{cancel_session_key, clear_session_cancellation, is_session_cancelled};

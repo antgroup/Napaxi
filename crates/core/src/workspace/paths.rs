@@ -51,16 +51,6 @@ pub fn scoped_files_dir(files_dir: &str, account_id: &str, agent_id: &str) -> St
         .to_string()
 }
 
-pub fn shared_workspace_files_dir(files_dir: &str, account_id: &str) -> String {
-    Path::new(files_dir)
-        .join("napaxi_scopes")
-        .join("accounts")
-        .join(sanitize_scope_component(account_id, DEFAULT_ACCOUNT_ID))
-        .join("workspace")
-        .display()
-        .to_string()
-}
-
 pub fn default_scoped_files_dir(files_dir: &str, agent_id: &str) -> String {
     scoped_files_dir(files_dir, DEFAULT_ACCOUNT_ID, agent_id)
 }

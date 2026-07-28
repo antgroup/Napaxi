@@ -176,11 +176,9 @@ impl HistoryRpc {
         let native_library_dir = native_library_dir_for(files_dir).ok_or_else(|| {
             anyhow::anyhow!("missing native_library_dir for Android Codex history")
         })?;
-        let workspace_files_dir = crate::runtime::shared_workspace_files_dir_from_handle(
-            handle,
-            normalized_account_id(&request.account_id),
-        )
-        .unwrap_or_else(|| files_dir.to_string());
+        let workspace_files_dir =
+            crate::runtime::default_engine_workspace_files_dir_from_handle(handle)
+                .unwrap_or_else(|| files_dir.to_string());
         let workspace_dir = crate::storage::FileBridge::new_with_workspace_files_dir(
             files_dir,
             &workspace_files_dir,

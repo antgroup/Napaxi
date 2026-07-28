@@ -28,14 +28,14 @@ pub fn scoped_workspace_files_dir(files_dir: &str, account_id: &str, agent_id: &
     crate::workspace::scoped_files_dir(files_dir, account_id, agent_id)
 }
 
-pub fn shared_workspace_files_dir(files_dir: &str, account_id: &str) -> String {
-    crate::workspace::shared_workspace_files_dir(files_dir, account_id)
+pub fn default_engine_workspace_files_dir(files_dir: &str) -> String {
+    crate::workspace::default_scoped_files_dir(files_dir, DEFAULT_AGENT_ID)
 }
 
-pub fn shared_workspace_files_dir_from_handle(handle: i64, account_id: &str) -> Option<String> {
+pub fn default_engine_workspace_files_dir_from_handle(handle: i64) -> Option<String> {
     // SAFETY: `handle` is a live engine handle produced by `create_engine_handle`; `handle_to_arc` returns `None` for a `0`/invalid handle rather than dereferencing it.
     let engine = unsafe { handle_to_arc(handle) }?;
-    Some(shared_workspace_files_dir(engine.files_dir(), account_id))
+    Some(default_engine_workspace_files_dir(engine.files_dir()))
 }
 
 pub fn scoped_workspace_files_dir_from_handle(
@@ -92,8 +92,7 @@ pub fn inject_message_handle(
     let Some(thread_id) = session_thread_id(session_key_json) else {
         return false;
     };
-    let account_id = session_account_id(session_key_json);
-    let workspace_files_dir = shared_workspace_files_dir(engine.files_dir(), &account_id);
+    let workspace_files_dir = default_engine_workspace_files_dir(engine.files_dir());
     let mut attachments = parse_scene_prompt_attachments(attachments_json);
     persist_attachment_files(
         engine.files_dir(),
