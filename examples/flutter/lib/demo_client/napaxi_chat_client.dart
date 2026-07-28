@@ -6434,14 +6434,18 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     DemoScenarioRuntimeProfile runtimeProfile,
   ) {
     final isCodex = runtimeProfile.agentId == 'engine.codex';
+    final isDeveloper = runtimeProfile.isDeveloper;
     return sdk.AgentDefinition(
       id: runtimeProfile.agentId,
       name: runtimeProfile.activeEngine.label,
       description: isCodex
-          ? 'Codex CLI engine runtime hosted by the core-owned Codex agent engine boundary.'
+          ? (isDeveloper
+                ? 'Codex CLI engine runtime hosted by the core-owned Codex agent engine boundary.'
+                : 'Codex beta runtime hosted by the core-owned Codex agent engine boundary.')
           : 'Focused mobile development engine runtime.',
-      systemPrompt:
-          'You are a focused mobile development engine. Prioritize concise project-aware coding help, use dedicated Git/project tools when available, and avoid multi-agent delegation unless the host explicitly exposes it.',
+      systemPrompt: isDeveloper
+          ? 'You are a focused mobile development engine. Prioritize concise project-aware coding help, use dedicated Git/project tools when available, and avoid multi-agent delegation unless the host explicitly exposes it.'
+          : 'You are Napaxi, a concise helpful mobile-native assistant.',
       engineId: isCodex ? sdk.codexAgentEngineId : sdk.napaxiCoreAgentEngineId,
       engineProfileId: isCodex ? 'codex' : '',
       engineConfig: isCodex ? const {'kind': 'codex'} : const {},
@@ -6464,7 +6468,8 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
 
   Future<void> _ensureRuntimeAgent(sdk.NapaxiEngine engine) async {
     final runtimeProfile = _activeRuntimeProfile;
-    if (runtimeProfile.supportsAgents) {
+    if (runtimeProfile.supportsAgents ||
+        runtimeProfile.agentId == sdk.NapaxiEngine.defaultAgentId) {
       engine.ensureAgent();
       return;
     }

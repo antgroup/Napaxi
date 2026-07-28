@@ -78,12 +78,26 @@ class DemoScenarioRuntimeProfile {
 }
 
 const DemoScenarioEngineSpec _generalAssistantEngine = DemoScenarioEngineSpec(
-  id: 'assistant',
-  label: 'napaxi',
+  id: _defaultDeveloperEngineId,
+  label: 'Napaxi',
   agentId: sdk.NapaxiEngine.defaultAgentId,
   icon: Icons.auto_awesome_rounded,
   enabled: true,
 );
+
+const DemoScenarioEngineSpec _generalCodexBetaEngine = DemoScenarioEngineSpec(
+  id: 'codex',
+  label: 'Codex(beta)',
+  agentId: 'engine.codex',
+  icon: Icons.data_object_rounded,
+  enabled: true,
+  description: 'Core-owned Codex agent engine beta.',
+);
+
+const List<DemoScenarioEngineSpec> _generalEngineSpecs = [
+  _generalAssistantEngine,
+  _generalCodexBetaEngine,
+];
 
 const List<DemoScenarioEngineSpec> _developerEngineSpecs = [
   DemoScenarioEngineSpec(
@@ -117,21 +131,25 @@ DemoScenarioRuntimeProfile _scenarioRuntimeProfileFor(
   String? developerEngineId,
 }) {
   final normalizedScenarioId = _normalizeDemoScenarioId(scenarioId);
+  final requestedEngineId = (developerEngineId ?? _defaultDeveloperEngineId)
+      .trim()
+      .toLowerCase();
   if (normalizedScenarioId != _mobileDevelopmentScenarioId) {
+    final activeEngine = _generalEngineSpecs.firstWhere(
+      (engine) => engine.enabled && engine.id == requestedEngineId,
+      orElse: () => _generalEngineSpecs.first,
+    );
     return DemoScenarioRuntimeProfile(
       scenarioId: normalizedScenarioId,
       mode: DemoScenarioRuntimeMode.general,
       accountId: _demoAccountId,
-      agentId: sdk.NapaxiEngine.defaultAgentId,
-      supportsAgents: true,
-      engines: const [_generalAssistantEngine],
-      activeEngineId: _generalAssistantEngine.id,
+      agentId: activeEngine.agentId,
+      supportsAgents: false,
+      engines: _generalEngineSpecs,
+      activeEngineId: activeEngine.id,
     );
   }
 
-  final requestedEngineId = (developerEngineId ?? _defaultDeveloperEngineId)
-      .trim()
-      .toLowerCase();
   final activeEngine = _developerEngineSpecs.firstWhere(
     (engine) => engine.enabled && engine.id == requestedEngineId,
     orElse: () => _developerEngineSpecs.first,
@@ -198,8 +216,10 @@ class DemoGitSettings {
   final bool configured;
   final bool healthy;
   final int? lastTestedAtMs;
+
   /// Commit identity (`user.name`) written to the sandbox rootfs `~/.gitconfig`.
   final String commitName;
+
   /// Commit identity (`user.email`) written to the sandbox rootfs `~/.gitconfig`.
   final String commitEmail;
 

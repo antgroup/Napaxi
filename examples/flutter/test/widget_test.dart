@@ -277,7 +277,7 @@ void main() {
   testWidgets('renders the chat shell', (tester) async {
     await tester.pumpWidget(_testApp());
 
-    expect(find.byKey(const Key('agent_selector_button')), findsOneWidget);
+    expect(find.byKey(const Key('engine_selector_button')), findsOneWidget);
     expect(find.text('No model configured'), findsNothing);
     expect(find.byKey(const Key('session_history_button')), findsOneWidget);
     expect(find.byKey(const Key('context_status_button')), findsOneWidget);
@@ -294,9 +294,7 @@ void main() {
     expect(find.byKey(const Key('slash_command_context')), findsOneWidget);
   });
 
-  testWidgets('general scenario hides developer runtime agents', (
-    tester,
-  ) async {
+  testWidgets('general scenario uses engine switcher', (tester) async {
     SharedPreferences.setMockInitialValues({
       'napaxi_demo.active_scenario.v1': 'napaxi.scenario.general',
     });
@@ -306,11 +304,6 @@ void main() {
           id: sdk.NapaxiEngine.defaultAgentId,
           name: 'napaxi',
           icon: Icons.auto_awesome_rounded,
-        ),
-        DemoAgent(
-          id: 'engine.napaxi',
-          name: 'Napaxi',
-          icon: Icons.terminal_rounded,
         ),
         DemoAgent(
           id: 'agent-helper',
@@ -325,15 +318,33 @@ void main() {
     );
     await pumpUntilFound(
       tester,
-      find.byKey(const Key('agent_selector_button')),
+      find.byKey(const Key('engine_selector_button')),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('agent_selector_button')));
+    expect(find.byKey(const Key('agent_selector_button')), findsNothing);
+    expect(find.text('Napaxi'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('engine_selector_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Helper'), findsOneWidget);
-    expect(find.text('Napaxi'), findsNothing);
+    expect(find.text('Helper'), findsNothing);
+    expect(find.text('Codex(beta)'), findsOneWidget);
+
+    await tester.tap(find.text('Codex(beta)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Codex(beta)'), findsOneWidget);
+    expect(fakeClient.appliedCapabilitySelection?.config, {
+      'scenario_id': 'napaxi.scenario.general',
+      'account_id': 'default',
+      'agent_id': 'engine.codex',
+      'developer_engine_id': 'codex',
+    });
+    expect(
+      fakeClient.appliedCapabilitySelection?.enabledCapabilities,
+      contains('napaxi.agent_engine.codex'),
+    );
   });
 
   testWidgets('renders source-aware context status details', (tester) async {
@@ -3227,6 +3238,7 @@ void main() {
       tester,
       find.byKey(const Key('engine_selector_button')),
     );
+    await pumpUntilFound(tester, find.text('napaxi'));
 
     expect(find.byKey(const Key('engine_selector_button')), findsOneWidget);
     expect(find.byKey(const Key('agent_selector_button')), findsNothing);

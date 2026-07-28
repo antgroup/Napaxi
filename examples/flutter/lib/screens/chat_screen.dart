@@ -1,5 +1,20 @@
 part of '../main.dart';
 
+const String _debugHotReloadTargetFromEnvironment = String.fromEnvironment(
+  'NAPAXI_DEBUG_HOT_RELOAD_TARGET',
+  defaultValue: '',
+);
+
+/// Hot-reload-friendly debug target.
+///
+/// Edit the fallback literal while `flutter run` is active, then press `r` to
+/// jump without restarting. A `--dart-define=NAPAXI_DEBUG_HOT_RELOAD_TARGET=...`
+/// value still wins for one-off runs.
+String get _debugHotReloadTarget =>
+    _debugHotReloadTargetFromEnvironment.trim().isNotEmpty
+    ? _debugHotReloadTargetFromEnvironment
+    : 'debug';
+
 const String _a2aProtocolFieldPattern =
     r'(?:kind|delivery|deliveryError|fromPeerId|toPeerId|peerId|sessionId|taskId|messageId|endpoint|transport|conversationTurn|conversationId|turnKind|turnId|replyToTurnId|sentIntent|remoteIntent|speechAct|requiresResponse|conversationOpen|conversationNeedsResponse|openQuestionCount|delivery_error|from_peer_id|to_peer_id|peer_id|session_id|task_id|message_id|conversation_turn|conversation_id|turn_kind|turn_id|reply_to_turn_id|sent_intent|remote_intent|speech_act|requires_response|conversation_open|conversation_needs_response|open_question_count)';
 
@@ -629,6 +644,7 @@ class _ChatScreenState extends State<ChatScreen>
   String? _selectedChatProjectId;
   bool _isRenamingSessionTitle = false;
   bool _isSessionHistorySearching = false;
+  bool _isDebugJumpPageOpen = false;
   int _sessionHistoryKeyboardIsolationEpoch = 0;
   String _activeScenarioId = _generalScenarioId;
   String _activeDeveloperEngineId = _defaultDeveloperEngineId;
@@ -961,6 +977,19 @@ class _ChatScreenState extends State<ChatScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_checkForUpdates(automatic: true));
     });
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+
+    assert(() {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _handleDebugHotReloadTarget();
+      });
+      return true;
+    }());
   }
 
   @override
@@ -8038,9 +8067,9 @@ $candidate
     unawaited(_refreshChannelInputSources());
   }
 
-  Future<void> _selectDeveloperEngine(String engineId) async {
+  Future<void> _selectScenarioEngine(String engineId) async {
     final currentRuntime = _activeRuntimeProfile;
-    if (!currentRuntime.isDeveloper) return;
+    if (currentRuntime.engines.length < 2) return;
     final nextRuntime = _scenarioRuntimeProfileFor(
       currentRuntime.scenarioId,
       developerEngineId: engineId,
@@ -8088,7 +8117,7 @@ $candidate
         ? 'napaxiCodexHistory'
         : 'napaxiCCHistory';
     debugPrint(
-      '[$logTag] selectDeveloperEngine from=$_activeDeveloperEngineId/$_activeAgentId to=${nextRuntime.activeEngineId}/${nextRuntime.agentId}',
+      '[$logTag] selectScenarioEngine from=$_activeDeveloperEngineId/$_activeAgentId to=${nextRuntime.activeEngineId}/${nextRuntime.agentId}',
     );
     await _activateRuntimeProfile(nextRuntime);
   }
@@ -8431,6 +8460,312 @@ $candidate
       }
       return false;
     }
+  }
+
+  void _handleDebugHotReloadTarget() {
+    switch (_debugHotReloadTarget.trim().toLowerCase()) {
+      case '':
+      case 'none':
+      case 'off':
+      case 'disabled':
+        return;
+      case 'debug':
+      case 'debug_page':
+      case 'debug_jump':
+      case 'launcher':
+        unawaited(_openDebugJumpPage());
+        return;
+      case 'developer_workbench':
+      case 'dev_workbench':
+      case 'workbench':
+      case 'repo_workbench':
+      case 'repositories':
+        _openDebugDeveloperWorkbenchPage();
+        return;
+      case 'environment':
+      case 'developer_environment':
+        _openDebugSessionHistoryPage(_SessionHistoryView.environment);
+        return;
+      case 'terminal':
+      case 'sandbox_terminal':
+        unawaited(_openSandboxTerminal());
+        return;
+      case 'files':
+        _showFilesFromMenu();
+        return;
+      case 'skills':
+        _showSkillsFromMenu();
+        return;
+      case 'projects':
+        _showProjectsFromMenu();
+        return;
+      case 'scenarios':
+        _openDebugSessionHistoryPage(_SessionHistoryView.scenarios);
+        return;
+      case 'settings':
+        _openDebugSessionHistoryPage(_SessionHistoryView.settings);
+        return;
+      case 'agent':
+      case 'agent_settings':
+        _openDebugSessionHistoryPage(
+          _SessionHistoryView.settings,
+          settingsSection: _SettingsSection.agent,
+        );
+        return;
+      case 'agent_manager':
+      case 'agents':
+        unawaited(_openAgentManager());
+        return;
+      case 'channels':
+      case 'channel_settings':
+        _openDebugSessionHistoryPage(
+          _SessionHistoryView.settings,
+          settingsSection: _SettingsSection.channels,
+        );
+        return;
+      case 'nearby':
+      case 'a2a':
+      case 'nearby_settings':
+        _openDebugSessionHistoryPage(
+          _SessionHistoryView.settings,
+          settingsSection: _SettingsSection.nearby,
+        );
+        return;
+      case 'engines':
+      case 'engine_settings':
+        _openDebugSessionHistoryPage(
+          _SessionHistoryView.settings,
+          settingsSection: _SettingsSection.engines,
+        );
+        return;
+      case 'feedback':
+        _openDebugSessionHistoryPage(_SessionHistoryView.feedback);
+        return;
+      case 'contact':
+        _openDebugSessionHistoryPage(_SessionHistoryView.contact);
+        return;
+      case 'about':
+        _openDebugSessionHistoryPage(
+          _SessionHistoryView.settings,
+          settingsSection: _SettingsSection.about,
+        );
+        return;
+      case 'licenses':
+      case 'oss_licenses':
+        _openDebugSessionHistoryPage(
+          _SessionHistoryView.settings,
+          settingsSection: _SettingsSection.licenses,
+        );
+        return;
+      case 'model':
+      case 'models':
+      case 'model_settings':
+        _openDebugSessionHistoryPage(
+          _SessionHistoryView.settings,
+          settingsSection: _SettingsSection.configuration,
+        );
+        return;
+      case 'model_editor':
+      case 'active_model':
+        unawaited(_openActiveContextModelConfig());
+        return;
+    }
+  }
+
+  Future<void> _openDebugJumpPage() async {
+    if (_isDebugJumpPageOpen) return;
+    _isDebugJumpPageOpen = true;
+    final destination = await Navigator.of(context).push<_DebugJumpDestination>(
+      MaterialPageRoute(
+        builder: (_) => _DebugJumpPage(
+          destinations: [
+            _DebugJumpDestination(
+              section: '开发工作台',
+              icon: Icons.code_rounded,
+              title: '开发工作台',
+              subtitle: '打开仓库 / Source Control Workbench 页面',
+              onOpen: _openDebugDeveloperWorkbenchPage,
+            ),
+            _DebugJumpDestination(
+              section: '开发工作台',
+              icon: Icons.terminal_rounded,
+              title: '沙箱终端',
+              subtitle: '打开开发场景顶部按钮背后的终端会话',
+              onOpen: () => unawaited(_openSandboxTerminal()),
+            ),
+            _DebugJumpDestination(
+              section: '开发工作台',
+              icon: Icons.construction_rounded,
+              title: '开发环境',
+              subtitle: '打开移动开发环境、技能和构建说明页面',
+              onOpen: () =>
+                  _openDebugSessionHistoryPage(_SessionHistoryView.environment),
+            ),
+            _DebugJumpDestination(
+              section: '常用页面',
+              icon: Icons.folder_open_rounded,
+              title: '文件',
+              subtitle: '打开文件浏览页面',
+              onOpen: _showFilesFromMenu,
+            ),
+            _DebugJumpDestination(
+              section: '常用页面',
+              icon: Icons.extension_rounded,
+              title: '技能',
+              subtitle: '打开技能管理页面',
+              onOpen: _showSkillsFromMenu,
+            ),
+            _DebugJumpDestination(
+              section: '常用页面',
+              icon: Icons.folder_copy_rounded,
+              title: '项目',
+              subtitle: '打开项目列表页面',
+              onOpen: _showProjectsFromMenu,
+            ),
+            _DebugJumpDestination(
+              section: '常用页面',
+              icon: Icons.widgets_rounded,
+              title: '场景',
+              subtitle: '打开场景选择与开发工作台邀请码页面',
+              onOpen: () =>
+                  _openDebugSessionHistoryPage(_SessionHistoryView.scenarios),
+            ),
+            _DebugJumpDestination(
+              section: '模型与 Agent',
+              icon: Icons.tune_rounded,
+              title: '模型配置',
+              subtitle: '打开模型和 SDK 配置页面',
+              onOpen: () => _openDebugSessionHistoryPage(
+                _SessionHistoryView.settings,
+                settingsSection: _SettingsSection.configuration,
+              ),
+            ),
+            _DebugJumpDestination(
+              section: '模型与 Agent',
+              icon: Icons.edit_note_rounded,
+              title: '当前模型编辑器',
+              subtitle: '打开当前上下文模型的编辑页；未配置时回到模型配置',
+              onOpen: () => unawaited(_openActiveContextModelConfig()),
+            ),
+            _DebugJumpDestination(
+              section: '隐藏设置页',
+              icon: Icons.settings_rounded,
+              title: '设置',
+              subtitle: '打开设置菜单',
+              onOpen: () =>
+                  _openDebugSessionHistoryPage(_SessionHistoryView.settings),
+            ),
+            _DebugJumpDestination(
+              section: '模型与 Agent',
+              icon: Icons.smart_toy_outlined,
+              title: 'Agent 设置',
+              subtitle: '打开设置里的默认 Agent / 模型绑定页面',
+              onOpen: () => _openDebugSessionHistoryPage(
+                _SessionHistoryView.settings,
+                settingsSection: _SettingsSection.agent,
+              ),
+            ),
+            _DebugJumpDestination(
+              section: '模型与 Agent',
+              icon: Icons.manage_accounts_outlined,
+              title: 'Agent 管理器',
+              subtitle: '打开顶部 Agent 下拉菜单里的管理页面',
+              onOpen: () => unawaited(_openAgentManager()),
+            ),
+            _DebugJumpDestination(
+              section: '隐藏设置页',
+              icon: Icons.hub_outlined,
+              title: 'Channel 设置',
+              subtitle: '打开 IM / 外设 Channel Provider 配置页',
+              onOpen: () => _openDebugSessionHistoryPage(
+                _SessionHistoryView.settings,
+                settingsSection: _SettingsSection.channels,
+              ),
+            ),
+            _DebugJumpDestination(
+              section: '隐藏设置页',
+              icon: Icons.sensors_rounded,
+              title: '本地 A2A',
+              subtitle: '打开附近 Agent 配对、邀请和诊断页面',
+              onOpen: () => _openDebugSessionHistoryPage(
+                _SessionHistoryView.settings,
+                settingsSection: _SettingsSection.nearby,
+              ),
+            ),
+            _DebugJumpDestination(
+              section: '隐藏设置页',
+              icon: Icons.memory_rounded,
+              title: '引擎设置',
+              subtitle: '打开开发引擎配置页面',
+              onOpen: () => _openDebugSessionHistoryPage(
+                _SessionHistoryView.settings,
+                settingsSection: _SettingsSection.engines,
+              ),
+            ),
+            _DebugJumpDestination(
+              section: '帮助与关于',
+              icon: Icons.rate_review_outlined,
+              title: '反馈',
+              subtitle: '打开独立反馈页',
+              onOpen: () =>
+                  _openDebugSessionHistoryPage(_SessionHistoryView.feedback),
+            ),
+            _DebugJumpDestination(
+              section: '帮助与关于',
+              icon: Icons.contact_support_outlined,
+              title: '联系我们',
+              subtitle: '打开联系方式页面',
+              onOpen: () =>
+                  _openDebugSessionHistoryPage(_SessionHistoryView.contact),
+            ),
+            _DebugJumpDestination(
+              section: '帮助与关于',
+              icon: Icons.info_outline_rounded,
+              title: '关于',
+              subtitle: '打开关于页',
+              onOpen: () => _openDebugSessionHistoryPage(
+                _SessionHistoryView.settings,
+                settingsSection: _SettingsSection.about,
+              ),
+            ),
+            _DebugJumpDestination(
+              section: '帮助与关于',
+              icon: Icons.article_outlined,
+              title: '开源许可证',
+              subtitle: '打开 License 列表页',
+              onOpen: () => _openDebugSessionHistoryPage(
+                _SessionHistoryView.settings,
+                settingsSection: _SettingsSection.licenses,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    _isDebugJumpPageOpen = false;
+    destination?.onOpen();
+  }
+
+  void _openDebugSessionHistoryPage(
+    _SessionHistoryView view, {
+    _SettingsSection settingsSection = _SettingsSection.menu,
+    _SkillsInitialTab skillsTab = _SkillsInitialTab.installed,
+  }) {
+    _dismissKeyboard();
+    _closeWorkbenchDrawer();
+    setState(() {
+      _sessionHistoryKeyboardIsolationEpoch += 1;
+      _isSessionHistorySearching = false;
+      _sessionHistoryInitialView = view;
+      _sessionHistoryInitialSettingsSection = settingsSection;
+      _sessionHistoryInitialSkillsTab = skillsTab;
+    });
+    _sessionMenuController.forward();
+  }
+
+  void _openDebugDeveloperWorkbenchPage() {
+    _openDebugSessionHistoryPage(_SessionHistoryView.repositories);
   }
 
   void _openSessionHistory() {
@@ -9009,7 +9344,7 @@ $candidate
                                 _activeSessionId,
                               ),
                               onAgentSelected: _selectAgent,
-                              onEngineSelected: _selectDeveloperEngine,
+                              onEngineSelected: _selectScenarioEngine,
                               onManageAgents: _openAgentManager,
                               showBackButton: _isActiveProjectChat,
                               onSessionsTap: _isActiveProjectChat
@@ -9718,6 +10053,139 @@ class _MemoryPendingCard extends StatelessWidget {
       return (actions.first as Map<String, dynamic>?) ?? {};
     }
     return {};
+  }
+}
+
+class _DebugJumpDestination {
+  const _DebugJumpDestination({
+    required this.section,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onOpen,
+  });
+
+  final String section;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onOpen;
+}
+
+class _DebugJumpPage extends StatelessWidget {
+  const _DebugJumpPage({required this.destinations});
+
+  final List<_DebugJumpDestination> destinations;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[const _DebugJumpHintCard()];
+    String? currentSection;
+    for (final destination in destinations) {
+      if (destination.section != currentSection) {
+        currentSection = destination.section;
+        children.add(_DebugJumpSectionHeader(title: currentSection));
+      }
+      children.add(_DebugJumpDestinationCard(destination: destination));
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Debug 跳转'), centerTitle: false),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        children: children,
+      ),
+    );
+  }
+}
+
+class _DebugJumpSectionHeader extends StatelessWidget {
+  const _DebugJumpSectionHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 22, 4, 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Color(0xFF6B7280),
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _DebugJumpDestinationCard extends StatelessWidget {
+  const _DebugJumpDestinationCard({required this.destination});
+
+  final _DebugJumpDestination destination;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: Color(0xFFE5E7EB)),
+        ),
+        child: ListTile(
+          key: Key('debug_jump_${destination.title}'),
+          leading: CircleAvatar(
+            backgroundColor: const Color(0xFFEFF6FF),
+            foregroundColor: const Color(0xFF2563EB),
+            child: Icon(destination.icon),
+          ),
+          title: Text(
+            destination.title,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(destination.subtitle),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => Navigator.of(context).pop(destination),
+        ),
+      ),
+    );
+  }
+}
+
+class _DebugJumpHintCard extends StatelessWidget {
+  const _DebugJumpHintCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: const Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Hot reload debug launcher',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            '运行 flutter run 后按 r，会自动打开这个页面。也可以修改 _debugHotReloadTarget 的 fallback 字符串后再次 hot reload，直接跳到指定页面。',
+            style: TextStyle(color: Color(0xFFD1D5DB), height: 1.45),
+          ),
+        ],
+      ),
+    );
   }
 }
 

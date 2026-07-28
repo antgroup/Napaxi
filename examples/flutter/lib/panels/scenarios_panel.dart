@@ -1294,8 +1294,7 @@ sdk.NapaxiCapabilitySelection _scenarioCapabilitySelection(
     'scenario_id': normalized,
     'account_id': runtimeProfile.accountId,
     'agent_id': runtimeProfile.agentId,
-    if (runtimeProfile.isDeveloper)
-      'developer_engine_id': runtimeProfile.activeEngineId,
+    'developer_engine_id': runtimeProfile.activeEngineId,
   };
   if (normalized == _mobileDevelopmentScenarioId && gitSettings != null) {
     config.addAll(gitSettings.toJson());
@@ -1330,6 +1329,7 @@ List<String> _scenarioEnabledCapabilities(String scenarioId) {
     _ => <String>[
       'napaxi.service.scenario_registry',
       'napaxi.agent_engine.napaxi_core',
+      'napaxi.agent_engine.codex',
       'napaxi.tool.ask_human',
       'napaxi.tool.agent_app_action',
       'napaxi.tool.memory',
