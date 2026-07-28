@@ -104,11 +104,7 @@ fn item_started_outcome(event: &Value) -> CodexTurnOutcome {
     let Some((call_id, name, arguments)) = tool_call_start(&item) else {
         return CodexTurnOutcome::default();
     };
-    let extra_events = if string_field(&item, "type") == "fileChange" {
-        file_change_progress_events(&call_id, &item)
-    } else {
-        Vec::new()
-    };
+    let extra_events = apply_patch_progress_events(&call_id, &name, &item);
     CodexTurnOutcome {
         event: Some(ChatEvent::ToolCall {
             call_id,
@@ -153,7 +149,11 @@ fn thread_item(event: &Value) -> Value {
 
 fn tool_call_start(item: &Value) -> Option<(String, String, String)> {
     let kind = string_field(item, "type");
-    let call_id = item_id(item);
+    let call_id = if is_custom_tool_kind(&kind) {
+        response_call_id(item)
+    } else {
+        item_id(item)
+    };
     if call_id.is_empty() {
         return None;
     }
@@ -162,6 +162,9 @@ fn tool_call_start(item: &Value) -> Option<(String, String, String)> {
         "dynamicToolCall" => (dynamic_tool_name(item), dynamic_tool_arguments(item)),
         "mcpToolCall" => (mcp_tool_name(item)?, json_arguments(item.get("arguments"))),
         "fileChange" => ("apply_patch".to_string(), file_change_arguments(item)),
+        "custom_tool_call" | "customToolCall" => {
+            (custom_tool_name(item), custom_tool_arguments(item))
+        }
         "webSearch" => (
             "web_search".to_string(),
             json!({"query": string_field(item, "query")}).to_string(),
@@ -177,7 +180,11 @@ fn tool_call_start(item: &Value) -> Option<(String, String, String)> {
 
 fn tool_call_result(item: &Value) -> Option<(String, String, String, bool)> {
     let kind = string_field(item, "type");
-    let call_id = item_id(item);
+    let call_id = if is_custom_tool_kind(&kind) || is_custom_tool_output_kind(&kind) {
+        response_call_id(item)
+    } else {
+        item_id(item)
+    };
     if call_id.is_empty() {
         return None;
     }
@@ -219,6 +226,21 @@ fn tool_call_result(item: &Value) -> Option<(String, String, String, bool)> {
             file_change_output(item),
             status_failed(item),
         )),
+        "custom_tool_call" | "customToolCall" => {
+            let name = custom_tool_name(item);
+            Some((
+                call_id,
+                name.clone(),
+                custom_tool_output(&name, &custom_tool_arguments(item), item),
+                custom_tool_failed(item),
+            ))
+        }
+        "custom_tool_call_output" | "customToolCallOutput" => Some((
+            call_id,
+            custom_tool_name(item),
+            string_field(item, "output"),
+            custom_tool_failed(item),
+        )),
         "webSearch" => Some((call_id, "web_search".to_string(), String::new(), false)),
         _ => None,
     }
@@ -240,6 +262,65 @@ fn command_execution_output(item: &Value) -> String {
 
 fn item_id(item: &Value) -> String {
     first_string(item, &["id", "call_id", "callId", "itemId"]).unwrap_or_default()
+}
+
+fn response_call_id(item: &Value) -> String {
+    first_string(item, &["call_id", "callId", "itemId", "id"]).unwrap_or_default()
+}
+
+fn is_custom_tool_kind(kind: &str) -> bool {
+    matches!(kind, "custom_tool_call" | "customToolCall")
+}
+
+fn is_custom_tool_output_kind(kind: &str) -> bool {
+    matches!(kind, "custom_tool_call_output" | "customToolCallOutput")
+}
+
+fn custom_tool_name(item: &Value) -> String {
+    let name = string_field(item, "name");
+    if name.trim().is_empty() {
+        "custom_tool".to_string()
+    } else {
+        name
+    }
+}
+
+fn custom_tool_arguments(item: &Value) -> String {
+    let input = first_string(item, &["input", "arguments", "content"]).unwrap_or_default();
+    if custom_tool_name(item) == "apply_patch" {
+        json!({"patch": input}).to_string()
+    } else if input.trim().is_empty() {
+        json!({}).to_string()
+    } else {
+        input
+    }
+}
+
+fn custom_tool_output(name: &str, arguments: &str, item: &Value) -> String {
+    let output = string_field(item, "output");
+    if name != "apply_patch" {
+        return output;
+    }
+    let patch = serde_json::from_str::<Value>(arguments)
+        .ok()
+        .and_then(|value| first_string(&value, &["patch"]))
+        .unwrap_or_default();
+    json!({
+        "status": if custom_tool_failed(item) { "error" } else { "ok" },
+        "files": patch_files(&patch),
+        "output": output,
+    })
+    .to_string()
+}
+
+fn custom_tool_failed(item: &Value) -> bool {
+    status_failed(item)
+        || string_field(item, "output")
+            .lines()
+            .next()
+            .and_then(|line| line.trim().strip_prefix("Exit code:"))
+            .and_then(|code| code.trim().parse::<i64>().ok())
+            .is_some_and(|code| code != 0)
 }
 
 fn dynamic_tool_name(item: &Value) -> String {
@@ -293,8 +374,25 @@ fn file_change_output(item: &Value) -> String {
     .to_string()
 }
 
-fn file_change_progress_events(call_id: &str, item: &Value) -> Vec<ChatEvent> {
-    file_change_files(item)
+fn apply_patch_progress_events(call_id: &str, name: &str, item: &Value) -> Vec<ChatEvent> {
+    if name != "apply_patch" {
+        return Vec::new();
+    }
+    let files = if is_custom_tool_kind(&string_field(item, "type")) {
+        let arguments = custom_tool_arguments(item);
+        let patch = serde_json::from_str::<Value>(&arguments)
+            .ok()
+            .and_then(|value| first_string(&value, &["patch"]))
+            .unwrap_or_default();
+        patch_files(&patch)
+    } else {
+        file_change_files(item)
+    };
+    patch_progress_events(call_id, files)
+}
+
+fn patch_progress_events(call_id: &str, files: Vec<Value>) -> Vec<ChatEvent> {
+    files
         .into_iter()
         .filter(|file| {
             file.get("path")
@@ -312,6 +410,80 @@ fn file_change_progress_events(call_id: &str, item: &Value) -> Vec<ChatEvent> {
                 "removed_lines": file.get("removed_lines").and_then(Value::as_i64).unwrap_or_default(),
             })
             .to_string(),
+        })
+        .collect()
+}
+
+fn patch_files(patch: &str) -> Vec<Value> {
+    #[derive(Debug)]
+    struct PatchFile {
+        action: String,
+        path: String,
+        added: i64,
+        removed: i64,
+    }
+
+    let mut files = Vec::<PatchFile>::new();
+    let mut current: Option<PatchFile> = None;
+    for line in patch.lines() {
+        if let Some(path) = line.strip_prefix("*** Add File: ") {
+            if let Some(file) = current.take() {
+                files.push(file);
+            }
+            current = Some(PatchFile {
+                action: "added".to_string(),
+                path: path.trim().to_string(),
+                added: 0,
+                removed: 0,
+            });
+            continue;
+        }
+        if let Some(path) = line.strip_prefix("*** Delete File: ") {
+            if let Some(file) = current.take() {
+                files.push(file);
+            }
+            current = Some(PatchFile {
+                action: "deleted".to_string(),
+                path: path.trim().to_string(),
+                added: 0,
+                removed: 0,
+            });
+            continue;
+        }
+        if let Some(path) = line.strip_prefix("*** Update File: ") {
+            if let Some(file) = current.take() {
+                files.push(file);
+            }
+            current = Some(PatchFile {
+                action: "updated".to_string(),
+                path: path.trim().to_string(),
+                added: 0,
+                removed: 0,
+            });
+            continue;
+        }
+        let Some(file) = current.as_mut() else {
+            continue;
+        };
+        if line.starts_with('+') && !line.starts_with("+++") {
+            file.added += 1;
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            file.removed += 1;
+        }
+    }
+    if let Some(file) = current {
+        files.push(file);
+    }
+    files
+        .into_iter()
+        .filter(|file| !file.path.is_empty())
+        .map(|file| {
+            json!({
+                "action": file.action,
+                "path": file.path,
+                "added_lines": file.added,
+                "removed_lines": file.removed,
+            })
         })
         .collect()
 }
@@ -353,16 +525,59 @@ fn file_change_files(item: &Value) -> Vec<Value> {
         .filter_map(|change| {
             let path = first_string(change, &["path", "file", "filePath", "oldPath", "newPath"])
                 .or_else(|| first_string(change, &["oldPath", "newPath"]))?;
-            let action = first_string(change, &["action", "type", "operation"])
-                .unwrap_or_else(|| "updated".to_string());
+            let action = file_change_action(change);
+            let (diff_added, diff_removed) = file_change_diff_counts(change, &action);
             Some(json!({
-                "action": normalize_file_action(&action),
+                "action": action,
                 "path": path,
-                "added_lines": int_field(change, &["added_lines", "addedLines", "additions", "added", "insertions"]),
-                "removed_lines": int_field(change, &["removed_lines", "removedLines", "deletions", "removed", "deletes"]),
+                "added_lines": int_field(change, &["added_lines", "addedLines", "additions", "added", "insertions"]).max(diff_added),
+                "removed_lines": int_field(change, &["removed_lines", "removedLines", "deletions", "removed", "deletes"]).max(diff_removed),
             }))
         })
         .collect()
+}
+
+fn file_change_action(change: &Value) -> String {
+    first_string(change, &["action", "type", "operation"])
+        .or_else(|| {
+            change
+                .get("kind")
+                .and_then(|kind| first_string(kind, &["type", "action", "operation"]))
+        })
+        .map(|action| normalize_file_action(&action).to_string())
+        .unwrap_or_else(|| "updated".to_string())
+}
+
+fn file_change_diff_counts(change: &Value, action: &str) -> (i64, i64) {
+    let diff = first_string(change, &["diff", "patch", "content"]).unwrap_or_default();
+    if diff.is_empty() {
+        return (0, 0);
+    }
+    let mut added = 0;
+    let mut removed = 0;
+    let mut saw_patch_markers = false;
+    for line in diff.lines() {
+        if line.starts_with("+++") || line.starts_with("---") {
+            saw_patch_markers = true;
+            continue;
+        }
+        if line.starts_with('+') {
+            saw_patch_markers = true;
+            added += 1;
+        } else if line.starts_with('-') {
+            saw_patch_markers = true;
+            removed += 1;
+        }
+    }
+    if saw_patch_markers || action == "updated" {
+        return (added, removed);
+    }
+    let line_count = diff.lines().count() as i64;
+    match action {
+        "added" => (line_count, 0),
+        "deleted" => (0, line_count),
+        _ => (added, removed),
+    }
 }
 
 fn normalize_file_action(action: &str) -> &str {

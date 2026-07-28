@@ -209,6 +209,7 @@ class _CliEngineBridge {
   final Map<int, Completer<Map<String, dynamic>?>> _pendingRpc = {};
   final Map<String, String> _agentMessageByItemId = {};
   final Map<String, String> _reasoningByItemId = {};
+  final Map<String, String> _customPatchByCallId = {};
   final Set<String> _startedToolCallIds = <String>{};
   final Map<String, _PendingCliHumanRequest> _pendingHumanRequests = {};
 
@@ -228,6 +229,7 @@ class _CliEngineBridge {
     _threadId = null;
     _agentMessageByItemId.clear();
     _reasoningByItemId.clear();
+    _customPatchByCallId.clear();
     _startedToolCallIds.clear();
     _pendingHumanRequests.clear();
   }
@@ -259,6 +261,7 @@ class _CliEngineBridge {
           _threadId = null;
           _agentMessageByItemId.clear();
           _reasoningByItemId.clear();
+          _customPatchByCallId.clear();
           _startedToolCallIds.clear();
         }
         if (_state == _CliSessionState.uninitialized) {
@@ -927,9 +930,10 @@ class _CliEngineBridge {
   ) {
     final item = _threadItem(params);
     if (item.isEmpty) return;
-    final callId = item['id']?.toString().trim() ?? '';
+    final itemType = item['type']?.toString().trim() ?? '';
+    final callId = _codexToolCallId(item);
     if (callId.isEmpty) return;
-    switch (item['type']) {
+    switch (itemType) {
       case 'commandExecution':
         _ensureToolCallStarted(
           controller,
@@ -944,6 +948,47 @@ class _CliEngineBridge {
           name: _dynamicToolName(item),
           arguments: _jsonString(item['arguments']),
         );
+      case 'fileChange':
+        _ensureToolCallStarted(
+          controller,
+          callId: callId,
+          name: 'apply_patch',
+          arguments: _fileChangeArguments(item),
+        );
+        for (final file in _fileChangeFiles(item)) {
+          controller.add(
+            sdk.ToolOutputChunkEvent(
+              callId: callId,
+              stream: 'patch',
+              content: _jsonString({'type': 'apply_patch_progress', ...file}),
+            ),
+          );
+        }
+      case 'custom_tool_call':
+      case 'customToolCall':
+        final name = _customToolName(item);
+        final arguments = _customToolArguments(item);
+        _ensureToolCallStarted(
+          controller,
+          callId: callId,
+          name: name,
+          arguments: arguments,
+        );
+        if (name == 'apply_patch') {
+          final patch = _customToolInput(item);
+          if (patch.trim().isNotEmpty) {
+            _customPatchByCallId[callId] = patch;
+          }
+          for (final file in _patchFiles(patch)) {
+            controller.add(
+              sdk.ToolOutputChunkEvent(
+                callId: callId,
+                stream: 'patch',
+                content: _jsonString({'type': 'apply_patch_progress', ...file}),
+              ),
+            );
+          }
+        }
     }
   }
 
@@ -954,7 +999,7 @@ class _CliEngineBridge {
     final item = _threadItem(params);
     if (item.isEmpty) return;
     final itemType = item['type']?.toString().trim() ?? '';
-    final itemId = item['id']?.toString().trim() ?? '';
+    final itemId = _codexToolCallId(item);
     switch (itemType) {
       case 'agentMessage':
         final text = item['text']?.toString() ?? '';
@@ -1007,6 +1052,69 @@ class _CliEngineBridge {
             name: name,
             output: _dynamicToolOutput(item),
             isError: _dynamicToolFailed(item),
+          ),
+        );
+      case 'fileChange':
+        if (itemId.isEmpty) return;
+        _ensureToolCallStarted(
+          controller,
+          callId: itemId,
+          name: 'apply_patch',
+          arguments: _fileChangeArguments(item),
+        );
+        controller.add(
+          sdk.ToolResultEvent(
+            callId: itemId,
+            name: 'apply_patch',
+            output: _fileChangeOutput(item),
+            isError: _statusFailed(item),
+          ),
+        );
+      case 'custom_tool_call':
+      case 'customToolCall':
+        if (itemId.isEmpty) return;
+        final name = _customToolName(item);
+        final arguments = _customToolArguments(item);
+        if (name == 'apply_patch') {
+          final patch = _customToolInput(item);
+          if (patch.trim().isNotEmpty) {
+            _customPatchByCallId[itemId] = patch;
+          }
+        }
+        _ensureToolCallStarted(
+          controller,
+          callId: itemId,
+          name: name,
+          arguments: arguments,
+        );
+        controller.add(
+          sdk.ToolResultEvent(
+            callId: itemId,
+            name: name,
+            output: _customToolOutput(item, callId: itemId),
+            isError: _customToolFailed(item),
+          ),
+        );
+      case 'custom_tool_call_output':
+      case 'customToolCallOutput':
+        if (itemId.isEmpty) return;
+        final hasPatch =
+            (_customPatchByCallId[itemId]?.trim().isNotEmpty ?? false);
+        final name = hasPatch ? 'apply_patch' : 'custom_tool';
+        _ensureToolCallStarted(
+          controller,
+          callId: itemId,
+          name: name,
+          arguments: hasPatch
+              ? _jsonString({'patch': _customPatchByCallId[itemId] ?? ''})
+              : _jsonString({}),
+        );
+        controller.add(
+          sdk.ToolResultEvent(
+            callId: itemId,
+            name: name,
+            output: _customToolOutput(item, callId: itemId, name: name),
+            isError: _customToolFailed(item),
           ),
         );
       case 'imageGeneration':
@@ -1078,11 +1186,19 @@ class _CliEngineBridge {
   }
 
   bool _dynamicToolFailed(Map<String, dynamic> item) {
-    final status = item['status']?.toString().trim().toLowerCase() ?? '';
-    if (status == 'failed' || status == 'rejected') return true;
+    if (_statusFailed(item)) return true;
     final success = item['success'];
     if (success is bool) return !success;
     return false;
+  }
+
+  bool _statusFailed(Map<String, dynamic> item) {
+    final status = item['status']?.toString().trim().toLowerCase() ?? '';
+    return status == 'failed' ||
+        status == 'rejected' ||
+        status == 'error' ||
+        status == 'cancelled' ||
+        status == 'canceled';
   }
 
   String _dynamicToolOutput(Map<String, dynamic> item) {
@@ -1104,6 +1220,271 @@ class _CliEngineBridge {
       if (parts.isNotEmpty) return parts.join('\n');
     }
     return jsonEncode(item);
+  }
+
+  String _codexToolCallId(Map<String, dynamic> item) {
+    final itemType = item['type']?.toString().trim() ?? '';
+    final keys = itemType == 'custom_tool_call' || itemType == 'customToolCall'
+        ? const ['call_id', 'callId', 'itemId', 'id']
+        : const ['id', 'call_id', 'callId', 'itemId'];
+    for (final key in keys) {
+      final value = item[key]?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  String _customToolName(Map<String, dynamic> item) {
+    final name = item['name']?.toString().trim() ?? '';
+    return name.isEmpty ? 'custom_tool' : name;
+  }
+
+  String _customToolInput(Map<String, dynamic> item) {
+    return _firstNonEmptyString([
+      item['input'],
+      item['arguments'],
+      item['content'],
+    ]);
+  }
+
+  String _customToolArguments(Map<String, dynamic> item) {
+    final input = _customToolInput(item);
+    return _customToolName(item) == 'apply_patch'
+        ? _jsonString({'patch': input})
+        : (input.trim().isEmpty ? _jsonString({}) : input);
+  }
+
+  bool _customToolFailed(Map<String, dynamic> item) {
+    if (_statusFailed(item)) return true;
+    final success = item['success'];
+    if (success is bool) return !success;
+    final output = item['output']?.toString() ?? '';
+    final lines = const LineSplitter().convert(output);
+    final firstLine = lines.isEmpty ? '' : lines.first;
+    final match = RegExp(r'^Exit code:\s*(-?\d+)').firstMatch(firstLine.trim());
+    return match != null && int.tryParse(match.group(1) ?? '0') != 0;
+  }
+
+  String _fileChangeArguments(Map<String, dynamic> item) {
+    final patch = _fileChangePatch(item);
+    if (patch.trim().isNotEmpty) return _jsonString({'patch': patch});
+    return _jsonString({'changes': item['changes']});
+  }
+
+  String _fileChangeOutput(Map<String, dynamic> item) {
+    return _jsonString({
+      'status': _statusFailed(item) ? 'error' : 'ok',
+      'files': _fileChangeFiles(item),
+    });
+  }
+
+  String _fileChangePatch(Map<String, dynamic> item) {
+    final direct = _firstNonEmptyString([item['patch'], item['diff']]);
+    if (direct.isNotEmpty) return direct;
+    final files = _fileChangeFiles(item);
+    return files
+        .map((file) {
+          final action = file['action']?.toString() ?? 'updated';
+          final path = file['path']?.toString() ?? '';
+          final label = action == 'added'
+              ? 'Add'
+              : action == 'deleted'
+              ? 'Delete'
+              : 'Update';
+          return '*** $label File: $path';
+        })
+        .join('\n');
+  }
+
+  List<Map<String, dynamic>> _fileChangeFiles(Map<String, dynamic> item) {
+    final changes = item['changes'];
+    if (changes is! List) {
+      final path = _firstNonEmptyString([
+        item['path'],
+        item['file'],
+        item['filePath'],
+      ]);
+      if (path.isEmpty) return const <Map<String, dynamic>>[];
+      return [
+        {
+          'action': 'updated',
+          'path': path,
+          'added_lines': 0,
+          'removed_lines': 0,
+        },
+      ];
+    }
+    final files = <Map<String, dynamic>>[];
+    for (final raw in changes) {
+      if (raw is! Map) continue;
+      final change = raw.cast<String, dynamic>();
+      final path = _firstNonEmptyString([
+        change['path'],
+        change['file'],
+        change['filePath'],
+        change['oldPath'],
+        change['newPath'],
+      ]);
+      if (path.isEmpty) continue;
+      final action = _normalizeFileAction(
+        _firstNonEmptyString([
+          change['action'],
+          change['type'],
+          change['operation'],
+          if (change['kind'] is Map) (change['kind'] as Map)['type'],
+        ]),
+      );
+      final counts = _fileChangeDiffCounts(change, action);
+      files.add({
+        'action': action,
+        'path': path,
+        'added_lines': _maxInt(
+          _firstInt([
+            change['added_lines'],
+            change['addedLines'],
+            change['additions'],
+            change['added'],
+            change['insertions'],
+          ]),
+          counts.$1,
+        ),
+        'removed_lines': _maxInt(
+          _firstInt([
+            change['removed_lines'],
+            change['removedLines'],
+            change['deletions'],
+            change['removed'],
+            change['deletes'],
+          ]),
+          counts.$2,
+        ),
+      });
+    }
+    return files;
+  }
+
+  (int, int) _fileChangeDiffCounts(Map<String, dynamic> change, String action) {
+    final diff = _firstNonEmptyString([
+      change['diff'],
+      change['patch'],
+      change['content'],
+    ]);
+    if (diff.isEmpty) return (0, 0);
+    var added = 0;
+    var removed = 0;
+    var sawPatchMarkers = false;
+    for (final line in const LineSplitter().convert(diff)) {
+      if (line.startsWith('+++') || line.startsWith('---')) {
+        sawPatchMarkers = true;
+        continue;
+      }
+      if (line.startsWith('+')) {
+        sawPatchMarkers = true;
+        added += 1;
+      } else if (line.startsWith('-')) {
+        sawPatchMarkers = true;
+        removed += 1;
+      }
+    }
+    if (sawPatchMarkers || action == 'updated') return (added, removed);
+    final lineCount = const LineSplitter().convert(diff).length;
+    if (action == 'added') return (lineCount, 0);
+    if (action == 'deleted') return (0, lineCount);
+    return (added, removed);
+  }
+
+  String _normalizeFileAction(String action) {
+    switch (action.trim().toLowerCase()) {
+      case 'add':
+      case 'added':
+      case 'create':
+      case 'created':
+        return 'added';
+      case 'delete':
+      case 'deleted':
+      case 'remove':
+      case 'removed':
+        return 'deleted';
+      default:
+        return 'updated';
+    }
+  }
+
+  int _firstInt(List<Object?> values) {
+    for (final value in values) {
+      if (value is int) return value;
+      final parsed = int.tryParse(value?.toString() ?? '');
+      if (parsed != null) return parsed;
+    }
+    return 0;
+  }
+
+  int _maxInt(int a, int b) => a > b ? a : b;
+
+  String _customToolOutput(
+    Map<String, dynamic> item, {
+    required String callId,
+    String? name,
+  }) {
+    name ??= _customToolName(item);
+    final output = item['output']?.toString() ?? '';
+    if (name != 'apply_patch') return output;
+    final patch = _firstNonEmptyString([
+      _customToolInput(item),
+      _customPatchByCallId[callId],
+    ]);
+    return _jsonString({
+      'status': _customToolFailed(item) ? 'error' : 'ok',
+      'files': _patchFiles(patch),
+      if (output.isNotEmpty) 'output': output,
+    });
+  }
+
+  List<Map<String, dynamic>> _patchFiles(String patch) {
+    final files = <Map<String, dynamic>>[];
+    Map<String, dynamic>? current;
+
+    void flush() {
+      final file = current;
+      if (file == null) return;
+      final path = file['path']?.toString().trim() ?? '';
+      if (path.isNotEmpty) files.add(Map<String, dynamic>.from(file));
+      current = null;
+    }
+
+    void start(String action, String path) {
+      flush();
+      current = <String, dynamic>{
+        'action': action,
+        'path': path.trim(),
+        'added_lines': 0,
+        'removed_lines': 0,
+      };
+    }
+
+    for (final line in const LineSplitter().convert(patch)) {
+      if (line.startsWith('*** Add File: ')) {
+        start('added', line.substring('*** Add File: '.length));
+        continue;
+      }
+      if (line.startsWith('*** Delete File: ')) {
+        start('deleted', line.substring('*** Delete File: '.length));
+        continue;
+      }
+      if (line.startsWith('*** Update File: ')) {
+        start('updated', line.substring('*** Update File: '.length));
+        continue;
+      }
+      final file = current;
+      if (file == null) continue;
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        file['added_lines'] = (file['added_lines'] as int) + 1;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        file['removed_lines'] = (file['removed_lines'] as int) + 1;
+      }
+    }
+    flush();
+    return files;
   }
 
   String _reasoningText(Map<String, dynamic> item) {
@@ -1472,6 +1853,7 @@ class _CliEngineBridge {
     _threadId = null;
     _agentMessageByItemId.clear();
     _reasoningByItemId.clear();
+    _customPatchByCallId.clear();
     _startedToolCallIds.clear();
   }
 

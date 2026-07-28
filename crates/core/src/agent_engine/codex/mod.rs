@@ -379,4 +379,89 @@ mod tests {
         assert_eq!(output["files"][0]["added_lines"], 2);
         assert_eq!(output["files"][0]["removed_lines"], 1);
     }
+
+    #[test]
+    fn maps_realtime_file_change_add_diff_to_apply_patch_line_counts() {
+        let started = map_app_server_message(&json!({
+            "method": "item/started",
+            "params": {"item": {
+                "type": "fileChange",
+                "id": "call_file_add",
+                "changes": [{
+                    "path": "/tmp/probe_apply_patch_demo.py",
+                    "kind": {"type": "add"},
+                    "diff": "one\ntwo\nthree\n"
+                }],
+                "status": "inProgress"
+            }}
+        }));
+        assert!(
+            matches!(started.event, Some(ChatEvent::ToolCall { call_id, name, .. }) if call_id == "call_file_add" && name == "apply_patch")
+        );
+        assert_eq!(started.extra_events.len(), 1);
+        let ChatEvent::ToolOutputChunk { content, .. } = &started.extra_events[0] else {
+            panic!("expected apply_patch progress chunk");
+        };
+        let progress: serde_json::Value = serde_json::from_str(content).unwrap();
+        assert_eq!(progress["type"], "apply_patch_progress");
+        assert_eq!(progress["path"], "/tmp/probe_apply_patch_demo.py");
+        assert_eq!(progress["action"], "added");
+        assert_eq!(progress["added_lines"], 3);
+        assert_eq!(progress["removed_lines"], 0);
+
+        let completed = map_app_server_message(&json!({
+            "method": "item/completed",
+            "params": {"item": {
+                "type": "fileChange",
+                "id": "call_file_add",
+                "changes": [{
+                    "path": "/tmp/probe_apply_patch_demo.py",
+                    "kind": {"type": "add"},
+                    "diff": "one\ntwo\nthree\n"
+                }],
+                "status": "completed"
+            }}
+        }));
+        let Some(ChatEvent::ToolResult { output, .. }) = completed.event else {
+            panic!("expected fileChange ToolResult");
+        };
+        let output: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(output["files"][0]["action"], "added");
+        assert_eq!(output["files"][0]["added_lines"], 3);
+    }
+
+    #[test]
+    fn maps_codex_custom_apply_patch_started_to_progress_lines() {
+        let started = map_app_server_message(&json!({
+            "jsonrpc": "2.0",
+            "method": "item/started",
+            "params": {"item": {
+                "id": "ctc-1",
+                "type": "custom_tool_call",
+                "call_id": "call-apply-1",
+                "name": "apply_patch",
+                "input": "*** Begin Patch\n*** Add File: tmp_codex_render_test.txt\n+hello codex\n+second line\n*** End Patch\n"
+            }}
+        }));
+        assert!(
+            matches!(started.event, Some(ChatEvent::ToolCall { call_id, name, arguments }) if call_id == "call-apply-1" && name == "apply_patch" && arguments.contains("*** Add File"))
+        );
+        assert_eq!(started.extra_events.len(), 1);
+        let ChatEvent::ToolOutputChunk {
+            call_id,
+            stream,
+            content,
+        } = &started.extra_events[0]
+        else {
+            panic!("expected apply_patch progress chunk");
+        };
+        assert_eq!(call_id, "call-apply-1");
+        assert_eq!(stream, "patch");
+        let progress: serde_json::Value = serde_json::from_str(content).unwrap();
+        assert_eq!(progress["type"], "apply_patch_progress");
+        assert_eq!(progress["path"], "tmp_codex_render_test.txt");
+        assert_eq!(progress["action"], "added");
+        assert_eq!(progress["added_lines"], 2);
+        assert_eq!(progress["removed_lines"], 0);
+    }
 }
