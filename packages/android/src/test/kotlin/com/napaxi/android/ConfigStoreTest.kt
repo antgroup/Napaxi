@@ -107,6 +107,10 @@ class ConfigStoreTest {
                 ),
                 systemPrompt = "Host prompt",
                 maxToolIterations = 9,
+                contextEngine = ContextEngineConfig(
+                    contextWindowTokens = 200000,
+                    responseReserveTokens = 8192,
+                ),
             ),
         )
 
@@ -125,6 +129,8 @@ class ConfigStoreTest {
         assertNull(selection.selectedProfileId)
         assertEquals(mapOf("napaxi.llm.image_analysis" to "vision"), selection.selectedProfileIdByCapability)
         assertEquals(selection.selectedProfileIdByCapability, selectionFromMap.selectedProfileIdByCapability)
+        assertEquals(200000, selection.contextEngine?.contextWindowTokens)
+        assertEquals(8192, selectionFromMap.contextEngine?.responseReserveTokens)
         assertEquals("", store.readApiKey("main"))
     }
 
@@ -154,6 +160,10 @@ class ConfigStoreTest {
             NapaxiConfigSelection(
                 selectedProfileId = "chat",
                 selectedProfileIdByCapability = mapOf("napaxi.llm.image_analysis" to "vision"),
+                contextEngine = ContextEngineConfig(
+                    contextWindowTokens = 200000,
+                    responseReserveTokens = 8192,
+                ),
             ),
         )
 
@@ -167,6 +177,8 @@ class ConfigStoreTest {
         assertEquals("vision-key", visionConfig?.apiKey)
         assertEquals("https://vision.test/v1", visionConfig?.baseUrl)
         assertEquals("gpt-test", missingOverrideConfig?.model)
+        assertEquals(200000, defaultConfig?.contextEngine?.contextWindowTokens)
+        assertEquals(8192, visionConfig?.contextEngine?.responseReserveTokens)
     }
 
     @Test

@@ -135,11 +135,17 @@ Future<sdk.LlmConfig?> _loadBackgroundAutomationConfig() async {
   final selectedId = selection.selectedProfileId;
   if (selectedId != null && selectedId.trim().isNotEmpty) {
     final config = await store.resolveConfig(selectedId);
-    if (config != null) return config;
+    if (config != null) {
+      return selection.contextEngine == null
+          ? config
+          : config.copyWith(contextEngine: selection.contextEngine);
+    }
   }
   final profiles = await store.loadProfiles();
   if (profiles.isEmpty) return null;
-  return store.resolveConfig(profiles.first.id);
+  final config = await store.resolveConfig(profiles.first.id);
+  if (config == null || selection.contextEngine == null) return config;
+  return config.copyWith(contextEngine: selection.contextEngine);
 }
 
 String _automationRunMessage(

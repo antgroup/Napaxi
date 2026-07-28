@@ -133,25 +133,28 @@ class NapaxiConfigProfile {
 }
 
 /// The user's active configuration selection: chosen profile(s), system
-/// prompt, and tool-iteration limit.
+/// prompt, tool-iteration limit, and optional global context-engine settings.
 class NapaxiConfigSelection {
   const NapaxiConfigSelection({
     this.selectedProfileId,
     this.selectedProfileIdByCapability = const {},
     this.systemPrompt = '',
     this.maxToolIterations = 50,
+    this.contextEngine,
   });
 
   final String? selectedProfileId;
   final Map<String, String> selectedProfileIdByCapability;
   final String systemPrompt;
   final int maxToolIterations;
+  final ContextEngineConfig? contextEngine;
 
   Map<String, Object?> toMap() => {
         'selected_profile_id': selectedProfileId,
         'selected_profile_id_by_capability': selectedProfileIdByCapability,
         'system_prompt': systemPrompt,
         'max_tool_iterations': maxToolIterations,
+        if (contextEngine != null) 'context_engine': contextEngine!.toMap(),
       };
 
   factory NapaxiConfigSelection.fromMap(Map<String, Object?> map) {
@@ -162,6 +165,11 @@ class NapaxiConfigSelection {
       ),
       systemPrompt: map['system_prompt'] as String? ?? '',
       maxToolIterations: map['max_tool_iterations'] as int? ?? 50,
+      contextEngine: map['context_engine'] is Map
+          ? ContextEngineConfig.fromMap(
+              Map<String, dynamic>.from(map['context_engine'] as Map),
+            )
+          : null,
     );
   }
 }
@@ -262,6 +270,7 @@ class NapaxiConfigStore {
       selectedProfileIdByCapability: nextCapabilitySelection,
       systemPrompt: selection.systemPrompt,
       maxToolIterations: selection.maxToolIterations,
+      contextEngine: selection.contextEngine,
     ));
   }
 
@@ -336,6 +345,7 @@ class NapaxiConfigStore {
       selectedProfileIdByCapability: capabilitySelection,
       systemPrompt: selection.systemPrompt,
       maxToolIterations: selection.maxToolIterations,
+      contextEngine: selection.contextEngine,
     );
   }
 

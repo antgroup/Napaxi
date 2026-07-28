@@ -5,14 +5,22 @@ enum ModelCapability {
   imageAnalysis,
   imageGeneration,
   videoGeneration,
+  // Kept for persisted-config compatibility. The UI does not expose this
+  // capability until Core has an end-to-end audio understanding runtime.
   audioAnalysis,
 }
 
-const List<ModelCapability> _modelCapabilities = [
+// Capability slots exposed by the settings and add/edit model flows. The enum
+// names remain stable because they are also persisted as wire keys.
+const List<ModelCapability> _configurableModelCapabilities = [
   ModelCapability.imageAnalysis,
   ModelCapability.imageGeneration,
   ModelCapability.videoGeneration,
-  ModelCapability.audioAnalysis,
+];
+
+const List<ModelCapability> _visibleModelCapabilities = [
+  ModelCapability.chat,
+  ..._configurableModelCapabilities,
 ];
 
 String _capabilityLabel(BuildContext context, ModelCapability capability) {
@@ -147,7 +155,7 @@ extension LlmModelProfileSdkConfig on LlmModelProfile {
     final videoModel = selectedModel(ModelCapability.videoGeneration);
     final audioModel = selectedModel(ModelCapability.audioAnalysis);
     final capabilityConfigs = <String, sdk.LlmCapabilityConfig>{};
-    for (final capability in _modelCapabilities) {
+    for (final capability in _configurableModelCapabilities) {
       final capabilityProfile = selectedProfileByCapability[capability] ?? this;
       final modelId =
           capabilityProfile.selectedModel(capability) ??
@@ -366,6 +374,7 @@ class LlmConfigState {
     this.selectedProfileIdByCapability = const {},
     this.systemPrompt = '',
     this.maxToolIterations = 50,
+    this.contextEngine = const sdk.ContextEngineConfig(),
   });
 
   final List<LlmModelProfile> profiles;
@@ -373,6 +382,7 @@ class LlmConfigState {
   final Map<ModelCapability, String> selectedProfileIdByCapability;
   final String systemPrompt;
   final int maxToolIterations;
+  final sdk.ContextEngineConfig contextEngine;
 
   LlmModelProfile? profileById(String? profileId) {
     final id = profileId?.trim();
@@ -428,7 +438,7 @@ class LlmConfigState {
     if (chatProfile == null) return null;
     final selectedModels = <ModelCapability, String>{};
     final selectedProfiles = <ModelCapability, LlmModelProfile>{};
-    for (final capability in _modelCapabilities) {
+    for (final capability in _configurableModelCapabilities) {
       final profile = capability == ModelCapability.chat
           ? chatProfile
           : selectedProfileFor(capability);
@@ -452,11 +462,11 @@ class LlmConfigState {
       selectedProfileByCapability: Map.unmodifiable(selectedProfiles),
       systemPrompt: systemPrompt,
       maxTokens: chatProfile.maxTokens,
-      contextWindowTokens: chatProfile.contextWindowTokens,
-      nativeContextWindowTokens: chatProfile.nativeContextWindowTokens,
-      responseReserveTokens: chatProfile.responseReserveTokens,
-      compactionModel: chatProfile.compactionModel,
-      preCompactionMemoryFlush: chatProfile.preCompactionMemoryFlush,
+      contextWindowTokens: contextEngine.contextWindowTokens,
+      nativeContextWindowTokens: contextEngine.nativeContextWindowTokens,
+      responseReserveTokens: contextEngine.responseReserveTokens,
+      compactionModel: contextEngine.compactionModel ?? '',
+      preCompactionMemoryFlush: contextEngine.preCompactionMemoryFlush,
     );
   }
 
@@ -643,6 +653,34 @@ sdk.NapaxiConfigSelection _storedSelectionFromConfig(LlmConfigState config) {
     },
     systemPrompt: config.systemPrompt,
     maxToolIterations: config.maxToolIterations,
+    contextEngine: config.contextEngine,
+  );
+}
+
+sdk.ContextEngineConfig _restoredGlobalContextEngine(
+  sdk.NapaxiConfigSelection selection,
+  List<LlmModelProfile> profiles,
+) {
+  final stored = selection.contextEngine;
+  if (stored != null) return stored;
+  LlmModelProfile? legacyProfile;
+  final selectedId = selection.selectedProfileId?.trim();
+  if (selectedId != null && selectedId.isNotEmpty) {
+    legacyProfile = profiles
+        .where((profile) => profile.id == selectedId)
+        .firstOrNull;
+  }
+  legacyProfile ??= profiles.firstOrNull;
+  if (legacyProfile == null) return const sdk.ContextEngineConfig();
+  return sdk.ContextEngineConfig(
+    contextWindowTokens:
+        legacyProfile.contextWindowTokens ??
+        legacyProfile.nativeContextWindowTokens,
+    responseReserveTokens: legacyProfile.responseReserveTokens,
+    compactionModel: legacyProfile.compactionModel.trim().isEmpty
+        ? null
+        : legacyProfile.compactionModel.trim(),
+    preCompactionMemoryFlush: legacyProfile.preCompactionMemoryFlush,
   );
 }
 

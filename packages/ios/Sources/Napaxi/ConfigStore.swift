@@ -241,17 +241,20 @@ public struct NapaxiConfigSelection: Codable, Equatable, Sendable {
     public var selectedProfileIdByCapability: [String: String]
     public var systemPrompt: String
     public var maxToolIterations: Int
+    public var contextEngine: NapaxiContextEngineConfig?
 
     public init(
         selectedProfileId: String? = nil,
         selectedProfileIdByCapability: [String: String] = [:],
         systemPrompt: String = "",
-        maxToolIterations: Int = 50
+        maxToolIterations: Int = 50,
+        contextEngine: NapaxiContextEngineConfig? = nil
     ) {
         self.selectedProfileId = selectedProfileId
         self.selectedProfileIdByCapability = selectedProfileIdByCapability
         self.systemPrompt = systemPrompt
         self.maxToolIterations = maxToolIterations
+        self.contextEngine = contextEngine
     }
 
     enum CodingKeys: String, CodingKey {
@@ -259,6 +262,7 @@ public struct NapaxiConfigSelection: Codable, Equatable, Sendable {
         case selectedProfileIdByCapability = "selected_profile_id_by_capability"
         case systemPrompt = "system_prompt"
         case maxToolIterations = "max_tool_iterations"
+        case contextEngine = "context_engine"
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -271,7 +275,10 @@ public struct NapaxiConfigSelection: Codable, Equatable, Sendable {
             selectedProfileId: map["selected_profile_id"]?.stringValue,
             selectedProfileIdByCapability: map["selected_profile_id_by_capability"]?.stringMapValue ?? [:],
             systemPrompt: map["system_prompt"]?.stringValue ?? "",
-            maxToolIterations: map.configInt("max_tool_iterations") ?? 50
+            maxToolIterations: map.configInt("max_tool_iterations") ?? 50,
+            contextEngine: map["context_engine"]?.objectValue.map {
+                NapaxiContextEngineConfig.fromMap($0)
+            }
         )
     }
 
@@ -289,12 +296,16 @@ public struct NapaxiConfigSelection: Codable, Equatable, Sendable {
     }
 
     public func toMap() -> [String: NapaxiJSONValue] {
-        [
+        var map: [String: NapaxiJSONValue] = [
             "selected_profile_id": selectedProfileId.map(NapaxiJSONValue.string) ?? .null,
             "selected_profile_id_by_capability": .object(selectedProfileIdByCapability.mapValues { .string($0) }),
             "system_prompt": .string(systemPrompt),
             "max_tool_iterations": .number(Double(maxToolIterations)),
         ]
+        if let contextEngine {
+            map["context_engine"] = .object(contextEngine.toMap())
+        }
+        return map
     }
 
     private static func flutterStringMap(from value: NapaxiJSONValue?, field: String) throws -> [String: String]? {
@@ -486,7 +497,8 @@ public final class NapaxiConfigStore: @unchecked Sendable {
             selectedProfileId: selection.selectedProfileId == profileId ? nil : selection.selectedProfileId,
             selectedProfileIdByCapability: nextCapabilitySelection,
             systemPrompt: selection.systemPrompt,
-            maxToolIterations: selection.maxToolIterations
+            maxToolIterations: selection.maxToolIterations,
+            contextEngine: selection.contextEngine
         ))
     }
 
@@ -533,7 +545,8 @@ public final class NapaxiConfigStore: @unchecked Sendable {
             selectedProfileId: profileIds.contains(selection.selectedProfileId ?? "") ? selection.selectedProfileId : nil,
             selectedProfileIdByCapability: selection.selectedProfileIdByCapability.filter { profileIds.contains($0.value) },
             systemPrompt: selection.systemPrompt,
-            maxToolIterations: selection.maxToolIterations
+            maxToolIterations: selection.maxToolIterations,
+            contextEngine: selection.contextEngine
         )
     }
 

@@ -3125,6 +3125,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
                 .map((profile) => profile.systemPrompt.trim())
                 .firstWhere((prompt) => prompt.isNotEmpty, orElse: () => ''),
       maxToolIterations: selection.maxToolIterations,
+      contextEngine: _restoredGlobalContextEngine(selection, restoredProfiles),
     );
     final modelProfileId = await _modelProfileIdForChannelAgent(
       engine,

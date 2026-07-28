@@ -1818,6 +1818,7 @@ enum _SessionHistoryView {
 enum _SettingsSection {
   menu,
   agent,
+  modelManagement,
   modelEditor,
   feedback,
   contact,
@@ -1924,18 +1925,35 @@ class _SettingsLicensesPageState extends State<_SettingsLicensesPage> {
   late final Future<List<_SettingsLicenseRecord>> _licenses = _loadLicenses();
 
   Future<List<_SettingsLicenseRecord>> _loadLicenses() async {
-    final records = <_SettingsLicenseRecord>[];
+    final displayTitles = <String, String>{};
+    final textsByTitle = <String, Set<String>>{};
     await for (final entry in LicenseRegistry.licenses) {
-      final packages = entry.packages.toList()..sort();
-      records.add(
-        _SettingsLicenseRecord(
-          title: packages.isEmpty ? 'Other' : packages.join(', '),
-          text: entry.paragraphs
-              .map((paragraph) => paragraph.text)
-              .join('\n\n'),
-        ),
-      );
+      final text = entry.paragraphs
+          .map((paragraph) => paragraph.text.trim())
+          .where((paragraph) => paragraph.isNotEmpty)
+          .join('\n\n');
+      final packages = entry.packages
+          .map((package) => package.trim())
+          .where((package) => package.isNotEmpty)
+          .toSet();
+      if (packages.isEmpty) packages.add('Other');
+      for (final package in packages) {
+        final key = package.toLowerCase();
+        displayTitles.putIfAbsent(key, () => package);
+        if (text.isNotEmpty) {
+          textsByTitle.putIfAbsent(key, () => <String>{}).add(text);
+        }
+      }
     }
+    final records = [
+      for (final entry in displayTitles.entries)
+        _SettingsLicenseRecord(
+          title: entry.value,
+          text: (textsByTitle[entry.key] ?? const <String>{}).join(
+            '\n\n────────\n\n',
+          ),
+        ),
+    ];
     records.sort(
       (left, right) =>
           left.title.toLowerCase().compareTo(right.title.toLowerCase()),
@@ -2048,21 +2066,29 @@ class _SettingsGroupCard extends StatelessWidget {
 }
 
 class _SettingsGroupTitle extends StatelessWidget {
-  const _SettingsGroupTitle({required this.title});
+  const _SettingsGroupTitle({super.key, required this.title, this.trailing});
 
   final String title;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 9),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: _configTextSecondary,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: _configTextSecondary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ?trailing,
+        ],
       ),
     );
   }
@@ -2229,6 +2255,7 @@ class _SettingsPage extends StatefulWidget {
     required this.onBack,
     this.onClose,
     this.initialSection = _SettingsSection.menu,
+    this.initiallyFocusAgentContext = false,
   });
 
   final LlmConfigState initialConfig;
@@ -2255,6 +2282,7 @@ class _SettingsPage extends StatefulWidget {
   final Future<bool> Function() onBack;
   final VoidCallback? onClose;
   final _SettingsSection initialSection;
+  final bool initiallyFocusAgentContext;
 
   @override
   State<_SettingsPage> createState() => _SettingsPageState();
@@ -2266,6 +2294,7 @@ class _SettingsPageState extends State<_SettingsPage>
   late _SettingsSection _section;
   late LlmConfigState _config;
   late AppLanguage _language;
+  late bool _focusAgentContext;
   late final AnimationController _sectionController;
   final List<_SettingsSection> _sectionStack = [];
   final GlobalKey<_LlmModelProfilePageState> _modelEditorKey = GlobalKey();
@@ -2287,6 +2316,7 @@ class _SettingsPageState extends State<_SettingsPage>
     _section = widget.initialSection;
     _config = widget.initialConfig;
     _language = widget.language;
+    _focusAgentContext = widget.initiallyFocusAgentContext;
     if (_section == _SettingsSection.engines && !_showsEngineSettings) {
       _section = _SettingsSection.menu;
     }
@@ -2310,6 +2340,10 @@ class _SettingsPageState extends State<_SettingsPage>
     }
     if (oldWidget.language != widget.language) {
       _language = widget.language;
+    }
+    if (!oldWidget.initiallyFocusAgentContext &&
+        widget.initiallyFocusAgentContext) {
+      _focusAgentContext = true;
     }
     if (_section == _SettingsSection.engines && !_showsEngineSettings) {
       _section = _SettingsSection.menu;
@@ -2425,6 +2459,13 @@ class _SettingsPageState extends State<_SettingsPage>
                 onPressed: widget.onClose,
                 icon: const Icon(Icons.close_rounded),
               ),
+            if (section == _SettingsSection.modelManagement)
+              IconButton(
+                key: const Key('settings_model_management_add_button'),
+                tooltip: strings.addModel,
+                onPressed: _addModel,
+                icon: const Icon(Icons.add_rounded),
+              ),
             if (section == _SettingsSection.modelEditor)
               TextButton(
                 key: const Key('save_model_button'),
@@ -2462,6 +2503,8 @@ class _SettingsPageState extends State<_SettingsPage>
       _SettingsSection.menu => strings.settingsTitle,
       _SettingsSection.agent =>
         _language == AppLanguage.chinese ? '智能体' : 'Agent',
+      _SettingsSection.modelManagement =>
+        _language == AppLanguage.chinese ? '模型管理' : 'Model management',
       _SettingsSection.modelEditor =>
         _editingNewModel ? strings.addModel : strings.editModel,
       _SettingsSection.feedback => strings.feedbackTitle,
@@ -2507,6 +2550,7 @@ class _SettingsPageState extends State<_SettingsPage>
         selectedProfileIdByCapability: Map.unmodifiable(selectedByCapability),
         systemPrompt: _config.systemPrompt,
         maxToolIterations: _config.maxToolIterations,
+        contextEngine: _config.contextEngine,
       ),
     );
   }
@@ -2526,6 +2570,74 @@ class _SettingsPageState extends State<_SettingsPage>
     _editingCapability = null;
     _editingNewModel = false;
     _setSection(_SettingsSection.modelEditor);
+  }
+
+  Future<void> _deleteModel(LlmModelProfile profile) async {
+    final selectedCapabilities = <ModelCapability>[
+      for (final capability in _visibleModelCapabilities)
+        if (_config.selectedProfileFor(capability)?.id == profile.id)
+          capability,
+    ];
+    final chinese = _language == AppLanguage.chinese;
+    final isInUse = selectedCapabilities.isNotEmpty;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _configPageBackground,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(chinese ? '删除模型？' : 'Delete model?'),
+        content: Text(
+          isInUse
+              ? chinese
+                    ? '“${profile.displayName}”当前正在使用。删除后，相关能力会自动切换到其他可用模型；如果没有可用模型，将变为未配置。'
+                    : '“${profile.displayName}” is currently in use. Its capabilities will switch to another available model, or become unconfigured if none is available.'
+              : chinese
+              ? '确定删除“${profile.displayName}”吗？此操作不会删除聊天记录。'
+              : 'Delete “${profile.displayName}”? This will not delete any chats.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(chinese ? '取消' : 'Cancel'),
+          ),
+          TextButton(
+            key: const Key('confirm_delete_model_button'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFB42318),
+            ),
+            child: Text(chinese ? '删除' : 'Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final profiles = [
+      for (final existing in _config.profiles)
+        if (existing.id != profile.id) existing,
+    ];
+    final selectedByCapability = Map<ModelCapability, String>.of(
+      _config.selectedProfileIdByCapability,
+    )..removeWhere((_, profileId) => profileId == profile.id);
+    var selectedProfileId = _config.selectedProfileId;
+    if (selectedProfileId == profile.id) {
+      selectedProfileId = profiles
+          .where((item) => item.supports(ModelCapability.chat))
+          .firstOrNull
+          ?.id;
+    }
+    _handleConfigChanged(
+      LlmConfigState(
+        profiles: List.unmodifiable(profiles),
+        selectedProfileId: selectedProfileId,
+        selectedProfileIdByCapability: Map.unmodifiable(selectedByCapability),
+        systemPrompt: _config.systemPrompt,
+        maxToolIterations: _config.maxToolIterations,
+        contextEngine: _config.contextEngine,
+      ),
+    );
   }
 
   void _saveModelEditor(LlmModelProfile profile) {
@@ -2567,6 +2679,7 @@ class _SettingsPageState extends State<_SettingsPage>
         selectedProfileIdByCapability: Map.unmodifiable(selectedByCapability),
         systemPrompt: _config.systemPrompt,
         maxToolIterations: _config.maxToolIterations,
+        contextEngine: _config.contextEngine,
       ),
     );
     unawaited(_animateBackToMenu());
@@ -2649,6 +2762,9 @@ class _SettingsPageState extends State<_SettingsPage>
 
   Future<void> _animateBackToMenu() async {
     if (isMenu || _backTransitionInFlight) return;
+    if (_section == _SettingsSection.agent) {
+      _focusAgentContext = false;
+    }
     _backTransitionInFlight = true;
     await _sectionController.animateBack(0, curve: Curves.easeOutCubic);
     if (mounted && _sectionController.isDismissed) {
@@ -2680,8 +2796,8 @@ class _SettingsPageState extends State<_SettingsPage>
         config: _config,
         language: _language,
         onSelectModel: _selectModelProfile,
-        onAddModel: (capability) => _addModel(capability: capability),
-        onEditModel: _editModel,
+        onOpenModelManagement: () =>
+            _setSection(_SettingsSection.modelManagement),
         onOpenAgent: () => _setSection(_SettingsSection.agent),
         onLanguageChanged: _handleLanguageChanged,
         onOpenFeedback: () => _setSection(_SettingsSection.feedback),
@@ -2690,6 +2806,13 @@ class _SettingsPageState extends State<_SettingsPage>
       _SettingsSection.agent => _AgentSettingsPage(
         config: _config,
         onConfigChanged: _handleConfigChanged,
+        initiallyFocusContext: _focusAgentContext,
+      ),
+      _SettingsSection.modelManagement => _ModelManagementPage(
+        config: _config,
+        language: _language,
+        onEditModel: _editModel,
+        onDeleteModel: _deleteModel,
       ),
       _SettingsSection.modelEditor =>
         _editingProfile == null
@@ -4433,8 +4556,7 @@ class _SettingsListPage extends StatelessWidget {
     required this.config,
     required this.language,
     required this.onSelectModel,
-    required this.onAddModel,
-    required this.onEditModel,
+    required this.onOpenModelManagement,
     required this.onOpenAgent,
     required this.onLanguageChanged,
     required this.onOpenFeedback,
@@ -4445,8 +4567,7 @@ class _SettingsListPage extends StatelessWidget {
   final AppLanguage language;
   final void Function(ModelCapability capability, String profileId)
   onSelectModel;
-  final Future<void> Function(ModelCapability? capability) onAddModel;
-  final ValueChanged<LlmModelProfile> onEditModel;
+  final VoidCallback onOpenModelManagement;
   final VoidCallback onOpenAgent;
   final ValueChanged<AppLanguage> onLanguageChanged;
   final VoidCallback onOpenFeedback;
@@ -4466,53 +4587,36 @@ class _SettingsListPage extends StatelessWidget {
             _ModelSlotRow(
               capability: ModelCapability.chat,
               icon: Icons.chat_bubble_outline_rounded,
-              title: chinese ? '主模型' : 'Primary model',
+              title: chinese ? '主力推理' : 'Primary reasoning',
               config: config,
               onSelected: onSelectModel,
-              onAddModel: onAddModel,
-              onEditModel: onEditModel,
             ),
             _ModelSlotRow(
               capability: ModelCapability.imageAnalysis,
               icon: Icons.image_search_outlined,
-              title: chinese ? '图片分析模型' : 'Image analysis',
+              title: chinese ? '图片理解' : 'Image understanding',
               config: config,
               onSelected: onSelectModel,
-              onAddModel: onAddModel,
-              onEditModel: onEditModel,
             ),
             _ModelSlotRow(
               capability: ModelCapability.imageGeneration,
               icon: Icons.brush_outlined,
-              title: chinese ? '图片生成模型' : 'Image generation',
+              title: chinese ? '图片生成' : 'Image generation',
               config: config,
               onSelected: onSelectModel,
-              onAddModel: onAddModel,
-              onEditModel: onEditModel,
-            ),
-            _ModelSlotRow(
-              capability: ModelCapability.audioAnalysis,
-              icon: Icons.graphic_eq_rounded,
-              title: chinese ? '语音分析模型' : 'Audio analysis',
-              config: config,
-              onSelected: onSelectModel,
-              onAddModel: onAddModel,
-              onEditModel: onEditModel,
             ),
             _ModelSlotRow(
               capability: ModelCapability.videoGeneration,
               icon: Icons.video_camera_back_outlined,
-              title: chinese ? '视频生成模型' : 'Video generation',
+              title: chinese ? '视频生成' : 'Video generation',
               config: config,
               onSelected: onSelectModel,
-              onAddModel: onAddModel,
-              onEditModel: onEditModel,
             ),
             _SettingsActionRow(
-              key: const Key('settings_add_model_item'),
-              icon: Icons.add_circle_outline_rounded,
-              title: strings.addModel,
-              onTap: () => unawaited(onAddModel(null)),
+              key: const Key('settings_model_management_item'),
+              icon: Icons.tune_rounded,
+              title: chinese ? '模型管理' : 'Model management',
+              onTap: onOpenModelManagement,
             ),
           ],
         ),
@@ -4555,6 +4659,225 @@ class _SettingsListPage extends StatelessWidget {
   }
 }
 
+enum _ModelManagementAction { edit, delete }
+
+class _ModelManagementPage extends StatelessWidget {
+  const _ModelManagementPage({
+    required this.config,
+    required this.language,
+    required this.onEditModel,
+    required this.onDeleteModel,
+  });
+
+  final LlmConfigState config;
+  final AppLanguage language;
+  final ValueChanged<LlmModelProfile> onEditModel;
+  final Future<void> Function(LlmModelProfile profile) onDeleteModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese = language == AppLanguage.chinese;
+    final profiles = config.profiles;
+    return ListView(
+      key: const Key('settings_model_management_page'),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
+      children: [
+        if (profiles.isEmpty)
+          Padding(
+            key: const Key('settings_model_management_empty'),
+            padding: const EdgeInsets.fromLTRB(24, 72, 24, 0),
+            child: Column(
+              children: [
+                const Icon(
+                  Icons.tune_rounded,
+                  size: 34,
+                  color: _configTextTertiary,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  chinese ? '还没有配置模型' : 'No models configured',
+                  style: const TextStyle(
+                    color: _configTextPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  chinese
+                      ? '点击右上角的加号新增模型'
+                      : 'Tap the plus button to add a model.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: _configTextSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          _SettingsGroupTitle(title: chinese ? '已配置模型' : 'Configured models'),
+          _SettingsGroupCard(
+            children: [
+              for (final profile in profiles)
+                _ModelManagementRow(
+                  profile: profile,
+                  language: language,
+                  inUse: _visibleModelCapabilities.any(
+                    (capability) =>
+                        config.selectedProfileFor(capability)?.id == profile.id,
+                  ),
+                  onEdit: () => onEditModel(profile),
+                  onDelete: () => unawaited(onDeleteModel(profile)),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ModelManagementRow extends StatelessWidget {
+  const _ModelManagementRow({
+    required this.profile,
+    required this.language,
+    required this.inUse,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final LlmModelProfile profile;
+  final AppLanguage language;
+  final bool inUse;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese = language == AppLanguage.chinese;
+    final subtitle = profile.subtitle;
+    return InkWell(
+      key: Key('settings_model_profile_${profile.id}'),
+      onTap: onEdit,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 66),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 9, 8, 9),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.memory_outlined,
+                color: _configTextPrimary,
+                size: 22,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            profile.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _configTextPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        if (inUse) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            chinese ? '使用中' : 'In use',
+                            style: const TextStyle(
+                              color: _configTextSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _configTextSecondary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              PopupMenuButton<_ModelManagementAction>(
+                key: Key('settings_model_profile_menu_${profile.id}'),
+                tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                color: _configSurface,
+                surfaceTintColor: Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                icon: const Icon(
+                  Icons.more_horiz_rounded,
+                  color: _configTextSecondary,
+                ),
+                onSelected: (action) {
+                  switch (action) {
+                    case _ModelManagementAction.edit:
+                      onEdit();
+                    case _ModelManagementAction.delete:
+                      onDelete();
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: _ModelManagementAction.edit,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.edit_outlined, size: 20),
+                        const SizedBox(width: 12),
+                        Text(chinese ? '编辑' : 'Edit'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _ModelManagementAction.delete,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.delete_outline_rounded,
+                          size: 20,
+                          color: Color(0xFFB42318),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          chinese ? '删除' : 'Delete',
+                          style: const TextStyle(color: Color(0xFFB42318)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ModelSlotRow extends StatelessWidget {
   const _ModelSlotRow({
     required this.capability,
@@ -4562,18 +4885,13 @@ class _ModelSlotRow extends StatelessWidget {
     required this.title,
     required this.config,
     required this.onSelected,
-    required this.onAddModel,
-    required this.onEditModel,
   });
 
-  static const _addModelValue = '__add_model__';
   final ModelCapability capability;
   final IconData icon;
   final String title;
   final LlmConfigState config;
   final void Function(ModelCapability capability, String profileId) onSelected;
-  final Future<void> Function(ModelCapability? capability) onAddModel;
-  final ValueChanged<LlmModelProfile> onEditModel;
 
   @override
   Widget build(BuildContext context) {
@@ -4588,8 +4906,8 @@ class _ModelSlotRow extends StatelessWidget {
         ? selectedProfile?.id
         : null;
     final dropdownWidth = math.min(
-      MediaQuery.sizeOf(context).width * 0.34,
-      154.0,
+      MediaQuery.sizeOf(context).width * 0.42,
+      184.0,
     );
 
     return ConstrainedBox(
@@ -4651,16 +4969,6 @@ class _ModelSlotRow extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: Text(
-                        chinese ? '新增模型' : 'Add model',
-                        style: const TextStyle(
-                          color: _configTextSecondary,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
                   ],
                   items: [
                     for (final profile in profiles)
@@ -4672,42 +4980,16 @@ class _ModelSlotRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    DropdownMenuItem<String>(
-                      value: _addModelValue,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.add_rounded, size: 18),
-                          const SizedBox(width: 8),
-                          Text(chinese ? '新增模型' : 'Add model'),
-                        ],
-                      ),
-                    ),
                   ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    if (value == _addModelValue) {
-                      unawaited(onAddModel(capability));
-                      return;
-                    }
-                    onSelected(capability, value);
-                  },
+                  onChanged: profiles.isEmpty
+                      ? null
+                      : (value) {
+                          if (value == null) return;
+                          onSelected(capability, value);
+                        },
                 ),
               ),
             ),
-            if (selectedProfile != null)
-              IconButton(
-                key: Key('settings_edit_model_${capability.name}'),
-                tooltip: AppStrings.of(context).editModel,
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.all(6),
-                constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                onPressed: () => onEditModel(selectedProfile),
-                icon: const Icon(
-                  Icons.edit_outlined,
-                  color: _configTextSecondary,
-                  size: 18,
-                ),
-              ),
           ],
         ),
       ),
@@ -4783,10 +5065,12 @@ class _AgentSettingsPage extends StatefulWidget {
   const _AgentSettingsPage({
     required this.config,
     required this.onConfigChanged,
+    this.initiallyFocusContext = false,
   });
 
   final LlmConfigState config;
   final ValueChanged<LlmConfigState> onConfigChanged;
+  final bool initiallyFocusContext;
 
   @override
   State<_AgentSettingsPage> createState() => _AgentSettingsPageState();
@@ -4795,6 +5079,11 @@ class _AgentSettingsPage extends StatefulWidget {
 class _AgentSettingsPageState extends State<_AgentSettingsPage> {
   late final TextEditingController _maxRoundsController;
   late final TextEditingController _userPromptController;
+  late final TextEditingController _contextWindowController;
+  late final TextEditingController _responseReserveController;
+  final GlobalKey _contextSectionKey = GlobalKey();
+  late String _contextWindowPreset;
+  late String _responseReservePreset;
 
   @override
   void initState() {
@@ -4805,12 +5094,45 @@ class _AgentSettingsPageState extends State<_AgentSettingsPage> {
     _userPromptController = TextEditingController(
       text: widget.config.systemPrompt,
     );
+    final contextEngine = widget.config.contextEngine;
+    _contextWindowPreset = _presetForTokens(
+      contextEngine.contextWindowTokens,
+      _contextWindowPresetTokens,
+    );
+    _responseReservePreset = _presetForTokens(
+      contextEngine.responseReserveTokens,
+      _responseReservePresetTokens,
+    );
+    _contextWindowController = TextEditingController(
+      text: _contextWindowPreset == _tokenPresetCustom
+          ? contextEngine.contextWindowTokens?.toString() ?? ''
+          : '',
+    );
+    _responseReserveController = TextEditingController(
+      text: _responseReservePreset == _tokenPresetCustom
+          ? contextEngine.responseReserveTokens?.toString() ?? ''
+          : '',
+    );
+    if (widget.initiallyFocusContext) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final sectionContext = _contextSectionKey.currentContext;
+        if (!mounted || sectionContext == null) return;
+        Scrollable.ensureVisible(
+          sectionContext,
+          alignment: 0.06,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
+        );
+      });
+    }
   }
 
   @override
   void dispose() {
     _maxRoundsController.dispose();
     _userPromptController.dispose();
+    _contextWindowController.dispose();
+    _responseReserveController.dispose();
     super.dispose();
   }
 
@@ -4822,6 +5144,36 @@ class _AgentSettingsPageState extends State<_AgentSettingsPage> {
     return parsed < 2 ? 2 : parsed;
   }
 
+  int? get _contextWindowTokens => _tokensForPreset(
+    _contextWindowPreset,
+    _contextWindowController.text,
+    _contextWindowPresetTokens,
+  );
+
+  int? get _responseReserveTokens => _tokensForPreset(
+    _responseReservePreset,
+    _responseReserveController.text,
+    _responseReservePresetTokens,
+  );
+
+  sdk.ContextEngineConfig get _contextEngine {
+    final current = widget.config.contextEngine;
+    return sdk.ContextEngineConfig(
+      enabled: current.enabled,
+      engine: current.engine,
+      triggerRatio: current.triggerRatio,
+      targetRatio: current.targetRatio,
+      protectHeadMessages: current.protectHeadMessages,
+      protectTailMessages: current.protectTailMessages,
+      contextWindowTokens: _contextWindowTokens,
+      responseReserveTokens: _responseReserveTokens,
+      compactionStrategy: current.compactionStrategy,
+      compactionModel: current.compactionModel,
+      compactionTimeoutMs: current.compactionTimeoutMs,
+      preCompactionMemoryFlush: current.preCompactionMemoryFlush,
+    );
+  }
+
   void _emitChanged() {
     widget.onConfigChanged(
       LlmConfigState(
@@ -4831,12 +5183,65 @@ class _AgentSettingsPageState extends State<_AgentSettingsPage> {
             widget.config.selectedProfileIdByCapability,
         systemPrompt: _userPromptController.text.trim(),
         maxToolIterations: _maxRounds,
+        contextEngine: _contextEngine,
+      ),
+    );
+  }
+
+  Future<void> _showContextHelp(bool chinese) {
+    return showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: _configPageBackground,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        key: const Key('context_settings_help_sheet'),
+        padding: const EdgeInsets.fromLTRB(22, 0, 22, 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              chinese ? '上下文设置' : 'Context settings',
+              style: const TextStyle(
+                color: _configTextPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 20),
+            _ContextSettingsHelpItem(
+              title: chinese ? '自动' : 'Auto',
+              description: chinese
+                  ? '跟随当前主力推理模型；无法识别模型上限时使用 128K。'
+                  : 'Follows the active reasoning model and uses 128K when its limit cannot be identified.',
+            ),
+            const SizedBox(height: 18),
+            _ContextSettingsHelpItem(
+              title: chinese ? '上下文长度' : 'Context length',
+              description: chinese
+                  ? '控制系统提示词、聊天记录和工具内容可共同使用的上下文预算。'
+                  : 'Controls the shared context budget for system prompts, chat history, and tool content.',
+            ),
+            const SizedBox(height: 18),
+            _ContextSettingsHelpItem(
+              title: chinese ? '回复预留' : 'Response reserve',
+              description: chinese
+                  ? '提前为模型回复保留的 Token；预留越多，可用于输入内容的空间越少。'
+                  : 'Tokens reserved for the model response. A larger reserve leaves less room for input.',
+            ),
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
     final chinese =
         _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
     return ListView(
@@ -4865,6 +5270,146 @@ class _AgentSettingsPageState extends State<_AgentSettingsPage> {
               onChanged: (_) => _emitChanged(),
             ),
           ],
+        ),
+        const SizedBox(height: 26),
+        _SettingsGroupTitle(
+          key: _contextSectionKey,
+          title: strings.contextAdvancedTitle,
+          trailing: IconButton(
+            key: const Key('context_settings_help_button'),
+            tooltip: chinese ? '查看上下文说明' : 'About context settings',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+            onPressed: () => _showContextHelp(chinese),
+            icon: const Icon(
+              Icons.help_outline_rounded,
+              size: 19,
+              color: _configTextSecondary,
+            ),
+          ),
+        ),
+        _SettingsGroupCard(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    key: const Key('context_window_preset_field'),
+                    initialValue: _contextWindowPreset,
+                    decoration: _configInputDecoration(
+                      labelText: strings.contextWindowLabel,
+                    ),
+                    items: [
+                      for (final value in const [
+                        _tokenPresetAuto,
+                        _tokenPreset128k,
+                        _tokenPreset200k,
+                        _tokenPreset1m,
+                        _tokenPresetCustom,
+                      ])
+                        DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(_tokenPresetLabel(context, value)),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _contextWindowPreset = value);
+                      _emitChanged();
+                    },
+                  ),
+                  if (_contextWindowPreset == _tokenPresetCustom) ...[
+                    const SizedBox(height: 12),
+                    _ConfigField(
+                      key: const Key('context_window_custom_field'),
+                      controller: _contextWindowController,
+                      label: strings.contextWindowCustomLabel,
+                      hintText: strings.contextWindowCustomHint,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (_) => _emitChanged(),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: const Key('response_reserve_preset_field'),
+                    initialValue: _responseReservePreset,
+                    decoration: _configInputDecoration(
+                      labelText: strings.responseReserveLabel,
+                    ),
+                    items: [
+                      for (final value in const [
+                        _tokenPresetAuto,
+                        _tokenPreset4k,
+                        _tokenPreset8k,
+                        _tokenPresetCustom,
+                      ])
+                        DropdownMenuItem<String>(
+                          value: value,
+                          child: Text(_tokenPresetLabel(context, value)),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _responseReservePreset = value);
+                      _emitChanged();
+                    },
+                  ),
+                  if (_responseReservePreset == _tokenPresetCustom) ...[
+                    const SizedBox(height: 12),
+                    _ConfigField(
+                      key: const Key('response_reserve_custom_field'),
+                      controller: _responseReserveController,
+                      label: strings.responseReserveCustomLabel,
+                      hintText: strings.responseReserveCustomHint,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                      onChanged: (_) => _emitChanged(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ContextSettingsHelpItem extends StatelessWidget {
+  const _ContextSettingsHelpItem({
+    required this.title,
+    required this.description,
+  });
+
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            color: _configTextPrimary,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          description,
+          style: const TextStyle(
+            color: _configTextSecondary,
+            fontSize: 14,
+            height: 1.45,
+          ),
         ),
       ],
     );

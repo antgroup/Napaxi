@@ -105,10 +105,11 @@ int? _tokensForPreset(
   return presets[preset];
 }
 
-String _tokenPresetLabel(String preset) {
+String _tokenPresetLabel(BuildContext context, String preset) {
+  final chinese = _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
   return switch (preset) {
-    _tokenPresetAuto => 'Auto',
-    _tokenPresetCustom => 'Custom',
+    _tokenPresetAuto => chinese ? '自动' : 'Auto',
+    _tokenPresetCustom => chinese ? '自定义' : 'Custom',
     _tokenPreset1m => '1M',
     _ => preset.toUpperCase(),
   };
@@ -154,6 +155,7 @@ class _LlmConfigPageState extends State<_LlmConfigPage> {
         ),
         systemPrompt: _systemPromptController.text.trim(),
         maxToolIterations: _configuredMaxToolIterations,
+        contextEngine: widget.initialConfig.contextEngine,
       ),
     );
   }
@@ -175,7 +177,7 @@ class _LlmConfigPageState extends State<_LlmConfigPage> {
 
   Map<ModelCapability, String> get _normalizedSelectedProfileIdByCapability {
     final selection = <ModelCapability, String>{};
-    for (final capability in _modelCapabilities) {
+    for (final capability in _configurableModelCapabilities) {
       final selectedId = _selectedProfileIdByCapability[capability];
       final selectedProfile = _profiles.where((profile) {
         return profile.id == selectedId && profile.supports(capability);
@@ -334,7 +336,7 @@ class _LlmConfigPageState extends State<_LlmConfigPage> {
           const SizedBox(height: 24),
           _SettingsSectionHeader(title: strings.capabilitySlotsTitle),
           const SizedBox(height: 12),
-          for (final capability in _modelCapabilities) ...[
+          for (final capability in _configurableModelCapabilities) ...[
             _CapabilityProfileSlotSelector(
               capability: capability,
               selectedProfileId:
@@ -692,15 +694,7 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
   late final TextEditingController _apiKeyController;
   late final TextEditingController _modelController;
   late final TextEditingController _maxTokensController;
-  late final TextEditingController _nativeContextWindowController;
-  late final TextEditingController _contextWindowController;
-  late final TextEditingController _responseReserveController;
-  late final TextEditingController _compactionModelController;
   late String _selectedProviderOptionId;
-  late String _nativeContextWindowPreset;
-  late String _contextWindowPreset;
-  late String _responseReservePreset;
-  late bool _preCompactionMemoryFlush;
   late List<String> _availableModels;
   late Set<ModelCapability> _selectedCapabilities;
   bool _isFetchingModels = false;
@@ -729,37 +723,6 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
     _maxTokensController = TextEditingController(
       text: widget.initialProfile.maxTokens.toString(),
     );
-    _nativeContextWindowPreset = _presetForTokens(
-      widget.initialProfile.nativeContextWindowTokens,
-      _contextWindowPresetTokens,
-    );
-    _contextWindowPreset = _presetForTokens(
-      widget.initialProfile.contextWindowTokens,
-      _contextWindowPresetTokens,
-    );
-    _responseReservePreset = _presetForTokens(
-      widget.initialProfile.responseReserveTokens,
-      _responseReservePresetTokens,
-    );
-    _contextWindowController = TextEditingController(
-      text: _contextWindowPreset == _tokenPresetCustom
-          ? widget.initialProfile.contextWindowTokens?.toString() ?? ''
-          : '',
-    );
-    _nativeContextWindowController = TextEditingController(
-      text: _nativeContextWindowPreset == _tokenPresetCustom
-          ? widget.initialProfile.nativeContextWindowTokens?.toString() ?? ''
-          : '',
-    );
-    _responseReserveController = TextEditingController(
-      text: _responseReservePreset == _tokenPresetCustom
-          ? widget.initialProfile.responseReserveTokens?.toString() ?? ''
-          : '',
-    );
-    _compactionModelController = TextEditingController(
-      text: widget.initialProfile.compactionModel,
-    );
-    _preCompactionMemoryFlush = widget.initialProfile.preCompactionMemoryFlush;
     _selectedCapabilities = _initialCapabilities();
     final initialOption = _optionForProvider(widget.initialProfile.provider);
     final hasInitialProvider = widget.initialProfile.provider.trim().isNotEmpty;
@@ -783,21 +746,29 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
     _apiKeyController.dispose();
     _modelController.dispose();
     _maxTokensController.dispose();
-    _nativeContextWindowController.dispose();
-    _contextWindowController.dispose();
-    _responseReserveController.dispose();
-    _compactionModelController.dispose();
     super.dispose();
   }
 
   void save() {
     final primaryModelId = _modelController.text.trim();
+    final preservedCapabilities =
+        widget.initialProfile.model.trim() == primaryModelId
+        ? widget.initialProfile.models
+              .where((entry) => entry.id.trim() == primaryModelId)
+              .expand((entry) => entry.capabilities)
+              .where(
+                (capability) => !_visibleModelCapabilities.contains(capability),
+              )
+        : const <ModelCapability>[];
     final models = primaryModelId.isEmpty
         ? const <ModelEntry>[]
         : [
             ModelEntry(
               id: primaryModelId,
-              capabilities: List.unmodifiable(_selectedCapabilities),
+              capabilities: List.unmodifiable({
+                ..._selectedCapabilities,
+                ...preservedCapabilities,
+              }),
             ),
           ];
 
@@ -812,11 +783,6 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
       selectedModelByCapability: const {},
       systemPrompt: widget.initialProfile.systemPrompt,
       maxTokens: _configuredMaxTokens,
-      contextWindowTokens: _configuredContextWindowTokens,
-      nativeContextWindowTokens: _configuredNativeContextWindowTokens,
-      responseReserveTokens: _configuredResponseReserveTokens,
-      compactionModel: _compactionModelController.text.trim(),
-      preCompactionMemoryFlush: _preCompactionMemoryFlush,
     );
     final onSaved = widget.onSaved;
     if (onSaved != null) {
@@ -832,39 +798,19 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
     return parsed;
   }
 
-  int? get _configuredContextWindowTokens => _tokensForPreset(
-    _contextWindowPreset,
-    _contextWindowController.text,
-    _contextWindowPresetTokens,
-  );
-
-  int? get _configuredNativeContextWindowTokens => _tokensForPreset(
-    _nativeContextWindowPreset,
-    _nativeContextWindowController.text,
-    _contextWindowPresetTokens,
-  );
-
-  int? get _configuredResponseReserveTokens => _tokensForPreset(
-    _responseReservePreset,
-    _responseReserveController.text,
-    _responseReservePresetTokens,
-  );
-
   Set<ModelCapability> _initialCapabilities() {
     final modelId = widget.initialProfile.model.trim();
     for (final entry in widget.initialProfile.models) {
       if (entry.id.trim() == modelId) {
         return entry.capabilities
-            .where((capability) => capability != ModelCapability.chat)
+            .where(_configurableModelCapabilities.contains)
             .toSet();
       }
     }
     final capabilities = <ModelCapability>{};
     for (final entry in widget.initialProfile.models) {
       capabilities.addAll(
-        entry.capabilities.where(
-          (capability) => capability != ModelCapability.chat,
-        ),
+        entry.capabilities.where(_configurableModelCapabilities.contains),
       );
     }
     return capabilities;
@@ -916,17 +862,6 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
   void _selectModel(String model) {
     setState(() => _modelController.text = model);
   }
-
-  void _selectCompactionModel(String model) {
-    setState(() => _compactionModelController.text = model);
-  }
-
-  List<String> get _compactionModelOptions => _mergeModels([
-    ..._availableModels,
-    for (final entry in widget.initialProfile.models) entry.id,
-    _modelController.text,
-    _compactionModelController.text,
-  ]);
 
   void _toggleCapability(ModelCapability capability) {
     setState(() {
@@ -1077,12 +1012,7 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
       setState(() {
         if (!testOnly) {
           final currentModel = _modelController.text.trim();
-          final compactionModel = _compactionModelController.text.trim();
-          _availableModels = _mergeModels([
-            ...models,
-            currentModel,
-            compactionModel,
-          ]);
+          _availableModels = _mergeModels([...models, currentModel]);
           if (!preserveCurrentModel && _availableModels.isEmpty) {
             _modelController.clear();
           } else if (!preserveCurrentModel &&
@@ -1300,146 +1230,6 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
             textInputAction: TextInputAction.next,
           ),
           const SizedBox(height: 24),
-          _SettingsSectionHeader(
-            title: strings.contextAdvancedTitle,
-            description: strings.contextAdvancedDescription,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            key: const Key('native_context_window_preset_field'),
-            initialValue: _nativeContextWindowPreset,
-            decoration: _configInputDecoration(
-              labelText: strings.nativeContextWindowLabel,
-              helperText: strings.nativeContextWindowHelp,
-            ),
-            items: [
-              for (final value in const [
-                _tokenPresetAuto,
-                _tokenPreset128k,
-                _tokenPreset200k,
-                _tokenPreset1m,
-                _tokenPresetCustom,
-              ])
-                DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(_tokenPresetLabel(value)),
-                ),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() => _nativeContextWindowPreset = value);
-            },
-          ),
-          if (_nativeContextWindowPreset == _tokenPresetCustom) ...[
-            const SizedBox(height: 12),
-            _ConfigField(
-              key: const Key('native_context_window_custom_field'),
-              controller: _nativeContextWindowController,
-              label: strings.nativeContextWindowCustomLabel,
-              hintText: strings.nativeContextWindowCustomHint,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.next,
-            ),
-          ],
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            key: const Key('context_window_preset_field'),
-            initialValue: _contextWindowPreset,
-            decoration: _configInputDecoration(
-              labelText: strings.contextWindowLabel,
-              helperText: strings.contextWindowHelp,
-            ),
-            items: [
-              for (final value in const [
-                _tokenPresetAuto,
-                _tokenPreset128k,
-                _tokenPreset200k,
-                _tokenPreset1m,
-                _tokenPresetCustom,
-              ])
-                DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(_tokenPresetLabel(value)),
-                ),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() => _contextWindowPreset = value);
-            },
-          ),
-          if (_contextWindowPreset == _tokenPresetCustom) ...[
-            const SizedBox(height: 12),
-            _ConfigField(
-              key: const Key('context_window_custom_field'),
-              controller: _contextWindowController,
-              label: strings.contextWindowCustomLabel,
-              hintText: strings.contextWindowCustomHint,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.next,
-            ),
-          ],
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            key: const Key('response_reserve_preset_field'),
-            initialValue: _responseReservePreset,
-            decoration: _configInputDecoration(
-              labelText: strings.responseReserveLabel,
-              helperText: strings.responseReserveHelp,
-            ),
-            items: [
-              for (final value in const [
-                _tokenPresetAuto,
-                _tokenPreset4k,
-                _tokenPreset8k,
-                _tokenPresetCustom,
-              ])
-                DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(_tokenPresetLabel(value)),
-                ),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() => _responseReservePreset = value);
-            },
-          ),
-          if (_responseReservePreset == _tokenPresetCustom) ...[
-            const SizedBox(height: 12),
-            _ConfigField(
-              key: const Key('response_reserve_custom_field'),
-              controller: _responseReserveController,
-              label: strings.responseReserveCustomLabel,
-              hintText: strings.responseReserveCustomHint,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.next,
-            ),
-          ],
-          const SizedBox(height: 12),
-          _CompactionModelSelectorField(
-            key: const Key('compaction_model_field'),
-            controller: _compactionModelController,
-            models: _compactionModelOptions,
-            label: strings.compactionModelLabel,
-            followChatLabel: strings.compactionModelFollowChat,
-            hintText: strings.compactionModelHint,
-            helperText: strings.compactionModelHelp,
-            onSelected: _selectCompactionModel,
-          ),
-          const SizedBox(height: 8),
-          SwitchListTile.adaptive(
-            key: const Key('pre_compaction_memory_flush_switch'),
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              strings.preCompactionMemoryFlushLabel,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-            ),
-            subtitle: Text(strings.preCompactionMemoryFlushDescription),
-            value: _preCompactionMemoryFlush,
-            onChanged: (value) {
-              setState(() => _preCompactionMemoryFlush = value);
-            },
-          ),
-          const SizedBox(height: 24),
           _SettingsSectionHeader(title: strings.modelCapabilitiesTitle),
           const SizedBox(height: 8),
           _ModelCapabilitiesSelector(
@@ -1575,56 +1365,6 @@ class _ModelSelectorField extends StatelessWidget {
   }
 }
 
-class _CompactionModelSelectorField extends StatelessWidget {
-  const _CompactionModelSelectorField({
-    super.key,
-    required this.controller,
-    required this.models,
-    required this.label,
-    required this.followChatLabel,
-    required this.hintText,
-    required this.helperText,
-    required this.onSelected,
-  });
-
-  final TextEditingController controller;
-  final List<String> models;
-  final String label;
-  final String followChatLabel;
-  final String hintText;
-  final String helperText;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      textInputAction: TextInputAction.next,
-      onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
-      decoration: _configInputDecoration(
-        labelText: label,
-        hintText: hintText,
-        helperText: helperText,
-        suffixIcon: PopupMenuButton<String>(
-          key: const Key('compaction_model_picker_button'),
-          tooltip: label,
-          icon: const Icon(
-            Icons.expand_more_rounded,
-            color: _configTextSecondary,
-          ),
-          onSelected: onSelected,
-          itemBuilder: (context) => [
-            PopupMenuItem<String>(value: '', child: Text(followChatLabel)),
-            if (models.isNotEmpty) const PopupMenuDivider(),
-            for (final model in models)
-              PopupMenuItem<String>(value: model, child: Text(model)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _ModelCapabilitiesSelector extends StatelessWidget {
   const _ModelCapabilitiesSelector({
     required this.selectedCapabilities,
@@ -1644,7 +1384,7 @@ class _ModelCapabilitiesSelector extends StatelessWidget {
       mainAxisSpacing: 2,
       crossAxisSpacing: 12,
       children: [
-        for (final capability in _modelCapabilities)
+        for (final capability in _configurableModelCapabilities)
           _CapabilityCheckbox(
             key: Key('capability_${capability.name}'),
             label: _capabilityLabel(context, capability),

@@ -124,12 +124,16 @@ public data class NapaxiConfigSelection(
     val selectedProfileIdByCapability: Map<String, String> = emptyMap(),
     val systemPrompt: String = "",
     val maxToolIterations: Int = 50,
+    val contextEngine: ContextEngineConfig? = null,
 ) {
     public fun toJsonObject(): JSONObject = JSONObject()
         .put("selected_profile_id", selectedProfileId)
         .put("selected_profile_id_by_capability", JSONObject(selectedProfileIdByCapability))
         .put("system_prompt", systemPrompt)
         .put("max_tool_iterations", maxToolIterations)
+        .apply {
+            contextEngine?.let { put("context_engine", it.toJsonObject()) }
+        }
 
     public fun toJson(): String = toJsonObject().toString()
 
@@ -150,6 +154,8 @@ public data class NapaxiConfigSelection(
                     .orEmpty(),
                 systemPrompt = obj.optString("system_prompt"),
                 maxToolIterations = obj.optInt("max_tool_iterations", 50),
+                contextEngine = obj.optJSONObject("context_engine")
+                    ?.let(ContextEngineConfig::fromJsonObject),
             )
         }
 
@@ -212,6 +218,7 @@ public class NapaxiConfigStore(
                 selectedProfileIdByCapability = nextByCapability,
                 systemPrompt = selection.systemPrompt,
                 maxToolIterations = selection.maxToolIterations,
+                contextEngine = selection.contextEngine,
             ),
         )
     }
@@ -243,7 +250,10 @@ public class NapaxiConfigStore(
             ?.let { selection.selectedProfileIdByCapability[it] }
             ?: selection.selectedProfileId
             ?: return null
-        return resolveConfig(selectedProfileId)
+        val config = resolveConfig(selectedProfileId) ?: return null
+        return selection.contextEngine
+            ?.let { config.copy(contextEngine = it) }
+            ?: config
     }
 
     public fun readApiKey(profileId: String): String =
@@ -268,6 +278,7 @@ public class NapaxiConfigStore(
             selectedProfileIdByCapability = selectedByCapability,
             systemPrompt = selection.systemPrompt,
             maxToolIterations = selection.maxToolIterations,
+            contextEngine = selection.contextEngine,
         )
     }
 

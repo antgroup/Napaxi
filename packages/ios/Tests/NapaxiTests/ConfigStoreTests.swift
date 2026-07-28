@@ -31,7 +31,11 @@ final class ConfigStoreTests: XCTestCase {
             selectedProfileId: "primary",
             selectedProfileIdByCapability: ["chat": "primary"],
             systemPrompt: "Global prompt",
-            maxToolIterations: -1
+            maxToolIterations: -1,
+            contextEngine: ContextEngineConfig(
+                contextWindowTokens: 200_000,
+                responseReserveTokens: 8_192
+            )
         )
 
         let profileMap = profile.toMap()
@@ -55,6 +59,8 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual(decodedProfile.metadata, ["owner": .string("ios")])
         XCTAssertEqual(selectionMap["selected_profile_id"], .string("primary"))
         XCTAssertEqual(selectionMap["selected_profile_id_by_capability"], .object(["chat": .string("primary")]))
+        XCTAssertEqual(selectionMap["context_engine"]?.objectValue?["context_window_tokens"], .number(200_000))
+        XCTAssertEqual(decodedSelection.contextEngine?.responseReserveTokens, 8_192)
         XCTAssertEqual(decodedSelection, selection)
         XCTAssertEqual(profileMap["extra_headers"], .null)
     }
@@ -327,7 +333,11 @@ final class ConfigStoreTests: XCTestCase {
             selectedProfileId: "primary",
             selectedProfileIdByCapability: ["chat": "primary"],
             systemPrompt: "Global prompt",
-            maxToolIterations: 77
+            maxToolIterations: 77,
+            contextEngine: ContextEngineConfig(
+                contextWindowTokens: 200_000,
+                responseReserveTokens: 8_192
+            )
         ))
 
         try await store.deleteProfile("primary")
@@ -342,6 +352,8 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertEqual(selection.selectedProfileIdByCapability, [:])
         XCTAssertEqual(selection.systemPrompt, "Global prompt")
         XCTAssertEqual(selection.maxToolIterations, 77)
+        XCTAssertEqual(selection.contextEngine?.contextWindowTokens, 200_000)
+        XCTAssertEqual(selection.contextEngine?.responseReserveTokens, 8_192)
     }
 
     func testNormalizesStaleProfileSelections() async throws {

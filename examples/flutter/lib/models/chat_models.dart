@@ -992,11 +992,13 @@ class ChatSession {
     required this.updatedAt,
     required this.messages,
     this.title = '',
+    this.summaryPreview = '',
     this.isPinned = false,
   });
 
   final String id;
   final String title;
+  final String summaryPreview;
   final bool isPinned;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -1017,11 +1019,18 @@ class ChatSession {
   }
 
   String get preview {
-    if (messages.isEmpty) return '';
-    final message = messages.reversed.firstWhere(
-      (message) => message.id != 'welcome',
-      orElse: () => messages.last,
-    );
+    ChatMessage? message;
+    for (final candidate in messages.reversed) {
+      if (candidate.id == 'welcome') continue;
+      message = candidate;
+      break;
+    }
+    if (message == null) {
+      final restoredPreview = summaryPreview.trim();
+      if (restoredPreview.isNotEmpty) return restoredPreview;
+      if (messages.isEmpty) return '';
+      message = messages.last;
+    }
     if (message.content.trim().isEmpty && message.attachments.isNotEmpty) {
       return '${message.attachments.length} attachment(s)';
     }
@@ -1031,6 +1040,7 @@ class ChatSession {
   ChatSession copyWith({
     String? id,
     String? title,
+    String? summaryPreview,
     bool? isPinned,
     DateTime? updatedAt,
     List<ChatMessage>? messages,
@@ -1038,6 +1048,7 @@ class ChatSession {
     return ChatSession(
       id: id ?? this.id,
       title: title ?? this.title,
+      summaryPreview: summaryPreview ?? this.summaryPreview,
       isPinned: isPinned ?? this.isPinned,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

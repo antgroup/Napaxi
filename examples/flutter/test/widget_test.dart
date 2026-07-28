@@ -474,8 +474,26 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, '配置'));
     await tester.pumpAndSettle();
 
-    expect(find.text('编辑模型'), findsOneWidget);
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('agent_settings_page')), findsOneWidget);
     expect(find.text('上下文'), findsOneWidget);
+    expect(
+      find.byKey(const Key('context_window_preset_field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('response_reserve_preset_field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('context_settings_help_button')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('智能体的全局上下文设置。自动会跟随当前主力推理模型，无法识别模型上限时使用 128K。'),
+      findsNothing,
+    );
+    expect(find.text('编辑模型'), findsNothing);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -1651,6 +1669,8 @@ void main() {
       await revealByKey(tester, const Key('capability_imageAnalysis')),
       findsOneWidget,
     );
+    expect(find.text('Image understanding'), findsOneWidget);
+    expect(find.byKey(const Key('capability_audioAnalysis')), findsNothing);
     await tapVisible(tester, const Key('capability_imageAnalysis'));
     expect(
       find.byKey(const Key('capability_slot_imageAnalysis')),
@@ -1673,7 +1693,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Video generation'), findsOneWidget);
-    expect(find.text('Audio analysis'), findsOneWidget);
+    expect(find.text('Audio understanding'), findsNothing);
     await enterVisibleText(
       tester,
       const Key('system_prompt_field'),
@@ -1877,7 +1897,7 @@ void main() {
           baseUrl: 'https://chat.example/v1',
           apiKey: 'chat-key',
           model: 'chat-model',
-          contextWindowTokens: 200000,
+          contextWindowTokens: 128000,
         ),
         LlmModelProfile(
           id: 'vision-profile',
@@ -1897,6 +1917,7 @@ void main() {
       selectedProfileIdByCapability: {
         ModelCapability.imageAnalysis: 'vision-profile',
       },
+      contextEngine: sdk.ContextEngineConfig(contextWindowTokens: 200000),
     );
 
     final config = state.selectedRuntimeProfile!.toSdkConfig();
@@ -2178,6 +2199,88 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Saved chat'), findsOneWidget);
+  });
+
+  testWidgets('shows restored previews before inactive histories are opened', (
+    tester,
+  ) async {
+    final store = sdk.NapaxiConfigStore.memory();
+    await store.saveProfile(
+      const sdk.NapaxiConfigProfile(
+        id: 'persisted',
+        name: 'Persisted',
+        provider: 'openai',
+        model: 'saved-model',
+        metadata: {
+          'model_entries': [
+            {
+              'id': 'saved-model',
+              'display_name': '',
+              'capabilities': ['chat'],
+            },
+          ],
+        },
+      ),
+      apiKey: 'sk-saved',
+    );
+    await store.saveSelection(
+      const sdk.NapaxiConfigSelection(selectedProfileId: 'persisted'),
+    );
+    final fakeClient = FakeNapaxiChatClient(
+      sessions: const [
+        sdk.SessionInfo(
+          key: sdk.SessionKey(
+            channelType: 'app',
+            accountId: 'flutter_demo',
+            threadId: 'session-newest',
+          ),
+          title: 'Newest chat',
+          preview: 'Newest saved answer',
+          messageCount: 2,
+          createdAt: '2026-05-12T11:00:00.000',
+          updatedAt: '2026-05-12T11:01:00.000',
+        ),
+        sdk.SessionInfo(
+          key: sdk.SessionKey(
+            channelType: 'app',
+            accountId: 'flutter_demo',
+            threadId: 'session-older',
+          ),
+          title: 'Older chat',
+          preview: 'Older saved answer',
+          messageCount: 2,
+          createdAt: '2026-05-12T10:00:00.000',
+          updatedAt: '2026-05-12T10:01:00.000',
+        ),
+      ],
+      historyByThreadId: const {
+        'session-newest': [
+          sdk.ChatMessage(role: 'user', content: 'Newest question'),
+          sdk.ChatMessage(role: 'assistant', content: 'Newest saved answer'),
+        ],
+        'session-older': [
+          sdk.ChatMessage(role: 'user', content: 'Older question'),
+          sdk.ChatMessage(role: 'assistant', content: 'Older full answer'),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      _testApp(configStore: store, chatClientFactory: () async => fakeClient),
+    );
+    await tester.pumpAndSettle();
+    await pumpUntilFound(tester, find.text('Newest question'));
+
+    expect(fakeClient.historyPageRequests, hasLength(1));
+    expect(fakeClient.historyPageRequests.single.threadId, 'session-newest');
+
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.byKey(const Key('session_tile_session-older')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Older saved answer'), findsOneWidget);
+    expect(fakeClient.historyPageRequests, hasLength(1));
   });
 
   testWidgets('restores SDK session history with the latest page first', (
@@ -2727,7 +2830,13 @@ void main() {
       apiKey: 'sk-secondary',
     );
     await configStore.saveSelection(
-      const sdk.NapaxiConfigSelection(selectedProfileId: 'primary-model'),
+      const sdk.NapaxiConfigSelection(
+        selectedProfileId: 'primary-model',
+        contextEngine: sdk.ContextEngineConfig(
+          compactionModel: 'legacy-compact-model',
+          preCompactionMemoryFlush: true,
+        ),
+      ),
     );
 
     await tester.pumpWidget(
@@ -2790,7 +2899,7 @@ void main() {
     );
     expect(
       find.byKey(const Key('settings_model_slot_audioAnalysis')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('settings_model_slot_videoGeneration')),
@@ -2820,7 +2929,11 @@ void main() {
       (await configStore.loadSelection()).selectedProfileId,
       'secondary-model',
     );
-    expect(find.byKey(const Key('settings_add_model_item')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settings_model_management_item')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('settings_add_model_item')), findsNothing);
     expect(find.byKey(const Key('settings_agent_item')), findsOneWidget);
     expect(find.byKey(const Key('settings_language_dropdown')), findsOneWidget);
     expect(
@@ -2847,10 +2960,50 @@ void main() {
     await tester.tap(find.text('简体中文').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('settings_edit_model_chat')));
+    await tester.tap(find.byKey(const Key('settings_model_management_item')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('settings_model_management_page')),
+      findsOneWidget,
+    );
+    expect(find.text('模型管理'), findsOneWidget);
+    expect(
+      find.byKey(const Key('settings_model_management_add_button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('settings_model_profile_primary-model')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('settings_model_management_add_button')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('model_profile_form')), findsOneWidget);
+    expect(find.text('新增模型'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('settings_model_management_page')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const Key('settings_model_profile_primary-model')),
+    );
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('model_profile_form')), findsOneWidget);
     expect(find.text('编辑模型'), findsOneWidget);
+    expect(
+      find.byKey(const Key('native_context_window_preset_field')),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('context_window_preset_field')), findsNothing);
+    expect(
+      find.byKey(const Key('response_reserve_preset_field')),
+      findsNothing,
+    );
     await tester.enterText(
       find.descendant(
         of: find.byKey(const Key('model_name_field')),
@@ -2860,8 +3013,15 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('save_model_button')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('settings_list_page')), findsOneWidget);
+    expect(
+      find.byKey(const Key('settings_model_management_page')),
+      findsOneWidget,
+    );
     expect(find.text('更新后的模型'), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings_list_page')), findsOneWidget);
     expect(find.byKey(const Key('settings_scenarios_item')), findsNothing);
     expect(find.byKey(const Key('settings_channels_item')), findsNothing);
 
@@ -2872,6 +3032,50 @@ void main() {
     expect(find.byKey(const Key('user_prompt_field')), findsOneWidget);
     expect(find.text('最大执行轮次'), findsOneWidget);
     expect(find.text('用户提示词'), findsOneWidget);
+    final contextWindowField = await revealByKey(
+      tester,
+      const Key('context_window_preset_field'),
+    );
+    expect(contextWindowField, findsOneWidget);
+    expect(
+      find.byKey(const Key('response_reserve_preset_field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('context_settings_help_button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('compaction_model_field')), findsNothing);
+    expect(
+      find.byKey(const Key('pre_compaction_memory_flush_switch')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('context_settings_help_button')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('context_settings_help_sheet')),
+      findsOneWidget,
+    );
+    expect(find.text('上下文设置'), findsOneWidget);
+    expect(find.text('自动'), findsWidgets);
+    expect(find.text('上下文长度'), findsWidgets);
+    expect(find.text('回复预留'), findsWidgets);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(contextWindowField);
+    await tester.pumpAndSettle();
+    expect(find.text('自动'), findsWidgets);
+    expect(find.text('自定义'), findsOneWidget);
+    await tester.tap(find.text('200K').last);
+    await tester.pumpAndSettle();
+    final responseReserveField = await revealByKey(
+      tester,
+      const Key('response_reserve_preset_field'),
+    );
+    await tester.tap(responseReserveField);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('8K').last);
+    await tester.pumpAndSettle();
     await tester.enterText(
       find.descendant(
         of: find.byKey(const Key('max_execution_rounds_field')),
@@ -2890,6 +3094,13 @@ void main() {
     final agentSelection = await configStore.loadSelection();
     expect(agentSelection.maxToolIterations, 18);
     expect(agentSelection.systemPrompt, '回答前先检查事实。');
+    expect(agentSelection.contextEngine?.contextWindowTokens, 200000);
+    expect(agentSelection.contextEngine?.responseReserveTokens, 8192);
+    expect(
+      agentSelection.contextEngine?.compactionModel,
+      'legacy-compact-model',
+    );
+    expect(agentSelection.contextEngine?.preCompactionMemoryFlush, isTrue);
 
     final slowSheetDrag = await tester.startGesture(
       tester.getCenter(find.byKey(const Key('agent_settings_page'))),
@@ -6412,7 +6623,7 @@ void main() {
 
     expect(
       find.byKey(const Key('chat_background_keyboard_inset_isolation')),
-      findsNothing,
+      findsOneWidget,
     );
 
     await tester.tap(find.byTooltip('Remove from favorites'));
@@ -6997,6 +7208,76 @@ void main() {
     expect(fakeClient.deleteCount, 1);
     expect(find.byKey(const Key('session_tile_session-2')), findsNothing);
   });
+
+  testWidgets(
+    'keeps a long chat at the same scroll position while renaming from history',
+    (tester) async {
+      final fakeClient = FakeNapaxiChatClient();
+      await tester.pumpWidget(
+        _testApp(chatClientFactory: () async => fakeClient),
+      );
+      await configureSingleModel(tester);
+
+      for (var index = 0; index < 12; index++) {
+        await tester.enterText(
+          find.byKey(const Key('chat_input_field')),
+          'Conversation message $index',
+        );
+        await tester.tap(find.byKey(const Key('send_message_button')));
+        await tester.pumpAndSettle();
+      }
+
+      final messageList = tester.widget<ListView>(
+        find.byKey(const Key('chat_message_list')),
+      );
+      final chatScrollController = messageList.controller!;
+      expect(chatScrollController.position.maxScrollExtent, greaterThan(0));
+      chatScrollController.jumpTo(
+        chatScrollController.position.maxScrollExtent * 0.45,
+      );
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('session_history_button')));
+      await tester.pumpAndSettle();
+      final scrollOffsetBeforeRename = chatScrollController.offset;
+      expect(scrollOffsetBeforeRename, greaterThan(0));
+      expect(
+        tester
+            .widget<IgnorePointer>(
+              find.byKey(const Key('chat_primary_interaction_lock')),
+            )
+            .ignoring,
+        isTrue,
+      );
+
+      await tester.longPress(find.byKey(const Key('session_tile_session-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('session_rename_action_session-1')),
+      );
+      await tester.pumpAndSettle();
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pump();
+
+      expect(chatScrollController.offset, closeTo(scrollOffsetBeforeRename, 1));
+
+      await tester.enterText(
+        find.byKey(const Key('session_rename_field_session-1')),
+        'Renamed without scrolling',
+      );
+      tester.view.resetViewInsets();
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('confirm_rename_session_session-1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(chatScrollController.offset, closeTo(scrollOffsetBeforeRename, 1));
+      expect(find.text('Renamed without scrolling'), findsOneWidget);
+    },
+  );
 
   testWidgets('creates a project and starts a project chat', (tester) async {
     final fakeClient = FakeNapaxiChatClient();

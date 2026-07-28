@@ -192,10 +192,14 @@ class _SessionMenuPageShift extends StatelessWidget {
             child: Stack(
               fit: StackFit.passthrough,
               children: [
-                Opacity(
-                  key: const Key('chat_primary_content'),
-                  opacity: 1 - (0.58 * progress),
-                  child: child!,
+                IgnorePointer(
+                  key: const Key('chat_primary_interaction_lock'),
+                  ignoring: value > 0,
+                  child: Opacity(
+                    key: const Key('chat_primary_content'),
+                    opacity: 1 - (0.58 * progress),
+                    child: child!,
+                  ),
                 ),
                 if (value > 0)
                   Positioned.fill(
@@ -224,14 +228,14 @@ class _KeyboardInsetIsolation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!enabled) return child;
-    return KeyedSubtree(
+    // Keep this wrapper stable when a sidebar field gains focus. Replacing
+    // the child subtree here recreates the message ListView and loses its
+    // current ScrollPosition.
+    return MediaQuery.removeViewInsets(
       key: const Key('chat_background_keyboard_inset_isolation'),
-      child: MediaQuery.removeViewInsets(
-        context: context,
-        removeBottom: true,
-        child: child,
-      ),
+      context: context,
+      removeBottom: enabled,
+      child: child,
     );
   }
 }
@@ -1004,6 +1008,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   void _handleInputFocusChanged() {
+    if (_sessionMenuController.value > 0) return;
     if (!_inputFocusNode.hasFocus) return;
     _scrollToBottom(force: true);
   }
@@ -1011,6 +1016,7 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void didChangeMetrics() {
     super.didChangeMetrics();
+    if (_sessionMenuController.value > 0) return;
     if (!_inputFocusNode.hasFocus) return;
     _scrollToBottom(force: true);
   }
@@ -2196,7 +2202,7 @@ class _ChatScreenState extends State<ChatScreen>
       _showContextStatusDetails(
         context,
         status,
-        onConfigure: () => unawaited(_openActiveContextModelConfig()),
+        onConfigure: () => unawaited(_openContextSettings()),
         onCompact: () => unawaited(_compactActiveContext()),
       );
       return;
@@ -2259,6 +2265,10 @@ class _ChatScreenState extends State<ChatScreen>
                   .map((profile) => profile.systemPrompt.trim())
                   .firstWhere((prompt) => prompt.isNotEmpty, orElse: () => ''),
         maxToolIterations: selection.maxToolIterations,
+        contextEngine: _restoredGlobalContextEngine(
+          selection,
+          restoredProfiles,
+        ),
       );
       if (!mounted || revision != _configRevision) return;
       setState(() {
@@ -2323,6 +2333,10 @@ class _ChatScreenState extends State<ChatScreen>
                   .map((profile) => profile.systemPrompt.trim())
                   .firstWhere((prompt) => prompt.isNotEmpty, orElse: () => ''),
         maxToolIterations: selection.maxToolIterations,
+        contextEngine: _restoredGlobalContextEngine(
+          selection,
+          restoredProfiles,
+        ),
       );
       setState(() {
         _config = restoredConfig;
@@ -2600,7 +2614,10 @@ class _ChatScreenState extends State<ChatScreen>
     _closeSessionHistory();
   }
 
-  Future<void> _showSettingsSheet(_SettingsSection section) async {
+  Future<void> _showSettingsSheet(
+    _SettingsSection section, {
+    bool focusContextSettings = false,
+  }) async {
     _dismissKeyboard();
     if (!mounted) return;
     final settingsPageKey = GlobalKey<_SettingsPageState>();
@@ -2698,6 +2715,7 @@ class _ChatScreenState extends State<ChatScreen>
                         },
                         onClose: () => Navigator.of(sheetContext).pop(),
                         initialSection: section,
+                        initiallyFocusAgentContext: focusContextSettings,
                       ),
                     ),
                   ],
@@ -3380,6 +3398,7 @@ class _ChatScreenState extends State<ChatScreen>
         ChatSession(
           id: sessionId,
           title: info.title,
+          summaryPreview: info.preview,
           isPinned: _isSessionPinned(agentId, sessionId),
           createdAt: _parseStoredDate(info.createdAt),
           updatedAt: _parseStoredDate(info.updatedAt),
@@ -3474,6 +3493,7 @@ class _ChatScreenState extends State<ChatScreen>
         ChatSession(
           id: sessionId,
           title: title,
+          summaryPreview: info.preview,
           isPinned: _isSessionPinned(agentId, sessionId),
           createdAt: _parseStoredDate(info.createdAt),
           updatedAt: _parseStoredDate(info.updatedAt),
@@ -7724,45 +7744,11 @@ $candidate
     await _showSettingsSheet(_SettingsSection.configuration);
   }
 
-  Future<void> _openActiveContextModelConfig() async {
+  Future<void> _openContextSettings() async {
     _dismissKeyboard();
-    final explicitProfileId = _modelProfileIdForAgent(_activeAgentId);
-    final profile =
-        _config.profileById(explicitProfileId) ??
-        _config.selectedProfileFor(ModelCapability.chat) ??
-        _config.selectedProfile;
-    if (profile == null) {
-      await _openConfigPage();
-      return;
-    }
-
-    final updatedProfile = await Navigator.of(context).push<LlmModelProfile>(
-      MaterialPageRoute(
-        builder: (context) => _LlmModelProfilePage(initialProfile: profile),
-      ),
-    );
-    if (updatedProfile == null) return;
-
-    final nextProfiles = _config.profiles
-        .map((item) => item.id == updatedProfile.id ? updatedProfile : item)
-        .toList();
-    final nextCapabilitySelection =
-        Map<ModelCapability, String>.from(_config.selectedProfileIdByCapability)
-          ..removeWhere((capability, profileId) {
-            return profileId == updatedProfile.id &&
-                !updatedProfile.supports(capability);
-          });
-
-    _handleConfigChanged(
-      LlmConfigState(
-        profiles: List.unmodifiable(nextProfiles),
-        selectedProfileId: _config.selectedProfileId ?? updatedProfile.id,
-        selectedProfileIdByCapability: Map.unmodifiable(
-          nextCapabilitySelection,
-        ),
-        systemPrompt: _config.systemPrompt,
-        maxToolIterations: _config.maxToolIterations,
-      ),
+    await _showSettingsSheet(
+      _SettingsSection.agent,
+      focusContextSettings: true,
     );
     unawaited(_refreshActiveContextStatus());
   }

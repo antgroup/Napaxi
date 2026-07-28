@@ -91,6 +91,10 @@ void main() {
         selectedProfileIdByCapability: {'chat': 'primary'},
         systemPrompt: 'Global prompt',
         maxToolIterations: 77,
+        contextEngine: ContextEngineConfig(
+          contextWindowTokens: 200000,
+          responseReserveTokens: 8192,
+        ),
       ),
     );
 
@@ -106,6 +110,14 @@ void main() {
     );
     expect((await store.loadSelection()).systemPrompt, 'Global prompt');
     expect((await store.loadSelection()).maxToolIterations, 77);
+    expect(
+      (await store.loadSelection()).contextEngine?.contextWindowTokens,
+      200000,
+    );
+    expect(
+      (await store.loadSelection()).contextEngine?.responseReserveTokens,
+      8192,
+    );
   });
 
   test('normalizes stale profile selections', () async {
@@ -128,6 +140,10 @@ void main() {
         },
         systemPrompt: 'Global prompt',
         maxToolIterations: -1,
+        contextEngine: ContextEngineConfig(
+          contextWindowTokens: 128000,
+          preCompactionMemoryFlush: true,
+        ),
       ),
     );
 
@@ -137,5 +153,7 @@ void main() {
     expect(selection.selectedProfileIdByCapability, {'chat': 'primary'});
     expect(selection.systemPrompt, 'Global prompt');
     expect(selection.maxToolIterations, -1);
+    expect(selection.contextEngine?.contextWindowTokens, 128000);
+    expect(selection.contextEngine?.preCompactionMemoryFlush, isTrue);
   });
 }

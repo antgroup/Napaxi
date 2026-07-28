@@ -289,7 +289,10 @@ LLM config. Core owns automatic long-session compaction, stores summary state
 under engine files, injects summaries through prompt sections, and exposes
 manual compact/status operations through the common session API. Adapters
 should configure it with `context_engine`; they should not rewrite session
-history or own a separate compression pipeline.
+history or own a separate compression pipeline. Flutter, Android, and iOS
+configuration selections may also persist a selection-level `context_engine`;
+hosts should apply it to the active profile so one global context policy follows
+model switches. Profile-level context settings remain readable for migration.
 
 ## Shell Command Safety
 
