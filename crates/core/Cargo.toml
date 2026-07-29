@@ -91,7 +91,7 @@ urlencoding = "2"
 # ============================================================================
 sha2 = "0.10"
 rand = "0.8"
-base64 = "0.22"
+base64 = "0.23"
 ring = "0.17.14"
 # Constant-time equality for HMAC signature verification. Already in the tree
 # transitively (via rustls); declared directly so the audited primitive backs
