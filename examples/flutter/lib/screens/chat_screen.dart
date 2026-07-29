@@ -460,7 +460,26 @@ class _CodexInstallProgressDialog extends StatelessWidget {
       builder: (context, state, _) {
         final finished = !state.running;
         final success = state.success == true;
+        final secondaryTextStyle = Theme.of(
+          context,
+        ).textTheme.bodySmall?.copyWith(color: _configTextSecondary);
         return AlertDialog(
+          backgroundColor: _configSurface,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          titleTextStyle: const TextStyle(
+            color: _configTextPrimary,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+          ),
+          contentTextStyle: const TextStyle(
+            color: _configTextSecondary,
+            fontSize: 15,
+            height: 1.45,
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
           title: Text(
             finished ? (success ? 'Codex 已安装' : 'Codex 安装失败') : '正在安装 Codex',
           ),
@@ -470,15 +489,16 @@ class _CodexInstallProgressDialog extends StatelessWidget {
             children: [
               Text(state.label),
               const SizedBox(height: 12),
-              LinearProgressIndicator(value: state.value.clamp(0, 1)),
+              LinearProgressIndicator(
+                value: state.value.clamp(0, 1),
+                color: _configTextPrimary,
+                backgroundColor: _configBorderFaint,
+              ),
               const SizedBox(height: 8),
               Text('${(state.value.clamp(0, 1) * 100).round()}%'),
               if (!finished) ...[
                 const SizedBox(height: 4),
-                Text(
-                  '预计等待 1–3 分钟',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text('预计等待 1–3 分钟', style: secondaryTextStyle),
               ],
               if (state.substeps.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -489,12 +509,7 @@ class _CodexInstallProgressDialog extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text('• '),
-                        Expanded(
-                          child: Text(
-                            step,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
+                        Expanded(child: Text(step, style: secondaryTextStyle)),
                       ],
                     ),
                   ),
@@ -502,16 +517,23 @@ class _CodexInstallProgressDialog extends StatelessWidget {
               ],
               if (state.detail.trim().isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Text(
-                  state.detail,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text(state.detail, style: secondaryTextStyle),
               ],
             ],
           ),
           actions: [
             if (!finished)
               TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: _configTextSecondary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                ),
                 onPressed: () {
                   onCancel();
                   Navigator.of(context).pop(false);
@@ -520,6 +542,19 @@ class _CodexInstallProgressDialog extends StatelessWidget {
               ),
             if (finished)
               FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: _configTextPrimary,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: _configBorderFaint,
+                  disabledForegroundColor: _configTextTertiary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 11,
+                  ),
+                ),
                 onPressed: () => Navigator.of(context).pop(success),
                 child: Text(success ? '继续' : '关闭'),
               ),
@@ -4565,7 +4600,21 @@ class _ChatScreenState extends State<ChatScreen>
   Future<bool?> _showCodexInstallPrompt(_EnvironmentCommandResult check) {
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _configSurface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        titleTextStyle: const TextStyle(
+          color: _configTextPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+        ),
+        contentTextStyle: const TextStyle(
+          color: _configTextSecondary,
+          fontSize: 15,
+          height: 1.45,
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
         title: const Text('安装 Codex 后即可使用'),
         content: const Text(
           '首次使用 Codex 前需要先完成一次安装。\n\n'
@@ -4574,11 +4623,13 @@ class _ChatScreenState extends State<ChatScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            style: _updateDialogTextButtonStyle(),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('取消'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            style: _updateDialogFilledButtonStyle(),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('安装'),
           ),
         ],
