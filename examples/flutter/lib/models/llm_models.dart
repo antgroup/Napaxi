@@ -85,6 +85,7 @@ class LlmModelProfile {
     this.responseReserveTokens,
     this.compactionModel = '',
     this.preCompactionMemoryFlush = false,
+    this.isUserEditable = true,
   }) : _defaultChatModel = model;
 
   final String id;
@@ -103,6 +104,7 @@ class LlmModelProfile {
   final int? responseReserveTokens;
   final String compactionModel;
   final bool preCompactionMemoryFlush;
+  final bool isUserEditable;
 
   String get model => selectedModel(ModelCapability.chat) ?? _defaultChatModel;
 
@@ -467,6 +469,7 @@ class LlmConfigState {
       responseReserveTokens: contextEngine.responseReserveTokens,
       compactionModel: contextEngine.compactionModel ?? '',
       preCompactionMemoryFlush: contextEngine.preCompactionMemoryFlush,
+      isUserEditable: chatProfile.isUserEditable,
     );
   }
 
@@ -477,6 +480,7 @@ class LlmConfigState {
 
 const _storedModelEntriesKey = 'model_entries';
 const _storedSelectedModelByCapabilityKey = 'selected_model_by_capability';
+const _storedUserEditableKey = 'user_editable';
 
 sdk.NapaxiConfigProfile _storedProfileFromProfile(LlmModelProfile profile) {
   final allowedModels = profile.models
@@ -523,6 +527,7 @@ sdk.NapaxiConfigProfile _storedProfileFromProfile(LlmModelProfile profile) {
         for (final entry in profile.selectedModelByCapability.entries)
           entry.key.name: entry.value,
       },
+      _storedUserEditableKey: profile.isUserEditable,
     },
   );
 }
@@ -549,7 +554,13 @@ LlmModelProfile _profileFromStoredProfile(
     responseReserveTokens: profile.contextEngine.responseReserveTokens,
     compactionModel: profile.contextEngine.compactionModel ?? '',
     preCompactionMemoryFlush: profile.contextEngine.preCompactionMemoryFlush,
+    isUserEditable: _userEditableFromMetadata(profile),
   );
+}
+
+bool _userEditableFromMetadata(sdk.NapaxiConfigProfile profile) {
+  final value = profile.metadata[_storedUserEditableKey];
+  return value is bool ? value : true;
 }
 
 List<ModelEntry> _modelEntriesFromMetadata(sdk.NapaxiConfigProfile profile) {

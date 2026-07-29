@@ -2566,6 +2566,7 @@ class _SettingsPageState extends State<_SettingsPage>
   }
 
   void _editModel(LlmModelProfile profile) {
+    if (!profile.isUserEditable) return;
     _editingProfile = profile;
     _editingCapability = null;
     _editingNewModel = false;
@@ -2573,6 +2574,7 @@ class _SettingsPageState extends State<_SettingsPage>
   }
 
   Future<void> _deleteModel(LlmModelProfile profile) async {
+    if (!profile.isUserEditable) return;
     final selectedCapabilities = <ModelCapability>[
       for (final capability in _visibleModelCapabilities)
         if (_config.selectedProfileFor(capability)?.id == profile.id)
@@ -2641,6 +2643,10 @@ class _SettingsPageState extends State<_SettingsPage>
   }
 
   void _saveModelEditor(LlmModelProfile profile) {
+    if (!_editingNewModel && _editingProfile?.isUserEditable == false) {
+      unawaited(_animateBackToMenu());
+      return;
+    }
     final profiles = _editingNewModel
         ? [..._config.profiles, profile]
         : [
@@ -4760,7 +4766,7 @@ class _ModelManagementRow extends StatelessWidget {
     final subtitle = profile.subtitle;
     return InkWell(
       key: Key('settings_model_profile_${profile.id}'),
-      onTap: onEdit,
+      onTap: profile.isUserEditable ? onEdit : null,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 66),
         child: Padding(
@@ -4820,56 +4826,65 @@ class _ModelManagementRow extends StatelessWidget {
                   ],
                 ),
               ),
-              PopupMenuButton<_ModelManagementAction>(
-                key: Key('settings_model_profile_menu_${profile.id}'),
-                tooltip: MaterialLocalizations.of(context).showMenuTooltip,
-                color: _configSurface,
-                surfaceTintColor: Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                icon: const Icon(
-                  Icons.more_horiz_rounded,
-                  color: _configTextSecondary,
-                ),
-                onSelected: (action) {
-                  switch (action) {
-                    case _ModelManagementAction.edit:
-                      onEdit();
-                    case _ModelManagementAction.delete:
-                      onDelete();
-                  }
-                },
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: _ModelManagementAction.edit,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.edit_outlined, size: 20),
-                        const SizedBox(width: 12),
-                        Text(chinese ? '编辑' : 'Edit'),
-                      ],
-                    ),
+              if (!profile.isUserEditable)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Icon(
+                    Icons.lock_outline_rounded,
+                    color: _configTextSecondary,
                   ),
-                  PopupMenuItem(
-                    value: _ModelManagementAction.delete,
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.delete_outline_rounded,
-                          size: 20,
-                          color: Color(0xFFB42318),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          chinese ? '删除' : 'Delete',
-                          style: const TextStyle(color: Color(0xFFB42318)),
-                        ),
-                      ],
-                    ),
+                )
+              else
+                PopupMenuButton<_ModelManagementAction>(
+                  key: Key('settings_model_profile_menu_${profile.id}'),
+                  tooltip: MaterialLocalizations.of(context).showMenuTooltip,
+                  color: _configSurface,
+                  surfaceTintColor: Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                ],
-              ),
+                  icon: const Icon(
+                    Icons.more_horiz_rounded,
+                    color: _configTextSecondary,
+                  ),
+                  onSelected: (action) {
+                    switch (action) {
+                      case _ModelManagementAction.edit:
+                        onEdit();
+                      case _ModelManagementAction.delete:
+                        onDelete();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: _ModelManagementAction.edit,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.edit_outlined, size: 20),
+                          const SizedBox(width: 12),
+                          Text(chinese ? '编辑' : 'Edit'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: _ModelManagementAction.delete,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.delete_outline_rounded,
+                            size: 20,
+                            color: Color(0xFFB42318),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            chinese ? '删除' : 'Delete',
+                            style: const TextStyle(color: Color(0xFFB42318)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
