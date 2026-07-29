@@ -6593,6 +6593,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (runtimeProfile.supportsAgents ||
         runtimeProfile.agentId == sdk.NapaxiEngine.defaultAgentId) {
       engine.ensureAgent();
+      await _ensureRuntimePresetSkills(engine, runtimeProfile);
       return;
     }
     final desiredDefinition = _runtimeAgentDefinition(runtimeProfile);
@@ -6619,13 +6620,14 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     sdk.NapaxiEngine engine,
     DemoScenarioRuntimeProfile runtimeProfile,
   ) async {
-    if (!runtimeProfile.isDeveloper) return;
+    final presetSkills = _runtimePresetSkills(runtimeProfile);
+    if (presetSkills.isEmpty) return;
     final installed = {
       for (final skill in engine.listSkills(agentId: runtimeProfile.agentId))
         skill.name.trim().toLowerCase(),
     };
     var changed = false;
-    for (final preset in _defaultPresetSkills()) {
+    for (final preset in presetSkills) {
       final name = preset.name.trim().toLowerCase();
       if (name.isEmpty || installed.contains(name)) continue;
       final result = await engine.installSkill(
@@ -6640,6 +6642,19 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (changed) {
       await engine.reloadSkills(agentId: runtimeProfile.agentId);
     }
+  }
+
+  List<DemoPresetSkill> _runtimePresetSkills(
+    DemoScenarioRuntimeProfile runtimeProfile,
+  ) {
+    final presetSkills = _defaultPresetSkills();
+    if (runtimeProfile.isDeveloper) return presetSkills;
+    if (runtimeProfile.mode == DemoScenarioRuntimeMode.general) {
+      return presetSkills
+          .where((skill) => skill.name == 'android-apk-build')
+          .toList(growable: false);
+    }
+    return const [];
   }
 
   Future<void> _reloadProviderAgent(String agentId) async {

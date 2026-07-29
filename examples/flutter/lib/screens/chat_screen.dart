@@ -4618,7 +4618,7 @@ class _ChatScreenState extends State<ChatScreen>
         title: const Text('安装 Codex 后即可使用'),
         content: const Text(
           '首次使用 Codex 前需要先完成一次安装。\n\n'
-          '预计下载大小：约 30–80 MB\n\n'
+          '预计下载大小：大约 80 MB\n\n'
           '安装过程中请保持网络连接。',
         ),
         actions: [
