@@ -386,45 +386,41 @@ void main() {
     );
   });
 
-  for (final testCase in <
-    ({
-      String name,
-      int? statusCode,
-      List<String> models,
-      bool shouldSwitch,
-    })
-  >[
-    (
-      name: 'accepts a listed Codex main model',
-      statusCode: null,
-      models: ['gpt-main'],
-      shouldSwitch: true,
-    ),
-    (
-      name: 'blocks a Codex main model missing from the catalog',
-      statusCode: null,
-      models: ['gpt-other'],
-      shouldSwitch: false,
-    ),
-    (
-      name: 'blocks Codex when model catalog authentication fails',
-      statusCode: 401,
-      models: const [],
-      shouldSwitch: false,
-    ),
-    (
-      name: 'blocks Codex when the model catalog server fails',
-      statusCode: 503,
-      models: const [],
-      shouldSwitch: false,
-    ),
-    (
-      name: 'allows Codex when model listing is unsupported',
-      statusCode: 404,
-      models: const [],
-      shouldSwitch: true,
-    ),
-  ]) {
+  for (final testCase
+      in <
+        ({String name, int? statusCode, List<String> models, bool shouldSwitch})
+      >[
+        (
+          name: 'accepts a listed Codex main model',
+          statusCode: null,
+          models: ['gpt-main'],
+          shouldSwitch: true,
+        ),
+        (
+          name: 'blocks a Codex main model missing from the catalog',
+          statusCode: null,
+          models: ['gpt-other'],
+          shouldSwitch: false,
+        ),
+        (
+          name: 'blocks Codex when model catalog authentication fails',
+          statusCode: 401,
+          models: const [],
+          shouldSwitch: false,
+        ),
+        (
+          name: 'blocks Codex when the model catalog server fails',
+          statusCode: 503,
+          models: const [],
+          shouldSwitch: false,
+        ),
+        (
+          name: 'allows Codex when model listing is unsupported',
+          statusCode: 404,
+          models: const [],
+          shouldSwitch: true,
+        ),
+      ]) {
     testWidgets(testCase.name, (tester) async {
       SharedPreferences.setMockInitialValues({
         'napaxi_demo.active_scenario.v1': 'napaxi.scenario.general',
@@ -438,11 +434,7 @@ void main() {
           configStore: store,
           chatClientFactory: () async => fakeClient,
           codexModelCatalogFetcher:
-              ({
-                required provider,
-                required baseUrl,
-                required apiKey,
-              }) async {
+              ({required provider, required baseUrl, required apiKey}) async {
                 catalogCalls += 1;
                 final statusCode = testCase.statusCode;
                 if (statusCode != null) {
@@ -492,14 +484,8 @@ void main() {
         configStore: store,
         chatClientFactory: () async => fakeClient,
         codexModelCatalogFetcher:
-            ({
-              required provider,
-              required baseUrl,
-              required apiKey,
-            }) async => throw const CodexModelCatalogHttpException(
-              401,
-              'unauthorized',
-            ),
+            ({required provider, required baseUrl, required apiKey}) async =>
+                throw const CodexModelCatalogHttpException(401, 'unauthorized'),
       ),
     );
     await tester.pumpAndSettle();
@@ -537,11 +523,7 @@ void main() {
         configStore: store,
         chatClientFactory: () async => fakeClient,
         codexModelCatalogFetcher:
-            ({
-              required provider,
-              required baseUrl,
-              required apiKey,
-            }) async {
+            ({required provider, required baseUrl, required apiKey}) async {
               catalogCalls += 1;
               return ['gpt-main'];
             },
@@ -1705,8 +1687,15 @@ void main() {
       tester.getTopLeft(find.text('Continued below.')).dy,
       greaterThan(tester.getTopLeft(find.text('Use this extra context')).dy),
     );
+    expect(find.byKey(const Key('stop_message_button')), findsOneWidget);
 
     await events.close();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final idleSendButton = tester.widget<IconButton>(
+      find.byKey(const Key('send_message_button')),
+    );
+    expect(idleSendButton.onPressed, isNull);
   });
 
   testWidgets('retract restores queued messages without stopping the run', (
@@ -1756,6 +1745,12 @@ void main() {
           .controller
           ?.text,
       'Use this extra context',
+    );
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('send_message_button')))
+          .onPressed,
+      isNotNull,
     );
 
     unawaited(events.close());
