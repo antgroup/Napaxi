@@ -27,8 +27,6 @@ class _ChatBubble extends StatefulWidget {
     required this.accountId,
     required this.agentId,
     required this.onOpenConfiguration,
-    required this.isFavoriteAttachment,
-    required this.onToggleFavoriteAttachment,
     required this.onLoadFullToolCall,
     required this.onCopyUserMessage,
     required this.onEditUserMessage,
@@ -41,8 +39,6 @@ class _ChatBubble extends StatefulWidget {
   final String accountId;
   final String agentId;
   final VoidCallback onOpenConfiguration;
-  final bool Function(ChatAttachment attachment) isFavoriteAttachment;
-  final ValueChanged<ChatAttachment> onToggleFavoriteAttachment;
   final Future<AgentToolCall?> Function(AgentToolCall toolCall)
   onLoadFullToolCall;
   final ValueChanged<ChatMessage> onCopyUserMessage;
@@ -181,8 +177,6 @@ class _ChatBubbleState extends State<_ChatBubble> {
             attachments: displayAttachments,
             accountId: widget.accountId,
             agentId: widget.agentId,
-            isFavoriteAttachment: widget.isFavoriteAttachment,
-            onToggleFavoriteAttachment: widget.onToggleFavoriteAttachment,
           ),
         ],
         if (!isUser && message.action != null) ...[
@@ -701,15 +695,11 @@ class _ConversationGeneratedAttachmentsView extends StatelessWidget {
     required this.attachments,
     required this.accountId,
     required this.agentId,
-    required this.isFavoriteAttachment,
-    required this.onToggleFavoriteAttachment,
   });
 
   final List<ChatAttachment> attachments;
   final String accountId;
   final String agentId;
-  final bool Function(ChatAttachment attachment) isFavoriteAttachment;
-  final ValueChanged<ChatAttachment> onToggleFavoriteAttachment;
 
   @override
   Widget build(BuildContext context) {
@@ -725,8 +715,6 @@ class _ConversationGeneratedAttachmentsView extends StatelessWidget {
           attachments: attachments,
           accountId: accountId,
           agentId: agentId,
-          isFavoriteAttachment: isFavoriteAttachment,
-          onToggleFavoriteAttachment: onToggleFavoriteAttachment,
         ),
       ),
     );

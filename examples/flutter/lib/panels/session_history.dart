@@ -323,7 +323,6 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.activeSessionId,
     required this.projects,
     required this.projectSessionIds,
-    required this.favoriteAttachments,
     required this.initialView,
     required this.initialSettingsSection,
     required this.initialSkillsTab,
@@ -342,8 +341,6 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.onConfigChanged,
     required this.onLanguageChanged,
     required this.onEngineConfigChanged,
-    required this.onFavoriteTap,
-    required this.onFavoriteRemove,
     required this.onCheckForUpdates,
     required this.onNearbyStart,
     required this.onNearbyStop,
@@ -379,7 +376,6 @@ class _SessionHistorySheet extends StatefulWidget {
   final String activeSessionId;
   final List<_ChatProject> projects;
   final Map<String, String> projectSessionIds;
-  final List<FavoriteAttachment> favoriteAttachments;
   final _SessionHistoryView initialView;
   final _SettingsSection initialSettingsSection;
   final _SkillsInitialTab initialSkillsTab;
@@ -398,8 +394,6 @@ class _SessionHistorySheet extends StatefulWidget {
   final ValueChanged<LlmConfigState> onConfigChanged;
   final ValueChanged<AppLanguage> onLanguageChanged;
   final VoidCallback onEngineConfigChanged;
-  final ValueChanged<ChatAttachment> onFavoriteTap;
-  final ValueChanged<ChatAttachment> onFavoriteRemove;
   final VoidCallback onCheckForUpdates;
   final Future<void> Function() onNearbyStart;
   final Future<void> Function() onNearbyStop;
@@ -721,18 +715,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     return searchableText.contains(normalizedQuery);
   }
 
-  bool _matchesFavorite(FavoriteAttachment favorite, String normalizedQuery) {
-    if (normalizedQuery.isEmpty) return true;
-    final attachment = favorite.attachment;
-    final searchableText = [
-      attachment.name,
-      attachment.path,
-      attachment.sandboxPath ?? '',
-      attachment.typeLabel,
-    ].join(' ').toLowerCase();
-    return searchableText.contains(normalizedQuery);
-  }
-
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
@@ -745,13 +727,8 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     final visibleSessions = sortedSessions
         .where((session) => _matchesSearch(session, normalizedQuery))
         .toList();
-    final visibleFavorites = widget.favoriteAttachments
-        .where((favorite) => _matchesFavorite(favorite, normalizedQuery))
-        .toList();
-    final hasSearchResults =
-        visibleFavorites.isNotEmpty || visibleSessions.isNotEmpty;
-    final hasAnyContent =
-        widget.favoriteAttachments.isNotEmpty || widget.sessions.isNotEmpty;
+    final hasSearchResults = visibleSessions.isNotEmpty;
+    final hasAnyContent = widget.sessions.isNotEmpty;
 
     return PopScope(
       canPop: _view == _SessionHistoryView.menu,
@@ -772,7 +749,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
             context: context,
             strings: strings,
             visibleSessions: visibleSessions,
-            visibleFavorites: visibleFavorites,
             hasSearchResults: hasSearchResults,
             hasAnyContent: hasAnyContent,
           ),
@@ -1084,7 +1060,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     required BuildContext context,
     required AppStrings strings,
     required List<ChatSession> visibleSessions,
-    required List<FavoriteAttachment> visibleFavorites,
     required bool hasSearchResults,
     required bool hasAnyContent,
   }) {
@@ -1226,31 +1201,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         child: Column(
                           children: [
-                            if (visibleFavorites.isNotEmpty) ...[
-                              if (!_isSearching)
-                                _SessionSectionHeader(
-                                  label: strings.favorites,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    10,
-                                    4,
-                                    10,
-                                    10,
-                                  ),
-                                ),
-                              for (final favorite in visibleFavorites) ...[
-                                _FavoriteAttachmentTile(
-                                  favorite: favorite,
-                                  onTap: () =>
-                                      widget.onFavoriteTap(favorite.attachment),
-                                  onRemove: () => widget.onFavoriteRemove(
-                                    favorite.attachment,
-                                  ),
-                                  onLongPress: () =>
-                                      _showFavoriteActions(context, favorite),
-                                ),
-                                const SizedBox(height: 4),
-                              ],
-                            ],
                             if (!_isSearching)
                               if (visibleSessions.any(
                                 (session) => session.isPinned,
@@ -1258,9 +1208,9 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                                 _SessionSectionHeader(
                                   label: strings.pinned,
                                   fontWeight: FontWeight.w600,
-                                  padding: EdgeInsets.fromLTRB(
+                                  padding: const EdgeInsets.fromLTRB(
                                     10,
-                                    visibleFavorites.isEmpty ? 4 : 10,
+                                    4,
                                     10,
                                     10,
                                   ),
@@ -1269,9 +1219,9 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
                                 _SessionSectionHeader(
                                   label: strings.recent,
                                   fontWeight: FontWeight.w600,
-                                  padding: EdgeInsets.fromLTRB(
+                                  padding: const EdgeInsets.fromLTRB(
                                     10,
-                                    visibleFavorites.isEmpty ? 4 : 10,
+                                    4,
                                     10,
                                     10,
                                   ),
@@ -1758,46 +1708,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
     while (view.viewInsets.bottom > 0 && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(milliseconds: 16));
     }
-  }
-
-  void _showFavoriteActions(BuildContext context, FavoriteAttachment favorite) {
-    final strings = AppStrings.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    key: Key('favorite_remove_action_${favorite.id.hashCode}'),
-                    leading: const Icon(
-                      Icons.delete_outline_rounded,
-                      color: Color(0xFFDC2626),
-                    ),
-                    title: Text(
-                      strings.removeFavorite,
-                      style: const TextStyle(color: Color(0xFFDC2626)),
-                    ),
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      widget.onFavoriteRemove(favorite.attachment);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
   }
 }
 
@@ -6715,126 +6625,6 @@ class _SessionSectionHeader extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _FavoriteAttachmentTile extends StatelessWidget {
-  const _FavoriteAttachmentTile({
-    required this.favorite,
-    required this.onTap,
-    required this.onRemove,
-    required this.onLongPress,
-  });
-
-  final FavoriteAttachment favorite;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
-  final VoidCallback onLongPress;
-
-  IconData get _icon {
-    final attachment = favorite.attachment;
-    if (attachment.isImage) return Icons.image_rounded;
-    if (attachment.isHtml) return Icons.web_asset_rounded;
-    if (attachment.isWebLink) return Icons.public_rounded;
-    if (attachment.isVideo) return Icons.play_circle_rounded;
-    if (attachment.isAudio) return Icons.audiotrack_rounded;
-    return Icons.insert_drive_file_rounded;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final attachment = favorite.attachment;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        key: Key('favorite_attachment_tile_${favorite.id.hashCode}'),
-        borderRadius: BorderRadius.circular(10),
-        hoverColor: const Color(0xFFEDEDED),
-        highlightColor: const Color(0xFFE5E5E5),
-        splashColor: const Color(0xFFD4D4D4).withValues(alpha: 0.24),
-        onTap: onTap,
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          onLongPress();
-        },
-        child: DecoratedBox(
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 8, 10),
-            child: Row(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  width: 3,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        attachment.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF333333),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(_icon, color: const Color(0xFF858585), size: 14),
-                          const SizedBox(width: 5),
-                          Expanded(
-                            child: Text(
-                              attachment.typeLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Color(0xFF666666),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                Tooltip(
-                  message: AppStrings.of(context).removeFavorite,
-                  child: InkResponse(
-                    key: Key(
-                      'remove_favorite_attachment_${favorite.id.hashCode}',
-                    ),
-                    onTap: onRemove,
-                    radius: 18,
-                    child: const SizedBox(
-                      width: 34,
-                      height: 34,
-                      child: Icon(
-                        Icons.star_rounded,
-                        color: Color(0xFFF59E0B),
-                        size: 19,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

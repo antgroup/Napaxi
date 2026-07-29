@@ -5874,7 +5874,9 @@ void main() {
     expect(find.text('编辑 snake.html +2 -1'), findsOneWidget);
   });
 
-  testWidgets('shows generated files as chat attachments', (tester) async {
+  testWidgets('shows generated files without favorite controls', (
+    tester,
+  ) async {
     final fakeClient = FakeNapaxiChatClient(
       detectedFiles: const [
         sdk.ResolvedFile(
@@ -5949,6 +5951,8 @@ void main() {
     );
     expect(find.text('snake.html'), findsOneWidget);
     expect(find.text('notes.md'), findsOneWidget);
+    expect(find.byTooltip('Add to favorites'), findsNothing);
+    expect(find.byTooltip('Remove from favorites'), findsNothing);
   });
 
   testWidgets('uses SDK thread id for generated attachment cache keys', (
@@ -6823,7 +6827,7 @@ void main() {
     expect(find.text('About'), findsOneWidget);
     expect(find.text('Current version'), findsNothing);
     expect(find.byKey(const Key('about_current_version')), findsOneWidget);
-    expect(find.text('0.1.0+14'), findsOneWidget);
+    expect(find.text('0.2.0+14'), findsOneWidget);
     expect(find.byKey(const Key('about_check_update_button')), findsOneWidget);
     expect(find.byKey(const Key('about_feedback_button')), findsNothing);
     expect(
@@ -6854,7 +6858,7 @@ void main() {
 
     expect(find.text('About'), findsOneWidget);
     expect(find.text('Current version'), findsNothing);
-    expect(find.text('0.1.0+14'), findsOneWidget);
+    expect(find.text('0.2.0+14'), findsOneWidget);
     expect(find.byKey(const Key('about_check_update_button')), findsOneWidget);
   });
 
@@ -6924,7 +6928,7 @@ void main() {
       'The update installer page was confusing.',
     );
     expect(feedback.submittedRequest?.contact, 'tester@example.com');
-    expect(feedback.submittedRequest?.appVersion.display, '0.1.0+14');
+    expect(feedback.submittedRequest?.appVersion.display, '0.2.0+14');
     expect(find.text('Feedback submitted.'), findsOneWidget);
   });
 
@@ -7125,268 +7129,6 @@ void main() {
     );
     expect(find.byKey(const Key('open_release_page_button')), findsOneWidget);
   });
-
-  testWidgets('favorites and unfavorites chat attachments from the side menu', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({
-      'napaxi_demo.favorite_attachments.v1': jsonEncode([
-        {
-          'id': 'path:https://example.com/report.html',
-          'name': 'example.com',
-          'path': 'https://example.com/report.html',
-          'type': 'file',
-          'mime_type': 'text/uri-list',
-          'created_at': DateTime(2026, 5, 18).toIso8601String(),
-        },
-      ]),
-    });
-
-    await tester.pumpWidget(
-      _testApp(chatClientFactory: () async => FakeNapaxiChatClient()),
-    );
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const Key('chat_input_field')),
-      'Budget planning',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('send_message_button')));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('session_history_button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Favorites'), findsOneWidget);
-    expect(find.text('example.com'), findsOneWidget);
-    expect(find.text('Recent'), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('Favorites')).dy,
-      lessThan(tester.getTopLeft(find.text('Recent')).dy),
-    );
-
-    await tester.tap(find.byKey(const Key('session_history_search_button')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('session_history_search_bar')), findsOneWidget);
-    expect(
-      find.byKey(const Key('session_history_search_close_surface')),
-      findsOneWidget,
-    );
-    final searchInputSurface = find.byKey(
-      const Key('session_history_search_input_surface'),
-    );
-    expect(searchInputSurface, findsOneWidget);
-    final searchInputDecoration =
-        tester.widget<Container>(searchInputSurface).decoration
-            as BoxDecoration;
-    expect(searchInputDecoration.borderRadius, BorderRadius.circular(24));
-    await tester.enterText(
-      find.byKey(const Key('session_history_search_field')),
-      'example',
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('example.com'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('session_history_list')),
-        matching: find.text('Budget planning'),
-      ),
-      findsNothing,
-    );
-
-    await tester.enterText(
-      find.byKey(const Key('session_history_search_field')),
-      'budget',
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('session_history_list')),
-        matching: find.text('Budget planning'),
-      ),
-      findsWidgets,
-    );
-    expect(find.text('example.com'), findsNothing);
-
-    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-    addTearDown(tester.view.resetViewInsets);
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('session_history_search_close')));
-    await tester.pump(const Duration(milliseconds: 120));
-
-    expect(
-      find.byKey(const Key('chat_background_keyboard_inset_isolation')),
-      findsOneWidget,
-    );
-
-    tester.view.resetViewInsets();
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const Key('chat_background_keyboard_inset_isolation')),
-      findsOneWidget,
-    );
-
-    await tester.tap(find.byTooltip('Remove from favorites'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Favorites'), findsNothing);
-    expect(find.text('example.com'), findsNothing);
-  });
-
-  testWidgets(
-    'matches restored uploaded attachments to legacy path favorites',
-    (tester) async {
-      const sessionKey = sdk.SessionKey(
-        channelType: 'app',
-        accountId: 'flutter_demo',
-        threadId: 'session-42',
-      );
-      SharedPreferences.setMockInitialValues({
-        'napaxi_demo.favorite_attachments.v1': jsonEncode([
-          {
-            'id': 'path:/tmp/photo.jpg',
-            'name': 'photo.jpg',
-            'path': '/tmp/photo.jpg',
-            'type': 'image',
-            'mime_type': 'image/jpeg',
-            'created_at': DateTime(2026, 5, 18).toIso8601String(),
-          },
-        ]),
-      });
-      final store = sdk.NapaxiConfigStore.memory();
-      await store.saveProfile(
-        const sdk.NapaxiConfigProfile(
-          id: 'persisted',
-          name: 'Persisted',
-          provider: 'openai',
-          model: 'saved-model',
-          metadata: {
-            'model_entries': [
-              {
-                'id': 'saved-model',
-                'display_name': '',
-                'capabilities': ['chat'],
-              },
-            ],
-          },
-        ),
-        apiKey: 'sk-saved',
-      );
-      await store.saveSelection(
-        const sdk.NapaxiConfigSelection(selectedProfileId: 'persisted'),
-      );
-      final fakeClient = FakeNapaxiChatClient(
-        sessions: const [
-          sdk.SessionInfo(
-            key: sessionKey,
-            title: 'Photo chat',
-            preview: 'Uploaded a photo',
-            messageCount: 1,
-            createdAt: '2026-05-18T10:00:00.000',
-            updatedAt: '2026-05-18T10:01:00.000',
-          ),
-        ],
-        historyByThreadId: const {
-          'session-42': [
-            sdk.ChatMessage(
-              role: 'user',
-              content: 'Uploaded a photo',
-              attachments: [
-                sdk.ChatAttachment(
-                  kind: 'image',
-                  mimeType: 'image/jpeg',
-                  filename: 'photo.jpg',
-                  sandboxPath: '/workspace/attachments/session-42/photo.jpg',
-                ),
-              ],
-            ),
-          ],
-        },
-      );
-
-      await tester.pumpWidget(
-        _testApp(configStore: store, chatClientFactory: () async => fakeClient),
-      );
-      await tester.pumpAndSettle();
-      await pumpUntilFound(
-        tester,
-        find.byKey(const Key('favorite_attachment_on')),
-      );
-
-      expect(find.byKey(const Key('favorite_attachment_on')), findsOneWidget);
-
-      await tester.tap(
-        find.byKey(const Key('conversation_attachments_button')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text(
-          'Uploaded · Image · /workspace/attachments/session-42/photo.jpg',
-        ),
-        findsOneWidget,
-      );
-      expect(
-        find.text(
-          'Generated · Image · /workspace/attachments/session-42/photo.jpg',
-        ),
-        findsNothing,
-      );
-
-      await tester.tap(find.byTooltip('Close'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const Key('favorite_attachment_on')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('session_history_button')));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Favorites'), findsNothing);
-      expect(find.text('photo.jpg'), findsNothing);
-    },
-  );
-
-  testWidgets(
-    'returns to the side menu after previewing a favorite attachment',
-    (tester) async {
-      WebViewPlatform.instance = _FakeWebViewPlatform();
-      SharedPreferences.setMockInitialValues({
-        'napaxi_demo.favorite_attachments.v1': jsonEncode([
-          {
-            'id': 'path:https://example.com/report.html',
-            'name': 'example.com',
-            'path': 'https://example.com/report.html',
-            'type': 'file',
-            'mime_type': 'text/uri-list',
-            'created_at': DateTime(2026, 5, 18).toIso8601String(),
-          },
-        ]),
-      });
-
-      await tester.pumpWidget(_testApp());
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('session_history_button')));
-      await tester.pumpAndSettle();
-
-      const favoriteId = 'path:https://example.com/report.html';
-      await tester.tap(
-        find.byKey(Key('favorite_attachment_tile_${favoriteId.hashCode}')),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Preview'), findsOneWidget);
-
-      await tester.pageBack();
-      await tester.pumpAndSettle();
-
-      expect(find.byKey(const Key('session_history_list')), findsOneWidget);
-      expect(find.text('Favorites'), findsOneWidget);
-      expect(find.text('example.com'), findsOneWidget);
-    },
-  );
 
   testWidgets('does not extract content web links into references', (
     tester,

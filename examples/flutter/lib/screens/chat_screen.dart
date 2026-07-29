@@ -787,8 +787,6 @@ class _ChatScreenState extends State<ChatScreen>
         WidgetsBindingObserver,
         _ChatScreenChannelMixin,
         _ChatScreenA2AMixin {
-  static const String _favoriteAttachmentsKey =
-      'napaxi_demo.favorite_attachments.v1';
   static const String _pinnedSessionsKey = 'napaxi_demo.pinned_sessions.v1';
   static const String _renamedSessionsKey = 'napaxi_demo.renamed_sessions.v1';
   static const String _chatProjectsKey = 'napaxi_demo.chat_projects.v1';
@@ -933,7 +931,6 @@ class _ChatScreenState extends State<ChatScreen>
   Map<String, String> _renamedSessionTitles = const {};
   List<_ChatProject> _chatProjects = const [];
   Map<String, String> _projectSessionIds = const {};
-  List<FavoriteAttachment> _favoriteAttachments = const [];
   Map<String, List<ChatAttachment>> _assistantAttachmentCache = const {};
   Map<String, List<ChatAttachment>> _pendingAssistantAttachments = const {};
   Map<String, Set<String>> _seenAttachmentIds = const {};
@@ -1027,16 +1024,6 @@ class _ChatScreenState extends State<ChatScreen>
       }
     }
     return List.unmodifiable(items);
-  }
-
-  List<FavoriteAttachment> get _activeFavoriteAttachments {
-    return _favoriteAttachments
-        .where(
-          (favorite) =>
-              favorite.accountId == _activeAccountId &&
-              favorite.agentId == _activeAgentId,
-        )
-        .toList(growable: false);
   }
 
   /// Flatten the active session's messages into render items, aggregating each
@@ -1253,7 +1240,6 @@ class _ChatScreenState extends State<ChatScreen>
     _unsavedSessionIds.add(_activeSessionId);
     _restorePersistedStateFuture = _restorePersistedState();
     unawaited(_restorePersistedStateFuture);
-    unawaited(_restoreFavoriteAttachments());
     unawaited(_restorePinnedSessions());
     unawaited(_restoreRenamedSessions());
     unawaited(_restoreChatProjects());
@@ -2702,40 +2688,6 @@ class _ChatScreenState extends State<ChatScreen>
     } catch (_) {
       // Keep the normal no-model prompt if the config store is unavailable.
     }
-  }
-
-  Future<void> _restoreFavoriteAttachments() async {
-    try {
-      final preferences = await SharedPreferences.getInstance();
-      final raw = preferences.getString(_favoriteAttachmentsKey);
-      if (raw == null || raw.trim().isEmpty) return;
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
-      final favorites = decoded
-          .whereType<Map>()
-          .map(
-            (entry) =>
-                FavoriteAttachment.fromMap(Map<String, Object?>.from(entry)),
-          )
-          .where((favorite) => favorite.id.trim().isNotEmpty)
-          .toList(growable: false);
-      if (!mounted) return;
-      setState(
-        () => _favoriteAttachments = _dedupeFavoriteAttachments(favorites),
-      );
-    } catch (_) {
-      // Favorites are a convenience cache; ignore corrupt local state.
-    }
-  }
-
-  Future<void> _persistFavoriteAttachments() async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(
-      _favoriteAttachmentsKey,
-      jsonEncode([
-        for (final favorite in _favoriteAttachments) favorite.toMap(),
-      ]),
-    );
   }
 
   String _pinnedSessionKey(String agentId, String sessionId) {
@@ -6787,54 +6739,6 @@ class _ChatScreenState extends State<ChatScreen>
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  bool _isFavoriteAttachment(ChatAttachment attachment) {
-    return _activeFavoriteAttachments.any(
-      (favorite) => _favoriteMatchesAttachment(favorite, attachment),
-    );
-  }
-
-  void _toggleFavoriteAttachment(ChatAttachment attachment) {
-    final id = _attachmentFavoriteId(attachment);
-    final index = _favoriteAttachments.indexWhere(
-      (favorite) =>
-          favorite.accountId == _activeAccountId &&
-          favorite.agentId == _activeAgentId &&
-          (favorite.id == id ||
-              _favoriteMatchesAttachment(favorite, attachment)),
-    );
-    setState(() {
-      if (index == -1) {
-        _favoriteAttachments = _dedupeFavoriteAttachments([
-          FavoriteAttachment(
-            id: id,
-            attachment: attachment,
-            createdAt: DateTime.now(),
-            accountId: _activeAccountId,
-            agentId: _activeAgentId,
-          ),
-          ..._favoriteAttachments,
-        ]);
-      } else {
-        _favoriteAttachments = _dedupeFavoriteAttachments([
-          for (var i = 0; i < _favoriteAttachments.length; i++)
-            if (i != index) _favoriteAttachments[i],
-        ]);
-      }
-    });
-    unawaited(_persistFavoriteAttachments());
-  }
-
-  void _openFavoriteAttachment(ChatAttachment attachment) {
-    unawaited(
-      _openAttachment(
-        context,
-        attachment,
-        accountId: _activeAccountId,
-        agentId: _activeAgentId,
-      ),
-    );
-  }
-
   Future<void> _openConversationAttachments() async {
     final items = _activeConversationAttachments;
     _markActiveAttachmentsSeen(_activeSessionId);
@@ -9784,7 +9688,6 @@ $candidate
                     .where((project) => project.agentId == _activeAgentId)
                     .toList(growable: false),
                 projectSessionIds: _activeProjectSessionMap(),
-                favoriteAttachments: _activeFavoriteAttachments,
                 initialView: _sessionHistoryInitialView,
                 initialSettingsSection: _sessionHistoryInitialSettingsSection,
                 initialSkillsTab: _sessionHistoryInitialSkillsTab,
@@ -9803,8 +9706,6 @@ $candidate
                 onConfigChanged: _handleConfigChanged,
                 onLanguageChanged: widget.onLanguageChanged,
                 onEngineConfigChanged: _handleEngineConfigChanged,
-                onFavoriteTap: _openFavoriteAttachment,
-                onFavoriteRemove: _toggleFavoriteAttachment,
                 onCheckForUpdates: () => _checkForUpdates(automatic: false),
                 onNearbyStart: () => _setA2AConnectionAllowedFromSettings(true),
                 onNearbyStop: () => _setA2AConnectionAllowedFromSettings(false),
@@ -10004,10 +9905,6 @@ $candidate
                                                       accountId:
                                                           _activeAccountId,
                                                       agentId: _activeAgentId,
-                                                      isFavoriteAttachment:
-                                                          _isFavoriteAttachment,
-                                                      onToggleFavoriteAttachment:
-                                                          _toggleFavoriteAttachment,
                                                     );
                                                   }
                                                   final message =
@@ -10021,10 +9918,6 @@ $candidate
                                                         _loadFullHistoryToolCall,
                                                     onOpenConfiguration:
                                                         _openModelSettingsPage,
-                                                    isFavoriteAttachment:
-                                                        _isFavoriteAttachment,
-                                                    onToggleFavoriteAttachment:
-                                                        _toggleFavoriteAttachment,
                                                     onOpenSkillOrganize:
                                                         _openSkillOrganizeFromChat,
                                                     onCopyUserMessage:
