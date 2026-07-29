@@ -696,11 +696,13 @@ class _LlmModelProfilePage extends StatefulWidget {
   const _LlmModelProfilePage({
     super.key,
     required this.initialProfile,
+    this.initialCapability,
     this.embedded = false,
     this.onSaved,
   });
 
   final LlmModelProfile initialProfile;
+  final ModelCapability? initialCapability;
   final bool embedded;
   final ValueChanged<LlmModelProfile>? onSaved;
 
@@ -822,18 +824,26 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
 
   Set<ModelCapability> _initialCapabilities() {
     final modelId = widget.initialProfile.model.trim();
-    for (final entry in widget.initialProfile.models) {
-      if (entry.id.trim() == modelId) {
-        return entry.capabilities
-            .where(_configurableModelCapabilities.contains)
-            .toSet();
-      }
-    }
     final capabilities = <ModelCapability>{};
     for (final entry in widget.initialProfile.models) {
-      capabilities.addAll(
-        entry.capabilities.where(_configurableModelCapabilities.contains),
-      );
+      if (entry.id.trim() == modelId) {
+        capabilities.addAll(
+          entry.capabilities.where(_configurableModelCapabilities.contains),
+        );
+        break;
+      }
+    }
+    if (capabilities.isEmpty) {
+      for (final entry in widget.initialProfile.models) {
+        capabilities.addAll(
+          entry.capabilities.where(_configurableModelCapabilities.contains),
+        );
+      }
+    }
+    final initialCapability = widget.initialCapability;
+    if (initialCapability != null &&
+        _configurableModelCapabilities.contains(initialCapability)) {
+      capabilities.add(initialCapability);
     }
     return capabilities;
   }

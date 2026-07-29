@@ -2802,6 +2802,8 @@ class _SettingsPageState extends State<_SettingsPage>
         config: _config,
         language: _language,
         onSelectModel: _selectModelProfile,
+        onAddModel: (capability) =>
+            unawaited(_addModel(capability: capability)),
         onOpenModelManagement: () =>
             _setSection(_SettingsSection.modelManagement),
         onOpenAgent: () => _setSection(_SettingsSection.agent),
@@ -2826,6 +2828,7 @@ class _SettingsPageState extends State<_SettingsPage>
             : _LlmModelProfilePage(
                 key: _modelEditorKey,
                 initialProfile: _editingProfile!,
+                initialCapability: _editingCapability,
                 embedded: true,
                 onSaved: _saveModelEditor,
               ),
@@ -4562,6 +4565,7 @@ class _SettingsListPage extends StatelessWidget {
     required this.config,
     required this.language,
     required this.onSelectModel,
+    required this.onAddModel,
     required this.onOpenModelManagement,
     required this.onOpenAgent,
     required this.onLanguageChanged,
@@ -4573,6 +4577,7 @@ class _SettingsListPage extends StatelessWidget {
   final AppLanguage language;
   final void Function(ModelCapability capability, String profileId)
   onSelectModel;
+  final ValueChanged<ModelCapability> onAddModel;
   final VoidCallback onOpenModelManagement;
   final VoidCallback onOpenAgent;
   final ValueChanged<AppLanguage> onLanguageChanged;
@@ -4596,6 +4601,7 @@ class _SettingsListPage extends StatelessWidget {
               title: chinese ? '主力推理' : 'Primary reasoning',
               config: config,
               onSelected: onSelectModel,
+              onAddModel: onAddModel,
             ),
             _ModelSlotRow(
               capability: ModelCapability.imageAnalysis,
@@ -4603,6 +4609,7 @@ class _SettingsListPage extends StatelessWidget {
               title: chinese ? '图片理解' : 'Image understanding',
               config: config,
               onSelected: onSelectModel,
+              onAddModel: onAddModel,
             ),
             _ModelSlotRow(
               capability: ModelCapability.imageGeneration,
@@ -4610,6 +4617,7 @@ class _SettingsListPage extends StatelessWidget {
               title: chinese ? '图片生成' : 'Image generation',
               config: config,
               onSelected: onSelectModel,
+              onAddModel: onAddModel,
             ),
             _ModelSlotRow(
               capability: ModelCapability.videoGeneration,
@@ -4617,6 +4625,7 @@ class _SettingsListPage extends StatelessWidget {
               title: chinese ? '视频生成' : 'Video generation',
               config: config,
               onSelected: onSelectModel,
+              onAddModel: onAddModel,
             ),
             _SettingsActionRow(
               key: const Key('settings_model_management_item'),
@@ -4900,6 +4909,7 @@ class _ModelSlotRow extends StatelessWidget {
     required this.title,
     required this.config,
     required this.onSelected,
+    required this.onAddModel,
   });
 
   final ModelCapability capability;
@@ -4907,11 +4917,13 @@ class _ModelSlotRow extends StatelessWidget {
   final String title;
   final LlmConfigState config;
   final void Function(ModelCapability capability, String profileId) onSelected;
+  final ValueChanged<ModelCapability> onAddModel;
 
   @override
   Widget build(BuildContext context) {
     final chinese =
         _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    final addModelLabel = AppStrings.of(context).addModel;
     final profiles = config.profiles
         .where((profile) => profile.supports(capability))
         .toList(growable: false);
@@ -4984,6 +4996,19 @@ class _ModelSlotRow extends StatelessWidget {
                           ),
                         ),
                       ),
+                    Align(
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: Text(
+                        addModelLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _configTextSecondary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
                   ],
                   items: [
                     for (final profile in profiles)
@@ -4995,13 +5020,28 @@ class _ModelSlotRow extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                    DropdownMenuItem<String>(
+                      key: Key(
+                        'settings_model_slot_${capability.name}_add_model',
+                      ),
+                      value: '',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.add_rounded, size: 18),
+                          const SizedBox(width: 8),
+                          Text(addModelLabel),
+                        ],
+                      ),
+                    ),
                   ],
-                  onChanged: profiles.isEmpty
-                      ? null
-                      : (value) {
-                          if (value == null) return;
-                          onSelected(capability, value);
-                        },
+                  onChanged: (value) {
+                    if (value == null) return;
+                    if (value.isEmpty) {
+                      onAddModel(capability);
+                      return;
+                    }
+                    onSelected(capability, value);
+                  },
                 ),
               ),
             ),

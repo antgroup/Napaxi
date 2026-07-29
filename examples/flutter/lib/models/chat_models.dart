@@ -58,6 +58,7 @@ class PendingInterjection {
     required this.id,
     required this.content,
     required this.createdAt,
+    this.draftContent,
     this.attachments = const [],
     this.attachmentCount = 0,
     this.retractsFromSdk = true,
@@ -67,6 +68,7 @@ class PendingInterjection {
   final String id;
   final String content;
   final DateTime createdAt;
+  final String? draftContent;
   final List<ChatAttachment> attachments;
   final int attachmentCount;
   final bool retractsFromSdk;
@@ -77,6 +79,7 @@ class PendingInterjection {
       id: id,
       content: content,
       createdAt: createdAt,
+      draftContent: draftContent,
       attachments: attachments,
       attachmentCount: attachmentCount,
       retractsFromSdk: retractsFromSdk,
@@ -815,8 +818,7 @@ List<ChatMessage> messagesFromSdkHistoryForTesting(
   List<sdk.ChatMessage> history, {
   required String accountId,
   required String agentId,
-}) =>
-    _messagesFromSdkHistory(history, accountId: accountId, agentId: agentId);
+}) => _messagesFromSdkHistory(history, accountId: accountId, agentId: agentId);
 
 ChatAttachment _attachmentFromSdk(
   sdk.ChatAttachment attachment, {

@@ -5,6 +5,9 @@ class AppStrings {
     required this.appTitle,
     required this.welcomeMessage,
     required this.welcomeReadyMessage,
+    required this.starterPromptTitle,
+    required this.starterPromptDevelopApk,
+    required this.starterPromptCompressPhoto,
     required this.noModelConfigured,
     required this.sessionsTooltip,
     required this.llmSettingsTooltip,
@@ -29,6 +32,7 @@ class AppStrings {
     required this.cancelEditTooltip,
     required this.sendTooltip,
     required this.stopTooltip,
+    required this.retractQueuedTooltip,
     required this.addAttachmentTooltip,
     required this.conversationAttachmentsTooltip,
     required this.terminalTitle,
@@ -341,6 +345,9 @@ class AppStrings {
   final String appTitle;
   final String welcomeMessage;
   final String welcomeReadyMessage;
+  final String starterPromptTitle;
+  final String starterPromptDevelopApk;
+  final String starterPromptCompressPhoto;
   final String noModelConfigured;
   final String sessionsTooltip;
   final String llmSettingsTooltip;
@@ -365,6 +372,7 @@ class AppStrings {
   final String cancelEditTooltip;
   final String sendTooltip;
   final String stopTooltip;
+  final String retractQueuedTooltip;
   final String addAttachmentTooltip;
   final String conversationAttachmentsTooltip;
   final String terminalTitle;
@@ -691,6 +699,10 @@ class AppStrings {
     welcomeMessage:
         'Welcome to napaxi. Open Basic configuration from Settings, then chat with the SDK-backed agent.',
     welcomeReadyMessage: 'napaxi is ready. Ask anything to start chatting.',
+    starterPromptTitle: 'Try asking',
+    starterPromptDevelopApk:
+        'Build me an expense-tracking APK and install it on my phone',
+    starterPromptCompressPhoto: 'Compress this photo to under 1 MB',
     noModelConfigured: 'No model configured',
     sessionsTooltip: 'Chat history',
     llmSettingsTooltip: 'Basic configuration',
@@ -717,6 +729,7 @@ class AppStrings {
     cancelEditTooltip: 'Cancel editing',
     sendTooltip: 'Send',
     stopTooltip: 'Stop',
+    retractQueuedTooltip: 'Retract queued messages',
     addAttachmentTooltip: 'Add attachment',
     conversationAttachmentsTooltip: 'Conversation attachments',
     terminalTitle: 'Terminal',
@@ -1063,6 +1076,9 @@ class AppStrings {
     appTitle: 'Napaxi',
     welcomeMessage: '欢迎使用 napaxi。请从设置里的“基础配置”添加模型，然后开始对话。',
     welcomeReadyMessage: 'napaxi 已准备好，可以直接开始对话。',
+    starterPromptTitle: '试试问',
+    starterPromptDevelopApk: '帮我开发一个记账APK，并安装到手机上',
+    starterPromptCompressPhoto: '帮我压缩这张照片到1MB以内',
     noModelConfigured: '未配置模型',
     sessionsTooltip: '会话历史',
     llmSettingsTooltip: '基础配置',
@@ -1088,6 +1104,7 @@ class AppStrings {
     cancelEditTooltip: '取消编辑',
     sendTooltip: '发送',
     stopTooltip: '停止',
+    retractQueuedTooltip: '撤回等待消息',
     addAttachmentTooltip: '添加附件',
     conversationAttachmentsTooltip: '本次对话附件',
     terminalTitle: '终端',

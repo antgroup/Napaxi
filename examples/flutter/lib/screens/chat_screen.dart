@@ -530,6 +530,217 @@ class _CodexInstallProgressDialog extends StatelessWidget {
   }
 }
 
+class _EmptyChatStarterPrompts extends StatefulWidget {
+  const _EmptyChatStarterPrompts({
+    required this.onDevelopApkTap,
+    required this.onCompressPhotoTap,
+  });
+
+  final VoidCallback onDevelopApkTap;
+  final VoidCallback onCompressPhotoTap;
+
+  @override
+  State<_EmptyChatStarterPrompts> createState() =>
+      _EmptyChatStarterPromptsState();
+}
+
+class _EmptyChatStarterPromptsState extends State<_EmptyChatStarterPrompts>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _entranceController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 720),
+  );
+  bool _entranceStarted = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entranceStarted) return;
+    _entranceStarted = true;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _entranceController.value = 1;
+    } else {
+      _entranceController.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _entranceController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = AppStrings.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _StarterPromptEntrance(
+              key: const Key('starter_prompt_title_entrance'),
+              animation: _entranceController,
+              start: 0,
+              end: 0.42,
+              distance: 8,
+              minimumScale: 0.985,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 5, bottom: 10),
+                child: Text(
+                  strings.starterPromptTitle,
+                  key: const Key('starter_prompt_title'),
+                  style: const TextStyle(
+                    color: Color(0xFF6B7280),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+            _StarterPromptEntrance(
+              key: const Key('starter_prompt_develop_apk_entrance'),
+              animation: _entranceController,
+              start: 0.12,
+              end: 0.72,
+              child: _StarterPromptButton(
+                key: const Key('starter_prompt_develop_apk'),
+                label: strings.starterPromptDevelopApk,
+                onTap: widget.onDevelopApkTap,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _StarterPromptEntrance(
+              key: const Key('starter_prompt_compress_photo_entrance'),
+              animation: _entranceController,
+              start: 0.3,
+              end: 1,
+              child: _StarterPromptButton(
+                key: const Key('starter_prompt_compress_photo'),
+                label: strings.starterPromptCompressPhoto,
+                onTap: widget.onCompressPhotoTap,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StarterPromptEntrance extends StatelessWidget {
+  const _StarterPromptEntrance({
+    super.key,
+    required this.animation,
+    required this.start,
+    required this.end,
+    required this.child,
+    this.distance = 16,
+    this.minimumScale = 0.965,
+  });
+
+  final Animation<double> animation;
+  final double start;
+  final double end;
+  final double distance;
+  final double minimumScale;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      child: child,
+      builder: (context, child) {
+        final progress = ((animation.value - start) / (end - start)).clamp(
+          0.0,
+          1.0,
+        );
+        final fade = Curves.easeOutCubic.transform(progress);
+        final motion = Curves.easeOutBack.transform(progress);
+        return Opacity(
+          opacity: fade,
+          child: Transform.translate(
+            offset: Offset(0, distance * (1 - motion)),
+            child: Transform.scale(
+              scale: minimumScale + ((1 - minimumScale) * motion),
+              alignment: Alignment.bottomCenter,
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _StarterPromptButton extends StatelessWidget {
+  const _StarterPromptButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 9, sigmaY: 9),
+          child: Material(
+            color: Colors.white.withValues(alpha: 0.58),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: onTap,
+              child: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(minHeight: 52),
+                alignment: Alignment.centerLeft,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 14,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: const Color(0xFFD1D5DB).withValues(alpha: 0.52),
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF5B6472),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ChatScreenState extends State<ChatScreen>
     with
         TickerProviderStateMixin,
@@ -610,6 +821,8 @@ class _ChatScreenState extends State<ChatScreen>
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _inputFocusNode = FocusNode();
+  final GlobalKey<_ChatInputBarState> _chatInputBarKey =
+      GlobalKey<_ChatInputBarState>();
   bool _autoFollowEnabled = true;
   bool _isPinnedToBottom = true;
   bool _showJumpToLatest = false;
@@ -654,6 +867,7 @@ class _ChatScreenState extends State<ChatScreen>
   String _activeDeveloperEngineId = _defaultDeveloperEngineId;
   DemoGitSettings _gitSettings = const DemoGitSettings();
   final Set<String> _stoppingSessionIds = {};
+  bool _isRetractingPendingInterjections = false;
   int _nextInterjectionId = 1;
   bool _isHandlingNotificationStop = false;
   bool _isHandlingProviderInstall = false;
@@ -812,6 +1026,7 @@ class _ChatScreenState extends State<ChatScreen>
     }
 
     for (final message in _messages) {
+      if (message.id == 'welcome' && _hasReadyChatModel) continue;
       if (message.isUser) {
         // Close out the previous turn before this user bubble starts a new one.
         flushTurn();
@@ -849,6 +1064,13 @@ class _ChatScreenState extends State<ChatScreen>
       return true;
     }
     return _hasVisibleAgentTrace(message);
+  }
+
+  bool get _hasReadyChatModel {
+    final selectedProfile = _config.selectedRuntimeProfile;
+    return selectedProfile != null &&
+        selectedProfile.hasModel &&
+        selectedProfile.apiKey.trim().isNotEmpty;
   }
 
   /// Identities of every generated attachment across the conversation, used to
@@ -944,6 +1166,22 @@ class _ChatScreenState extends State<ChatScreen>
           : strings.welcomeMessage,
       createdAt: DateTime.now(),
     );
+  }
+
+  Future<void> _sendStarterPrompt(String prompt) async {
+    _inputController.value = TextEditingValue(
+      text: prompt,
+      selection: TextSelection.collapsed(offset: prompt.length),
+    );
+    await _sendMessage(const []);
+  }
+
+  Future<void> _applyPhotoCompressionStarterPrompt(String prompt) async {
+    _inputController.value = TextEditingValue(
+      text: prompt,
+      selection: TextSelection.collapsed(offset: prompt.length),
+    );
+    await _chatInputBarKey.currentState?.pickGalleryImage();
   }
 
   ChatSession _refreshWelcomeMessage(ChatSession session) {
@@ -4551,7 +4789,7 @@ class _ChatScreenState extends State<ChatScreen>
         'route=inject-running session=$_activeSessionId '
         'assistant=${activeRun.assistantMessageId}',
       );
-      await _sendRunningMessage(effectiveText, attachments);
+      await _sendRunningMessage(effectiveText, attachments, displayText: text);
       return;
     }
     _traceChat('route=new-turn session=$_activeSessionId');
@@ -4815,6 +5053,7 @@ class _ChatScreenState extends State<ChatScreen>
     final interjection = PendingInterjection(
       id: 'interjection-${_nextInterjectionId++}',
       content: text,
+      draftContent: displayText ?? text,
       attachments: List.unmodifiable(attachments),
       attachmentCount: attachments.length,
       createdAt: DateTime.now(),
@@ -5562,8 +5801,9 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _sendRunningMessage(
     String text,
-    List<ChatAttachment> attachments,
-  ) async {
+    List<ChatAttachment> attachments, {
+    String? displayText,
+  }) async {
     if (text.isEmpty && attachments.isEmpty) return;
     final sessionId = _activeSessionId;
     final run = _sessionRuns[sessionId];
@@ -5593,6 +5833,7 @@ class _ChatScreenState extends State<ChatScreen>
     final interjection = PendingInterjection(
       id: 'interjection-${_nextInterjectionId++}',
       content: text,
+      draftContent: displayText ?? text,
       attachments: List.unmodifiable(attachments),
       attachmentCount: attachments.length,
       createdAt: now,
@@ -5637,36 +5878,70 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _stopActiveSend() async {
-    final run = _activeRun;
-    if (run != null && run.pendingInterjections.isNotEmpty) {
-      await _restoreLatestPendingInterjection(_activeSessionId, run);
-    }
-    await _stopSessionRun(_activeSessionId, clearPendingInterjections: true);
+    await _stopSessionRun(_activeSessionId);
   }
 
-  Future<void> _restoreLatestPendingInterjection(
-    String sessionId,
-    ChatSessionRunState run,
-  ) async {
-    final interjection = run.pendingInterjections.last;
-    if (interjection.retractsFromSdk) {
-      final client = await _getChatClient();
-      try {
-        await client.retractInjectedMessage(
-          run.sessionKey,
-          interjection.content,
-        );
-      } catch (_) {
-        // The run is being cancelled; restoring the draft locally is still useful.
+  Future<void> _retractPendingInterjections() async {
+    if (_isRetractingPendingInterjections) return;
+    final sessionId = _activeSessionId;
+    final run = _sessionRuns[sessionId];
+    if (run == null || run.pendingInterjections.isEmpty) return;
+    _isRetractingPendingInterjections = true;
+    try {
+      final pending = List<PendingInterjection>.of(run.pendingInterjections);
+      final client =
+          pending.any(
+            (item) =>
+                item.retractsFromSdk &&
+                item.status == PendingInterjectionStatus.queued,
+          )
+          ? await _getChatClient()
+          : null;
+
+      for (final interjection in pending.reversed) {
+        if (!interjection.retractsFromSdk ||
+            interjection.status != PendingInterjectionStatus.queued) {
+          continue;
+        }
+        try {
+          await client?.retractInjectedMessage(
+            run.sessionKey,
+            interjection.content,
+          );
+        } catch (_) {
+          // Always restore the local draft even if the best-effort SDK retract fails.
+        }
+        if (!mounted) return;
       }
-      if (!mounted) return;
+
+      final pendingIds = pending.map((item) => item.id).toSet();
+      _updateSessionRun(sessionId, (current) {
+        final remaining = current.pendingInterjections
+            .where((item) => !pendingIds.contains(item.id))
+            .toList(growable: false);
+        return current.copyWith(
+          activity: remaining.isEmpty
+              ? 'Running'
+              : 'Processing queued messages',
+          pendingInterjections: List.unmodifiable(remaining),
+        );
+      });
+
+      final restoredText = pending
+          .map((item) => item.draftContent ?? item.content)
+          .where((content) => content.trim().isNotEmpty)
+          .join('\n');
+      _inputController.value = TextEditingValue(
+        text: restoredText,
+        selection: TextSelection.collapsed(offset: restoredText.length),
+      );
+      _chatInputBarKey.currentState?.restoreAttachments(
+        pending.expand((item) => item.attachments),
+      );
+      _inputFocusNode.requestFocus();
+    } finally {
+      _isRetractingPendingInterjections = false;
     }
-    _removePendingInterjection(sessionId, interjection.id);
-    _inputController.value = TextEditingValue(
-      text: interjection.content,
-      selection: TextSelection.collapsed(offset: interjection.content.length),
-    );
-    _inputFocusNode.requestFocus();
   }
 
   void _removePendingInterjection(String sessionId, String interjectionId) {
@@ -6862,7 +7137,7 @@ class _ChatScreenState extends State<ChatScreen>
             ChatMessage(
               id: 'user-${_nextMessageId++}',
               role: ChatRole.user,
-              content: interjection.content,
+              content: interjection.draftContent ?? interjection.content,
               attachments: interjection.attachments,
               createdAt: now,
             ),
@@ -9543,6 +9818,8 @@ $candidate
     final compactionNotice = _activeContextCompactionNotice;
     final messageListTopPadding = compactionNotice == null ? 18.0 : 86.0;
     final renderItems = _buildChatRenderItems();
+    final showStarterPrompts =
+        _hasReadyChatModel && renderItems.isEmpty && !_isActiveSessionSending;
     final generatedIdentities = _generatedAttachmentIdentities(_activeSession);
 
     return Scaffold(
@@ -9719,6 +9996,39 @@ $candidate
                                               ),
                                             ),
                                           ),
+                                          if (showStarterPrompts)
+                                            Positioned(
+                                              left: 20,
+                                              right: 20,
+                                              bottom: 20,
+                                              child: ValueListenableBuilder<TextEditingValue>(
+                                                valueListenable:
+                                                    _inputController,
+                                                builder:
+                                                    (context, value, child) =>
+                                                        value.text
+                                                            .trim()
+                                                            .isEmpty
+                                                        ? child!
+                                                        : const SizedBox.shrink(),
+                                                child: _EmptyChatStarterPrompts(
+                                                  onDevelopApkTap: () => unawaited(
+                                                    _sendStarterPrompt(
+                                                      AppStrings.of(
+                                                        context,
+                                                      ).starterPromptDevelopApk,
+                                                    ),
+                                                  ),
+                                                  onCompressPhotoTap: () => unawaited(
+                                                    _applyPhotoCompressionStarterPrompt(
+                                                      AppStrings.of(
+                                                        context,
+                                                      ).starterPromptCompressPhoto,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                           Positioned(
                                             left: 16,
                                             right: 16,
@@ -9828,6 +10138,7 @@ $candidate
                               _ChatInputShell(
                                 roundedBottom: showMobileBrowserDock,
                                 child: _ChatInputBar(
+                                  key: _chatInputBarKey,
                                   controller: _inputController,
                                   focusNode: _inputFocusNode,
                                   isSending: _isActiveSessionSending,
@@ -9843,6 +10154,11 @@ $candidate
                                   onContextStatusTap: _handleContextStatusTap,
                                   onSend: _sendMessage,
                                   onStop: _stopActiveSend,
+                                  pendingMessageCount:
+                                      _activeRun?.pendingInterjections.length ??
+                                      0,
+                                  onRetractPending:
+                                      _retractPendingInterjections,
                                   channelInputSources: _channelInputSources,
                                   channelInputBusyAccountId:
                                       _channelInputBusyAccountId,

@@ -97,9 +97,10 @@ class _PendingInterjectionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFailed = interjection.status == PendingInterjectionStatus.failed;
-    final text = interjection.content.trim().isEmpty
+    final draftContent = interjection.draftContent ?? interjection.content;
+    final text = draftContent.trim().isEmpty
         ? (isChinese ? '附件消息' : 'Attachment message')
-        : interjection.content.trim();
+        : draftContent.trim();
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,6 +214,7 @@ class _SlashCommandInvocation {
 
 class _ChatInputBar extends StatefulWidget {
   const _ChatInputBar({
+    super.key,
     required this.controller,
     required this.focusNode,
     required this.isSending,
@@ -225,6 +227,8 @@ class _ChatInputBar extends StatefulWidget {
     required this.onContextStatusTap,
     required this.onSend,
     required this.onStop,
+    this.pendingMessageCount = 0,
+    this.onRetractPending,
     this.channelInputSources = const [],
     this.channelInputBusyAccountId,
     this.channelInputActiveAccountId,
@@ -254,6 +258,8 @@ class _ChatInputBar extends StatefulWidget {
   })
   onSend;
   final Future<void> Function() onStop;
+  final int pendingMessageCount;
+  final Future<void> Function()? onRetractPending;
   final List<DemoChannelInputSource> channelInputSources;
   final String? channelInputBusyAccountId;
   final String? channelInputActiveAccountId;
@@ -374,6 +380,12 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   Future<void> _pickGalleryImage() async {
     final images = await _imagePicker.pickMultiImage();
     _addImageAttachments(images);
+  }
+
+  Future<void> pickGalleryImage() => _pickGalleryImage();
+
+  void restoreAttachments(Iterable<ChatAttachment> attachments) {
+    _addAttachments(attachments);
   }
 
   Future<void> _pickCameraImage() async {
@@ -536,7 +548,14 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final slashSuggestions = _slashSuggestions;
-    final isSendAction = !widget.isSending || _canSend;
+    final primaryAction = _canSend
+        ? _ChatInputPrimaryAction.send
+        : widget.pendingMessageCount > 0 && widget.onRetractPending != null
+        ? _ChatInputPrimaryAction.retract
+        : widget.isSending
+        ? _ChatInputPrimaryAction.stop
+        : _ChatInputPrimaryAction.send;
+    final isSendAction = primaryAction == _ChatInputPrimaryAction.send;
     final sendColor = isSendAction && !_canSend
         ? const Color(0xFFD1D5DB)
         : const Color(0xFF111827);
@@ -666,25 +685,36 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                       width: 40,
                       height: 40,
                       child: IconButton.filled(
-                        key: isSendAction
-                            ? widget.sendButtonKey
-                            : widget.stopButtonKey,
-                        tooltip: isSendAction
-                            ? strings.sendTooltip
-                            : strings.stopTooltip,
-                        onPressed: isSendAction
-                            ? (_canSend ? _send : null)
-                            : widget.onStop,
+                        key: switch (primaryAction) {
+                          _ChatInputPrimaryAction.send => widget.sendButtonKey,
+                          _ChatInputPrimaryAction.stop => widget.stopButtonKey,
+                          _ChatInputPrimaryAction.retract => const Key(
+                            'retract_queued_messages_button',
+                          ),
+                        },
+                        tooltip: switch (primaryAction) {
+                          _ChatInputPrimaryAction.send => strings.sendTooltip,
+                          _ChatInputPrimaryAction.stop => strings.stopTooltip,
+                          _ChatInputPrimaryAction.retract =>
+                            strings.retractQueuedTooltip,
+                        },
+                        onPressed: switch (primaryAction) {
+                          _ChatInputPrimaryAction.send =>
+                            _canSend ? _send : null,
+                          _ChatInputPrimaryAction.stop => widget.onStop,
+                          _ChatInputPrimaryAction.retract =>
+                            widget.onRetractPending,
+                        },
                         style: IconButton.styleFrom(
                           backgroundColor: sendColor,
                           foregroundColor: Colors.white,
                         ),
-                        icon: Icon(
-                          isSendAction
-                              ? Icons.arrow_upward_rounded
-                              : Icons.stop_rounded,
-                          size: 18,
-                        ),
+                        icon: Icon(switch (primaryAction) {
+                          _ChatInputPrimaryAction.send =>
+                            Icons.arrow_upward_rounded,
+                          _ChatInputPrimaryAction.stop => Icons.stop_rounded,
+                          _ChatInputPrimaryAction.retract => Icons.undo_rounded,
+                        }, size: 18),
                       ),
                     ),
                   ],
@@ -697,6 +727,8 @@ class _ChatInputBarState extends State<_ChatInputBar> {
     );
   }
 }
+
+enum _ChatInputPrimaryAction { send, stop, retract }
 
 class _AttachmentPreviewRow extends StatelessWidget {
   const _AttachmentPreviewRow({

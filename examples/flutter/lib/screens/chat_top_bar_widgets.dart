@@ -161,8 +161,6 @@ class _ChatTopBar extends StatelessWidget {
                             enabled: engine.enabled,
                             child: Row(
                               children: [
-                                Icon(engine.icon, size: 20),
-                                const SizedBox(width: 10),
                                 Expanded(child: Text(engine.label)),
                                 if (!engine.enabled)
                                   Text(
@@ -178,7 +176,6 @@ class _ChatTopBar extends StatelessWidget {
                           ),
                       ],
                       child: _TopBarSelectorLabel(
-                        icon: runtimeProfile.activeEngine.icon,
                         label: runtimeProfile.activeEngine.label,
                       ),
                     ),
@@ -336,9 +333,9 @@ class _SourceControlPanelIconPainter extends CustomPainter {
 }
 
 class _TopBarSelectorLabel extends StatelessWidget {
-  const _TopBarSelectorLabel({required this.icon, required this.label});
+  const _TopBarSelectorLabel({this.icon, required this.label});
 
-  final IconData icon;
+  final IconData? icon;
   final String label;
 
   @override
@@ -348,8 +345,10 @@ class _TopBarSelectorLabel extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 20, color: const Color(0xFF222222)),
-          const SizedBox(width: 8),
+          if (icon != null) ...[
+            Icon(icon, size: 20, color: const Color(0xFF222222)),
+            const SizedBox(width: 8),
+          ],
           Flexible(
             child: Text(
               label,
@@ -389,7 +388,7 @@ class _TopBarAttachmentIcon extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Icon(
-          hasAttachments ? Icons.snippet_folder_rounded : Icons.folder_outlined,
+          hasAttachments ? Icons.folder_rounded : Icons.folder_outlined,
           key: Key(
             hasAttachments
                 ? 'conversation_attachments_icon_filled'

@@ -4,6 +4,7 @@ import 'dart:convert';
 // ignore_for_file: depend_on_referenced_packages, unnecessary_import, use_super_parameters
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:napaxi/main.dart';
 import 'package:napaxi_flutter/napaxi_flutter.dart' as sdk;
@@ -354,12 +355,20 @@ void main() {
 
     expect(find.byKey(const Key('agent_selector_button')), findsNothing);
     expect(find.text('Napaxi'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('engine_selector_button')),
+        matching: find.byIcon(Icons.auto_awesome_rounded),
+      ),
+      findsNothing,
+    );
 
     await tester.tap(find.byKey(const Key('engine_selector_button')));
     await tester.pumpAndSettle();
 
     expect(find.text('Helper'), findsNothing);
     expect(find.text('Codex(beta)'), findsOneWidget);
+    expect(find.byIcon(Icons.data_object_rounded), findsNothing);
 
     await tester.tap(find.text('Codex(beta)'));
     await tester.pumpAndSettle();
@@ -820,11 +829,12 @@ void main() {
     );
   });
 
-  testWidgets('updates the welcome message after model configuration', (
+  testWidgets('replaces the ready welcome message with starter prompts', (
     tester,
   ) async {
+    final fakeClient = FakeNapaxiChatClient();
     await tester.pumpWidget(
-      _testApp(chatClientFactory: () async => FakeNapaxiChatClient()),
+      _testApp(chatClientFactory: () async => fakeClient),
     );
 
     expect(
@@ -838,6 +848,25 @@ void main() {
 
     expect(
       find.text('napaxi is ready. Ask anything to start chatting.'),
+      findsNothing,
+    );
+    expect(find.byKey(const Key('starter_prompt_title')), findsOneWidget);
+    expect(find.text('Try asking'), findsOneWidget);
+    expect(
+      find.byKey(const Key('starter_prompt_title_entrance')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('starter_prompt_develop_apk_entrance')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('starter_prompt_compress_photo_entrance')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('starter_prompt_develop_apk')), findsOneWidget);
+    expect(
+      find.byKey(const Key('starter_prompt_compress_photo')),
       findsOneWidget,
     );
     expect(
@@ -847,6 +876,22 @@ void main() {
       findsNothing,
     );
 
+    await tester.tap(find.byKey(const Key('starter_prompt_develop_apk')));
+    await tester.pumpAndSettle();
+
+    expect(
+      fakeClient.sentMessages,
+      contains('Build me an expense-tracking APK and install it on my phone'),
+    );
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('chat_input_field')))
+          .controller
+          ?.text,
+      isEmpty,
+    );
+    expect(find.byKey(const Key('starter_prompt_develop_apk')), findsNothing);
+
     await tester.tap(find.byKey(const Key('session_history_button')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('new_session_button')));
@@ -854,8 +899,42 @@ void main() {
 
     expect(
       find.text('napaxi is ready. Ask anything to start chatting.'),
-      findsOneWidget,
+      findsNothing,
     );
+    expect(find.byKey(const Key('starter_prompt_develop_apk')), findsOneWidget);
+  });
+
+  testWidgets('photo starter prompt opens the gallery picker', (tester) async {
+    const imagePickerChannel = MethodChannel('plugins.flutter.io/image_picker');
+    var pickerOpened = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(imagePickerChannel, (call) async {
+          if (call.method != 'pickMultiImage') return null;
+          pickerOpened = true;
+          return <String>['/tmp/receipt.jpg'];
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(imagePickerChannel, null),
+    );
+
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => FakeNapaxiChatClient()),
+    );
+    await configureSingleModel(tester);
+
+    await tester.tap(find.byKey(const Key('starter_prompt_compress_photo')));
+    await tester.pumpAndSettle();
+
+    expect(pickerOpened, isTrue);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('chat_input_field')))
+          .controller
+          ?.text,
+      'Compress this photo to under 1 MB',
+    );
+    expect(find.text('1 attachment'), findsOneWidget);
   });
 
   testWidgets('uses the main model for chat without a chat capability slot', (
@@ -1630,7 +1709,7 @@ void main() {
     await events.close();
   });
 
-  testWidgets('stop cancels a run and restores the latest queued message', (
+  testWidgets('retract restores queued messages without stopping the run', (
     tester,
   ) async {
     final events = StreamController<sdk.ChatEvent>();
@@ -1656,15 +1735,19 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byKey(const Key('pending_interjection_queue')), findsOneWidget);
-    expect(find.byKey(const Key('stop_message_button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('retract_queued_messages_button')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('stop_message_button')), findsNothing);
 
-    await tester.tap(find.byKey(const Key('stop_message_button')));
+    await tester.tap(find.byKey(const Key('retract_queued_messages_button')));
     await tester.pump();
-    await _pumpUntilBackgroundStopped(tester, fakeClient);
+    await tester.pump(const Duration(milliseconds: 50));
 
     expect(fakeClient.retractCount, 1);
     expect(fakeClient.retractedMessage, 'Use this extra context');
-    expect(fakeClient.cancelCount, 1);
+    expect(fakeClient.cancelCount, 0);
     expect(find.byKey(const Key('pending_interjection_queue')), findsNothing);
     expect(find.byKey(const Key('send_message_button')), findsOneWidget);
     expect(
@@ -1674,6 +1757,70 @@ void main() {
           ?.text,
       'Use this extra context',
     );
+
+    unawaited(events.close());
+  });
+
+  testWidgets('retract restores every queued message in send order', (
+    tester,
+  ) async {
+    final events = StreamController<sdk.ChatEvent>();
+    final fakeClient = FakeNapaxiChatClient(eventStream: events.stream);
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await configureSingleModel(tester);
+
+    await tester.enterText(find.byKey(const Key('chat_input_field')), 'Start');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('send_message_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    await tester.enterText(
+      find.byKey(const Key('chat_input_field')),
+      'First queued',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('send_message_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      find.byKey(const Key('retract_queued_messages_button')),
+      findsOneWidget,
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('chat_input_field')),
+      'Second queued',
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('retract_queued_messages_button')),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(const Key('send_message_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('retract_queued_messages_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(fakeClient.retractCount, 2);
+    expect(fakeClient.cancelCount, 0);
+    expect(find.byKey(const Key('pending_interjection_queue')), findsNothing);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('chat_input_field')))
+          .controller
+          ?.text,
+      'First queued\nSecond queued',
+    );
+    expect(find.byKey(const Key('send_message_button')), findsOneWidget);
 
     unawaited(events.close());
   });
@@ -1717,7 +1864,7 @@ void main() {
     expect(find.text('Next task'), findsOneWidget);
   });
 
-  testWidgets('stop cancels a run and restores a queued next turn', (
+  testWidgets('retract restores a queued next turn without cancelling', (
     tester,
   ) async {
     final events = StreamController<sdk.ChatEvent>();
@@ -1745,14 +1892,17 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const Key('pending_interjection_queue')), findsOneWidget);
+    expect(
+      find.byKey(const Key('retract_queued_messages_button')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byKey(const Key('stop_message_button')));
+    await tester.tap(find.byKey(const Key('retract_queued_messages_button')));
     await tester.pump();
-    await _pumpUntilBackgroundStopped(tester, fakeClient);
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(fakeClient.retractCount, 0);
-    expect(fakeClient.cancelCount, 1);
+    expect(fakeClient.cancelCount, 0);
     expect(fakeClient.sentMessages, ['Start']);
     expect(find.byKey(const Key('pending_interjection_queue')), findsNothing);
     expect(find.byKey(const Key('send_message_button')), findsOneWidget);
@@ -3520,6 +3670,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('settings_feedback_item')), findsOneWidget);
     expect(find.byKey(const Key('settings_about_item')), findsOneWidget);
+  });
+
+  testWidgets('model slots stay available and offer adding a model', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_testApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_menu_button')));
+    await tester.pumpAndSettle();
+
+    final imageSlot = find.byKey(
+      const Key('settings_model_slot_imageAnalysis'),
+    );
+    final dropdown = tester.widget<DropdownButton<String>>(imageSlot);
+    expect(dropdown.onChanged, isNotNull);
+    expect(dropdown.items, hasLength(1));
+
+    await tester.tap(imageSlot);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('settings_model_slot_imageAnalysis_add_model')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('model_profile_form')), findsOneWidget);
+    expect(find.text('Add model'), findsOneWidget);
+    final capabilityCheckbox = find.descendant(
+      of: find.byKey(const Key('capability_imageAnalysis')),
+      matching: find.byType(Checkbox),
+    );
+    expect(tester.widget<Checkbox>(capabilityCheckbox).value, isTrue);
   });
 
   testWidgets('mobile developer scenario uses engine runtime scope', (
