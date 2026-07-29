@@ -211,6 +211,7 @@ class _LlmConfigPageState extends State<_LlmConfigPage> {
   }
 
   Future<void> _editProfile(LlmModelProfile profile) async {
+    if (!profile.isUserEditable) return;
     final updatedProfile = await Navigator.of(context).push<LlmModelProfile>(
       MaterialPageRoute(
         builder: (context) => _LlmModelProfilePage(initialProfile: profile),
@@ -237,6 +238,11 @@ class _LlmConfigPageState extends State<_LlmConfigPage> {
   }
 
   void _deleteProfile(String profileId) {
+    if (_profiles.any(
+      (profile) => profile.id == profileId && !profile.isUserEditable,
+    )) {
+      return;
+    }
     setState(() {
       _profiles = _profiles
           .where((profile) => profile.id != profileId)
@@ -329,8 +335,12 @@ class _LlmConfigPageState extends State<_LlmConfigPage> {
                 profile: profile,
                 isSelected: profile.id == _normalizedSelectedProfileId,
                 onSelect: () => _selectProfile(profile.id),
-                onEdit: () => _editProfile(profile),
-                onDelete: () => _deleteProfile(profile.id),
+                onEdit: profile.isUserEditable
+                    ? () => _editProfile(profile)
+                    : null,
+                onDelete: profile.isUserEditable
+                    ? () => _deleteProfile(profile.id)
+                    : null,
               );
             }),
           const SizedBox(height: 24),
@@ -579,8 +589,8 @@ class _ModelProfileTile extends StatelessWidget {
   final LlmModelProfile profile;
   final bool isSelected;
   final VoidCallback onSelect;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -642,26 +652,37 @@ class _ModelProfileTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  key: Key('edit_model_${profile.id}'),
-                  tooltip: strings.editModel,
-                  onPressed: onEdit,
-                  icon: const Icon(
-                    Icons.edit_outlined,
-                    color: _configTextSecondary,
-                    size: 20,
+                if (!profile.isUserEditable)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Icon(
+                      Icons.lock_outline_rounded,
+                      color: _configTextSecondary,
+                      size: 20,
+                    ),
+                  )
+                else ...[
+                  IconButton(
+                    key: Key('edit_model_${profile.id}'),
+                    tooltip: strings.editModel,
+                    onPressed: onEdit,
+                    icon: const Icon(
+                      Icons.edit_outlined,
+                      color: _configTextSecondary,
+                      size: 20,
+                    ),
                   ),
-                ),
-                IconButton(
-                  key: Key('delete_model_${profile.id}'),
-                  tooltip: strings.deleteModel,
-                  onPressed: onDelete,
-                  icon: const Icon(
-                    Icons.delete_outline,
-                    color: _configTextSecondary,
-                    size: 20,
+                  IconButton(
+                    key: Key('delete_model_${profile.id}'),
+                    tooltip: strings.deleteModel,
+                    onPressed: onDelete,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: _configTextSecondary,
+                      size: 20,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
@@ -783,6 +804,7 @@ class _LlmModelProfilePageState extends State<_LlmModelProfilePage> {
       selectedModelByCapability: const {},
       systemPrompt: widget.initialProfile.systemPrompt,
       maxTokens: _configuredMaxTokens,
+      isUserEditable: widget.initialProfile.isUserEditable,
     );
     final onSaved = widget.onSaved;
     if (onSaved != null) {

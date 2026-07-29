@@ -2325,6 +2325,70 @@ void main() {
     );
   });
 
+  testWidgets('selects managed models without exposing edit actions', (
+    tester,
+  ) async {
+    final store = sdk.NapaxiConfigStore.memory();
+    await store.saveProfile(
+      const sdk.NapaxiConfigProfile(
+        id: 'managed-model',
+        name: 'Managed model',
+        provider: 'openai-compatible',
+        model: 'managed-model-id',
+        metadata: {'user_editable': false},
+      ),
+      apiKey: 'managed-token',
+    );
+    await store.saveProfile(
+      const sdk.NapaxiConfigProfile(
+        id: 'user-model',
+        name: 'User model',
+        provider: 'openai',
+        model: 'user-model-id',
+      ),
+      apiKey: 'user-token',
+    );
+    await store.saveSelection(
+      const sdk.NapaxiConfigSelection(selectedProfileId: 'user-model'),
+    );
+    final fakeClient = FakeNapaxiChatClient();
+
+    await tester.pumpWidget(
+      _testApp(configStore: store, chatClientFactory: () async => fakeClient),
+    );
+    await tester.pumpAndSettle();
+    await openModelConfiguration(tester);
+
+    expect(
+      find.byKey(const Key('model_profile_managed-model')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('edit_model_managed-model')), findsNothing);
+    expect(find.byKey(const Key('delete_model_managed-model')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('model_profile_managed-model')));
+    await tester.pumpAndSettle();
+    expect((await store.loadSelection()).selectedProfileId, 'managed-model');
+    await closeSettingsSheet(tester);
+
+    await tester.enterText(
+      find.byKey(const Key('chat_input_field')),
+      'Use managed model',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('send_message_button')));
+    await tester.pumpAndSettle();
+
+    expect(fakeClient.configuredProfile?.model, 'managed-model-id');
+    expect(
+      find.text(
+        'Fake SDK reply from managed-model-id: Use managed model',
+        findRichText: true,
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('restores saved model configuration after rebuild', (
     tester,
   ) async {
