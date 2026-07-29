@@ -47,6 +47,10 @@ String _sanitizeA2AProtocolText(String value) {
     '附近 Agent',
   );
   text = text.replaceAll(
+    RegExp(r'`?\bandroid-apk-build\b`?', caseSensitive: false),
+    'Android APK Build',
+  );
+  text = text.replaceAll(
     RegExp(r'`?\bandroid-[A-Za-z0-9_.:-]{6,}\b`?', caseSensitive: false),
     'Android Agent',
   );
@@ -146,6 +150,7 @@ String _localA2AChannelPeerLabel(DemoChannelBridgeEvent event) {
   ]) {
     final label = (value ?? '').trim();
     final normalized = label.toLowerCase();
+    if (normalized == 'android-apk-build') return 'Android APK Build';
     if (normalized.startsWith('android-')) return 'Android Agent';
     if (normalized.startsWith('ios-')) return 'iOS Agent';
     if (_isGenericA2APeerLabel(label)) continue;
@@ -8339,6 +8344,10 @@ $candidate
     await _showSettingsSheet(_SettingsSection.configuration);
   }
 
+  Future<void> _openModelSettingsPage() async {
+    await _showSettingsSheet(_SettingsSection.menu);
+  }
+
   Future<void> _openContextSettings() async {
     _dismissKeyboard();
     await _showSettingsSheet(
@@ -10011,7 +10020,7 @@ $candidate
                                                     onLoadFullToolCall:
                                                         _loadFullHistoryToolCall,
                                                     onOpenConfiguration:
-                                                        _openConfigPage,
+                                                        _openModelSettingsPage,
                                                     isFavoriteAttachment:
                                                         _isFavoriteAttachment,
                                                     onToggleFavoriteAttachment:

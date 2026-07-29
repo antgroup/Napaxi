@@ -819,7 +819,7 @@ class AppStrings {
     apiKeyInvalidForHeader:
         'API Key contains unsupported characters. Paste the raw key only.',
     noModelsFound: 'No models returned. You can still enter one manually.',
-    openConfiguration: 'Open basic configuration',
+    openConfiguration: 'Open model settings',
     noSavedModelsTitle: 'No models yet',
     modelCapabilitiesTitle: 'Model capabilities',
     addModelIdLabel: 'Model ID',
@@ -1189,7 +1189,7 @@ class AppStrings {
     apiKeyRequiredForTest: '请先填写 API Key 再测试。',
     apiKeyInvalidForHeader: 'API Key 包含无法用于请求头的字符，请只粘贴原始 key。',
     noModelsFound: '接口没有返回模型，也可以手动填写。',
-    openConfiguration: '打开基础配置',
+    openConfiguration: '打开模型设置',
     noSavedModelsTitle: '还没有模型',
     modelCapabilitiesTitle: '模型能力',
     addModelIdLabel: '模型 ID',

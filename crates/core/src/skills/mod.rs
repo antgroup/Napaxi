@@ -24,6 +24,7 @@ mod catalog;
 mod commands;
 mod config;
 mod curator;
+mod export;
 mod install;
 mod lifecycle;
 mod limits;
@@ -123,3 +124,4 @@ pub use status::{
 
 // Curator and evolution dispatch.
 pub use curator::{apply_evolution_action, run_skill_curator, run_skill_curator_handle};
+pub(crate) use export::export_prompt_skills;

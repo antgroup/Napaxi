@@ -651,6 +651,7 @@ String _a2aPeerDisplayLabel(Object peer) {
 String _a2aDefaultPeerDisplayLabel(String peerId) {
   final normalized = peerId.trim().toLowerCase();
   if (normalized.startsWith('ios-')) return 'iOS Agent';
+  if (normalized == 'android-apk-build') return 'Android APK Build';
   if (normalized.startsWith('android-')) return 'Android Agent';
   return '附近 Agent';
 }

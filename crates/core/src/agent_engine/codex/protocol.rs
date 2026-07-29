@@ -135,6 +135,38 @@ pub(crate) fn thread_delete_request(client: &mut JsonRpcClient, thread_id: &str)
     client.request("thread/delete", json!({"threadId": thread_id}))
 }
 
+pub(crate) fn skills_extra_roots_set_request(client: &mut JsonRpcClient) -> (u64, String) {
+    client.request(
+        "skills/extraRoots/set",
+        json!({
+            "extraRoots": ["/skills"],
+        }),
+    )
+}
+
+pub(crate) fn skills_list_request(client: &mut JsonRpcClient, force_reload: bool) -> (u64, String) {
+    client.request(
+        "skills/list",
+        json!({
+            "forceReload": force_reload,
+        }),
+    )
+}
+
+pub(crate) fn skill_roots_then_turn_lines(
+    client: &mut JsonRpcClient,
+    request: &AgentEngineTurnRequest,
+    state: &CodexSessionState,
+) -> Vec<String> {
+    let (_, skills_root_line) = skills_extra_roots_set_request(client);
+    let (_, skills_list_line) = skills_list_request(client, true);
+    vec![
+        skills_root_line,
+        skills_list_line,
+        turn_start_request(client, request, state),
+    ]
+}
+
 pub(crate) fn turn_start_request(
     client: &mut JsonRpcClient,
     request: &AgentEngineTurnRequest,
@@ -147,11 +179,12 @@ pub(crate) fn turn_start_request(
         .or_else(|| request.engine_config.get("effort"))
         .and_then(Value::as_str)
         .unwrap_or("medium");
+    let input = codex_turn_input_items(&request.message);
     let (_, line) = client.request(
         "turn/start",
         json!({
             "threadId": thread_id,
-            "input": [{"type": "text", "text": request.message}],
+            "input": input,
             "approvalPolicy": "never",
             "sandboxPolicy": {"type": "dangerFullAccess"},
             "effort": effort,
@@ -164,6 +197,54 @@ pub(crate) fn turn_start_request(
         }),
     );
     line
+}
+
+fn codex_turn_input_items(message: &str) -> Vec<Value> {
+    let skills = explicit_codex_skills(message);
+    if skills.is_empty() {
+        return vec![json!({"type": "text", "text": message})];
+    }
+    let mut text = message.to_string();
+    for skill in &skills {
+        if !has_skill_mention(&text, skill) {
+            text = format!("${skill}\n{text}");
+        }
+    }
+    let mut input = vec![json!({"type": "text", "text": text})];
+    for skill in skills {
+        input.push(json!({
+            "type": "skill",
+            "name": skill,
+            "path": format!("/skills/{skill}/SKILL.md"),
+        }));
+    }
+    input
+}
+
+fn explicit_codex_skills(message: &str) -> Vec<&'static str> {
+    if should_use_android_apk_build(message) {
+        vec!["android-apk-build"]
+    } else {
+        Vec::new()
+    }
+}
+
+fn should_use_android_apk_build(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    has_skill_mention(&lower, "android-apk-build")
+        || ((lower.contains("apk") || lower.contains("android"))
+            && (lower.contains("build")
+                || lower.contains("package")
+                || lower.contains("sign")
+                || lower.contains("install")
+                || lower.contains("构建")
+                || lower.contains("打包")
+                || lower.contains("签名")
+                || lower.contains("安装")))
+}
+
+fn has_skill_mention(text: &str, skill: &str) -> bool {
+    text.contains(&format!("${skill}")) || text.contains(&format!("/{skill}"))
 }
 
 pub(crate) fn response_id(message: &Value) -> Option<u64> {

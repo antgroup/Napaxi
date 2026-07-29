@@ -767,6 +767,14 @@ void main() {
       find.text('Choose a chat model before chatting.', findRichText: true),
       findsOneWidget,
     );
+
+    await tester.tap(find.byKey(const Key('chat_action_openConfiguration')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsOneWidget);
+    expect(find.byKey(const Key('settings_list_page')), findsOneWidget);
+    expect(find.byKey(const Key('settings_model_slot_chat')), findsOneWidget);
+    expect(find.byKey(const Key('config_page_list')), findsNothing);
   });
 
   testWidgets('long pressing a sent user message can edit it in the composer', (

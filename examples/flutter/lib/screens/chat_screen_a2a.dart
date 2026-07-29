@@ -4301,6 +4301,7 @@ mixin _ChatScreenA2AMixin on State<ChatScreen> {
     }
     final normalized = peerId.trim().toLowerCase();
     if (normalized.startsWith('ios-')) return 'iOS Agent';
+    if (normalized == 'android-apk-build') return 'Android APK Build';
     if (normalized.startsWith('android-')) return 'Android Agent';
     return '附近 Agent';
   }
@@ -4945,6 +4946,7 @@ mixin _ChatScreenA2AMixin on State<ChatScreen> {
     if (_isGenericA2APeerLabel(displayName)) {
       final peerId = peer.peerId.trim().toLowerCase();
       if (peerId.startsWith('ios-')) return 'iOS Agent';
+      if (peerId == 'android-apk-build') return 'Android APK Build';
       if (peerId.startsWith('android-')) return 'Android Agent';
       return '附近 Agent';
     }

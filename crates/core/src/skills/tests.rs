@@ -12,6 +12,7 @@ use super::commands::{list_skill_commands, resolve_skill_command};
 use super::config::{set_skill_enabled, update_skill_config};
 use super::curator::apply_evolution_action;
 use super::curator::run_skill_curator;
+use super::export::export_prompt_skills;
 use super::install::{
     extract_skill_from_zip_bytes, install_skill, install_skill_handle, install_skill_package,
 };
@@ -101,6 +102,105 @@ fn engine_handle(files_dir: &str) -> i64 {
     })
     .to_string();
     crate::runtime::create_engine_handle(&config_json, &context_json).unwrap()
+}
+
+#[tokio::test]
+async fn exports_visible_skills_to_prompt_skills_mirror() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy();
+    assert!(
+        install_skill(&files_dir, "", SKILL)
+            .await
+            .contains(r#""success":true"#)
+    );
+    let source = tmp
+        .path()
+        .join("agent_runtime/skills/agents/napaxi/demo-skill");
+    tokio::fs::create_dir_all(source.join("scripts"))
+        .await
+        .unwrap();
+    tokio::fs::write(source.join("scripts/helper.py"), b"print('ok')")
+        .await
+        .unwrap();
+    tokio::fs::create_dir_all(source.join("assets"))
+        .await
+        .unwrap();
+    tokio::fs::write(source.join("assets/info.txt"), b"asset")
+        .await
+        .unwrap();
+
+    let report = export_prompt_skills(&files_dir, "").await.unwrap();
+
+    assert!(report.success);
+    assert_eq!(report.exported, vec!["demo-skill"]);
+    let mirror = tmp.path().join("prompt_skills/demo-skill");
+    assert_eq!(
+        tokio::fs::read_to_string(mirror.join("SKILL.md"))
+            .await
+            .unwrap(),
+        SKILL
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(mirror.join("scripts/helper.py"))
+            .await
+            .unwrap(),
+        "print('ok')"
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(mirror.join("assets/info.txt"))
+            .await
+            .unwrap(),
+        "asset"
+    );
+}
+
+#[tokio::test]
+async fn export_prompt_skills_removes_stale_mirror_entries() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy();
+    assert!(
+        install_skill(&files_dir, "", SKILL)
+            .await
+            .contains(r#""success":true"#)
+    );
+    export_prompt_skills(&files_dir, "").await.unwrap();
+    assert!(
+        tmp.path()
+            .join("prompt_skills/demo-skill/SKILL.md")
+            .exists()
+    );
+
+    assert!(remove_skill(&files_dir, "", "demo-skill").await);
+    let report = export_prompt_skills(&files_dir, "").await.unwrap();
+
+    assert!(report.exported.is_empty());
+    assert!(!tmp.path().join("prompt_skills/demo-skill").exists());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn export_prompt_skills_skips_symlinks_without_escaping_mirror() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy();
+    assert!(
+        install_skill(&files_dir, "", SKILL)
+            .await
+            .contains(r#""success":true"#)
+    );
+    let outside = tmp.path().join("outside.txt");
+    std::fs::write(&outside, "secret").unwrap();
+    let source = tmp
+        .path()
+        .join("agent_runtime/skills/agents/napaxi/demo-skill");
+    std::os::unix::fs::symlink(&outside, source.join("linked.txt")).unwrap();
+    std::os::unix::fs::symlink(tmp.path(), source.join("linked-dir")).unwrap();
+
+    export_prompt_skills(&files_dir, "").await.unwrap();
+
+    let mirror = tmp.path().join("prompt_skills/demo-skill");
+    assert!(mirror.join("SKILL.md").exists());
+    assert!(!mirror.join("linked.txt").exists());
+    assert!(!mirror.join("linked-dir/outside.txt").exists());
 }
 
 #[tokio::test]

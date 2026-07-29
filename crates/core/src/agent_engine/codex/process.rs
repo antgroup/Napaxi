@@ -16,8 +16,8 @@ use super::events::map_app_server_message;
 #[cfg(target_os = "android")]
 use super::protocol::{
     JsonRpcClient, extract_thread_id, initialize_request, initialized_notification,
-    parse_json_lines, response_error, response_id, thread_open_request, thread_start_request,
-    turn_start_request,
+    parse_json_lines, response_error, response_id, skill_roots_then_turn_lines,
+    skills_extra_roots_set_request, skills_list_request, thread_open_request, thread_start_request,
 };
 #[cfg(target_os = "android")]
 use super::state::{
@@ -307,6 +307,15 @@ where
         emit(event.clone());
         return vec![event];
     }
+    if let Err(error) =
+        crate::skills::export_prompt_skills(&request.files_dir, &request.agent_id).await
+    {
+        let event = ChatEvent::Error {
+            message: format!("Codex skill export failed: {error}"),
+        };
+        emit(event.clone());
+        return vec![event];
+    }
 
     let native_library_dir = request
         .engine_config
@@ -390,9 +399,9 @@ where
                 return vec![event];
             }
         }
-        StartAction::StartTurn { line } => {
+        StartAction::StartTurn { lines } => {
             sent_turn = true;
-            if let Err(error) = write_line(pty, &line) {
+            if let Err(error) = write_lines(pty, &lines) {
                 release_session_process(&key, true);
                 let event = ChatEvent::Error {
                     message: error.to_string(),
@@ -663,7 +672,7 @@ enum StartAction {
         is_resume: bool,
     },
     StartTurn {
-        line: String,
+        lines: Vec<String>,
     },
 }
 
@@ -702,7 +711,7 @@ fn acquire_session_process(
         active.last_used = Instant::now();
         let action = if state.native_thread_id.is_some() {
             StartAction::StartTurn {
-                line: turn_start_request(&mut active.rpc, request, state),
+                lines: skill_roots_then_turn_lines(&mut active.rpc, request, state),
             }
         } else {
             let (request_id, line, is_resume) = thread_open_request(&mut active.rpc, state);
@@ -739,13 +748,15 @@ fn acquire_session_process(
     let mut rpc = JsonRpcClient::new();
     let (initialize_id, initialize_line) = initialize_request(&mut rpc);
     let initialized_line = initialized_notification(&rpc);
+    let (_skills_root_id, skills_root_line) = skills_extra_roots_set_request(&mut rpc);
+    let (_skills_list_id, skills_list_line) = skills_list_request(&mut rpc, true);
     let (open_request_id, open_line, is_resume) = thread_open_request(&mut rpc, state);
     let action = StartAction::InitializeThenOpen {
         initialize_id,
         initialize_line,
         initialized_line,
         open_request_id,
-        open_line,
+        open_line: [skills_root_line, skills_list_line, open_line].join("\n"),
         is_resume,
     };
     guard.insert(
@@ -771,6 +782,14 @@ fn write_line(pty: u64, line: &str) -> anyhow::Result<()> {
 }
 
 #[cfg(target_os = "android")]
+fn write_lines(pty: u64, lines: &[String]) -> anyhow::Result<()> {
+    for line in lines {
+        write_line(pty, line)?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
 fn with_active_rpc<T>(key: &str, build: impl FnOnce(&mut JsonRpcClient) -> T) -> Option<T> {
     let sessions = active_sessions();
     let mut guard = sessions.lock().ok()?;
@@ -786,11 +805,11 @@ fn write_turn_after_thread_open(
     request: &AgentEngineTurnRequest,
     state: &super::state::CodexSessionState,
 ) -> Result<(), ChatEvent> {
-    let turn_line = with_active_rpc(key, |rpc| turn_start_request(rpc, request, state))
+    let turn_lines = with_active_rpc(key, |rpc| skill_roots_then_turn_lines(rpc, request, state))
         .ok_or_else(|| ChatEvent::Error {
-            message: "Codex session registry entry disappeared".to_string(),
-        })?;
-    write_line(pty, &turn_line).map_err(|error| ChatEvent::Error {
+        message: "Codex session registry entry disappeared".to_string(),
+    })?;
+    write_lines(pty, &turn_lines).map_err(|error| ChatEvent::Error {
         message: error.to_string(),
     })
 }

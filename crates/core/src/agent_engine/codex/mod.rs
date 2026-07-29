@@ -464,4 +464,81 @@ mod tests {
         assert_eq!(progress["added_lines"], 2);
         assert_eq!(progress["removed_lines"], 0);
     }
+    fn test_turn_request(message: &str) -> crate::agent_engine::AgentEngineTurnRequest {
+        crate::agent_engine::AgentEngineTurnRequest {
+            engine_id: CODEX_ENGINE_ID.to_string(),
+            engine_profile_id: String::new(),
+            engine_config: serde_json::json!({}),
+            run_id: "run".to_string(),
+            files_dir: "files".to_string(),
+            workspace_files_dir: "workspace".to_string(),
+            account_id: "acct".to_string(),
+            agent_id: "agent".to_string(),
+            session_key_json: "{}".to_string(),
+            message: message.to_string(),
+            attachments_json: String::new(),
+            config_json: "{}".to_string(),
+        }
+    }
+
+    #[test]
+    fn builds_skills_extra_roots_payload_for_sandbox_skills() {
+        let mut rpc = super::protocol::JsonRpcClient::new();
+        let (_, line) = super::protocol::skills_extra_roots_set_request(&mut rpc);
+        let payload: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(payload["method"], "skills/extraRoots/set");
+        assert_eq!(
+            payload["params"]["extraRoots"],
+            serde_json::json!(["/skills"])
+        );
+    }
+
+    #[test]
+    fn turn_start_input_is_plain_text_without_explicit_skill() {
+        let mut rpc = super::protocol::JsonRpcClient::new();
+        let state = super::state::CodexSessionState {
+            native_thread_id: Some("thread".to_string()),
+            config_fingerprint: String::new(),
+        };
+        let line =
+            super::protocol::turn_start_request(&mut rpc, &test_turn_request("hello"), &state);
+        let payload: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(payload["method"], "turn/start");
+        assert_eq!(
+            payload["params"]["input"],
+            serde_json::json!([{"type":"text","text":"hello"}])
+        );
+    }
+
+    #[test]
+    fn turn_start_input_includes_android_apk_build_skill_item() {
+        let mut rpc = super::protocol::JsonRpcClient::new();
+        let state = super::state::CodexSessionState {
+            native_thread_id: Some("thread".to_string()),
+            config_fingerprint: String::new(),
+        };
+        let line = super::protocol::turn_start_request(
+            &mut rpc,
+            &test_turn_request("帮我构建 APK"),
+            &state,
+        );
+        let payload: serde_json::Value = serde_json::from_str(&line).unwrap();
+        let input = payload["params"]["input"].as_array().unwrap();
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[0]["type"], "text");
+        assert!(
+            input[0]["text"]
+                .as_str()
+                .unwrap()
+                .starts_with("$android-apk-build\n")
+        );
+        assert_eq!(
+            input[1],
+            serde_json::json!({
+                "type": "skill",
+                "name": "android-apk-build",
+                "path": "/skills/android-apk-build/SKILL.md"
+            })
+        );
+    }
 }
