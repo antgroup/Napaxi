@@ -238,23 +238,6 @@ fn model_from_config_json(raw: &str) -> String {
         .unwrap_or_default()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn codex_config_dir_targets_linux_env_rootfs_home() {
-        assert_eq!(
-            config::config_dir("app_files"),
-            std::path::Path::new("app_files")
-                .join("linux-env")
-                .join("rootfs")
-                .join("root")
-                .join(".codex"),
-        );
-    }
-}
-
 #[cfg(not(target_os = "android"))]
 pub(crate) async fn run_codex_turn<F, C>(
     request: AgentEngineTurnRequest,
@@ -984,5 +967,21 @@ fn cleanup_idle_sessions() {
     };
     for active in expired {
         let _ = crate::android_linux_env::pty::close_pty_session(active.pty);
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_config_dir_targets_linux_env_rootfs_home() {
+        assert_eq!(
+            config::config_dir("app_files"),
+            std::path::Path::new("app_files")
+                .join("linux-env")
+                .join("rootfs")
+                .join("root")
+                .join(".codex"),
+        );
     }
 }

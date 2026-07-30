@@ -284,10 +284,10 @@ pub(crate) fn parse_json_lines(buffer: &mut String, chunk: &str) -> Vec<Value> {
         let line: String = buffer.drain(..drain_end).collect();
         let line = &line[..line_end];
         let trimmed = strip_ansi(line.trim());
-        if trimmed.starts_with('{') {
-            if let Ok(value) = serde_json::from_str::<Value>(&trimmed) {
-                parsed.push(value);
-            }
+        if trimmed.starts_with('{')
+            && let Ok(value) = serde_json::from_str::<Value>(&trimmed)
+        {
+            parsed.push(value);
         }
     }
     parsed

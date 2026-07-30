@@ -2,9 +2,61 @@ import 'dart:convert';
 
 import 'package:napaxi_flutter/agent_engine.dart';
 import 'package:napaxi_flutter/models/agent.dart';
+import 'package:napaxi_flutter/models/chat_event.dart';
 import 'package:test/test.dart';
 
+class _DefaultAgentEngineExecutor extends AgentEngineExecutor {
+  @override
+  Future<AgentEngineTurnResult> startTurn(
+    AgentEngineTurnRequest request,
+    AgentEngineToolBroker tools,
+  ) async {
+    return AgentEngineTurnResult.response('ok');
+  }
+}
+
 void main() {
+  test('agent engine defaults and turn codecs use core wire shape', () async {
+    final executor = _DefaultAgentEngineExecutor();
+    final request = AgentEngineTurnRequest(
+      engineId: externalHostAgentEngineId,
+      engineProfileId: 'dev-loop',
+      engineConfig: const {'binary': 'custom-agent'},
+      runId: 'run-1',
+      filesDir: '/files',
+      workspaceFilesDir: '/files/workspaces/default',
+      accountId: 'acct',
+      agentId: 'builder',
+      sessionKeyJson: '{"thread_id":"t1"}',
+      message: 'implement this',
+      attachmentsJson: '[]',
+      configJson: '{"provider":"openai"}',
+    );
+
+    expect(
+      await executor.cancel(
+        runId: 'run-1',
+        sessionKeyJson: '{"thread_id":"t1"}',
+      ),
+      isFalse,
+    );
+    final unsupportedResume = await executor.resume(
+      request,
+      AgentEngineToolBroker(() => 1),
+    );
+    expect(unsupportedResume.events.single['type'], 'error');
+    expect(request.toMap()['workspace_files_dir'], '/files/workspaces/default');
+
+    final response = AgentEngineTurnResult.response('done');
+    expect(response.events.single, {'type': 'response', 'content': 'done'});
+    final fromEvents = AgentEngineTurnResult.fromEvents(const [
+      ResponseEvent(content: 'hello'),
+      ThinkingEvent(content: 'planning'),
+    ]);
+    expect(fromEvents.events.first, {'type': 'response', 'content': 'hello'});
+    expect(fromEvents.events.last, {'type': 'thinking', 'content': 'planning'});
+  });
+
   test('agent engine turn request decodes core wire shape', () {
     final request = AgentEngineTurnRequest.fromMap({
       'engine_id': 'external_host',
