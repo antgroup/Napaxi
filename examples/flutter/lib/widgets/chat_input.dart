@@ -1057,6 +1057,7 @@ class _AttachmentChip extends StatelessWidget {
       'xls' || 'xlsx' => Icons.table_chart_outlined,
       'ppt' || 'pptx' => Icons.slideshow_outlined,
       'zip' || 'rar' || '7z' || 'tar' || 'gz' => Icons.folder_zip_outlined,
+      'apk' => Icons.install_mobile_rounded,
       'mp3' || 'wav' || 'aac' || 'flac' || 'ogg' => Icons.audiotrack_outlined,
       'mp4' || 'mov' || 'avi' || 'mkv' || 'webm' => Icons.videocam_outlined,
       _ => Icons.insert_drive_file_outlined,
@@ -1266,13 +1267,17 @@ class _MessageAttachmentsView extends StatelessWidget {
               attachment.isImage || attachment.isVideo || attachment.isHtml,
         )
         .toList();
+    final apkFiles = attachments
+        .where((attachment) => attachment.isApk)
+        .toList();
     final files = attachments
         .where(
           (attachment) =>
               !attachment.isImage &&
               !attachment.isVideo &&
               !attachment.isHtml &&
-              !attachment.isWebLink,
+              !attachment.isWebLink &&
+              !attachment.isApk,
         )
         .toList();
 
@@ -1293,8 +1298,16 @@ class _MessageAttachmentsView extends StatelessWidget {
             accountId: accountId,
             agentId: agentId,
           ),
-        if ((previewable.isNotEmpty || webLinks.isNotEmpty) && files.isNotEmpty)
+        if ((previewable.isNotEmpty || webLinks.isNotEmpty) &&
+            (apkFiles.isNotEmpty || files.isNotEmpty))
           const SizedBox(height: 8),
+        if (apkFiles.isNotEmpty)
+          _ApkAttachmentsCard(
+            apkFiles: apkFiles,
+            accountId: accountId,
+            agentId: agentId,
+          ),
+        if (apkFiles.isNotEmpty && files.isNotEmpty) const SizedBox(height: 8),
         if (files.isNotEmpty)
           _AttachmentFilesCard(
             files: files,
@@ -1720,6 +1733,176 @@ class _AttachmentTileBody extends StatelessWidget {
   }
 }
 
+class _ApkAttachmentsCard extends StatelessWidget {
+  const _ApkAttachmentsCard({
+    required this.apkFiles,
+    required this.accountId,
+    required this.agentId,
+  });
+
+  final List<ChatAttachment> apkFiles;
+  final String accountId;
+  final String agentId;
+
+  @override
+  Widget build(BuildContext context) {
+    final isChinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    return Container(
+      key: const Key('message_attachment_apk_card'),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 11, 12, 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: const Icon(
+                    Icons.install_mobile_rounded,
+                    size: 18,
+                    color: Color(0xFF16A34A),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        apkFiles.length == 1
+                            ? (isChinese ? '可安装 APK' : 'Installable APK')
+                            : (isChinese
+                                  ? '可安装 APK（${apkFiles.length} 个）'
+                                  : 'Installable APKs (${apkFiles.length})'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF14532D),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isChinese
+                            ? '点击后打开系统安装器'
+                            : 'Tap to open the system installer',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF15803D),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFDCFCE7)),
+          for (var i = 0; i < apkFiles.length; i++) ...[
+            _ApkAttachmentRow(
+              attachment: apkFiles[i],
+              accountId: accountId,
+              agentId: agentId,
+            ),
+            if (i != apkFiles.length - 1)
+              const Divider(
+                height: 1,
+                thickness: 1,
+                color: Color(0xFFDCFCE7),
+                indent: 14,
+                endIndent: 14,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ApkAttachmentRow extends StatelessWidget {
+  const _ApkAttachmentRow({
+    required this.attachment,
+    required this.accountId,
+    required this.agentId,
+  });
+
+  final ChatAttachment attachment;
+  final String accountId;
+  final String agentId;
+
+  @override
+  Widget build(BuildContext context) {
+    final isChinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    return InkWell(
+      key: Key('message_attachment_apk_${attachment.path.hashCode}'),
+      onTap: () => _openAttachment(
+        context,
+        attachment,
+        accountId: accountId,
+        agentId: agentId,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.android_rounded,
+              size: 20,
+              color: Color(0xFF16A34A),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                attachment.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF052E16),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isChinese ? '安装' : 'Install',
+              style: const TextStyle(
+                color: Color(0xFF15803D),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: Color(0xFF16A34A),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AttachmentFilesCard extends StatefulWidget {
   const _AttachmentFilesCard({
     required this.files,
@@ -1861,6 +2044,7 @@ class _AttachmentFileListRow extends StatelessWidget {
       'xls' || 'xlsx' => Icons.table_chart_outlined,
       'ppt' || 'pptx' => Icons.slideshow_outlined,
       'zip' || 'rar' || '7z' || 'tar' || 'gz' => Icons.folder_zip_outlined,
+      'apk' => Icons.install_mobile_rounded,
       'mp3' || 'wav' || 'aac' || 'flac' || 'ogg' => Icons.audiotrack_outlined,
       'mp4' || 'mov' || 'avi' || 'mkv' || 'webm' => Icons.videocam_outlined,
       _ => Icons.insert_drive_file_outlined,
@@ -1974,6 +2158,10 @@ Future<void> _openAttachment(
   }
   if (resolved.isImage) {
     await _showAttachmentImagePreview(context, resolved);
+    return;
+  }
+  if (resolved.isApk) {
+    await _installApkAttachment(context, resolved);
     return;
   }
   if (resolved.isVideo) {
@@ -2093,6 +2281,48 @@ List<String> _attachmentSandboxPathCandidates(
   final unscoped = bridge.sandboxToReal(path);
   if (unscoped != null && unscoped.isNotEmpty) candidates.add(unscoped);
   return candidates.toSet().toList(growable: false);
+}
+
+Future<void> _installApkAttachment(
+  BuildContext context,
+  ChatAttachment attachment,
+) async {
+  final isChinese =
+      _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+  if (!sdk.NapaxiApkInstaller.isSupported) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isChinese
+              ? 'APK 安装仅支持 Android 设备'
+              : 'APK installation is only supported on Android.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  final result = await sdk.NapaxiApkInstaller.installApk(attachment.path);
+  if (!context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.hideCurrentSnackBar();
+  if (result.success || result.installerOpened) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(isChinese ? '已打开系统安装器' : 'System installer opened.'),
+      ),
+    );
+    return;
+  }
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        result.error?.trim().isNotEmpty == true
+            ? result.error!
+            : (isChinese ? '无法安装 APK' : 'Could not install APK.'),
+      ),
+    ),
+  );
 }
 
 Future<void> _showWebAttachmentPreview(
