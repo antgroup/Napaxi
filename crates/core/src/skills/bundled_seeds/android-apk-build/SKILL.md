@@ -1,8 +1,8 @@
 ---
 name: android-apk-build
-version: "1.2.2"
+version: "1.2.3"
 display_name: Android APK Build
-description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a deterministic build.sh; Android framework WebView/local HTML assets are allowed only when the user is asking for an installable Android app/APK wrapper; do not turn ordinary HTML/webpage/front-end requests into APKs by default, and do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
+description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a deterministic build.sh; Android framework WebView/local HTML assets are allowed only when the user is asking for an installable Android app/APK wrapper; when using HTML, bundle all local resources into the APK assets and reference them with relative paths instead of fixed device/workspace paths; do not turn ordinary HTML/webpage/front-end requests into APKs by default, and do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
 activation:
   keywords: ["android", "apk", "安卓", "应用", "网页封装", "html app", "webview", "打包", "签名", "安装包", "build apk", "写app", "做app", "生成app", "build app"]
   patterns: ["(?i)\\b(apk|android app|build app|make app|package app|sign apk|installable app)\\b", "(写|做|生成|开发|创建).{0,12}(app|应用|安卓|安装包|apk)", "(app|应用|安卓|apk).{0,12}(打包|签名|构建|安装|生成)"]
@@ -44,7 +44,7 @@ Before writing code, mentally pin these constants and do not reinterpret them fr
 
 
 - Java only for Android code. No Kotlin, Gradle, Android Studio, Jetpack Compose, AndroidX, Maven dependencies, or NDK.
-- Web-style app wrappers are allowed only when the user is actually asking for an installable Android app/APK that wraps web content, such as “把这个网页封装成 app/apk” or “做一个能安装的 HTML app”. If the user merely asks for HTML, H5, a webpage, a frontend page, or web assets without asking for Android/app/APK/installable output, do not use this skill and do not wrap it as an APK. When a WebView wrapper is appropriate, keep local HTML/CSS/JS assets under `app/src/main/assets/`, use the same Java-only build template, and produce exactly one universal APK. Do not use Capacitor/Cordova/Ionic/React Native/Flutter or any web framework that requires fetching packages or a new toolchain.
+- Web-style app wrappers are allowed only when the user is actually asking for an installable Android app/APK that wraps web content, such as “把这个网页封装成 app/apk” or “做一个能安装的 HTML app”. If the user merely asks for HTML, H5, a webpage, a frontend page, or web assets without asking for Android/app/APK/installable output, do not use this skill and do not wrap it as an APK. When a WebView wrapper is appropriate, put the full local web bundle under `app/src/main/assets/www/` (for example `index.html`, CSS, JS, images, fonts, JSON, and other local files), load `file:///android_asset/www/index.html`, and make HTML references relative such as `./style.css`, `./app.js`, or `images/logo.png`. Do not hard-code `/workspace/...`, `/sdcard/...`, `/data/...`, Mac/desktop paths, localhost dev-server URLs, or other fixed file paths inside Java or HTML. Use the same Java-only build template and produce exactly one universal APK. Do not use Capacitor/Cordova/Ionic/React Native/Flutter or any web framework that requires fetching packages or a new toolchain.
 - One launcher `Activity` extending `android.app.Activity` or other framework classes from `android.jar` only.
 - Always define a launcher icon. Use the fixed vector drawable template below at `app/src/main/res/drawable/ic_launcher.xml`, reference it from both `android:icon` and `android:roundIcon`, and keep icon colors in `colors.xml`. Do not leave icon unset and do not reference missing `@mipmap/*` assets.
 - Resource XML under `app/src/main/res/`; Java under `app/src/main/java/`.
@@ -72,8 +72,12 @@ Create files in this layout exactly:
             ├── java/
             │   └── <package path>/
             │       └── MainActivity.java
-            ├── assets/                 # optional: local HTML/CSS/JS for WebView apps
-            │   └── index.html
+            ├── assets/                 # optional: bundled WebView app assets
+            │   └── www/
+            │       ├── index.html
+            │       ├── style.css
+            │       ├── app.js
+            │       └── images/
             └── res/
                 ├── drawable/
                 │   └── ic_launcher.xml
@@ -83,7 +87,7 @@ Create files in this layout exactly:
                     └── styles.xml
 ```
 
-Minimal resource files are acceptable, but the launcher icon is not optional. If the user does not provide an icon, use the fixed vector icon template from this skill. If the user provides an icon later, keep the same resource name (`@drawable/ic_launcher`) and still emit one APK; do not create split APKs or a full mipmap density set unless the user explicitly provides those assets.
+Minimal resource files are acceptable, but the launcher icon is not optional. For WebView wrappers, all local web resources needed at runtime must be copied into `app/src/main/assets/www/`; the APK must not depend on files left in `/workspace`, Downloads, `/sdcard`, or any other host path. If the user does not provide an icon, use the fixed vector icon template from this skill. If the user provides an icon later, keep the same resource name (`@drawable/ic_launcher`) and still emit one APK; do not create split APKs or a full mipmap density set unless the user explicitly provides those assets.
 
 ## Fixed `build.sh` template
 
@@ -343,7 +347,7 @@ public class MainActivity extends Activity {
 ## Build workflow
 
 1. Create the fixed layout and write `build.sh` exactly from this skill.
-2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading local files from `app/src/main/assets/` only when the user asks for a web/HTML-style installable Android app or APK wrapper.
+2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading `file:///android_asset/www/index.html` only when the user asks for a web/HTML-style installable Android app or APK wrapper. Put every local HTML/CSS/JS/image/font/data asset under `app/src/main/assets/www/` and use relative links inside the HTML bundle; never reference fixed workspace/device paths.
 3. Run `chmod +x build.sh && bash build.sh` from the project root.
 4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that intermediate APK files were cleaned. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
 5. If the user asks to install, use the available APK install flow/tool if present; otherwise provide the APK path.
@@ -358,6 +362,6 @@ public class MainActivity extends Activity {
 - Do not regenerate or relocate the keystore on every build. If the package name is unchanged, Android requires the update APK to be signed with the same certificate as the installed APK.
 - Do not use `minSdkVersion="21"` or a low `targetSdkVersion`; use min 26 / target 33.
 - Do not omit the launcher icon and do not reference nonexistent `@mipmap/ic_launcher` resources. Use `@drawable/ic_launcher` unless the user explicitly supplies a complete replacement icon asset.
-- Do not automatically convert plain HTML/H5/webpage/frontend requests into APK projects. Web content is supported here only when the user wants an Android app/APK/installable wrapper; in that case use Android's built-in `android.webkit.WebView` and local assets.
+- Do not automatically convert plain HTML/H5/webpage/frontend requests into APK projects. Web content is supported here only when the user wants an Android app/APK/installable wrapper; in that case use Android's built-in `android.webkit.WebView`, bundle the complete local web asset tree under `app/src/main/assets/www/`, load `file:///android_asset/www/index.html`, and keep all resource references relative. Do not point at `/workspace`, `/sdcard`, `/data`, Downloads, localhost, or machine-specific absolute paths.
 - Do not fetch Gradle, Maven, AndroidX, Compose, Cordova, Capacitor, Ionic, Flutter, React Native, npm packages, or iOS tooling to “improve compatibility”. That makes builds slower, requires unsupported tools, or leaves this phone sandbox workflow.
 - Do not produce multiple APKs for arm64/x86 unless the app actually contains native code, which this skill forbids by default.
