@@ -50,6 +50,16 @@ final class PlatformToolContractTests: XCTestCase {
         XCTAssertEqual(definitionNames, fixtureNames)
     }
 
+
+    func testPlatformToolNameLookupAcceptsCapabilityIds() {
+        XCTAssertTrue(NapaxiPlatformToolProvider.isPlatformTool("open_url"))
+        XCTAssertTrue(NapaxiPlatformToolProvider.isPlatformTool("napaxi.platform_tool.open_url"))
+        XCTAssertEqual(
+            NapaxiPlatformToolProvider.normalizedPlatformToolName("napaxi.platform_tool.open_url"),
+            "open_url"
+        )
+    }
+
     func testPlatformToolDescriptionsMatchSharedContract() throws {
         let definitionsByName = Dictionary(
             uniqueKeysWithValues: NapaxiPlatformToolProvider.getToolDefinitions().map { ($0.name, $0) }

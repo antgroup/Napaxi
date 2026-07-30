@@ -19,7 +19,7 @@ build artifact, is `.gitignore`'d, and is **not** covered here.
 | `assets/libtalloc.so.2` | [talloc](https://talloc.samba.org/) (Samba) | 2.x | LGPL-3.0-or-later | No |
 | `jniLibs/arm64-v8a/libldmusl.so` | [musl libc](https://musl.libc.org/) dynamic loader (aarch64) | — | MIT | No |
 | `jniLibs/arm64-v8a/libloader.so` | Napaxi aarch64 sandbox loader shim | — | GPL-3.0-or-later | First-party |
-| `assets/alpine-rootfs.bin` | [Alpine Linux](https://alpinelinux.org/) minirootfs | — | mixed (per-package) | No |
+| `assets/alpine-rootfs.bin` | [Alpine Linux](https://alpinelinux.org/) minirootfs plus `@openai/codex` CLI | Alpine 3.23.4, Codex 0.144.6 | mixed (per-package), Apache-2.0 for Codex CLI | No |
 
 ## Integrity (SHA-256)
 
@@ -34,7 +34,7 @@ c51792635038f3fcfb27f44f977181c5bb043150a0d3074e0db7e3b3477a0ce0  jniLibs/arm64-
 ```
 
 `alpine-rootfs.bin` integrity is tracked by its Git LFS object id
-(`02205b38b17b08dc652df6a07ce989d245eb8fc6cfbfc39ef5bb7417777a2ef0`).
+(`ea48d9d037175e11a511d28553ec90d4a3b1cba6626fcdff74f9f1eef09d054a`).
 
 To recompute locally:
 

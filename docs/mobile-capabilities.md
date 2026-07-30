@@ -241,7 +241,54 @@ turn repeats this sync from the turn's `config_json`, invalidates stale native
 thread mappings when the configuration fingerprint changes, and refuses to run
 if the model config is missing or invalid. The deprecated raw TOML API is
 retained only for source compatibility and must not be used by host
-applications.
+applications. If a host must route only the sandboxed Codex CLI through a
+network proxy, it may put `http_proxy`, `https_proxy`, `all_proxy`, or
+`no_proxy` under the Codex agent definition's `engine_config.network_env`; core
+validates those values, exports them only for `codex app-server`, and includes
+them in the Codex runtime fingerprint so idle sessions restart when the network
+route changes. This proxy path is Codex-engine scoped and does not mutate the
+Rust-native Napaxi provider configuration.
+
+Codex turns reuse the normal Napaxi prompt and attachment preparation path before
+they enter app-server. The compiled `napaxi_core` runtime instructions are sent
+as Codex app-server `developerInstructions` when a native Codex thread is started
+or resumed, so SDK policies for workspace use, shell/file behavior, skills,
+media handling, response language, and host guidance stay aligned with the
+default engine path without replacing the Rust tool loop. Attachment bytes are
+persisted into the workspace under `/workspace/attachments/<thread>/...`; image
+attachments with workspace sandbox paths are forwarded as Codex app-server
+`localImage` input items, and all attachments are summarized in the text input
+with filename, MIME type, kind, and workspace path when available. Host-local
+picker paths are not passed as `localImage` values because the app-server process
+can only read sandbox-visible workspace files. Non-image file attachments
+continue to be exposed as workspace paths and metadata for Codex to inspect with
+its sandbox tools. The Android integration strict live probe requires the model
+response to reflect both a text-file sentinel and a PNG image sentinel before it
+accepts the attachment path as validated. This does not change the default
+`napaxi_core` engine attachment/history path.
+
+Codex app-server threads also receive Napaxi's currently admitted tool
+descriptors through the app-server experimental `dynamicTools` field on
+`thread/start`. These descriptors are derived from the same capability profile,
+selection, tool registry, and internal handler preflight used by the Rust tool
+loop. When Codex sends an `item/tool/call` request, core executes it through the
+Napaxi tool broker / internal tool-loop path with the same invocation admission,
+policy, workspace context, redaction, and result sanitization used by
+`napaxi_core`. On mobile platforms, core includes the shared platform-tool
+descriptors in this preflight only when a host tool bridge is registered, then
+dispatches calls back through that bridge with workspace context so Android/iOS
+permission, file-resolution, and user-confirmation handling stays in the SDK
+adapter. Platform and device tools such as URL opening, camera, media library,
+clipboard, browser, Git, and host custom tools remain available only when the
+host declares and enables their capabilities and still require any host-side
+permission or user-confirmation UI. Dynamic tools are advertised only
+when a new native Codex thread is started; existing resumed app-server threads
+continue with the tools they were started with, and configuration or dynamic-tool
+fingerprint changes clear the thread mapping before a new thread is opened.
+Approval, extra-permission, MCP elicitation, current-time, and unsupported
+app-server JSON-RPC requests are answered deterministically at the Codex bridge
+boundary so a mobile turn is not left waiting on a Codex-side approval channel;
+user-input requests remain routed through Napaxi's ask-human continuation path.
 
 `CodexAgentEngineConfigResult` reports `success`, `providerAvailable`,
 `modelUsable`, `errorCode`, `error`, `model`, and `configChanged`. Stable errors

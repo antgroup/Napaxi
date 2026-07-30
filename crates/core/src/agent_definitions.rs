@@ -38,6 +38,57 @@ pub enum AgentSource {
     AgentMd,
 }
 
+/// Return whether a tool name is allowed by an agent-level tool filter.
+///
+/// Filter entries may use either the descriptor name (for example `open_url`)
+/// or the stable capability ID (for example `napaxi.platform_tool.open_url`).
+pub(crate) fn tool_allowed_by_filter(tool_name: &str, filter: &ToolFilter) -> bool {
+    match filter {
+        ToolFilter::AllTools => true,
+        ToolFilter::Allowlist(allowed) => allowed
+            .iter()
+            .any(|entry| tool_name_matches_filter_entry(tool_name, entry)),
+        ToolFilter::Denylist(denied) => !denied
+            .iter()
+            .any(|entry| tool_name_matches_filter_entry(tool_name, entry)),
+    }
+}
+
+pub(crate) fn filter_tool_descriptors_for_definition(
+    definition: Option<&AgentDefinition>,
+    descriptors: Vec<crate::tool_registry::ToolDescriptor>,
+) -> Vec<crate::tool_registry::ToolDescriptor> {
+    let Some(definition) = definition else {
+        return descriptors;
+    };
+    descriptors
+        .into_iter()
+        .filter(|descriptor| tool_allowed_by_filter(&descriptor.name, &definition.tool_filter))
+        .collect()
+}
+
+fn tool_name_matches_filter_entry(tool_name: &str, entry: &str) -> bool {
+    let tool_name = tool_name.trim();
+    let entry = entry.trim();
+    if tool_name == entry {
+        return true;
+    }
+    let tool_capability_id = effective_tool_capability_id(tool_name);
+    if tool_capability_id.as_deref() == Some(entry) {
+        return true;
+    }
+    let entry_capability_id = crate::capabilities::tool_capability_id(entry);
+    if entry_capability_id.as_deref() == Some(tool_name) {
+        return true;
+    }
+    entry_capability_id.is_some() && entry_capability_id == tool_capability_id
+}
+
+fn effective_tool_capability_id(tool_name: &str) -> Option<String> {
+    crate::capabilities::tool_capability_id(tool_name)
+        .or_else(|| Some("napaxi.tool.custom_host".to_string()))
+}
+
 impl std::fmt::Display for AgentSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -644,6 +695,38 @@ A safe agent without dangerous tools.
             let back: ToolFilter = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(filter, back);
         }
+    }
+
+    #[test]
+    fn test_tool_filter_accepts_descriptor_names_and_capability_ids() {
+        assert!(tool_allowed_by_filter(
+            "open_url",
+            &ToolFilter::Allowlist(vec!["napaxi.platform_tool.open_url".into()])
+        ));
+        assert!(tool_allowed_by_filter(
+            "napaxi.platform_tool.open_url",
+            &ToolFilter::Allowlist(vec!["open_url".into()])
+        ));
+        assert!(!tool_allowed_by_filter(
+            "open_url",
+            &ToolFilter::Denylist(vec!["napaxi.platform_tool.open_url".into()])
+        ));
+        assert!(tool_allowed_by_filter(
+            "custom_ping",
+            &ToolFilter::Allowlist(vec!["custom_ping".into()])
+        ));
+        assert!(tool_allowed_by_filter(
+            "custom_ping",
+            &ToolFilter::Allowlist(vec!["napaxi.tool.custom_host".into()])
+        ));
+        assert!(!tool_allowed_by_filter(
+            "custom_ping",
+            &ToolFilter::Denylist(vec!["napaxi.tool.custom_host".into()])
+        ));
+        assert!(tool_allowed_by_filter(
+            "open_url",
+            &ToolFilter::Denylist(vec!["napaxi.tool.custom_host".into()])
+        ));
     }
 
     #[test]

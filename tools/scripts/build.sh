@@ -335,8 +335,76 @@ wake_android_device() {
     local serial="$2"
     "$adb" -s "$serial" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
     "$adb" -s "$serial" shell wm dismiss-keyguard >/dev/null 2>&1 || true
-    "$adb" -s "$serial" shell input keyevent 82 >/dev/null 2>&1 || true
     "$adb" -s "$serial" shell cmd statusbar collapse >/dev/null 2>&1 || true
+}
+
+
+run_android_codex_probe() {
+    local adb="$1"
+    local serial="$2"
+    local package="$3"
+    local activity="$4"
+    local dump coords probe_dump attempt
+
+    info "Running optional Android Codex Engine Probe on $serial"
+    wake_android_device "$adb" "$serial"
+    dump="$(
+        "$adb" -s "$serial" shell timeout 5 uiautomator dump /sdcard/napaxi_android_integration.xml >/dev/null 2>&1 &&
+            "$adb" -s "$serial" shell cat /sdcard/napaxi_android_integration.xml 2>/dev/null
+    )" || dump=""
+    coords="$(printf '%s' "$dump" | python3 -c '
+import re, sys, xml.etree.ElementTree as ET
+raw = sys.stdin.read()
+try:
+    root = ET.fromstring(raw)
+except Exception:
+    sys.exit(1)
+for node in root.iter("node"):
+    if node.attrib.get("text") == "Codex Engine Probe":
+        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.attrib.get("bounds", ""))
+        if m:
+            l,t,r,b = map(int, m.groups())
+            print((l + r) // 2, (t + b) // 2)
+            sys.exit(0)
+sys.exit(1)
+' 2>/dev/null)" || coords=""
+    [ -n "$coords" ] || {
+        printf '%s\n' "$dump" >&2
+        err "Codex Engine Probe button was not found in Android integration UI."
+    }
+    # shellcheck disable=SC2086
+    "$adb" -s "$serial" shell input tap $coords >/dev/null 2>&1 || true
+
+    for attempt in $(seq 1 90); do
+        wake_android_device "$adb" "$serial"
+        probe_dump="$(
+            "$adb" -s "$serial" shell timeout 5 uiautomator dump /sdcard/napaxi_android_integration.xml >/dev/null 2>&1 &&
+                "$adb" -s "$serial" shell cat /sdcard/napaxi_android_integration.xml 2>/dev/null
+        )" || probe_dump=""
+        if printf '%s\n' "$probe_dump" | grep -q "Codex Engine Probe failed:"; then
+            printf '%s\n' "$probe_dump" >&2
+            err "Codex Engine Probe action failed before producing diagnostics."
+        fi
+        if printf '%s\n' "$probe_dump" | grep -q "codexConfigSuccess=" &&
+            printf '%s\n' "$probe_dump" | grep -q "hostApiNetwork=" &&
+            printf '%s\n' "$probe_dump" | grep -q "codexNetworkEnv=" &&
+            printf '%s\n' "$probe_dump" | grep -q "chatTimedOut="; then
+            if [ "${NAPAXI_ANDROID_INTEGRATION_EXPECT_CODEX_LIVE:-}" = "1" ]; then
+                printf '%s\n' "$probe_dump" | grep -q "codexConfigSuccess=true" || err "Codex config did not succeed."
+                printf '%s\n' "$probe_dump" | grep -q "chatTimedOut=false" || err "Codex live turn timed out."
+                printf '%s\n' "$probe_dump" | grep -q "errors=none" || err "Codex live turn reported errors."
+                printf '%s\n' "$probe_dump" | grep -q "responseChecks=fileSentinel=true, imageSentinel=true" || err "Codex live turn did not prove text-file and image attachment handling."
+                printf '%s\n' "$probe_dump" | grep -q "android_integration_ping:result" || err "Codex live turn did not return the custom dynamic tool result."
+                printf '%s\n' "$probe_dump" | grep -q "get_device_info:result" || err "Codex live turn did not return the platform device-info tool result."
+            fi
+            info "Android Codex Engine Probe produced diagnostics on $serial"
+            return
+        fi
+        sleep 1
+    done
+
+    printf '%s\n' "$probe_dump" >&2
+    err "Codex Engine Probe did not report diagnostics on device."
 }
 
 check_android_integration_device() {
@@ -378,10 +446,35 @@ check_android_integration_device() {
     "$adb" -s "$serial" shell appops set "$package" POST_NOTIFICATION allow >/dev/null 2>&1 || true
     wake_android_device "$adb" "$serial"
 
+    local start_args=(
+        -W -n "$activity"
+        --ez run_smoke true
+        --ez install_first_provider true
+    )
+    if [ -n "${NAPAXI_ANDROID_INTEGRATION_API_KEY:-}" ]; then
+        start_args+=(--es napaxi_api_key "$NAPAXI_ANDROID_INTEGRATION_API_KEY")
+    fi
+    if [ -n "${NAPAXI_ANDROID_INTEGRATION_BASE_URL:-}" ]; then
+        start_args+=(--es napaxi_base_url "$NAPAXI_ANDROID_INTEGRATION_BASE_URL")
+    fi
+    if [ -n "${NAPAXI_ANDROID_INTEGRATION_MODEL:-}" ]; then
+        start_args+=(--es napaxi_model "$NAPAXI_ANDROID_INTEGRATION_MODEL")
+    fi
+    if [ -n "${NAPAXI_ANDROID_INTEGRATION_HTTPS_PROXY:-}" ]; then
+        start_args+=(--es napaxi_https_proxy "$NAPAXI_ANDROID_INTEGRATION_HTTPS_PROXY")
+    fi
+    if [ -n "${NAPAXI_ANDROID_INTEGRATION_HTTP_PROXY:-}" ]; then
+        start_args+=(--es napaxi_http_proxy "$NAPAXI_ANDROID_INTEGRATION_HTTP_PROXY")
+    fi
+    if [ -n "${NAPAXI_ANDROID_INTEGRATION_ALL_PROXY:-}" ]; then
+        start_args+=(--es napaxi_all_proxy "$NAPAXI_ANDROID_INTEGRATION_ALL_PROXY")
+    fi
+    if [ -n "${NAPAXI_ANDROID_INTEGRATION_NO_PROXY:-}" ]; then
+        start_args+=(--es napaxi_no_proxy "$NAPAXI_ANDROID_INTEGRATION_NO_PROXY")
+    fi
+
     info "Starting Android integration app on device $serial"
-    start_output="$("$adb" -s "$serial" shell am start -W -n "$activity" \
-        --ez run_smoke true \
-        --ez install_first_provider true 2>&1)"
+    start_output="$("$adb" -s "$serial" shell am start "${start_args[@]}" 2>&1)"
     printf '%s\n' "$start_output" | grep -Eq "Status: ok|Complete" || {
         printf '%s\n' "$start_output" >&2
         err "Android integration Activity did not start cleanly."
@@ -408,6 +501,9 @@ check_android_integration_device() {
         fi
         if printf '%s\n' "$smoke_dump" | grep -Eq 'package="com\.(google\.)?android\.permissioncontroller"|text="允许"|text="Allow"'; then
             "$adb" -s "$serial" shell input tap 900 1700 >/dev/null 2>&1 || true
+        elif ! printf '%s\n' "$smoke_dump" | grep -q "package=\"$package\""; then
+            "$adb" -s "$serial" shell am start -n "$activity" >/dev/null 2>&1 || true
+            sleep 1
         fi
         if printf '%s\n' "$smoke_dump" | grep -q "tools=" &&
             printf '%s\n' "$smoke_dump" | grep -q "providers=" &&
@@ -425,6 +521,9 @@ check_android_integration_device() {
                     ;;
             esac
             info "Android integration smoke completed on $serial (pid=$pid)"
+            if [ "${NAPAXI_ANDROID_INTEGRATION_RUN_CODEX_PROBE:-}" = "1" ]; then
+                run_android_codex_probe "$adb" "$serial" "$package" "$activity"
+            fi
             return
         fi
         sleep 1

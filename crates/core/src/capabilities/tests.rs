@@ -94,6 +94,22 @@ mod registry {
     }
 
     #[test]
+    fn platform_tool_capability_ids_accept_bare_names_and_capability_ids() {
+        assert_eq!(
+            platform_tool_capability_id("open_url"),
+            "napaxi.platform_tool.open_url"
+        );
+        assert_eq!(
+            platform_tool_capability_id("napaxi.platform_tool.open_url"),
+            "napaxi.platform_tool.open_url"
+        );
+        assert_eq!(
+            tool_capability_id("napaxi.platform_tool.open_url").as_deref(),
+            Some("napaxi.platform_tool.open_url")
+        );
+    }
+
+    #[test]
     fn agent_app_action_capability_is_host_carried_tool() {
         let definitions = definitions();
         let definition = definitions

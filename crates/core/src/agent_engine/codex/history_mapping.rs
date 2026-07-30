@@ -178,6 +178,7 @@ struct PendingHistoryToolCall {
     arguments: String,
 }
 
+#[cfg(test)]
 fn map_history_item(item: &Value) -> Option<Value> {
     map_history_payload_item(history_payload(item))
 }

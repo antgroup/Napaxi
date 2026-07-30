@@ -18,6 +18,7 @@ distribution, and should have the combination reviewed by counsel.
 | Samba talloc | `packages/flutter/android/assets/libtalloc.so.2` | LGPL-3.0-or-later | dynamic library | upstream, below |
 | musl libc loader | `packages/flutter/android/jniLibs/arm64-v8a/libldmusl.so` | MIT | dynamic loader | upstream, below |
 | Alpine minirootfs | `packages/flutter/android/assets/alpine-rootfs.bin`, `packages/ios/Sources/Napaxi/Resources/alpine-rootfs.tar.gz` | mixed (per-package) | data image | upstream, below |
+| OpenAI Codex CLI 0.144.6 | inside `packages/flutter/android/assets/alpine-rootfs.bin` | Apache-2.0 | separate CLI executable launched in sandbox | npm package, below |
 | `libloader.so` | `packages/flutter/android/jniLibs/arm64-v8a/libloader.so` | GPL-3.0-or-later | Napaxi sandbox loader shim | Napaxi project |
 | iSHCore 0.3.0 | `packages/ios/Vendor/iSHCore`, iOS CocoaPods dependency | GPL-3.0; upstream GPLv2 additional licensing notes and `LICENSE.IOS` also apply | static libraries | <https://github.com/ish-app/ish> |
 
@@ -40,6 +41,7 @@ exact released versions:
 - **iSHCore / iSH** (GPL-3.0; upstream GPLv2 additional licensing notes and
   `LICENSE.IOS` also apply): <https://github.com/ish-app/ish>
 - **Alpine Linux** packages: <https://alpinelinux.org/> (per-package sources via APKBUILD)
+- **OpenAI Codex CLI 0.144.6** (Apache-2.0): <https://www.npmjs.com/package/@openai/codex>
 
 If you received a binary distribution of an app built with the Napaxi SDK and
 want the corresponding source for any GPL/LGPL component, the upstream links

@@ -1,8 +1,12 @@
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::state::CodexSessionState;
 use crate::agent_engine::AgentEngineTurnRequest;
+use crate::tool_registry::ToolDescriptor;
 
+// Codex app-server speaks a JSON-line RPC protocol that is JSON-RPC-like,
+// but the wire objects intentionally omit a top-level `jsonrpc` field.
 pub(crate) struct JsonRpcClient {
     next_id: u64,
 }
@@ -17,12 +21,12 @@ impl JsonRpcClient {
         self.next_id = self.next_id.saturating_add(1);
         (
             id,
-            json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}).to_string(),
+            json!({"id":id,"method":method,"params":params}).to_string(),
         )
     }
 
     pub(crate) fn notification(&self, method: &str, params: Option<Value>) -> String {
-        let mut payload = json!({"jsonrpc":"2.0","method":method});
+        let mut payload = json!({"method":method});
         if let Some(params) = params {
             payload["params"] = params;
         }
@@ -51,39 +55,112 @@ pub(crate) fn initialized_notification(client: &JsonRpcClient) -> String {
 pub(crate) fn thread_open_request(
     client: &mut JsonRpcClient,
     state: &CodexSessionState,
+    request: Option<&AgentEngineTurnRequest>,
+    dynamic_tools: &[ToolDescriptor],
 ) -> (u64, String, bool) {
     if let Some(thread_id) = &state.native_thread_id {
         let (id, line) = client.request(
             "thread/resume",
-            json!({
-                "threadId": thread_id,
-                "approvalPolicy": "never",
-                "sandbox": "danger-full-access",
-            }),
+            thread_open_params(Some(thread_id), request, dynamic_tools),
         );
         (id, line, true)
     } else {
         let (id, line) = client.request(
             "thread/start",
-            json!({
-                "cwd": "/workspace",
-                "approvalPolicy": "never",
-                "sandbox": "danger-full-access",
-            }),
+            thread_open_params(None, request, dynamic_tools),
         );
         (id, line, false)
     }
 }
 
-pub(crate) fn thread_start_request(client: &mut JsonRpcClient) -> (u64, String) {
+pub(crate) fn thread_start_request(
+    client: &mut JsonRpcClient,
+    request: Option<&AgentEngineTurnRequest>,
+    dynamic_tools: &[ToolDescriptor],
+) -> (u64, String) {
     client.request(
         "thread/start",
-        json!({
-            "cwd": "/workspace",
-            "approvalPolicy": "never",
-            "sandbox": "danger-full-access",
-        }),
+        thread_open_params(None, request, dynamic_tools),
     )
+}
+
+fn thread_open_params(
+    thread_id: Option<&str>,
+    request: Option<&AgentEngineTurnRequest>,
+    dynamic_tools: &[ToolDescriptor],
+) -> Value {
+    let mut params = json!({
+        "cwd": "/workspace",
+        "approvalPolicy": "never",
+        "sandbox": "danger-full-access",
+    });
+    if let Some(thread_id) = thread_id {
+        params["threadId"] = Value::String(thread_id.to_string());
+    }
+    if let Some(instructions) = request.and_then(codex_developer_instructions) {
+        params["developerInstructions"] = Value::String(instructions);
+    }
+    if thread_id.is_none() {
+        if let Some(dynamic_tools) = codex_dynamic_tools(dynamic_tools) {
+            params["dynamicTools"] = dynamic_tools;
+        }
+    }
+    params
+}
+
+pub(crate) fn dynamic_tools_fingerprint(descriptors: &[ToolDescriptor]) -> String {
+    let mut visible = descriptors
+        .iter()
+        .filter(|descriptor| !crate::skills::is_hidden_skill_tool(&descriptor.name))
+        .cloned()
+        .collect::<Vec<_>>();
+    visible.sort_by(|left, right| left.name.cmp(&right.name));
+    let raw = serde_json::to_vec(&visible).unwrap_or_default();
+    crate::crypto::sha256_base64_no_pad(&raw)
+}
+
+fn codex_dynamic_tools(descriptors: &[ToolDescriptor]) -> Option<Value> {
+    let tools = descriptors
+        .iter()
+        .filter(|descriptor| !crate::skills::is_hidden_skill_tool(&descriptor.name))
+        .map(|descriptor| {
+            json!({
+                "type": "function",
+                "name": descriptor.name,
+                "description": descriptor.description,
+                "inputSchema": descriptor.parameters,
+            })
+        })
+        .collect::<Vec<_>>();
+    if tools.is_empty() {
+        return None;
+    }
+    Some(json!([
+        {
+            "type": "namespace",
+            "name": "napaxi",
+            "description": "Napaxi SDK runtime and device tools admitted by the current capability profile. Use these for host/device actions that are outside Codex's built-in workspace tools.",
+            "tools": tools,
+        }
+    ]))
+}
+
+fn codex_developer_instructions(request: &AgentEngineTurnRequest) -> Option<String> {
+    serde_json::from_str::<Value>(&request.config_json)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("system_prompt")
+                .or_else(|| value.get("systemPrompt"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| {
+                    format!(
+                        "Napaxi SDK runtime instructions. These instructions are supplied by napaxi_core for adapter parity and should be treated as developer guidance, not as user-provided content.\n\n{value}"
+                    )
+                })
+        })
 }
 
 pub(crate) fn thread_list_request(client: &mut JsonRpcClient, cwd: Option<&str>) -> (u64, String) {
@@ -179,7 +256,7 @@ pub(crate) fn turn_start_request(
         .or_else(|| request.engine_config.get("effort"))
         .and_then(Value::as_str)
         .unwrap_or("medium");
-    let input = codex_turn_input_items(&request.message);
+    let input = codex_turn_input_items(&request.message, &request.attachments_json);
     let (_, line) = client.request(
         "turn/start",
         json!({
@@ -199,18 +276,47 @@ pub(crate) fn turn_start_request(
     line
 }
 
-fn codex_turn_input_items(message: &str) -> Vec<Value> {
+fn codex_turn_input_items(message: &str, attachments_json: &str) -> Vec<Value> {
+    let attachments = parse_codex_attachments(attachments_json);
     let skills = explicit_codex_skills(message);
-    if skills.is_empty() {
-        return vec![json!({"type": "text", "text": message})];
-    }
     let mut text = message.to_string();
     for skill in &skills {
         if !has_skill_mention(&text, skill) {
             text = format!("${skill}\n{text}");
         }
     }
+    if !attachments.is_empty() {
+        text.push_str("\n\n<attachments>\n");
+        for attachment in &attachments {
+            text.push_str("- ");
+            if let Some(filename) = &attachment.filename {
+                text.push_str(filename);
+            } else {
+                text.push_str("attachment");
+            }
+            text.push_str(&format!(" ({})", attachment.kind));
+            if let Some(mime_type) = &attachment.mime_type {
+                text.push_str(&format!(", mime_type={mime_type}"));
+            }
+            if let Some(path) = &attachment.sandbox_path {
+                text.push_str(&format!(", sandbox_path={path}"));
+            }
+            text.push('\n');
+        }
+        text.push_str("</attachments>");
+    }
+
     let mut input = vec![json!({"type": "text", "text": text})];
+    for attachment in &attachments {
+        if attachment.kind == "image"
+            && let Some(path) = &attachment.sandbox_path
+        {
+            input.push(json!({
+                "type": "localImage",
+                "path": path,
+            }));
+        }
+    }
     for skill in skills {
         input.push(json!({
             "type": "skill",
@@ -219,6 +325,61 @@ fn codex_turn_input_items(message: &str) -> Vec<Value> {
         }));
     }
     input
+}
+
+#[derive(Debug, Clone)]
+struct CodexAttachmentInput {
+    kind: String,
+    mime_type: Option<String>,
+    filename: Option<String>,
+    sandbox_path: Option<String>,
+}
+
+fn parse_codex_attachments(attachments_json: &str) -> Vec<CodexAttachmentInput> {
+    let Ok(Value::Array(items)) = serde_json::from_str::<Value>(attachments_json) else {
+        return Vec::new();
+    };
+    items
+        .into_iter()
+        .filter_map(|item| {
+            let kind = string_field(&item, "kind").unwrap_or_else(|| {
+                let mime_type = string_field(&item, "mime_type")
+                    .or_else(|| string_field(&item, "mimeType"))
+                    .unwrap_or_default();
+                if mime_type.starts_with("image/") {
+                    "image".to_string()
+                } else if mime_type.starts_with("audio/") {
+                    "audio".to_string()
+                } else {
+                    "document".to_string()
+                }
+            });
+            let sandbox_path = string_field(&item, "sandbox_path")
+                .or_else(|| string_field(&item, "storage_key"))
+                .or_else(|| string_field(&item, "storageKey"))
+                .or_else(|| string_field(&item, "path").filter(|path| is_codex_sandbox_path(path)))
+                .filter(|path| is_codex_sandbox_path(path));
+            Some(CodexAttachmentInput {
+                kind,
+                mime_type: string_field(&item, "mime_type")
+                    .or_else(|| string_field(&item, "mimeType")),
+                filename: string_field(&item, "filename").or_else(|| string_field(&item, "name")),
+                sandbox_path,
+            })
+        })
+        .collect()
+}
+
+fn string_field(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+}
+
+fn is_codex_sandbox_path(path: &str) -> bool {
+    path == "/workspace" || path.starts_with("/workspace/")
 }
 
 fn explicit_codex_skills(message: &str) -> Vec<&'static str> {
@@ -245,6 +406,145 @@ fn should_use_android_apk_build(message: &str) -> bool {
 
 fn has_skill_mention(text: &str, skill: &str) -> bool {
     text.contains(&format!("${skill}")) || text.contains(&format!("/{skill}"))
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct DynamicToolCallParams {
+    #[serde(default)]
+    pub(crate) arguments: Value,
+    pub(crate) call_id: String,
+    #[serde(default)]
+    pub(crate) namespace: Option<String>,
+    pub(crate) tool: String,
+    pub(crate) thread_id: String,
+    pub(crate) turn_id: String,
+}
+
+pub(crate) fn server_request_id(message: &Value) -> Option<Value> {
+    let method = message.get("method")?.as_str()?;
+    if is_client_request_method(method) {
+        return None;
+    }
+    message.get("id").cloned()
+}
+
+fn is_client_request_method(method: &str) -> bool {
+    matches!(
+        method,
+        "initialize"
+            | "initialized"
+            | "thread/start"
+            | "thread/resume"
+            | "thread/delete"
+            | "turn/start"
+            | "skills/extraRoots/set"
+            | "skills/list"
+    )
+}
+
+pub(crate) fn dynamic_tool_call_params(
+    message: &Value,
+) -> Result<Option<DynamicToolCallParams>, String> {
+    if message.get("method").and_then(Value::as_str) != Some("item/tool/call") {
+        return Ok(None);
+    }
+    let params = message
+        .get("params")
+        .cloned()
+        .ok_or_else(|| "missing item/tool/call params".to_string())?;
+    serde_json::from_value(params)
+        .map(Some)
+        .map_err(|error| format!("invalid item/tool/call params: {error}"))
+}
+
+pub(crate) fn dynamic_tool_call_response(id: Value, success: bool, output: &str) -> String {
+    json!({
+        "id": id,
+        "result": {
+            "success": success,
+            "contentItems": [
+                {"type": "inputText", "text": output}
+            ]
+        }
+    })
+    .to_string()
+}
+
+pub(crate) fn app_server_request_auto_response(message: &Value, id: Value) -> Option<String> {
+    let method = message.get("method").and_then(Value::as_str)?;
+    match method {
+        // Handled by the dynamic tool bridge before this fallback.
+        "item/tool/call" => None,
+        // Deliberately deferred until the host supplies an answer through
+        // answer_human_request.
+        "item/tool/requestUserInput" => None,
+        // Keep the mobile runtime policy gate authoritative: Codex is opened
+        // with approvalPolicy=never, so approval requests should be unusual.
+        // If they still arrive, answer deterministically instead of leaving the
+        // JSON-RPC request pending forever.
+        "item/commandExecution/requestApproval" => {
+            Some(json_rpc_result(id, json!({"decision": "decline"})))
+        }
+        "item/fileChange/requestApproval" => {
+            Some(json_rpc_result(id, json!({"decision": "decline"})))
+        }
+        "item/permissions/requestApproval" => Some(json_rpc_result(
+            id,
+            json!({
+                "permissions": {},
+                "scope": "turn",
+                "strictAutoReview": false
+            }),
+        )),
+        "mcpServer/elicitation/request" => Some(json_rpc_result(
+            id,
+            json!({"action": "cancel", "content": Value::Null}),
+        )),
+        "currentTime/read" => Some(json_rpc_result(
+            id,
+            json!({"currentTimeAt": unix_time_seconds()}),
+        )),
+        // These requests require upstream account/device attestation providers
+        // that Napaxi does not expose through the Codex app-server bridge.
+        // Return structured RPC errors rather than hanging the turn.
+        "account/chatgptAuthTokens/refresh" | "attestation/generate" => Some(json_rpc_error(
+            id,
+            -32000,
+            &format!("Napaxi Codex app-server bridge does not support {method}"),
+        )),
+        _ => Some(json_rpc_error(
+            id,
+            -32601,
+            &format!("unsupported Codex app-server request: {method}"),
+        )),
+    }
+}
+
+fn json_rpc_result(id: Value, result: Value) -> String {
+    json!({
+        "id": id,
+        "result": result,
+    })
+    .to_string()
+}
+
+fn json_rpc_error(id: Value, code: i64, message: &str) -> String {
+    json!({
+        "id": id,
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    })
+    .to_string()
+}
+
+fn unix_time_seconds() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 pub(crate) fn response_id(message: &Value) -> Option<u64> {
@@ -331,73 +631,5 @@ fn strip_ansi(input: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_json_lines_and_filters_noise() {
-        let mut buf = String::new();
-        let out = parse_json_lines(&mut buf, "noise\n{\"jsonrpc\":\"2.0\"}\n");
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0]["jsonrpc"], "2.0");
-    }
-
-    #[test]
-    fn parses_json_lines_with_cr_and_crlf_delimiters() {
-        let mut buf = String::new();
-        let out = parse_json_lines(
-            &mut buf,
-            "{\"jsonrpc\":\"2.0\",\"id\":1}\r{\"jsonrpc\":\"2.0\",\"id\":2}\r\n",
-        );
-        assert_eq!(out.len(), 2);
-        assert_eq!(out[0]["id"], 1);
-        assert_eq!(out[1]["id"], 2);
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn parses_json_lines_split_across_chunks() {
-        let mut buf = String::new();
-        assert!(parse_json_lines(&mut buf, "{\"jsonrpc\":").is_empty());
-        let out = parse_json_lines(&mut buf, "\"2.0\",\"id\":3}\r");
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0]["id"], 3);
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn extracts_thread_id_from_thread_started_notification() {
-        let message = json!({
-            "jsonrpc": "2.0",
-            "method": "thread/started",
-            "params": {"thread": {"id": "thread-1"}}
-        });
-        assert_eq!(extract_thread_id(&message).as_deref(), Some("thread-1"));
-    }
-
-    #[test]
-    fn ignores_null_json_rpc_error_fields() {
-        assert!(response_error(&json!({"id": 1, "result": {}, "error": null})).is_none());
-        assert_eq!(
-            response_error(&json!({"id": 1, "error": {"message": "not initialized"}})).as_deref(),
-            Some("not initialized")
-        );
-    }
-
-    #[test]
-    fn history_requests_match_codex_app_server_contract() {
-        let mut client = JsonRpcClient::new();
-        let (_, list) = thread_list_request(&mut client, Some("/workspace"));
-        let (_, read) = thread_read_request(&mut client, "thread-1");
-        let (_, delete) = thread_delete_request(&mut client, "thread-1");
-        let list: Value = serde_json::from_str(&list).unwrap();
-        let read: Value = serde_json::from_str(&read).unwrap();
-        let delete: Value = serde_json::from_str(&delete).unwrap();
-        assert_eq!(list["method"], "thread/list");
-        assert_eq!(list["params"]["cwd"], "/workspace");
-        assert_eq!(read["method"], "thread/read");
-        assert_eq!(read["params"]["includeTurns"], true);
-        assert_eq!(delete["method"], "thread/delete");
-        assert_eq!(delete["params"]["threadId"], "thread-1");
-    }
-}
+#[path = "protocol_tests.rs"]
+mod tests;

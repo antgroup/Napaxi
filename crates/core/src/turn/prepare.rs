@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::tool_registry::{ToolDescriptor, ToolRegistry};
-use crate::types::{ChatEvent, PlatformLlmConfig};
+use crate::types::{ChatEvent, IncomingAttachment, PlatformLlmConfig};
 
 #[cfg(test)]
 use super::TurnMode;
@@ -22,6 +22,8 @@ pub(crate) struct PreparedTurn {
     pub(crate) history: Vec<crate::session::SessionMessage>,
     pub(crate) raw_history: Vec<serde_json::Value>,
     pub(crate) context_events: Vec<ChatEvent>,
+    pub(crate) attachments: Vec<IncomingAttachment>,
+    pub(crate) tool_descriptors: Vec<ToolDescriptor>,
 }
 
 #[cfg(test)]
@@ -202,6 +204,8 @@ where
         history,
         raw_history,
         context_events,
+        attachments,
+        tool_descriptors: preflight_descriptors,
     })
 }
 
@@ -317,6 +321,8 @@ where
         history,
         raw_history,
         context_events: context_output.events,
+        attachments,
+        tool_descriptors: preflight_descriptors,
     })
 }
 

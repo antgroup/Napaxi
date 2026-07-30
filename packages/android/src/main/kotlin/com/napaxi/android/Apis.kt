@@ -259,10 +259,10 @@ public class AgentApi internal constructor(private val engine: NapaxiEngine) {
 
     public suspend fun createFromDefinition(defId: String, config: LlmConfig? = null): Boolean =
         withContext(Dispatchers.IO) {
-            engine.bridgeLong(
+            engine.bridgeBool(
                 "agent_defs.create_agent",
                 JSONObject().put("def_id", defId).put("config_json", (config ?: engine.config).toJson()),
-            ) != 0L
+            )
         }
 }
 

@@ -15,6 +15,8 @@ pub(crate) struct CodexSessionState {
     pub(crate) native_thread_id: Option<String>,
     #[serde(default)]
     pub(crate) config_fingerprint: String,
+    #[serde(default)]
+    pub(crate) dynamic_tools_fingerprint: String,
 }
 
 #[cfg(target_os = "android")]
@@ -27,6 +29,7 @@ pub(crate) struct ActiveCodexSession {
     pub(crate) human_responses: Vec<(String, String)>,
     pub(crate) files_dir: String,
     pub(crate) config_fingerprint: String,
+    pub(crate) dynamic_tools_fingerprint: String,
     pub(crate) close_after_turn: bool,
 }
 
@@ -176,6 +179,7 @@ pub(crate) fn bind_native_thread(
         &CodexSessionState {
             native_thread_id: Some(native_thread_id.to_string()),
             config_fingerprint: config_fingerprint.to_string(),
+            dynamic_tools_fingerprint: String::new(),
         },
     );
 }
@@ -269,6 +273,7 @@ mod tests {
         let state = CodexSessionState {
             native_thread_id: Some("thread-old".to_string()),
             config_fingerprint: "fingerprint-old".to_string(),
+            dynamic_tools_fingerprint: "tools-old".to_string(),
         };
         save_state(&files_dir, "session-one", &state);
         save_state(&files_dir, "session-two", &state);
@@ -297,6 +302,7 @@ mod tests {
             &CodexSessionState {
                 native_thread_id: Some("thread-current".to_string()),
                 config_fingerprint: "fingerprint-current".to_string(),
+                dynamic_tools_fingerprint: "tools-current".to_string(),
             },
         );
         save_state(
@@ -305,6 +311,7 @@ mod tests {
             &CodexSessionState {
                 native_thread_id: Some("thread-stale".to_string()),
                 config_fingerprint: "fingerprint-stale".to_string(),
+                dynamic_tools_fingerprint: "tools-stale".to_string(),
             },
         );
 
@@ -341,7 +348,8 @@ mod tests {
         assert_eq!(state.native_thread_id.as_deref(), Some("native-thread"));
         assert_eq!(state.config_fingerprint, "fingerprint");
         let mut rpc = super::super::protocol::JsonRpcClient::new();
-        let (_, request, is_resume) = super::super::protocol::thread_open_request(&mut rpc, &state);
+        let (_, request, is_resume) =
+            super::super::protocol::thread_open_request(&mut rpc, &state, None, &[]);
         let request: serde_json::Value = serde_json::from_str(&request).unwrap();
         assert!(is_resume);
         assert_eq!(request["method"], "thread/resume");
