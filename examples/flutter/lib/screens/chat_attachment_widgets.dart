@@ -252,6 +252,7 @@ class _ConversationAttachmentIcon extends StatelessWidget {
       ChatAttachmentPreviewKind.audio => Icons.graphic_eq_rounded,
       ChatAttachmentPreviewKind.html => Icons.web_asset_rounded,
       ChatAttachmentPreviewKind.webLink => Icons.link_rounded,
+      ChatAttachmentPreviewKind.apk => Icons.install_mobile_rounded,
       ChatAttachmentPreviewKind.file => Icons.insert_drive_file_rounded,
     };
     return Container(

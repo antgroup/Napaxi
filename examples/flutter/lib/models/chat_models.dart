@@ -273,7 +273,7 @@ class ChatMessage {
 
 enum ChatAttachmentType { image, file }
 
-enum ChatAttachmentPreviewKind { image, video, audio, html, webLink, file }
+enum ChatAttachmentPreviewKind { image, video, audio, html, webLink, apk, file }
 
 class ChatAttachment {
   const ChatAttachment({
@@ -312,6 +312,10 @@ class ChatAttachment {
   bool get isHtml =>
       _mimeTypeHint == 'text/html' || const {'html', 'htm'}.contains(extension);
 
+  bool get isApk =>
+      _mimeTypeHint == 'application/vnd.android.package-archive' ||
+      extension == 'apk';
+
   bool get isWebLink {
     final value = path.trim().isNotEmpty ? path.trim() : name.trim();
     final uri = Uri.tryParse(value);
@@ -324,6 +328,7 @@ class ChatAttachment {
     if (isImage) return ChatAttachmentPreviewKind.image;
     if (isVideo) return ChatAttachmentPreviewKind.video;
     if (isAudio) return ChatAttachmentPreviewKind.audio;
+    if (isApk) return ChatAttachmentPreviewKind.apk;
     return ChatAttachmentPreviewKind.file;
   }
 
@@ -333,6 +338,7 @@ class ChatAttachment {
     if (isAudio) return 'Audio';
     if (isHtml) return 'HTML';
     if (isWebLink) return 'Link';
+    if (isApk) return 'APK';
     return switch (extension) {
       'pdf' => 'PDF',
       'doc' || 'docx' => 'Word',
@@ -375,6 +381,7 @@ class ChatAttachment {
       };
     }
     if (isHtml) return 'text/html';
+    if (isApk) return 'application/vnd.android.package-archive';
     return switch (extension) {
       'pdf' => 'application/pdf',
       'json' => 'application/json',

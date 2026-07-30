@@ -5741,6 +5741,7 @@ class _ChatScreenState extends State<ChatScreen>
                   sessionId,
                   currentAssistantMessageId,
                   agentId: agentId,
+                  producedSince: _sessionRuns[sessionId]?.startedAt,
                 ),
               );
               final run = _sessionRuns[sessionId];
@@ -7117,6 +7118,7 @@ class _ChatScreenState extends State<ChatScreen>
     String sessionId,
     String messageId, {
     required String agentId,
+    DateTime? producedSince,
   }) async {
     final message = _messageById(messageId);
     if (message == null) return;
@@ -7124,6 +7126,11 @@ class _ChatScreenState extends State<ChatScreen>
     if (producedText.trim().isNotEmpty) {
       _appendProducedFileAttachments(sessionId, producedText, agentId: agentId);
     }
+    await _appendRecentApkAttachments(
+      sessionId,
+      agentId: agentId,
+      producedSince: producedSince,
+    );
     await _appendInlineHtmlAttachment(sessionId, messageId);
     _flushPendingAssistantAttachments(sessionId, messageId);
   }
@@ -7144,14 +7151,13 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   /// Tools whose result reliably names files the assistant actually created or
-  /// modified — these explicitly declare the affected paths in their structured
-  /// result. `shell` is intentionally excluded: its result is plain
-  /// stdout/stderr with no file manifest, so (matching Codex) files written as
-  /// a side effect of shell commands are NOT surfaced as generated attachments.
-  /// This avoids noise like a `python -m venv` run dumping the whole venv tree.
+  /// modified. `shell` is still excluded for generic files because its side
+  /// effects can be huge/noisy (for example a venv or build tree), but APKs get
+  /// a narrow exception: build commands commonly produce an installable APK
+  /// without going through write_file/apply_patch.
   bool _isGeneratedFileTool(String toolName) {
     return switch (_canonicalToolName(toolName)) {
-      'write_file' || 'apply_patch' => true,
+      'write_file' || 'apply_patch' || 'shell' => true,
       _ => false,
     };
   }
@@ -7176,12 +7182,45 @@ class _ChatScreenState extends State<ChatScreen>
     AgentToolCall toolCall,
   ) {
     final canonicalName = _canonicalToolName(toolCall.name);
+    if (canonicalName == 'shell') {
+      _appendApkPathsFromShellToolCall(buffer, toolCall);
+      return;
+    }
     if (canonicalName != 'write_file' && canonicalName != 'apply_patch') {
       return;
     }
     for (final file in _collectWriteFileResults(toolCall)) {
       if (file.action == 'deleted' || file.path.trim().isEmpty) continue;
       buffer.writeln(file.path);
+    }
+  }
+
+  void _appendApkPathsFromShellToolCall(
+    StringBuffer buffer,
+    AgentToolCall toolCall,
+  ) {
+    final text = StringBuffer()
+      ..writeln(toolCall.arguments)
+      ..writeln(toolCall.streamingOutput)
+      ..writeln(toolCall.output ?? '');
+    for (final chunk in toolCall.outputChunks) {
+      text.writeln(chunk.content);
+    }
+    final seen = <String>{};
+    for (final match in RegExp(
+      r'''(?:^|[\s"'`=:\[\](),])([^\s"'`<>|]+\.apk)(?=$|[\s"'`<>|,).])''',
+      caseSensitive: false,
+      multiLine: true,
+    ).allMatches(text.toString())) {
+      final raw = match.group(1)?.trim();
+      if (raw == null || raw.isEmpty) continue;
+      final candidate = raw.replaceAll(RegExp(r'[),.;]+$'), '');
+      if (!candidate.toLowerCase().endsWith('.apk')) continue;
+      if (seen.add(candidate)) buffer.writeln(candidate);
+      if (!candidate.startsWith('/') && !candidate.contains('://')) {
+        final workspaceCandidate = '/workspace/$candidate';
+        if (seen.add(workspaceCandidate)) buffer.writeln(workspaceCandidate);
+      }
     }
   }
 
@@ -7217,6 +7256,76 @@ $candidate
 </body>
 </html>
 ''';
+  }
+
+  Future<void> _appendRecentApkAttachments(
+    String sessionId, {
+    required String agentId,
+    DateTime? producedSince,
+  }) async {
+    if (!sdk.NapaxiFileBridge.isInitialized) return;
+    final since = producedSince?.subtract(const Duration(minutes: 2));
+    if (since == null) return;
+
+    final bridge = sdk.NapaxiFileBridge.instance;
+    final workspaceDir = bridge.workspaceDirScoped(
+      accountId: _activeAccountId,
+      agentId: agentId,
+    );
+    if (!await workspaceDir.exists()) return;
+
+    final attachments = <ChatAttachment>[];
+    var visited = 0;
+    const maxVisited = 30000;
+    const maxApks = 20;
+    try {
+      await for (final entity in workspaceDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (++visited > maxVisited || attachments.length >= maxApks) break;
+        if (entity is! File || !entity.path.toLowerCase().endsWith('.apk')) {
+          continue;
+        }
+        DateTime modified;
+        try {
+          modified = await entity.lastModified();
+        } catch (_) {
+          continue;
+        }
+        if (modified.isBefore(since)) continue;
+        final sandboxPath = bridge.realToSandboxScoped(
+          entity.path,
+          accountId: _activeAccountId,
+          agentId: agentId,
+        );
+        if (sandboxPath == null || sandboxPath.trim().isEmpty) continue;
+        attachments.add(
+          ChatAttachment(
+            name: entity.uri.pathSegments.isEmpty
+                ? 'app.apk'
+                : entity.uri.pathSegments.last,
+            path: entity.path,
+            sandboxPath: sandboxPath,
+            type: ChatAttachmentType.file,
+            mimeTypeOverride: 'application/vnd.android.package-archive',
+          ),
+        );
+      }
+    } catch (_) {
+      return;
+    }
+    if (attachments.isEmpty) return;
+    attachments.sort((a, b) {
+      try {
+        return File(
+          b.path,
+        ).lastModifiedSync().compareTo(File(a.path).lastModifiedSync());
+      } catch (_) {
+        return 0;
+      }
+    });
+    _queueAssistantAttachments(sessionId, attachments);
   }
 
   void _appendProducedFileAttachments(
