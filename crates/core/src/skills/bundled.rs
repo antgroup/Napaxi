@@ -10,7 +10,7 @@ use super::paths::app_bundled_skills_dir;
 
 /// Current bundled skill set version. Increment when updating seed content
 /// to trigger re-deployment on next engine start.
-const BUNDLED_VERSION: u32 = 6;
+const BUNDLED_VERSION: u32 = 7;
 
 /// Embedded skill content: (slug, SKILL.md content).
 const BUNDLED_SKILLS: &[(&str, &str)] = &[
@@ -105,7 +105,7 @@ mod tests {
         assert!(base.join(".version").exists());
 
         let version = std::fs::read_to_string(base.join(".version")).unwrap();
-        assert_eq!(version.trim(), "6");
+        assert_eq!(version.trim(), "7");
     }
 
     #[test]

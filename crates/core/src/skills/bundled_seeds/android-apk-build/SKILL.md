@@ -1,8 +1,8 @@
 ---
 name: android-apk-build
-version: "1.2.0"
+version: "1.2.1"
 display_name: Android APK Build
-description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a deterministic build.sh; Android framework WebView/local HTML assets are allowed because they need no new toolchain, but do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
+description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a deterministic build.sh; Android framework WebView/local HTML assets are allowed because they need no new toolchain, but do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
 activation:
   keywords: ["android", "apk", "安卓", "应用", "网页封装", "html app", "webview", "打包", "签名", "安装包", "build apk", "写app", "做app", "生成app", "build app"]
   patterns: ["(?i)\\b(apk|android app|build app|make app|package app|sign apk|installable app)\\b", "(写|做|生成|开发|创建).{0,12}(app|应用|安卓|安装包|apk)", "(app|应用|安卓|apk).{0,12}(打包|签名|构建|安装|生成)"]
@@ -53,7 +53,7 @@ Before writing code, mentally pin these constants and do not reinterpret them fr
 - Do not lower `targetSdkVersion` or `minSdkVersion`. Low targets make modern Android show “built for an older version” warnings or reject installs in some flows.
 - Do not add `<uses-sdk>` values via aapt2 command-line flags; keep them in `AndroidManifest.xml`.
 - Do not add native libraries, ABI filters, split APKs, `armeabi-v7a`, `x86_64`, `arm64-v8a`, or “compatibility” variants. This template outputs one architecture-independent APK.
-- The final APK path must be `build/<APP_NAME>.apk` and it must be the only final APK emitted by the workflow. Temporary intermediates may exist under `build/apk-work/`, but do not present or copy multiple installable APK variants.
+- The final APK path must be `build/<APP_NAME>.apk` and it must be the only final APK emitted by the workflow. Temporary intermediates may exist during the build under `build/apk-work/`, but `build.sh` must delete intermediate `*.apk` files after writing and verifying the final signed APK. Do not present or copy multiple installable APK variants.
 - Keep the signing certificate stable across app updates. Generate the debug keystore only if it does not already exist, store it at `<project>/debug.keystore`, and never delete it during `rm -rf build`. Reusing this keystore lets Android install a newer APK over the previous one with the same package name.
 - Do not place the keystore inside `build/`, because `build/` is cleaned on every run and would change the signature on every rebuild.
 - Use the fixed `build.sh` template below. Do not rewrite the pipeline from memory.
@@ -214,6 +214,15 @@ java -jar "$BUILD_TOOLS/lib/apksigner.jar" sign \
   "$APK_WORK_DIR/aligned.apk"
 
 java -jar "$BUILD_TOOLS/lib/apksigner.jar" verify --verbose "$BUILD_DIR/$APP_NAME.apk"
+
+echo "cleanup intermediate APKs"
+find "$APK_WORK_DIR" -maxdepth 1 -type f -name '*.apk' -delete
+INTERMEDIATE_APK_COUNT=$(find "$APK_WORK_DIR" -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')
+if [ "$INTERMEDIATE_APK_COUNT" != "0" ]; then
+  echo "expected no intermediate APK files in $APK_WORK_DIR, found $INTERMEDIATE_APK_COUNT" >&2
+  find "$APK_WORK_DIR" -maxdepth 1 -type f -name '*.apk' -print >&2
+  exit 1
+fi
 APK_COUNT=$(find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')
 if [ "$APK_COUNT" != "1" ]; then
   echo "expected exactly one final APK in $BUILD_DIR, found $APK_COUNT" >&2
@@ -336,7 +345,7 @@ public class MainActivity extends Activity {
 1. Create the fixed layout and write `build.sh` exactly from this skill.
 2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading local files from `app/src/main/assets/` when the user asks for a web/HTML-style app.
 3. Run `chmod +x build.sh && bash build.sh` from the project root.
-4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
+4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that intermediate APK files were cleaned. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
 5. If the user asks to install, use the available APK install flow/tool if present; otherwise provide the APK path.
 
 ## Common mistakes to avoid
