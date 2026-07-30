@@ -10,10 +10,14 @@ use super::paths::app_bundled_skills_dir;
 
 /// Current bundled skill set version. Increment when updating seed content
 /// to trigger re-deployment on next engine start.
-const BUNDLED_VERSION: u32 = 1;
+const BUNDLED_VERSION: u32 = 4;
 
 /// Embedded skill content: (slug, SKILL.md content).
 const BUNDLED_SKILLS: &[(&str, &str)] = &[
+    (
+        "android-apk-build",
+        include_str!("bundled_seeds/android-apk-build/SKILL.md"),
+    ),
     (
         "web-researcher",
         include_str!("bundled_seeds/web-researcher/SKILL.md"),
@@ -91,6 +95,7 @@ mod tests {
         ensure_bundled_skills(files_dir);
 
         let base = app_bundled_skills_dir(files_dir);
+        assert!(base.join("android-apk-build/SKILL.md").exists());
         assert!(base.join("web-researcher/SKILL.md").exists());
         assert!(base.join("code-helper/SKILL.md").exists());
         assert!(base.join("translator/SKILL.md").exists());
@@ -100,7 +105,7 @@ mod tests {
         assert!(base.join(".version").exists());
 
         let version = std::fs::read_to_string(base.join(".version")).unwrap();
-        assert_eq!(version.trim(), "1");
+        assert_eq!(version.trim(), "4");
     }
 
     #[test]
@@ -125,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_bundled_skill_count() {
-        assert_eq!(BUNDLED_SKILLS.len(), 6);
+        assert_eq!(BUNDLED_SKILLS.len(), 7);
     }
 
     #[test]
