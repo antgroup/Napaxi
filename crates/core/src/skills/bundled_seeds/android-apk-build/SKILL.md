@@ -1,8 +1,8 @@
 ---
 name: android-apk-build
-version: "1.1.0"
+version: "1.2.0"
 display_name: Android APK Build
-description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, stable debug signing across rebuilds/updates, and a deterministic build.sh; Android framework WebView/local HTML assets are allowed because they need no new toolchain, but do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
+description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a deterministic build.sh; Android framework WebView/local HTML assets are allowed because they need no new toolchain, but do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
 activation:
   keywords: ["android", "apk", "安卓", "应用", "网页封装", "html app", "webview", "打包", "签名", "安装包", "build apk", "写app", "做app", "生成app", "build app"]
   patterns: ["(?i)\\b(apk|android app|build app|make app|package app|sign apk|installable app)\\b", "(写|做|生成|开发|创建).{0,12}(app|应用|安卓|安装包|apk)", "(app|应用|安卓|apk).{0,12}(打包|签名|构建|安装|生成)"]
@@ -16,7 +16,7 @@ Use this skill to create and build a **small installable Android APK** from sour
 
 The phone sandbox environment is fixed for this workflow:
 
-- App data root on the integration device: `/data/user/0/com.napaxi.examples.androidintegration/files/`.
+- App data root depends on the Napaxi host app. In the Flutter demo / 通用模式 app it is `/data/user/0/com.napa.app.test/files/`; do not use the older Android integration package path. The APK package you generate is independent from the host app package.
 - Linux rootfs mounted for the AI: Alpine Linux v3.23 under `linux-env/rootfs`.
 - Inside the sandbox, use `/workspace` for app source and `/opt/android/sdk` for Android SDK.
 - Android SDK pieces already expected by the template: build-tools `33.0.2` and platform `android-33`.
@@ -39,12 +39,14 @@ Before writing code, mentally pin these constants and do not reinterpret them fr
 | APK native ABI | none | The app contains no native libraries |
 | APK compatibility format | exactly one universal APK | `classes.dex` + resources install on supported Android devices regardless of CPU |
 | Signing identity | stable per project | Android treats same-package updates as valid only when signed by the same certificate |
+| Launcher icon | `@drawable/ic_launcher` vector | Avoid missing-icon resources and avoid generating density-specific binary variants |
 | SDK policy | minSdk 26, targetSdk 33 | Avoid modern Android “old app” warnings and low-target install issues |
 
 
 - Java only for Android code. No Kotlin, Gradle, Android Studio, Jetpack Compose, AndroidX, Maven dependencies, or NDK.
 - Web-style apps are allowed only as an Android framework `WebView` wrapper around local HTML/CSS/JS assets under `app/src/main/assets/`. This still uses the same Java-only build template and produces exactly one universal APK. Do not use Capacitor/Cordova/Ionic/React Native/Flutter or any web framework that requires fetching packages or a new toolchain.
 - One launcher `Activity` extending `android.app.Activity` or other framework classes from `android.jar` only.
+- Always define a launcher icon. Use the fixed vector drawable template below at `app/src/main/res/drawable/ic_launcher.xml`, reference it from both `android:icon` and `android:roundIcon`, and keep icon colors in `colors.xml`. Do not leave icon unset and do not reference missing `@mipmap/*` assets.
 - Resource XML under `app/src/main/res/`; Java under `app/src/main/java/`.
 - `compileSdk`/platform jar: Android 33 from `/opt/android/sdk/platforms/android-33/android.jar`.
 - Manifest must use `<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="33"/>`.
@@ -74,14 +76,14 @@ Create files in this layout exactly:
             │   └── index.html
             └── res/
                 ├── drawable/
-                ├── mipmap-hdpi/
+                │   └── ic_launcher.xml
                 └── values/
                     ├── colors.xml
                     ├── strings.xml
                     └── styles.xml
 ```
 
-Minimal resource files are acceptable. If there is no image/icon asset, use default label-only app metadata and avoid inventing binary assets.
+Minimal resource files are acceptable, but the launcher icon is not optional. If the user does not provide an icon, use the fixed vector icon template from this skill. If the user provides an icon later, keep the same resource name (`@drawable/ic_launcher`) and still emit one APK; do not create split APKs or a full mipmap density set unless the user explicitly provides those assets.
 
 ## Fixed `build.sh` template
 
@@ -241,6 +243,8 @@ Use reverse-domain lowercase package names such as `com.napaxi.generated.todo`. 
     <application
         android:theme="@style/AppTheme"
         android:label="@string/app_name"
+        android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
         android:allowBackup="false"
         android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">
@@ -267,7 +271,26 @@ Use reverse-domain lowercase package names such as `com.napaxi.generated.todo`. 
 <resources>
     <color name="background">#FFFFFF</color>
     <color name="foreground">#202124</color>
+    <color name="icon_background">#2F6BFF</color>
+    <color name="icon_foreground">#FFFFFF</color>
 </resources>
+```
+
+`app/src/main/res/drawable/ic_launcher.xml`:
+
+```xml
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="@color/icon_background"
+        android:pathData="M24,4C12.95,4 4,12.95 4,24s8.95,20 20,20 20,-8.95 20,-20S35.05,4 24,4z" />
+    <path
+        android:fillColor="@color/icon_foreground"
+        android:pathData="M24,10l3.7,7.5 8.3,1.2 -6,5.8 1.4,8.2L24,28.8l-7.4,3.9 1.4,-8.2 -6,-5.8 8.3,-1.2z" />
+</vector>
 ```
 
 `app/src/main/res/values/styles.xml`:
@@ -313,7 +336,7 @@ public class MainActivity extends Activity {
 1. Create the fixed layout and write `build.sh` exactly from this skill.
 2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading local files from `app/src/main/assets/` when the user asks for a web/HTML-style app.
 3. Run `chmod +x build.sh && bash build.sh` from the project root.
-4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate.
+4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
 5. If the user asks to install, use the available APK install flow/tool if present; otherwise provide the APK path.
 
 ## Common mistakes to avoid
@@ -325,6 +348,7 @@ public class MainActivity extends Activity {
 - Do not output both unsigned/aligned/signed APKs as final artifacts. Only `build/<APP_NAME>.apk` is the final APK; intermediates stay in `build/apk-work/`.
 - Do not regenerate or relocate the keystore on every build. If the package name is unchanged, Android requires the update APK to be signed with the same certificate as the installed APK.
 - Do not use `minSdkVersion="21"` or a low `targetSdkVersion`; use min 26 / target 33.
+- Do not omit the launcher icon and do not reference nonexistent `@mipmap/ic_launcher` resources. Use `@drawable/ic_launcher` unless the user explicitly supplies a complete replacement icon asset.
 - Do not reject a web/网页/HTML-style app just because it is web-like. If it can be implemented with Android's built-in `android.webkit.WebView` and local assets, it is supported by this toolchain.
 - Do not fetch Gradle, Maven, AndroidX, Compose, Cordova, Capacitor, Ionic, Flutter, React Native, npm packages, or iOS tooling to “improve compatibility”. That makes builds slower, requires unsupported tools, or leaves this phone sandbox workflow.
 - Do not produce multiple APKs for arm64/x86 unless the app actually contains native code, which this skill forbids by default.

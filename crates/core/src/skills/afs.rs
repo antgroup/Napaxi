@@ -135,7 +135,9 @@ async fn merge_additional_sources(files_dir: &str, agent_id: &str, registry: &Sk
         let source_registry = SkillRegistry::new(source.root.clone());
         let _ = source_registry.discover_all(agent_id).await;
         for skill in source_registry.skills_for_user(agent_id) {
-            if registry.has_for_user(skill.name(), agent_id) {
+            let is_reserved_bundled_override =
+                source.kind == "app_bundled" && matches_reserved_bundled_skill(skill.name());
+            if registry.has_for_user(skill.name(), agent_id) && !is_reserved_bundled_override {
                 continue;
             }
             let mut cloned = (*skill).clone();
@@ -155,6 +157,14 @@ async fn merge_additional_sources(files_dir: &str, agent_id: &str, registry: &Sk
             let _ = registry.commit_install_or_replace(&name, cloned);
         }
     }
+}
+
+fn matches_reserved_bundled_skill(name: &str) -> bool {
+    // android-apk-build started as a phone demo preset that users could install
+    // into agent-created skill roots. The app now ships a stricter bundled copy
+    // with a fixed sandbox template, signing, icon, and trigger contract. Let the
+    // bundled copy win so stale v1.0.0 agent presets do not shadow app updates.
+    name.trim().eq_ignore_ascii_case("android-apk-build")
 }
 
 fn skill_source_path(skill: &napaxi_skills::LoadedSkill) -> std::path::PathBuf {

@@ -722,6 +722,52 @@ async fn legacy_skill_path_is_still_readable() {
 }
 
 #[tokio::test]
+async fn app_bundled_android_apk_build_overrides_stale_agent_copy() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy();
+    let root = tmp.path().join("agent_runtime/skills");
+    let app_dir = root.join("app_bundled/android-apk-build");
+    let agent_dir = root.join("agents/napaxi/android-apk-build");
+    tokio::fs::create_dir_all(&app_dir).await.unwrap();
+    tokio::fs::create_dir_all(&agent_dir).await.unwrap();
+    tokio::fs::write(
+        app_dir.join("SKILL.md"),
+        "---
+name: android-apk-build
+description: bundled copy
+version: 2.0.0
+---
+
+Bundled copy.
+",
+    )
+    .await
+    .unwrap();
+    tokio::fs::write(
+        agent_dir.join("SKILL.md"),
+        "---
+name: android-apk-build
+description: stale agent copy
+version: 1.0.0
+---
+
+Stale agent copy.
+",
+    )
+    .await
+    .unwrap();
+
+    let active = active_skill_prompt_with_metadata(&files_dir, "", "android apk").await;
+    assert!(active.catalog_prompt.contains("bundled copy"));
+    assert!(!active.catalog_prompt.contains("stale agent copy"));
+
+    let detail: serde_json::Value =
+        serde_json::from_str(&get_skill(&files_dir, "", "android-apk-build").await).unwrap();
+    assert_eq!(detail["version"], "2.0.0");
+    assert!(detail["source"].as_str().unwrap().contains("Bundled"));
+}
+
+#[tokio::test]
 async fn source_registry_priority_prefers_agent_created_skill() {
     let tmp = tempfile::tempdir().unwrap();
     let files_dir = tmp.path().to_string_lossy();
