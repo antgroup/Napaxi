@@ -31,7 +31,7 @@ class _ChatBubble extends StatefulWidget {
     required this.onCopyUserMessage,
     required this.onEditUserMessage,
     required this.onAnswerHumanRequest,
-    required this.onOpenSkillOrganize,
+    required this.onFocusHumanRequest,
     this.aggregatedAttachmentIdentities = const <String>{},
   });
 
@@ -44,7 +44,7 @@ class _ChatBubble extends StatefulWidget {
   final ValueChanged<ChatMessage> onCopyUserMessage;
   final ValueChanged<ChatMessage> onEditUserMessage;
   final void Function(String requestId, String response) onAnswerHumanRequest;
-  final ValueChanged<ChatMessage> onOpenSkillOrganize;
+  final ValueChanged<HumanRequest> onFocusHumanRequest;
   final Set<String> aggregatedAttachmentIdentities;
 
   @override
@@ -158,18 +158,11 @@ class _ChatBubbleState extends State<_ChatBubble> {
           _HumanRequestCard(
             request: message.humanRequest!,
             onAnswer: widget.onAnswerHumanRequest,
+            onFocusAnswer: widget.onFocusHumanRequest,
           ),
-        if (!isUser && message.evolutionStatus != null) ...[
-          if (message.content.isNotEmpty || message.humanRequest != null)
-            const SizedBox(height: 8),
-          _EvolutionStatusChip(
-            status: message.evolutionStatus!,
-            onTap: message.evolutionStatus!.stage == ChatEvolutionStage.pending
-                ? () => widget.onOpenSkillOrganize(message)
-                : null,
-          ),
-        ],
-        if (message.content.isEmpty && !hasVisibleAgentTrace && message.isStreaming)
+        if (message.content.isEmpty &&
+            !hasVisibleAgentTrace &&
+            message.isStreaming)
           const _AssistantWaitingIndicator(),
         if (displayAttachments.isNotEmpty) ...[
           if (message.content.isNotEmpty) const SizedBox(height: 10),
@@ -402,89 +395,6 @@ class _UserMessageActionButton extends StatelessWidget {
   }
 }
 
-class _EvolutionStatusChip extends StatelessWidget {
-  const _EvolutionStatusChip({required this.status, this.onTap});
-
-  final ChatEvolutionStatus status;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    final (label, icon, color) = switch (status.stage) {
-      ChatEvolutionStage.reviewing => (
-        strings.evolutionReviewing,
-        Icons.auto_awesome_motion_rounded,
-        const Color(0xFF64748B),
-      ),
-      ChatEvolutionStage.reviewed => (
-        strings.evolutionReviewed,
-        Icons.check_rounded,
-        const Color(0xFF64748B),
-      ),
-      ChatEvolutionStage.updated => (
-        _updatedLabel(strings, status.reviewTypes),
-        Icons.auto_awesome_rounded,
-        const Color(0xFF047857),
-      ),
-      ChatEvolutionStage.pending => (
-        strings.evolutionPendingSuggestions(status.pendingCount),
-        Icons.rule_rounded,
-        const Color(0xFFB45309),
-      ),
-      ChatEvolutionStage.failed => (
-        strings.evolutionFailed,
-        Icons.info_outline_rounded,
-        const Color(0xFF6B7280),
-      ),
-    };
-
-    final chip = DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.18)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            if (onTap != null) ...[
-              const SizedBox(width: 3),
-              Icon(Icons.chevron_right_rounded, size: 14, color: color),
-            ],
-          ],
-        ),
-      ),
-    );
-    if (onTap == null) return chip;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onTap,
-        child: chip,
-      ),
-    );
-  }
-
-  String _updatedLabel(AppStrings strings, List<String> reviewTypes) {
-    if (reviewTypes.contains('skill')) return strings.evolutionSkillUpdated;
-    return strings.evolutionMemoryUpdated;
-  }
-}
-
 class _ChatMessageActionButton extends StatelessWidget {
   const _ChatMessageActionButton({
     required this.action,
@@ -519,16 +429,22 @@ class _ChatMessageActionButton extends StatelessWidget {
 }
 
 class _HumanRequestCard extends StatelessWidget {
-  const _HumanRequestCard({required this.request, required this.onAnswer});
+  const _HumanRequestCard({
+    required this.request,
+    required this.onAnswer,
+    required this.onFocusAnswer,
+  });
 
   final HumanRequest request;
   final void Function(String requestId, String response) onAnswer;
+  final ValueChanged<HumanRequest> onFocusAnswer;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final isCancelled = request.cancelled;
-    return Container(
+    final canAnswer = !isCancelled && !request.answered;
+    final content = Container(
       key: Key('human_request_${request.requestId}'),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -587,7 +503,7 @@ class _HumanRequestCard extends StatelessWidget {
               ],
             ),
           ],
-          if (!isCancelled && request.options.isNotEmpty) ...[
+          if (canAnswer && request.options.isNotEmpty) ...[
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -596,9 +512,7 @@ class _HumanRequestCard extends StatelessWidget {
                 for (final option in request.options)
                   OutlinedButton(
                     key: Key('human_option_${request.requestId}_$option'),
-                    onPressed: request.answered
-                        ? null
-                        : () => onAnswer(request.requestId, option),
+                    onPressed: () => onAnswer(request.requestId, option),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: const Color(0xFF111827),
                       side: const BorderSide(color: Color(0xFFD1D5DB)),
@@ -614,10 +528,46 @@ class _HumanRequestCard extends StatelessWidget {
               ],
             ),
           ],
+          if (canAnswer && request.options.isEmpty) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              key: Key('human_reply_${request.requestId}'),
+              onPressed: () => onFocusAnswer(request),
+              icon: const Icon(Icons.reply_rounded, size: 16),
+              label: Text(_humanRequestReplyLabel(context)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF111827),
+                side: const BorderSide(color: Color(0xFFD1D5DB)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ],
         ],
       ),
     );
+
+    if (!canAnswer || request.options.isNotEmpty) return content;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => onFocusAnswer(request),
+        child: content,
+      ),
+    );
   }
+}
+
+String _humanRequestReplyLabel(BuildContext context) {
+  return switch (_AppLanguageScope.languageOf(context)) {
+    AppLanguage.chinese => '回答',
+    AppLanguage.english => 'Reply',
+  };
 }
 
 class _AssistantWaitingIndicator extends StatefulWidget {

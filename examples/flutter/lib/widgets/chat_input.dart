@@ -1955,6 +1955,7 @@ Future<void> _openAttachment(
   ChatAttachment attachment, {
   String? accountId,
   String? agentId,
+  Future<NapaxiChatClient> Function()? clientFuture,
 }) async {
   final resolved = _resolveAttachmentForOpen(
     attachment,
@@ -1979,6 +1980,22 @@ Future<void> _openAttachment(
     await _showVideoAttachmentPreview(context, resolved);
     return;
   }
+  final previewItem = _previewItemForAttachment(resolved);
+  if (previewItem != null && previewItem.canPreview) {
+    final client = clientFuture == null ? null : await clientFuture();
+    if (!context.mounted) return;
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute(
+        builder: (context) => _FilePreviewPage(
+          client: client,
+          item: previewItem,
+          agentId: agentId ?? sdk.NapaxiEngine.defaultAgentId,
+          readOnly: true,
+        ),
+      ),
+    );
+    return;
+  }
   await share.Share.shareXFiles([
     share.XFile(
       resolved.path,
@@ -1986,6 +2003,37 @@ Future<void> _openAttachment(
       mimeType: resolved.mimeType,
     ),
   ]);
+}
+
+_FileBrowserItem? _previewItemForAttachment(ChatAttachment attachment) {
+  if (attachment.isWebLink) return null;
+  final path = attachment.path.trim();
+  if (path.isEmpty || !File(path).existsSync()) return null;
+  final file = File(path);
+  int? sizeBytes;
+  DateTime? modified;
+  try {
+    sizeBytes = file.lengthSync();
+    modified = file.lastModifiedSync();
+  } catch (_) {
+    // Best-effort metadata only; preview can still try to open the file.
+  }
+  final item = _FileBrowserItem(
+    source: _FileSource.workspace,
+    path: attachment.sandboxPath?.trim().isNotEmpty == true
+        ? attachment.sandboxPath!.trim()
+        : path,
+    name: attachment.name.trim().isEmpty
+        ? path.split(Platform.pathSeparator).last
+        : attachment.name.trim(),
+    isDirectory: false,
+    realPath: path,
+    mimeType: attachment.mimeType,
+    sizeBytes: sizeBytes,
+    modified: modified,
+  );
+  if (item.isHtml || item.isImage) return null;
+  return item.isTextPreviewable ? item : null;
 }
 
 ChatAttachment? _resolveAttachmentForOpen(

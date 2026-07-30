@@ -113,7 +113,6 @@ class _SkillsPage extends StatelessWidget {
     required this.clientFuture,
     required this.agentId,
     this.initialTab = _SkillsInitialTab.installed,
-    this.onPendingEvolutionChanged,
     this.onBack,
     this.onMenu,
   });
@@ -121,7 +120,6 @@ class _SkillsPage extends StatelessWidget {
   final Future<NapaxiChatClient> clientFuture;
   final String agentId;
   final _SkillsInitialTab initialTab;
-  final Future<void> Function()? onPendingEvolutionChanged;
   final Future<bool> Function()? onBack;
   final VoidCallback? onMenu;
 
@@ -175,7 +173,6 @@ class _SkillsPage extends StatelessWidget {
             client: snapshot.data!,
             agentId: agentId,
             initialTab: initialTab,
-            onPendingEvolutionChanged: onPendingEvolutionChanged,
           );
         },
       ),
@@ -188,13 +185,11 @@ class _SkillsBrowser extends StatefulWidget {
     required this.client,
     required this.agentId,
     required this.initialTab,
-    this.onPendingEvolutionChanged,
   });
 
   final NapaxiChatClient client;
   final String agentId;
   final _SkillsInitialTab initialTab;
-  final Future<void> Function()? onPendingEvolutionChanged;
 
   @override
   State<_SkillsBrowser> createState() => _SkillsBrowserState();
@@ -205,7 +200,6 @@ class _SkillsBrowserState extends State<_SkillsBrowser> {
 
   late Future<List<sdk.SkillInfo>> _installedFuture;
   late Future<sdk.SkillStatusReport> _statusFuture;
-  late Future<_SkillGovernanceSnapshot> _organizeFuture;
   List<sdk.SkillInfo> _installedSkills = const [];
   // Maps catalog slug (lowercased) → manifest name (lowercased) recorded at
   // install time, persisted to SharedPreferences so the store tab can
@@ -219,7 +213,6 @@ class _SkillsBrowserState extends State<_SkillsBrowser> {
     _loadSlugMap();
     _installedFuture = _loadInstalledSkills();
     _statusFuture = _loadSkillStatus();
-    _organizeFuture = _loadOrganizeSnapshot();
   }
 
   Future<void> _loadSlugMap() async {
@@ -258,22 +251,15 @@ class _SkillsBrowserState extends State<_SkillsBrowser> {
     return widget.client.listSkillStatus(agentId: widget.agentId);
   }
 
-  Future<_SkillGovernanceSnapshot> _loadOrganizeSnapshot() {
-    return _SkillGovernanceSnapshot.load(widget.client, widget.agentId);
-  }
-
   Future<void> _refreshInstalledSkills() async {
     final future = _loadInstalledSkills();
     final statusFuture = _loadSkillStatus();
-    final organizeFuture = _loadOrganizeSnapshot();
     setState(() {
       _installedFuture = future;
       _statusFuture = statusFuture;
-      _organizeFuture = organizeFuture;
     });
     await future;
     await statusFuture;
-    await organizeFuture;
     if (mounted) setState(() {});
   }
 
@@ -382,13 +368,12 @@ class _SkillsBrowserState extends State<_SkillsBrowser> {
     final strings = AppStrings.of(context);
     final installedNames = _installedSkillKeys();
     final initialIndex = switch (widget.initialTab) {
-      _SkillsInitialTab.installed => 0,
+      _SkillsInitialTab.installed || _SkillsInitialTab.organize => 0,
       _SkillsInitialTab.store => 1,
-      _SkillsInitialTab.organize => 2,
     };
 
     return DefaultTabController(
-      length: 3,
+      length: 2,
       initialIndex: initialIndex,
       child: Column(
         children: [
@@ -414,18 +399,6 @@ class _SkillsBrowserState extends State<_SkillsBrowser> {
               tabs: [
                 Tab(text: strings.installedSkillsTitle),
                 Tab(text: strings.skillStoreTitle),
-                FutureBuilder<_SkillGovernanceSnapshot>(
-                  future: _organizeFuture,
-                  builder: (context, snapshot) {
-                    final labels = _SkillGovernanceLabels.of(context);
-                    final pendingCount = snapshot.data?.pending.length ?? 0;
-                    return Tab(
-                      text: pendingCount > 0
-                          ? labels.tabTitleWithCount(pendingCount)
-                          : labels.tabTitle,
-                    );
-                  },
-                ),
               ],
             ),
           ),
@@ -444,18 +417,6 @@ class _SkillsBrowserState extends State<_SkillsBrowser> {
                   client: widget.client,
                   installedNames: installedNames,
                   onInstall: _installSkill,
-                ),
-                _SkillGovernanceView(
-                  client: widget.client,
-                  agentId: widget.agentId,
-                  snapshotFuture: _organizeFuture,
-                  onSkillsChanged: _refreshInstalledSkills,
-                  onSnapshotChanged: (future) {
-                    setState(() {
-                      _organizeFuture = future;
-                    });
-                  },
-                  onPendingEvolutionChanged: widget.onPendingEvolutionChanged,
                 ),
               ],
             ),
@@ -785,7 +746,6 @@ class _SkillGovernanceView extends StatefulWidget {
     required this.snapshotFuture,
     required this.onSkillsChanged,
     required this.onSnapshotChanged,
-    this.onPendingEvolutionChanged,
   });
 
   final NapaxiChatClient client;
@@ -793,7 +753,6 @@ class _SkillGovernanceView extends StatefulWidget {
   final Future<_SkillGovernanceSnapshot> snapshotFuture;
   final Future<void> Function() onSkillsChanged;
   final ValueChanged<Future<_SkillGovernanceSnapshot>> onSnapshotChanged;
-  final Future<void> Function()? onPendingEvolutionChanged;
 
   @override
   State<_SkillGovernanceView> createState() => _SkillGovernanceViewState();
@@ -863,7 +822,6 @@ class _SkillGovernanceViewState extends State<_SkillGovernanceView> {
         );
       }
       await widget.onSkillsChanged();
-      await widget.onPendingEvolutionChanged?.call();
       await _refresh();
     });
   }
@@ -872,7 +830,6 @@ class _SkillGovernanceViewState extends State<_SkillGovernanceView> {
     return _runAction('reject:${item.id}', () async {
       final result = await widget.client.rejectPendingEvolution(item.id);
       _throwIfActionError(result);
-      await widget.onPendingEvolutionChanged?.call();
       await _refresh();
     });
   }

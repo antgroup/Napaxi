@@ -366,7 +366,6 @@ class _SessionHistorySheet extends StatefulWidget {
     required this.onSessionRenameEditingChanged,
     required this.onSearchModeChanged,
     required this.onSessionDelete,
-    this.onPendingEvolutionChanged,
   });
 
   final DemoAgent activeAgent;
@@ -420,7 +419,6 @@ class _SessionHistorySheet extends StatefulWidget {
   final ValueChanged<bool> onSessionRenameEditingChanged;
   final ValueChanged<bool> onSearchModeChanged;
   final ValueChanged<String> onSessionDelete;
-  final Future<void> Function()? onPendingEvolutionChanged;
 
   @override
   State<_SessionHistorySheet> createState() => _SessionHistorySheetState();
@@ -1099,7 +1097,6 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
           clientFuture: _skillsClientFuture!,
           agentId: widget.activeAgent.id,
           initialTab: _skillsInitialTab,
-          onPendingEvolutionChanged: widget.onPendingEvolutionChanged,
           onBack: _handleBack,
         );
       case _SessionHistoryView.scenarios:
