@@ -35,6 +35,21 @@ String _browserModeLabel(AppStrings strings, sdk.BrowserViewportMode mode) {
   };
 }
 
+const Color _topBarMenuSurfaceColor = _appSurfaceColor;
+const Color _topBarMenuSelectedColor = Color(0xFFEDEEF0);
+const Color _topBarMenuTextColor = Color(0xFF171717);
+const Color _topBarMenuMutedColor = Color(0xFF737373);
+const double _topBarMenuItemHeight = 48;
+const BoxConstraints _topBarMenuConstraints = BoxConstraints(
+  minWidth: 168,
+  maxWidth: 260,
+);
+const ShapeBorder _topBarMenuShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.all(Radius.circular(14)),
+  side: BorderSide(color: _appSurfaceBorderColor),
+);
+final Color _topBarMenuShadowColor = Colors.black.withValues(alpha: 0.16);
+
 class _ChatTopBar extends StatelessWidget {
   const _ChatTopBar({
     required this.activeAgent,
@@ -104,10 +119,15 @@ class _ChatTopBar extends StatelessWidget {
               child: runtimeProfile.supportsAgents
                   ? PopupMenuButton<String>(
                       key: const Key('agent_selector_button'),
-                      tooltip: activeAgent.label(language),
-                      initialValue: activeAgent.id,
+                      tooltip: '',
                       position: PopupMenuPosition.under,
                       offset: const Offset(0, 8),
+                      color: _topBarMenuSurfaceColor,
+                      surfaceTintColor: Colors.transparent,
+                      shadowColor: _topBarMenuShadowColor,
+                      elevation: 10,
+                      shape: _topBarMenuShape,
+                      constraints: _topBarMenuConstraints,
                       onSelected: (value) {
                         if (value == '__manage_agents__') {
                           onManageAgents();
@@ -119,26 +139,22 @@ class _ChatTopBar extends StatelessWidget {
                         for (final agent in agents)
                           PopupMenuItem(
                             value: agent.id,
-                            child: Row(
-                              children: [
-                                Icon(agent.icon, size: 20),
-                                const SizedBox(width: 10),
-                                Text(agent.label(language)),
-                              ],
+                            height: _topBarMenuItemHeight,
+                            padding: EdgeInsets.zero,
+                            child: _TopBarMenuRow(
+                              icon: agent.icon,
+                              label: agent.label(language),
+                              selected: agent.id == activeAgent.id,
                             ),
                           ),
-                        const PopupMenuDivider(),
+                        const PopupMenuDivider(height: 8),
                         PopupMenuItem(
                           value: '__manage_agents__',
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.manage_accounts_rounded,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(strings.manageAgents),
-                            ],
+                          height: _topBarMenuItemHeight,
+                          padding: EdgeInsets.zero,
+                          child: _TopBarMenuRow(
+                            icon: Icons.manage_accounts_rounded,
+                            label: strings.manageAgents,
                           ),
                         ),
                       ],
@@ -149,29 +165,31 @@ class _ChatTopBar extends StatelessWidget {
                     )
                   : PopupMenuButton<String>(
                       key: const Key('engine_selector_button'),
-                      tooltip: runtimeProfile.activeEngine.label,
-                      initialValue: runtimeProfile.activeEngineId,
+                      tooltip: '',
                       position: PopupMenuPosition.under,
                       offset: const Offset(0, 8),
+                      color: _topBarMenuSurfaceColor,
+                      surfaceTintColor: Colors.transparent,
+                      shadowColor: _topBarMenuShadowColor,
+                      elevation: 10,
+                      shape: _topBarMenuShape,
+                      constraints: _topBarMenuConstraints,
                       onSelected: onEngineSelected,
                       itemBuilder: (context) => [
                         for (final engine in runtimeProfile.engines)
                           PopupMenuItem(
                             value: engine.id,
                             enabled: engine.enabled,
-                            child: Row(
-                              children: [
-                                Expanded(child: Text(engine.label)),
-                                if (!engine.enabled)
-                                  Text(
-                                    strings.developerEngineUnavailable,
-                                    style: const TextStyle(
-                                      color: Color(0xFF737373),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                              ],
+                            height: _topBarMenuItemHeight,
+                            padding: EdgeInsets.zero,
+                            child: _TopBarMenuRow(
+                              label: engine.label,
+                              selected:
+                                  engine.id == runtimeProfile.activeEngineId,
+                              trailing: !engine.enabled
+                                  ? strings.developerEngineUnavailable
+                                  : null,
+                              muted: !engine.enabled,
                             ),
                           ),
                       ],
@@ -330,6 +348,68 @@ class _SourceControlPanelIconPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SourceControlPanelIconPainter oldDelegate) =>
       oldDelegate.color != color;
+}
+
+class _TopBarMenuRow extends StatelessWidget {
+  const _TopBarMenuRow({
+    required this.label,
+    this.icon,
+    this.selected = false,
+    this.trailing,
+    this.muted = false,
+  });
+
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final String? trailing;
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = muted ? _topBarMenuMutedColor : _topBarMenuTextColor;
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: _topBarMenuItemHeight - 8),
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: selected ? _topBarMenuSelectedColor : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 20, color: textColor),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 15,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+              ),
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 12),
+            Text(
+              trailing!,
+              style: const TextStyle(
+                color: _topBarMenuMutedColor,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _TopBarSelectorLabel extends StatelessWidget {
