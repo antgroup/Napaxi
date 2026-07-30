@@ -103,6 +103,12 @@ where
     };
     hooks.stage_completed(context, TurnStage::ParseInput);
 
+    if let Err(error) = crate::skills::export_prompt_skills(files_dir, agent_id).await {
+        let message = format!("Skill sandbox sync failed: {error}");
+        hooks.stage_failed(context, TurnStage::PreparePrompt, &message);
+        return Err(chat_error(message));
+    }
+
     hooks.stage_started(context, TurnStage::PreparePrompt);
     let has_shell_tool = crate::tool_loop::has_tool_named(tools, extra_tools, "shell").await;
     let has_browser_tool =
@@ -242,6 +248,12 @@ where
     };
     context.thread_id = Some(thread_id.clone());
     hooks.stage_completed(context, TurnStage::ParseInput);
+
+    if let Err(error) = crate::skills::export_prompt_skills(files_dir, agent_id).await {
+        let message = format!("Skill sandbox sync failed: {error}");
+        hooks.stage_failed(context, TurnStage::PreparePrompt, &message);
+        return Err(chat_error(message));
+    }
 
     hooks.stage_started(context, TurnStage::PreparePrompt);
     let has_shell_tool = crate::tool_loop::has_tool_named(tools, extra_tools, "shell").await;
