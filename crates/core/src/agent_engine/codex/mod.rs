@@ -541,4 +541,62 @@ mod tests {
             })
         );
     }
+
+    #[test]
+    fn turn_start_input_includes_android_apk_build_for_plain_app_creation() {
+        let mut rpc = super::protocol::JsonRpcClient::new();
+        let state = super::state::CodexSessionState {
+            native_thread_id: Some("thread".to_string()),
+            config_fingerprint: String::new(),
+        };
+        let line = super::protocol::turn_start_request(
+            &mut rpc,
+            &test_turn_request("帮我写一个简单记账 app，可以安装到手机上"),
+            &state,
+        );
+        let payload: serde_json::Value = serde_json::from_str(&line).unwrap();
+        let input = payload["params"]["input"].as_array().unwrap();
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[1]["name"], "android-apk-build");
+
+        let terse_line =
+            super::protocol::turn_start_request(&mut rpc, &test_turn_request("写app"), &state);
+        let terse_payload: serde_json::Value = serde_json::from_str(&terse_line).unwrap();
+        assert_eq!(
+            terse_payload["params"]["input"].as_array().unwrap().len(),
+            2
+        );
+    }
+
+    #[test]
+    fn turn_start_input_allows_web_wrappers_but_not_flutter_apps() {
+        let mut rpc = super::protocol::JsonRpcClient::new();
+        let state = super::state::CodexSessionState {
+            native_thread_id: Some("thread".to_string()),
+            config_fingerprint: String::new(),
+        };
+
+        let web_line = super::protocol::turn_start_request(
+            &mut rpc,
+            &test_turn_request("帮我做一个 web app 的登录页"),
+            &state,
+        );
+        let web_payload: serde_json::Value = serde_json::from_str(&web_line).unwrap();
+        assert_eq!(web_payload["params"]["input"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            web_payload["params"]["input"].as_array().unwrap()[1]["name"],
+            "android-apk-build"
+        );
+
+        let flutter_line = super::protocol::turn_start_request(
+            &mut rpc,
+            &test_turn_request("创建一个 Flutter app 页面"),
+            &state,
+        );
+        let flutter_payload: serde_json::Value = serde_json::from_str(&flutter_line).unwrap();
+        assert_eq!(
+            flutter_payload["params"]["input"].as_array().unwrap().len(),
+            1
+        );
+    }
 }

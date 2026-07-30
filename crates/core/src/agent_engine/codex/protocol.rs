@@ -231,16 +231,61 @@ fn explicit_codex_skills(message: &str) -> Vec<&'static str> {
 
 fn should_use_android_apk_build(message: &str) -> bool {
     let lower = message.to_lowercase();
-    has_skill_mention(&lower, "android-apk-build")
-        || ((lower.contains("apk") || lower.contains("android"))
-            && (lower.contains("build")
-                || lower.contains("package")
-                || lower.contains("sign")
-                || lower.contains("install")
-                || lower.contains("构建")
-                || lower.contains("打包")
-                || lower.contains("签名")
-                || lower.contains("安装")))
+    if has_skill_mention(&lower, "android-apk-build") {
+        return true;
+    }
+
+    let android_or_apk = lower.contains("apk")
+        || lower.contains("android")
+        || lower.contains("安卓")
+        || lower.contains("安装包");
+    let build_or_package = contains_any(
+        &lower,
+        &[
+            "build", "make", "create", "generate", "develop", "package", "sign", "install",
+            "compile", "构建", "打包", "签名", "安装", "编译", "生成", "创建", "开发", "做", "写",
+        ],
+    );
+    if android_or_apk && build_or_package {
+        return true;
+    }
+
+    // In the phone-hosted Napaxi experience, users often say just “写一个 app”
+    // or “做个应用” and expect an installable Android APK. Inject the APK build
+    // skill for app-creation phrasing unless the prompt clearly asks for an app
+    // surface that needs a separate unsupported toolchain such as iOS, Flutter,
+    // or React Native. Web/HTML wrappers are allowed because the fixed Java
+    // template can host local assets in an Android WebView.
+    let app_surface = lower.contains("app")
+        || lower.contains("应用")
+        || lower.contains("小工具")
+        || lower.contains("安装到手机")
+        || lower.contains("手机上安装")
+        || lower.contains("能安装");
+    let create_app = contains_any(
+        &lower,
+        &[
+            "写", "做", "开发", "创建", "生成", "make", "create", "build", "develop",
+        ],
+    );
+    let unsupported_toolchain_surface = contains_any(
+        &lower,
+        &[
+            "browser extension",
+            "浏览器插件",
+            "ios app",
+            "iphone",
+            "swift",
+            "flutter",
+            "react native",
+        ],
+    );
+
+    app_surface && create_app && !unsupported_toolchain_surface
+}
+
+fn contains_any(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
 }
 
 fn has_skill_mention(text: &str, skill: &str) -> bool {
