@@ -795,6 +795,8 @@ class _ChatScreenState extends State<ChatScreen>
   static const String _seenAttachmentsKey = 'napaxi_demo.seen_attachments.v1';
   static const String _activeScenarioKey = 'napaxi_demo.active_scenario.v1';
   static const double _sessionMenuFlingVelocity = 650;
+  static const double _sessionMenuOpenDragThreshold = 35;
+  static const double _projectBackHorizontalDragThreshold = 56;
   static const double _bottomFollowThreshold = 72;
   static const double _bottomPinnedTolerance = 1;
   static const double _historyTopLoadThreshold = 360;
@@ -9289,7 +9291,9 @@ $candidate
     final totalDelta = event.position - start;
     final isProjectBackGesture =
         _isActiveProjectChat || _primaryView == _ChatPrimaryView.projectDetail;
-    final horizontalThreshold = isProjectBackGesture ? 56.0 : 8.0;
+    final horizontalThreshold = isProjectBackGesture
+        ? _projectBackHorizontalDragThreshold
+        : _sessionMenuOpenDragThreshold;
     final isHorizontalOpenDrag =
         totalDelta.dx > horizontalThreshold &&
         totalDelta.dx.abs() > totalDelta.dy.abs() * 1.2;
