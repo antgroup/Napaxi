@@ -1,8 +1,8 @@
 ---
 name: android-apk-build
-version: "1.2.3"
+version: "1.2.4"
 display_name: Android APK Build
-description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a deterministic build.sh; Android framework WebView/local HTML assets are allowed only when the user is asking for an installable Android app/APK wrapper; when using HTML, bundle all local resources into the APK assets and reference them with relative paths instead of fixed device/workspace paths; do not turn ordinary HTML/webpage/front-end requests into APKs by default, and do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
+description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a bundled immutable build script that AI must only run with parameters; Android framework WebView/local HTML assets are allowed only when the user is asking for an installable Android app/APK wrapper; when using HTML, bundle all local resources into the APK assets and reference them with relative paths instead of fixed device/workspace paths; do not turn ordinary HTML/webpage/front-end requests into APKs by default, and do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
 activation:
   keywords: ["android", "apk", "安卓", "应用", "网页封装", "html app", "webview", "打包", "签名", "安装包", "build apk", "写app", "做app", "生成app", "build app"]
   patterns: ["(?i)\\b(apk|android app|build app|make app|package app|sign apk|installable app)\\b", "(写|做|生成|开发|创建).{0,12}(app|应用|安卓|安装包|apk)", "(app|应用|安卓|apk).{0,12}(打包|签名|构建|安装|生成)"]
@@ -53,10 +53,10 @@ Before writing code, mentally pin these constants and do not reinterpret them fr
 - Do not lower `targetSdkVersion` or `minSdkVersion`. Low targets make modern Android show “built for an older version” warnings or reject installs in some flows.
 - Do not add `<uses-sdk>` values via aapt2 command-line flags; keep them in `AndroidManifest.xml`.
 - Do not add native libraries, ABI filters, split APKs, `armeabi-v7a`, `x86_64`, `arm64-v8a`, or “compatibility” variants. This template outputs one architecture-independent APK.
-- The final APK path must be `build/<APP_NAME>.apk` and it must be the only final APK emitted by the workflow. Temporary intermediates may exist during the build under `build/apk-work/`, but `build.sh` must delete intermediate `*.apk` files after writing and verifying the final signed APK. Do not present or copy multiple installable APK variants.
+- The final APK path must be `build/<APP_NAME>.apk` and it must be the only final APK emitted by the workflow. The bundled build script must not emit intermediate `*.apk` files; temporary packaging files stay under `build/apk-work/` with non-APK names and the script removes that work directory before exit. Do not present or copy multiple installable APK variants.
 - Keep the signing certificate stable across app updates. Generate the debug keystore only if it does not already exist, store it at `<project>/debug.keystore`, and never delete it during `rm -rf build`. Reusing this keystore lets Android install a newer APK over the previous one with the same package name.
 - Do not place the keystore inside `build/`, because `build/` is cleaned on every run and would change the signature on every rebuild.
-- Use the fixed `build.sh` template below. Do not rewrite the pipeline from memory.
+- Use the bundled script resource `scripts/build_apk.sh`. Do not write, copy, patch, or regenerate a project-local `build.sh`; AI is only allowed to pass parameters to the bundled script.
 
 ## Required project layout
 
@@ -64,7 +64,6 @@ Create files in this layout exactly:
 
 ```text
 <project>/
-├── build.sh
 └── app/
     └── src/
         └── main/
@@ -89,154 +88,21 @@ Create files in this layout exactly:
 
 Minimal resource files are acceptable, but the launcher icon is not optional. For WebView wrappers, all local web resources needed at runtime must be copied into `app/src/main/assets/www/`; the APK must not depend on files left in `/workspace`, Downloads, `/sdcard`, or any other host path. If the user does not provide an icon, use the fixed vector icon template from this skill. If the user provides an icon later, keep the same resource name (`@drawable/ic_launcher`) and still emit one APK; do not create split APKs or a full mipmap density set unless the user explicitly provides those assets.
 
-## Fixed `build.sh` template
+## Fixed build script resource
 
-Write this file verbatim as `<project>/build.sh`, then only change `APP_NAME` through the environment if needed (`APP_NAME=MyApp bash build.sh`). Do not hard-code a user-specific project path.
+The build pipeline is a separate bundled skill file:
+
+```text
+/skills/android-apk-build/scripts/build_apk.sh
+```
+
+Treat this script as immutable. Do not create a project-local `build.sh`, do not paste the script into the generated app, and do not edit the script to “fix” build behavior. If the skill is mounted at a different root, locate this skill directory and run its `scripts/build_apk.sh` file in place. The only allowed customization is passing parameters:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$PROJECT_DIR/app"
-SRC_DIR="$APP_DIR/src/main"
-BUILD_DIR="$PROJECT_DIR/build"
-GEN_DIR="$BUILD_DIR/gen"
-CLASS_DIR="$BUILD_DIR/classes"
-DEX_DIR="$BUILD_DIR/dex"
-RES_FLAT_DIR="$BUILD_DIR/res-flat"
-APK_WORK_DIR="$BUILD_DIR/apk-work"
-
-ANDROID_SDK="${ANDROID_SDK:-/opt/android/sdk}"
-BUILD_TOOLS="$ANDROID_SDK/build-tools/33.0.2"
-ANDROID_JAR="$ANDROID_SDK/platforms/android-33/android.jar"
-X86_SYSROOT="${X86_SYSROOT:-/opt/x86root/sysroot}"
-APP_NAME="${APP_NAME:-app}"
-MIN_API=26
-
-run_x86_64() {
-  qemu-x86_64 -L "$X86_SYSROOT" "$@"
-}
-
-require_file() {
-  if [ ! -f "$1" ]; then
-    echo "missing required file: $1" >&2
-    exit 1
-  fi
-}
-
-require_dir() {
-  if [ ! -d "$1" ]; then
-    echo "missing required directory: $1" >&2
-    exit 1
-  fi
-}
-
-require_file "$ANDROID_JAR"
-require_file "$BUILD_TOOLS/aapt2"
-require_file "$BUILD_TOOLS/lib/d8.jar"
-require_file "$BUILD_TOOLS/zipalign"
-require_file "$BUILD_TOOLS/lib/apksigner.jar"
-require_file "$SRC_DIR/AndroidManifest.xml"
-require_dir "$SRC_DIR/java"
-require_dir "$SRC_DIR/res"
-
-KEYSTORE="$PROJECT_DIR/debug.keystore"
-
-rm -rf "$BUILD_DIR"
-mkdir -p "$GEN_DIR" "$CLASS_DIR" "$DEX_DIR" "$RES_FLAT_DIR" "$APK_WORK_DIR"
-
-echo "[1/7] aapt2 compile resources"
-run_x86_64 "$BUILD_TOOLS/aapt2" compile --dir "$SRC_DIR/res" -o "$RES_FLAT_DIR"
-
-echo "[2/7] aapt2 link resources"
-mapfile -t FLAT_RES < <(find "$RES_FLAT_DIR" -name '*.flat' | sort)
-if [ "${#FLAT_RES[@]}" -eq 0 ]; then
-  echo "aapt2 produced no .flat resources" >&2
-  exit 1
-fi
-run_x86_64 "$BUILD_TOOLS/aapt2" link \
-  -I "$ANDROID_JAR" \
-  --manifest "$SRC_DIR/AndroidManifest.xml" \
-  --java "$GEN_DIR" \
-  --auto-add-overlay \
-  -o "$APK_WORK_DIR/base.apk" \
-  "${FLAT_RES[@]}"
-
-echo "[3/7] javac Java sources"
-mapfile -t JAVA_SOURCES < <(find "$SRC_DIR/java" "$GEN_DIR" -name '*.java' | sort)
-if [ "${#JAVA_SOURCES[@]}" -eq 0 ]; then
-  echo "no Java sources found" >&2
-  exit 1
-fi
-javac -source 11 -target 11 \
-  -classpath "$ANDROID_JAR" \
-  -d "$CLASS_DIR" \
-  "${JAVA_SOURCES[@]}"
-
-echo "[4/7] d8 classes.dex"
-mapfile -t CLASS_FILES < <(find "$CLASS_DIR" -name '*.class' | sort)
-java -cp "$BUILD_TOOLS/lib/d8.jar" com.android.tools.r8.D8 \
-  --min-api "$MIN_API" \
-  --lib "$ANDROID_JAR" \
-  --output "$DEX_DIR" \
-  "${CLASS_FILES[@]}"
-require_file "$DEX_DIR/classes.dex"
-
-echo "[5/7] package classes.dex"
-cp "$APK_WORK_DIR/base.apk" "$APK_WORK_DIR/unsigned.apk"
-(
-  cd "$DEX_DIR"
-  zip -q -j "$APK_WORK_DIR/unsigned.apk" classes.dex
-)
-
-echo "[6/7] zipalign"
-run_x86_64 "$BUILD_TOOLS/zipalign" -f -p 4 \
-  "$APK_WORK_DIR/unsigned.apk" \
-  "$APK_WORK_DIR/aligned.apk"
-
-echo "[7/7] debug sign and verify"
-if [ ! -f "$KEYSTORE" ]; then
-  keytool -genkeypair -v \
-    -keystore "$KEYSTORE" \
-    -storepass android \
-    -alias androiddebugkey \
-    -keypass android \
-    -keyalg RSA \
-    -keysize 2048 \
-    -validity 10000 \
-    -dname "CN=Android Debug,O=Android,C=US" >/dev/null
-fi
-
-rm -f "$BUILD_DIR"/*.apk
-java -jar "$BUILD_TOOLS/lib/apksigner.jar" sign \
-  --ks "$KEYSTORE" \
-  --ks-key-alias androiddebugkey \
-  --ks-pass pass:android \
-  --key-pass pass:android \
-  --out "$BUILD_DIR/$APP_NAME.apk" \
-  "$APK_WORK_DIR/aligned.apk"
-
-java -jar "$BUILD_TOOLS/lib/apksigner.jar" verify --verbose "$BUILD_DIR/$APP_NAME.apk"
-
-echo "cleanup intermediate APKs"
-find "$APK_WORK_DIR" -maxdepth 1 -type f -name '*.apk' -delete
-INTERMEDIATE_APK_COUNT=$(find "$APK_WORK_DIR" -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')
-if [ "$INTERMEDIATE_APK_COUNT" != "0" ]; then
-  echo "expected no intermediate APK files in $APK_WORK_DIR, found $INTERMEDIATE_APK_COUNT" >&2
-  find "$APK_WORK_DIR" -maxdepth 1 -type f -name '*.apk' -print >&2
-  exit 1
-fi
-APK_COUNT=$(find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')
-if [ "$APK_COUNT" != "1" ]; then
-  echo "expected exactly one final APK in $BUILD_DIR, found $APK_COUNT" >&2
-  find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' -print >&2
-  exit 1
-fi
-ls -lh "$BUILD_DIR/$APP_NAME.apk"
-echo "Build complete: $BUILD_DIR/$APP_NAME.apk"
-echo "Signing keystore reused from: $KEYSTORE"
+bash /skills/android-apk-build/scripts/build_apk.sh --project-dir <project> --app-name <APP_NAME>
 ```
+
+The script owns the full APK pipeline, including qemu usage for x86_64 SDK binaries, Java `d8`/`apksigner`, stable `<project>/debug.keystore`, Android assets packaging via `app/src/main/assets`, and cleanup verification. After it exits successfully, there must be exactly one APK: `<project>/build/<APP_NAME>.apk`. Intermediate package files use non-APK names inside `build/apk-work/`, that work directory is removed before exit, and additional final APK variants must not exist under `build/`.
 
 ## Minimal app template
 
@@ -346,10 +212,10 @@ public class MainActivity extends Activity {
 
 ## Build workflow
 
-1. Create the fixed layout and write `build.sh` exactly from this skill.
+1. Create the fixed project layout only. Do not create, edit, or copy `build.sh`; the build script lives in this skill at `scripts/build_apk.sh`.
 2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading `file:///android_asset/www/index.html` only when the user asks for a web/HTML-style installable Android app or APK wrapper. Put every local HTML/CSS/JS/image/font/data asset under `app/src/main/assets/www/` and use relative links inside the HTML bundle; never reference fixed workspace/device paths.
-3. Run `chmod +x build.sh && bash build.sh` from the project root.
-4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that intermediate APK files were cleaned. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
+3. Run `bash /skills/android-apk-build/scripts/build_apk.sh --project-dir <project> --app-name <APP_NAME>` (or the same `scripts/build_apk.sh` path from the active skill directory if `/skills` is mounted differently).
+4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that the bundled script cleaned and verified the absence of intermediate APK files. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
 5. If the user asks to install, use the available APK install flow/tool if present; otherwise provide the APK path.
 
 ## Common mistakes to avoid
@@ -357,8 +223,8 @@ public class MainActivity extends Activity {
 - Do not inspect the sandbox architecture and then choose APK ABI from it. The sandbox is aarch64, `aapt2`/`zipalign` run under qemu x86_64, and the APK is universal because it contains `classes.dex` and resources only.
 - Do not “fix” qemu/x86_64 by producing an x86 APK. qemu is only a build-tool runner.
 - Do not “fix” the phone being arm64 by producing an arm64 APK. Pure Java APKs do not need arm64 native output.
-- Do not create hard-coded scripts like `PROJECT=/workspace/expense-tracker`; the fixed script derives `PROJECT_DIR` from its own path.
-- Do not output both unsigned/aligned/signed APKs as final artifacts. Only `build/<APP_NAME>.apk` is the final APK; intermediates stay in `build/apk-work/`.
+- Do not create project-local build scripts at all, including hard-coded scripts like `PROJECT=/workspace/expense-tracker`. Run the bundled skill script and pass `--project-dir` / `--app-name` only.
+- Do not output both unsigned/aligned/signed APKs as final artifacts. Only `build/<APP_NAME>.apk` is the final APK; the bundled script must not leave intermediate APKs or a packaging work directory behind.
 - Do not regenerate or relocate the keystore on every build. If the package name is unchanged, Android requires the update APK to be signed with the same certificate as the installed APK.
 - Do not use `minSdkVersion="21"` or a low `targetSdkVersion`; use min 26 / target 33.
 - Do not omit the launcher icon and do not reference nonexistent `@mipmap/ic_launcher` resources. Use `@drawable/ic_launcher` unless the user explicitly supplies a complete replacement icon asset.
