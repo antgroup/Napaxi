@@ -51,6 +51,9 @@ pub(super) async fn install_skill_package(
             {
                 return error_response(format!("install extras failed: {e}"));
             }
+            if let Err(e) = super::export::export_prompt_skills(files_dir, agent_id).await {
+                return error_response(format!("sync skill sandbox mirror failed: {e}"));
+            }
             serde_json::json!({
                 "name": name,
                 "success": true,
