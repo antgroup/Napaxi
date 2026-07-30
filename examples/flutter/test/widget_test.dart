@@ -7927,6 +7927,20 @@ void main() {
       const Color(0xFFF7F8FA),
     );
 
+    final smallSwipe = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('chat_message_list'))),
+    );
+    await smallSwipe.moveBy(const Offset(28, 0));
+    await tester.pump();
+
+    expect(
+      tester.getTopLeft(find.byKey(const Key('chat_primary_surface'))).dx,
+      0,
+    );
+
+    await smallSwipe.up();
+    await tester.pumpAndSettle();
+
     await tester.drag(
       find.byKey(const Key('chat_message_list')),
       const Offset(320, 0),
