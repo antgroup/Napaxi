@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 // ignore_for_file: depend_on_referenced_packages, unnecessary_import, use_super_parameters
 
@@ -1047,6 +1048,7 @@ void main() {
     await tester.tap(find.byKey(const Key('chat_input_field')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     expect(scrollController.offset, scrollController.position.maxScrollExtent);
@@ -1116,6 +1118,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
 
     final scrollable = find.byKey(const Key('chat_message_list'));
     final gesture = await tester.startGesture(tester.getCenter(scrollable));
@@ -1134,6 +1137,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
     await gesture.up();
     await tester.pump();
 
@@ -1146,6 +1150,7 @@ void main() {
       warnIfMissed: false,
     );
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
     final position = scrollableWidget.controller!.position;
@@ -1297,7 +1302,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('I will keep that in mind.'), findsOneWidget);
-    expect(find.text('Reviewing'), findsOneWidget);
+    expect(find.text('Reviewing'), findsNothing);
     expect(
       find.text('Learning from this chat in the background.'),
       findsNothing,
@@ -1350,92 +1355,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.text('Done.'), findsOneWidget);
-    expect(find.text('Memory updated'), findsOneWidget);
+    expect(find.text('Memory updated'), findsNothing);
     expect(find.byKey(const Key('send_message_button')), findsOneWidget);
-
-    await events.close();
-  });
-
-  testWidgets('pending evolution chip opens skill organize page', (
-    tester,
-  ) async {
-    final events = StreamController<sdk.ChatEvent>();
-    final fakeClient = FakeNapaxiChatClient(
-      eventStream: events.stream,
-      evolutionRuns: [
-        sdk.EvolutionRun(
-          id: 'run-1',
-          agentId: sdk.NapaxiEngine.defaultAgentId,
-          threadId: 'session-1',
-          reviewType: 'skill',
-          status: sdk.EvolutionRunStatus.completed,
-          queuedAt: DateTime.now(),
-          completedAt: DateTime.now(),
-          pendingCount: 1,
-        ),
-      ],
-      pendingEvolution: [
-        {
-          'id': 'pending-1',
-          'agent_id': sdk.NapaxiEngine.defaultAgentId,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'action_type': 'SkillPatch',
-          'reasoning': 'Tighten the research workflow.',
-          'action': {
-            'type': 'patch',
-            'params': {
-              'skill_name': 'research',
-              'file_path': 'SKILL.md',
-              'old_string': 'Use broad web searches.',
-              'new_string': 'Use focused source-backed research.',
-            },
-          },
-        },
-      ],
-    );
-    await tester.pumpWidget(
-      _testApp(chatClientFactory: () async => fakeClient),
-    );
-    await configureSingleModel(tester);
-
-    await tester.enterText(
-      find.byKey(const Key('chat_input_field')),
-      'Improve this skill',
-    );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('send_message_button')));
-    await tester.pump();
-    await _pumpUntilSent(tester, fakeClient);
-
-    events.add(const sdk.ResponseEvent(content: 'I found a skill change.'));
-    await tester.pump();
-    events.add(
-      const sdk.EvolutionQueuedEvent(
-        reviewTypes: ['skill'],
-        runs: [sdk.EvolutionQueuedRun(id: 'run-1', reviewType: 'skill')],
-      ),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(find.text('1 suggestion pending'), findsOneWidget);
-
-    await tester.tap(find.text('1 suggestion pending'));
-    await tester.pumpAndSettle();
-
-    // The pending chip now opens a "Pending Suggestions" sheet listing the
-    // queued skill patch directly.
-    expect(find.text('Pending Suggestions'), findsOneWidget);
-    expect(find.text('Patch Skill'), findsOneWidget);
-    expect(find.text('Tighten the research workflow.'), findsOneWidget);
-
-    await tester.tap(find.text('Confirm'));
-    await tester.pump(const Duration(milliseconds: 200));
-
-    expect(fakeClient.appliedPendingEvolutionId, 'pending-1');
-    await tester.pumpAndSettle();
-    // Once applied, the sheet reports there is nothing left to review.
-    expect(find.text('No pending suggestions'), findsOneWidget);
 
     await events.close();
   });
@@ -1584,6 +1505,60 @@ void main() {
 
     await events.close();
   });
+
+  testWidgets(
+    'focuses input and answers an ask human request without options',
+    (tester) async {
+      final events = StreamController<sdk.ChatEvent>();
+      final fakeClient = FakeNapaxiChatClient(eventStream: events.stream);
+      await tester.pumpWidget(
+        _testApp(chatClientFactory: () async => fakeClient),
+      );
+      await configureSingleModel(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Plan it',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pump();
+
+      events.add(
+        const sdk.AskingHumanEvent(
+          requestId: 'human-freeform',
+          question: 'What should I tell them?',
+          options: [],
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('human_request_human-freeform')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('human_reply_human-freeform')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('human_reply_human-freeform')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Use the concise version.',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(fakeClient.answeredHumanRequestId, 'human-freeform');
+      expect(fakeClient.answeredHumanResponse, 'Use the concise version.');
+
+      await events.close();
+    },
+  );
 
   testWidgets(
     'renders final response after answering ask human following delta',
@@ -2015,9 +1990,11 @@ void main() {
     await tester.tap(find.byKey(const Key('new_session_button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byKey(const Key('session_history_button')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
     await pumpUntilFound(
       tester,
@@ -2025,6 +2002,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('session_tile_session-1')));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Still working...'), findsOneWidget);
@@ -4378,7 +4356,7 @@ void main() {
     expect(find.text('2 uses · 1 views · 0 patches'), findsOneWidget);
     expect(find.text('3 files'), findsOneWidget);
     expect(find.text('SKILL.md'), findsOneWidget);
-    expect(find.text('notes.md'), findsOneWidget);
+    expect(find.text('notes.md'), findsWidgets);
     expect(find.text('scripts'), findsOneWidget);
     expect(find.text('run.sh'), findsOneWidget);
     expect(find.byKey(const Key('toggle_skill_research')), findsOneWidget);
@@ -4746,7 +4724,7 @@ void main() {
     expect(find.text('writer updated'), findsOneWidget);
   });
 
-  testWidgets('shows skill organize pending unused and tucked away items', (
+  testWidgets('skills page removes organize suggestions module', (
     tester,
   ) async {
     final fakeClient = FakeNapaxiChatClient(
@@ -4770,11 +4748,6 @@ void main() {
           createdBy: 'agent',
           useCount: 1,
         ),
-        sdk.SkillUsageRecord(
-          skillName: 'legacy-writer',
-          state: 'archived',
-          absorbedInto: 'writer',
-        ),
       ],
     );
 
@@ -4787,87 +4760,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('skills_menu_item')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Organize 1'));
-    await tester.pumpAndSettle();
-    await pumpUntilFound(tester, find.text('research'));
 
-    expect(find.text('Organize'), findsNothing);
-    expect(find.text('1 skill suggestion pending'), findsOneWidget);
-    expect(find.text('Suggestions'), findsOneWidget);
-    expect(find.text('Unused'), findsOneWidget);
-    expect(find.textContaining('Skill Patch'), findsOneWidget);
-    expect(find.text('research'), findsWidgets);
-
-    await tester.tap(find.text('Details'));
-    await tester.pumpAndSettle();
-    expect(find.text('Suggestion details'), findsOneWidget);
-    // The details dialog renders the suggestion reasoning plus humanized
-    // action lines (Action / Skill); it does not render before/after diff
-    // bodies. Assert against what is actually shown.
-    expect(find.textContaining('Tighten the research workflow.'), findsWidgets);
-    expect(find.textContaining('Skill: research'), findsOneWidget);
-    await tester.tap(find.text('OK'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Confirm'));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(fakeClient.appliedPendingEvolutionId, 'pending-1');
-
-    await tester.pumpAndSettle();
-    await tester.drag(
-      find.byKey(const Key('skill_governance_list')),
-      const Offset(0, -260),
-    );
-    await tester.pumpAndSettle();
-    // 'Tucked away' is the bottom section; assert it after scrolling it in.
-    expect(find.text('Tucked away'), findsOneWidget);
-    expect(find.text('legacy-writer'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('Restore'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Restore'));
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(fakeClient.restoredSkillName, 'legacy-writer');
-  });
-
-  testWidgets('ignores a pending skill suggestion without surfacing an error', (
-    tester,
-  ) async {
-    final fakeClient = FakeNapaxiChatClient(
-      pendingEvolution: [
-        {
-          'id': 'pending-1',
-          'agent_id': sdk.NapaxiEngine.defaultAgentId,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-          'action_type': 'SkillPatch',
-          'reasoning': 'Tighten the research workflow.',
-          'action': {
-            'type': 'patch',
-            'params': {'skill_name': 'research'},
-          },
-        },
-      ],
-    );
-
-    await tester.pumpWidget(
-      _testApp(chatClientFactory: () async => fakeClient),
-    );
-    await configureSingleModel(tester);
-
-    await tester.tap(find.byKey(const Key('session_history_button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('skills_menu_item')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Organize 1'));
-    await tester.pumpAndSettle();
-    await pumpUntilFound(tester, find.text('research'));
-
-    await tester.tap(find.text('Ignore'));
-    await tester.pumpAndSettle();
-
-    expect(fakeClient.rejectedPendingEvolutionId, 'pending-1');
-    expect(find.text('Organize 1'), findsNothing);
-    expect(find.textContaining('Skill organizing failed'), findsNothing);
+    expect(find.text('Installed'), findsOneWidget);
+    expect(find.text('Store'), findsOneWidget);
+    expect(find.textContaining('Organize'), findsNothing);
+    expect(find.textContaining('suggestion pending'), findsNothing);
+    expect(find.textContaining('Suggestions'), findsNothing);
   });
 
   testWidgets('folds recursive workspace files into folders', (tester) async {
@@ -5950,7 +5848,7 @@ void main() {
       findsNothing,
     );
     expect(find.text('snake.html'), findsOneWidget);
-    expect(find.text('notes.md'), findsOneWidget);
+    expect(find.text('notes.md'), findsWidgets);
     expect(find.byTooltip('Add to favorites'), findsNothing);
     expect(find.byTooltip('Remove from favorites'), findsNothing);
   });
@@ -6014,13 +5912,27 @@ void main() {
   testWidgets('shows current conversation attachments from the top bar', (
     tester,
   ) async {
+    final markdownFile = File(
+      '${Directory.systemTemp.path}/napaxi_attachment_preview.md',
+    )..writeAsStringSync('# Preview\n\nGenerated markdown body.');
+    addTearDown(() {
+      if (markdownFile.existsSync()) markdownFile.deleteSync();
+    });
     final fakeClient = FakeNapaxiChatClient(
-      detectedFiles: const [
-        sdk.ResolvedFile(
+      detectedFiles: [
+        const sdk.ResolvedFile(
           sandboxPath: '/workspace/snake.html',
           realPath: '/tmp/snake.html',
           filename: 'snake.html',
           mimeType: 'text/html',
+          isImage: false,
+          exists: true,
+        ),
+        sdk.ResolvedFile(
+          sandboxPath: '/workspace/notes.md',
+          realPath: markdownFile.path,
+          filename: 'notes.md',
+          mimeType: 'text/markdown',
           isImage: false,
           exists: true,
         ),
@@ -6030,13 +5942,13 @@ void main() {
           callId: 'write-1',
           name: 'write_file',
           arguments:
-              '{"patch":"*** Begin Patch\\n*** Add File: /workspace/snake.html\\n+<html></html>\\n*** End Patch"}',
+              '{"patch":"*** Begin Patch\n*** Add File: /workspace/snake.html\n+<html></html>\n*** Add File: /workspace/notes.md\n+# Preview\n*** End Patch"}',
         ),
         sdk.ToolResultEvent(
           callId: 'write-1',
           name: 'write_file',
           output:
-              '{"files":[{"action":"added","path":"/workspace/snake.html"}]}',
+              '{"files":[{"action":"added","path":"/workspace/snake.html"},{"action":"added","path":"/workspace/notes.md"}]}',
           isError: false,
         ),
         sdk.ResponseEvent(content: 'Built snake.'),
@@ -6074,6 +5986,16 @@ void main() {
       find.text('Generated · HTML · /workspace/snake.html'),
       findsOneWidget,
     );
+    expect(find.text('Generated · MD · /workspace/notes.md'), findsOneWidget);
+
+    await tester.tap(find.text('Generated · MD · /workspace/notes.md'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('notes.md'), findsWidgets);
+    expect(find.textContaining('Generated markdown body.'), findsOneWidget);
+    expect(find.byTooltip('Delete file'), findsNothing);
   });
 
   testWidgets('does not surface uploaded attachment paths as generated files', (
@@ -6441,7 +6363,7 @@ void main() {
 
     expect(find.text('Saved answer'), findsOneWidget);
     expect(find.text('snake.html'), findsOneWidget);
-    expect(find.text('notes.md'), findsOneWidget);
+    expect(find.text('notes.md'), findsWidgets);
 
     await tester.tap(find.byKey(const Key('conversation_attachments_button')));
     await tester.pumpAndSettle();
