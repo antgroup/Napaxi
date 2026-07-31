@@ -273,7 +273,7 @@ class ChatMessage {
 
 enum ChatAttachmentType { image, file }
 
-enum ChatAttachmentPreviewKind { image, video, audio, html, webLink, file }
+enum ChatAttachmentPreviewKind { image, video, audio, html, webLink, apk, file }
 
 class ChatAttachment {
   const ChatAttachment({
@@ -312,6 +312,10 @@ class ChatAttachment {
   bool get isHtml =>
       _mimeTypeHint == 'text/html' || const {'html', 'htm'}.contains(extension);
 
+  bool get isApk =>
+      _mimeTypeHint == 'application/vnd.android.package-archive' ||
+      extension == 'apk';
+
   bool get isWebLink {
     final value = path.trim().isNotEmpty ? path.trim() : name.trim();
     final uri = Uri.tryParse(value);
@@ -324,6 +328,7 @@ class ChatAttachment {
     if (isImage) return ChatAttachmentPreviewKind.image;
     if (isVideo) return ChatAttachmentPreviewKind.video;
     if (isAudio) return ChatAttachmentPreviewKind.audio;
+    if (isApk) return ChatAttachmentPreviewKind.apk;
     return ChatAttachmentPreviewKind.file;
   }
 
@@ -333,6 +338,7 @@ class ChatAttachment {
     if (isAudio) return 'Audio';
     if (isHtml) return 'HTML';
     if (isWebLink) return 'Link';
+    if (isApk) return 'APK';
     return switch (extension) {
       'pdf' => 'PDF',
       'doc' || 'docx' => 'Word',
@@ -375,6 +381,7 @@ class ChatAttachment {
       };
     }
     if (isHtml) return 'text/html';
+    if (isApk) return 'application/vnd.android.package-archive';
     return switch (extension) {
       'pdf' => 'application/pdf',
       'json' => 'application/json',
@@ -393,140 +400,6 @@ class ChatAttachment {
       _ => 'application/octet-stream',
     };
   }
-}
-
-class FavoriteAttachment {
-  const FavoriteAttachment({
-    required this.id,
-    required this.attachment,
-    required this.createdAt,
-    this.accountId = _demoAccountId,
-    this.agentId = sdk.NapaxiEngine.defaultAgentId,
-  });
-
-  final String id;
-  final ChatAttachment attachment;
-  final DateTime createdAt;
-  final String accountId;
-  final String agentId;
-
-  Map<String, Object?> toMap() => {
-    'id': id,
-    'account_id': accountId,
-    'agent_id': agentId,
-    'name': attachment.name,
-    'path': attachment.path,
-    'type': attachment.type.name,
-    'created_at': createdAt.toIso8601String(),
-    if (attachment.sandboxPath != null &&
-        attachment.sandboxPath!.trim().isNotEmpty)
-      'sandbox_path': attachment.sandboxPath,
-    if (attachment.mimeTypeOverride != null &&
-        attachment.mimeTypeOverride!.trim().isNotEmpty)
-      'mime_type': attachment.mimeTypeOverride,
-  };
-
-  factory FavoriteAttachment.fromMap(Map<String, Object?> map) {
-    final rawType = map['type'] as String? ?? ChatAttachmentType.file.name;
-    return FavoriteAttachment(
-      id: map['id'] as String? ?? '',
-      accountId: map['account_id'] as String? ?? _demoAccountId,
-      agentId: map['agent_id'] as String? ?? sdk.NapaxiEngine.defaultAgentId,
-      attachment: ChatAttachment(
-        name: map['name'] as String? ?? 'Attachment',
-        path: map['path'] as String? ?? '',
-        type: rawType == ChatAttachmentType.image.name
-            ? ChatAttachmentType.image
-            : ChatAttachmentType.file,
-        sandboxPath: map['sandbox_path'] as String?,
-        mimeTypeOverride: map['mime_type'] as String?,
-      ),
-      createdAt: _parseStoredDate(map['created_at'] as String? ?? ''),
-    );
-  }
-}
-
-String _attachmentFavoriteId(ChatAttachment attachment) {
-  final sandboxPath = attachment.sandboxPath?.trim();
-  if (sandboxPath != null && sandboxPath.isNotEmpty) {
-    return 'sandbox:$sandboxPath';
-  }
-  final path = attachment.path.trim();
-  if (path.isNotEmpty) return 'path:$path';
-  return 'name:${attachment.name.trim()}|mime:${attachment.mimeType}';
-}
-
-bool _favoriteMatchesAttachment(
-  FavoriteAttachment favorite,
-  ChatAttachment attachment,
-) {
-  if (favorite.id == _attachmentFavoriteId(attachment)) return true;
-  return _sameUploadedAttachmentFavorite(favorite.attachment, attachment);
-}
-
-List<FavoriteAttachment> _dedupeFavoriteAttachments(
-  Iterable<FavoriteAttachment> favorites,
-) {
-  final deduped = <FavoriteAttachment>[];
-  for (final favorite in favorites) {
-    final existingIndex = deduped.indexWhere((existing) {
-      final sameScope =
-          existing.accountId == favorite.accountId &&
-          existing.agentId == favorite.agentId;
-      return sameScope &&
-          (existing.id == favorite.id ||
-              _sameUploadedAttachmentFavorite(
-                existing.attachment,
-                favorite.attachment,
-              ));
-    });
-    if (existingIndex == -1) {
-      deduped.add(favorite);
-      continue;
-    }
-    deduped[existingIndex] = _preferredFavoriteAttachment(
-      deduped[existingIndex],
-      favorite,
-    );
-  }
-  return List.unmodifiable(deduped);
-}
-
-FavoriteAttachment _preferredFavoriteAttachment(
-  FavoriteAttachment current,
-  FavoriteAttachment candidate,
-) {
-  final currentScore = _favoriteMetadataScore(current);
-  final candidateScore = _favoriteMetadataScore(candidate);
-  if (candidateScore != currentScore) {
-    return candidateScore > currentScore ? candidate : current;
-  }
-  return candidate.createdAt.isAfter(current.createdAt) ? candidate : current;
-}
-
-int _favoriteMetadataScore(FavoriteAttachment favorite) {
-  final attachment = favorite.attachment;
-  var score = 0;
-  if (_hasUploadedAttachmentSandboxIdentity(attachment)) score += 4;
-  if ((attachment.sandboxPath ?? '').trim().isNotEmpty) score += 2;
-  if (attachment.path.trim().isNotEmpty) score += 1;
-  if ((attachment.mimeTypeOverride ?? '').trim().isNotEmpty) score += 1;
-  return score;
-}
-
-bool _sameUploadedAttachmentFavorite(ChatAttachment a, ChatAttachment b) {
-  final aSandboxPath = _uploadedAttachmentSandboxPath(a);
-  final bSandboxPath = _uploadedAttachmentSandboxPath(b);
-  if (aSandboxPath == null && bSandboxPath == null) {
-    return false;
-  }
-  if (aSandboxPath != null && bSandboxPath != null) {
-    return aSandboxPath == bSandboxPath;
-  }
-  final aName = _normalizedAttachmentBasename(a);
-  final bName = _normalizedAttachmentBasename(b);
-  if (aName.isEmpty || aName != bName) return false;
-  return a.mimeType.trim().toLowerCase() == b.mimeType.trim().toLowerCase();
 }
 
 bool _hasUploadedAttachmentSandboxIdentity(ChatAttachment attachment) {
@@ -548,14 +421,6 @@ bool _isUploadedAttachmentSandboxPath(String path) {
     return true;
   }
   return path.contains('/workspace/attachments/');
-}
-
-String _normalizedAttachmentBasename(ChatAttachment attachment) {
-  final name = attachment.name.trim();
-  if (name.isNotEmpty) return name.toLowerCase();
-  final path = attachment.path.trim();
-  if (path.isEmpty) return '';
-  return path.replaceAll('\\', '/').split('/').last.toLowerCase();
 }
 
 DateTime _parseStoredDate(String value) {

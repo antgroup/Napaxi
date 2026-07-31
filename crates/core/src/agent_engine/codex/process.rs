@@ -872,3 +872,19 @@ fn cleanup_idle_sessions() {
         let _ = crate::android_linux_env::pty::close_pty_session(active.pty);
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_config_dir_targets_linux_env_rootfs_home() {
+        assert_eq!(
+            config::config_dir("app_files"),
+            std::path::Path::new("app_files")
+                .join("linux-env")
+                .join("rootfs")
+                .join("root")
+                .join(".codex"),
+        );
+    }
+}

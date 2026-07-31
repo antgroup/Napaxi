@@ -1028,8 +1028,6 @@ class _AttachmentChip extends StatelessWidget {
   const _AttachmentChip({
     required this.attachment,
     this.onRemove,
-    this.isFavorite = false,
-    this.onToggleFavorite,
     this.compact = false,
     this.accountId,
     this.agentId,
@@ -1037,8 +1035,6 @@ class _AttachmentChip extends StatelessWidget {
 
   final ChatAttachment attachment;
   final VoidCallback? onRemove;
-  final bool isFavorite;
-  final VoidCallback? onToggleFavorite;
   final bool compact;
   final String? accountId;
   final String? agentId;
@@ -1061,6 +1057,7 @@ class _AttachmentChip extends StatelessWidget {
       'xls' || 'xlsx' => Icons.table_chart_outlined,
       'ppt' || 'pptx' => Icons.slideshow_outlined,
       'zip' || 'rar' || '7z' || 'tar' || 'gz' => Icons.folder_zip_outlined,
+      'apk' => Icons.install_mobile_rounded,
       'mp3' || 'wav' || 'aac' || 'flac' || 'ogg' => Icons.audiotrack_outlined,
       'mp4' || 'mov' || 'avi' || 'mkv' || 'webm' => Icons.videocam_outlined,
       _ => Icons.insert_drive_file_outlined,
@@ -1095,12 +1092,7 @@ class _AttachmentChip extends StatelessWidget {
         Container(
           width: compact ? 176 : 188,
           height: compact ? 52 : 58,
-          padding: EdgeInsets.fromLTRB(
-            8,
-            8,
-            onRemove != null || onToggleFavorite != null ? 30 : 10,
-            8,
-          ),
+          padding: EdgeInsets.fromLTRB(8, 8, onRemove != null ? 30 : 10, 8),
           decoration: BoxDecoration(
             color: const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(10),
@@ -1158,15 +1150,6 @@ class _AttachmentChip extends StatelessWidget {
             top: -5,
             right: -5,
             child: _RemoveAttachmentButton(onTap: onRemove!),
-          ),
-        if (onRemove == null && onToggleFavorite != null)
-          Positioned(
-            top: 5,
-            right: 5,
-            child: _FavoriteAttachmentButton(
-              isFavorite: isFavorite,
-              onTap: onToggleFavorite!,
-            ),
           ),
       ],
     );
@@ -1267,15 +1250,11 @@ class _MessageAttachmentsView extends StatelessWidget {
     required this.attachments,
     required this.accountId,
     required this.agentId,
-    required this.isFavoriteAttachment,
-    required this.onToggleFavoriteAttachment,
   });
 
   final List<ChatAttachment> attachments;
   final String accountId;
   final String agentId;
-  final bool Function(ChatAttachment attachment) isFavoriteAttachment;
-  final ValueChanged<ChatAttachment> onToggleFavoriteAttachment;
 
   @override
   Widget build(BuildContext context) {
@@ -1288,13 +1267,17 @@ class _MessageAttachmentsView extends StatelessWidget {
               attachment.isImage || attachment.isVideo || attachment.isHtml,
         )
         .toList();
+    final apkFiles = attachments
+        .where((attachment) => attachment.isApk)
+        .toList();
     final files = attachments
         .where(
           (attachment) =>
               !attachment.isImage &&
               !attachment.isVideo &&
               !attachment.isHtml &&
-              !attachment.isWebLink,
+              !attachment.isWebLink &&
+              !attachment.isApk,
         )
         .toList();
 
@@ -1306,8 +1289,6 @@ class _MessageAttachmentsView extends StatelessWidget {
             attachments: previewable,
             accountId: accountId,
             agentId: agentId,
-            isFavoriteAttachment: isFavoriteAttachment,
-            onToggleFavoriteAttachment: onToggleFavoriteAttachment,
           ),
         if (previewable.isNotEmpty && webLinks.isNotEmpty)
           const SizedBox(height: 8),
@@ -1316,18 +1297,22 @@ class _MessageAttachmentsView extends StatelessWidget {
             attachments: webLinks,
             accountId: accountId,
             agentId: agentId,
-            isFavoriteAttachment: isFavoriteAttachment,
-            onToggleFavoriteAttachment: onToggleFavoriteAttachment,
           ),
-        if ((previewable.isNotEmpty || webLinks.isNotEmpty) && files.isNotEmpty)
+        if ((previewable.isNotEmpty || webLinks.isNotEmpty) &&
+            (apkFiles.isNotEmpty || files.isNotEmpty))
           const SizedBox(height: 8),
+        if (apkFiles.isNotEmpty)
+          _ApkAttachmentsCard(
+            apkFiles: apkFiles,
+            accountId: accountId,
+            agentId: agentId,
+          ),
+        if (apkFiles.isNotEmpty && files.isNotEmpty) const SizedBox(height: 8),
         if (files.isNotEmpty)
           _AttachmentFilesCard(
             files: files,
             accountId: accountId,
             agentId: agentId,
-            isFavoriteAttachment: isFavoriteAttachment,
-            onToggleFavoriteAttachment: onToggleFavoriteAttachment,
           ),
       ],
     );
@@ -1339,15 +1324,11 @@ class _WebLinkReferenceSection extends StatefulWidget {
     required this.attachments,
     required this.accountId,
     required this.agentId,
-    required this.isFavoriteAttachment,
-    required this.onToggleFavoriteAttachment,
   });
 
   final List<ChatAttachment> attachments;
   final String accountId;
   final String agentId;
-  final bool Function(ChatAttachment attachment) isFavoriteAttachment;
-  final ValueChanged<ChatAttachment> onToggleFavoriteAttachment;
 
   @override
   State<_WebLinkReferenceSection> createState() =>
@@ -1449,13 +1430,6 @@ class _WebLinkReferenceSectionState extends State<_WebLinkReferenceSection> {
                             attachment: widget.attachments[i],
                             accountId: widget.accountId,
                             agentId: widget.agentId,
-                            isFavorite: widget.isFavoriteAttachment(
-                              widget.attachments[i],
-                            ),
-                            onToggleFavorite: () =>
-                                widget.onToggleFavoriteAttachment(
-                                  widget.attachments[i],
-                                ),
                           ),
                           if (i != widget.attachments.length - 1)
                             const SizedBox(height: 8),
@@ -1493,16 +1467,12 @@ class _WebLinkReferenceItem extends StatelessWidget {
     required this.attachment,
     required this.accountId,
     required this.agentId,
-    required this.isFavorite,
-    required this.onToggleFavorite,
   });
 
   final int index;
   final ChatAttachment attachment;
   final String accountId;
   final String agentId;
-  final bool isFavorite;
-  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -1564,44 +1534,7 @@ class _WebLinkReferenceItem extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            _ReferenceFavoriteButton(
-              isFavorite: isFavorite,
-              onTap: onToggleFavorite,
-            ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ReferenceFavoriteButton extends StatelessWidget {
-  const _ReferenceFavoriteButton({
-    required this.isFavorite,
-    required this.onTap,
-  });
-
-  final bool isFavorite;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    return Tooltip(
-      message: isFavorite ? strings.removeFavorite : strings.addFavorite,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(
-            isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
-            size: 18,
-            color: isFavorite
-                ? const Color(0xFFF59E0B)
-                : const Color(0xFF94A3B8),
-          ),
         ),
       ),
     );
@@ -1613,15 +1546,11 @@ class _AttachmentPreviewGrid extends StatelessWidget {
     required this.attachments,
     required this.accountId,
     required this.agentId,
-    required this.isFavoriteAttachment,
-    required this.onToggleFavoriteAttachment,
   });
 
   final List<ChatAttachment> attachments;
   final String accountId;
   final String agentId;
-  final bool Function(ChatAttachment attachment) isFavoriteAttachment;
-  final ValueChanged<ChatAttachment> onToggleFavoriteAttachment;
 
   double _bounded(double value, double min, double max) {
     if (value < min) return min;
@@ -1646,8 +1575,6 @@ class _AttachmentPreviewGrid extends StatelessWidget {
               compact: true,
               accountId: accountId,
               agentId: agentId,
-              isFavorite: isFavoriteAttachment(attachment),
-              onToggleFavorite: () => onToggleFavoriteAttachment(attachment),
             );
           }
           final width = _bounded(availableWidth, 160, 280);
@@ -1658,8 +1585,6 @@ class _AttachmentPreviewGrid extends StatelessWidget {
             radius: 12,
             accountId: accountId,
             agentId: agentId,
-            isFavorite: isFavoriteAttachment(attachment),
-            onToggleFavorite: () => onToggleFavoriteAttachment(attachment),
           );
         }
 
@@ -1680,9 +1605,6 @@ class _AttachmentPreviewGrid extends StatelessWidget {
                   radius: 10,
                   accountId: accountId,
                   agentId: agentId,
-                  isFavorite: isFavoriteAttachment(attachments[i]),
-                  onToggleFavorite: () =>
-                      onToggleFavoriteAttachment(attachments[i]),
                 ),
                 if (i != attachments.length - 1) const SizedBox(width: spacing),
               ],
@@ -1703,8 +1625,6 @@ class _MessageAttachmentPreviewTile extends StatelessWidget {
     required this.radius,
     required this.accountId,
     required this.agentId,
-    required this.isFavorite,
-    required this.onToggleFavorite,
   });
 
   final ChatAttachment attachment;
@@ -1713,8 +1633,6 @@ class _MessageAttachmentPreviewTile extends StatelessWidget {
   final double radius;
   final String accountId;
   final String agentId;
-  final bool isFavorite;
-  final VoidCallback onToggleFavorite;
 
   @override
   Widget build(BuildContext context) {
@@ -1774,51 +1692,7 @@ class _MessageAttachmentPreviewTile extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              top: 6,
-              right: 6,
-              child: _FavoriteAttachmentButton(
-                isFavorite: isFavorite,
-                onTap: onToggleFavorite,
-              ),
-            ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FavoriteAttachmentButton extends StatelessWidget {
-  const _FavoriteAttachmentButton({
-    required this.isFavorite,
-    required this.onTap,
-  });
-
-  final bool isFavorite;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final strings = AppStrings.of(context);
-    return Tooltip(
-      message: isFavorite ? strings.removeFavorite : strings.addFavorite,
-      child: Material(
-        color: Colors.black.withValues(alpha: isFavorite ? 0.62 : 0.38),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(
-            key: Key('favorite_attachment_${isFavorite ? 'on' : 'off'}'),
-            width: 28,
-            height: 28,
-            child: Icon(
-              isFavorite ? Icons.star_rounded : Icons.star_border_rounded,
-              size: 18,
-              color: isFavorite ? const Color(0xFFFFC857) : Colors.white,
-            ),
-          ),
         ),
       ),
     );
@@ -1859,20 +1733,186 @@ class _AttachmentTileBody extends StatelessWidget {
   }
 }
 
+class _ApkAttachmentsCard extends StatelessWidget {
+  const _ApkAttachmentsCard({
+    required this.apkFiles,
+    required this.accountId,
+    required this.agentId,
+  });
+
+  final List<ChatAttachment> apkFiles;
+  final String accountId;
+  final String agentId;
+
+  @override
+  Widget build(BuildContext context) {
+    final isChinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    return Container(
+      key: const Key('message_attachment_apk_card'),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 11, 12, 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF86EFAC)),
+                  ),
+                  child: const Icon(
+                    Icons.install_mobile_rounded,
+                    size: 18,
+                    color: Color(0xFF16A34A),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        apkFiles.length == 1
+                            ? (isChinese ? '可安装 APK' : 'Installable APK')
+                            : (isChinese
+                                  ? '可安装 APK（${apkFiles.length} 个）'
+                                  : 'Installable APKs (${apkFiles.length})'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF14532D),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isChinese
+                            ? '点击后打开系统安装器'
+                            : 'Tap to open the system installer',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF15803D),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: Color(0xFFDCFCE7)),
+          for (var i = 0; i < apkFiles.length; i++) ...[
+            _ApkAttachmentRow(
+              attachment: apkFiles[i],
+              accountId: accountId,
+              agentId: agentId,
+            ),
+            if (i != apkFiles.length - 1)
+              const Divider(
+                height: 1,
+                thickness: 1,
+                color: Color(0xFFDCFCE7),
+                indent: 14,
+                endIndent: 14,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ApkAttachmentRow extends StatelessWidget {
+  const _ApkAttachmentRow({
+    required this.attachment,
+    required this.accountId,
+    required this.agentId,
+  });
+
+  final ChatAttachment attachment;
+  final String accountId;
+  final String agentId;
+
+  @override
+  Widget build(BuildContext context) {
+    final isChinese =
+        _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+    return InkWell(
+      key: Key('message_attachment_apk_${attachment.path.hashCode}'),
+      onTap: () => _openAttachment(
+        context,
+        attachment,
+        accountId: accountId,
+        agentId: agentId,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.android_rounded,
+              size: 20,
+              color: Color(0xFF16A34A),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                attachment.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF052E16),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              isChinese ? '安装' : 'Install',
+              style: const TextStyle(
+                color: Color(0xFF15803D),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: Color(0xFF16A34A),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _AttachmentFilesCard extends StatefulWidget {
   const _AttachmentFilesCard({
     required this.files,
     required this.accountId,
     required this.agentId,
-    required this.isFavoriteAttachment,
-    required this.onToggleFavoriteAttachment,
   });
 
   final List<ChatAttachment> files;
   final String accountId;
   final String agentId;
-  final bool Function(ChatAttachment attachment) isFavoriteAttachment;
-  final ValueChanged<ChatAttachment> onToggleFavoriteAttachment;
 
   static const int _collapsedVisibleCount = 3;
 
@@ -1910,9 +1950,6 @@ class _AttachmentFilesCardState extends State<_AttachmentFilesCard> {
               attachment: visible[i],
               accountId: widget.accountId,
               agentId: widget.agentId,
-              isFavorite: widget.isFavoriteAttachment(visible[i]),
-              onToggleFavorite: () =>
-                  widget.onToggleFavoriteAttachment(visible[i]),
             ),
             if (i != visible.length - 1)
               const Divider(
@@ -1981,15 +2018,11 @@ class _AttachmentFilesCardHeader extends StatelessWidget {
 class _AttachmentFileListRow extends StatelessWidget {
   const _AttachmentFileListRow({
     required this.attachment,
-    required this.isFavorite,
-    required this.onToggleFavorite,
     required this.accountId,
     required this.agentId,
   });
 
   final ChatAttachment attachment;
-  final bool isFavorite;
-  final VoidCallback onToggleFavorite;
   final String accountId;
   final String agentId;
 
@@ -2011,6 +2044,7 @@ class _AttachmentFileListRow extends StatelessWidget {
       'xls' || 'xlsx' => Icons.table_chart_outlined,
       'ppt' || 'pptx' => Icons.slideshow_outlined,
       'zip' || 'rar' || '7z' || 'tar' || 'gz' => Icons.folder_zip_outlined,
+      'apk' => Icons.install_mobile_rounded,
       'mp3' || 'wav' || 'aac' || 'flac' || 'ogg' => Icons.audiotrack_outlined,
       'mp4' || 'mov' || 'avi' || 'mkv' || 'webm' => Icons.videocam_outlined,
       _ => Icons.insert_drive_file_outlined,
@@ -2043,11 +2077,6 @@ class _AttachmentFileListRow extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            _FavoriteAttachmentButton(
-              isFavorite: isFavorite,
-              onTap: onToggleFavorite,
             ),
           ],
         ),
@@ -2110,6 +2139,7 @@ Future<void> _openAttachment(
   ChatAttachment attachment, {
   String? accountId,
   String? agentId,
+  Future<NapaxiChatClient> Function()? clientFuture,
 }) async {
   final resolved = _resolveAttachmentForOpen(
     attachment,
@@ -2130,8 +2160,28 @@ Future<void> _openAttachment(
     await _showAttachmentImagePreview(context, resolved);
     return;
   }
+  if (resolved.isApk) {
+    await _installApkAttachment(context, resolved);
+    return;
+  }
   if (resolved.isVideo) {
     await _showVideoAttachmentPreview(context, resolved);
+    return;
+  }
+  final previewItem = _previewItemForAttachment(resolved);
+  if (previewItem != null && previewItem.canPreview) {
+    final client = clientFuture == null ? null : await clientFuture();
+    if (!context.mounted) return;
+    await Navigator.of(context, rootNavigator: true).push<void>(
+      MaterialPageRoute(
+        builder: (context) => _FilePreviewPage(
+          client: client,
+          item: previewItem,
+          agentId: agentId ?? sdk.NapaxiEngine.defaultAgentId,
+          readOnly: true,
+        ),
+      ),
+    );
     return;
   }
   await share.Share.shareXFiles([
@@ -2141,6 +2191,37 @@ Future<void> _openAttachment(
       mimeType: resolved.mimeType,
     ),
   ]);
+}
+
+_FileBrowserItem? _previewItemForAttachment(ChatAttachment attachment) {
+  if (attachment.isWebLink) return null;
+  final path = attachment.path.trim();
+  if (path.isEmpty || !File(path).existsSync()) return null;
+  final file = File(path);
+  int? sizeBytes;
+  DateTime? modified;
+  try {
+    sizeBytes = file.lengthSync();
+    modified = file.lastModifiedSync();
+  } catch (_) {
+    // Best-effort metadata only; preview can still try to open the file.
+  }
+  final item = _FileBrowserItem(
+    source: _FileSource.workspace,
+    path: attachment.sandboxPath?.trim().isNotEmpty == true
+        ? attachment.sandboxPath!.trim()
+        : path,
+    name: attachment.name.trim().isEmpty
+        ? path.split(Platform.pathSeparator).last
+        : attachment.name.trim(),
+    isDirectory: false,
+    realPath: path,
+    mimeType: attachment.mimeType,
+    sizeBytes: sizeBytes,
+    modified: modified,
+  );
+  if (item.isHtml || item.isImage) return null;
+  return item.isTextPreviewable ? item : null;
 }
 
 ChatAttachment? _resolveAttachmentForOpen(
@@ -2200,6 +2281,48 @@ List<String> _attachmentSandboxPathCandidates(
   final unscoped = bridge.sandboxToReal(path);
   if (unscoped != null && unscoped.isNotEmpty) candidates.add(unscoped);
   return candidates.toSet().toList(growable: false);
+}
+
+Future<void> _installApkAttachment(
+  BuildContext context,
+  ChatAttachment attachment,
+) async {
+  final isChinese =
+      _AppLanguageScope.languageOf(context) == AppLanguage.chinese;
+  if (!sdk.NapaxiApkInstaller.isSupported) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          isChinese
+              ? 'APK 安装仅支持 Android 设备'
+              : 'APK installation is only supported on Android.',
+        ),
+      ),
+    );
+    return;
+  }
+
+  final result = await sdk.NapaxiApkInstaller.installApk(attachment.path);
+  if (!context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.hideCurrentSnackBar();
+  if (result.success || result.installerOpened) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(isChinese ? '已打开系统安装器' : 'System installer opened.'),
+      ),
+    );
+    return;
+  }
+  messenger.showSnackBar(
+    SnackBar(
+      content: Text(
+        result.error?.trim().isNotEmpty == true
+            ? result.error!
+            : (isChinese ? '无法安装 APK' : 'Could not install APK.'),
+      ),
+    ),
+  );
 }
 
 Future<void> _showWebAttachmentPreview(

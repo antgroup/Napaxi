@@ -6630,9 +6630,10 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     var changed = false;
     for (final preset in presetSkills) {
       final name = preset.name.trim().toLowerCase();
-      if (name.isEmpty || installed.contains(name)) continue;
+      if (name.isEmpty) continue;
+      if (installed.contains(name) && preset.supportFiles.isEmpty) continue;
       final result = await engine.installSkill(
-        preset.skillContent,
+        preset.installPayload,
         agentId: runtimeProfile.agentId,
       );
       if (result.success) {

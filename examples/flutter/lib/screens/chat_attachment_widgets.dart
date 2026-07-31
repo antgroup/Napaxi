@@ -66,7 +66,7 @@ class _ConversationAttachmentsSheet extends StatelessWidget {
   });
 
   final List<_ConversationAttachmentItem> items;
-  final ValueChanged<ChatAttachment> onOpenAttachment;
+  final Future<void> Function(ChatAttachment attachment) onOpenAttachment;
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +130,8 @@ class _ConversationAttachmentsSheet extends StatelessWidget {
                           final item = items[index];
                           return _ConversationAttachmentTile(
                             item: item,
-                            onTap: () => onOpenAttachment(item.attachment),
+                            onTap: () =>
+                                unawaited(onOpenAttachment(item.attachment)),
                           );
                         },
                       ),
@@ -251,6 +252,7 @@ class _ConversationAttachmentIcon extends StatelessWidget {
       ChatAttachmentPreviewKind.audio => Icons.graphic_eq_rounded,
       ChatAttachmentPreviewKind.html => Icons.web_asset_rounded,
       ChatAttachmentPreviewKind.webLink => Icons.link_rounded,
+      ChatAttachmentPreviewKind.apk => Icons.install_mobile_rounded,
       ChatAttachmentPreviewKind.file => Icons.insert_drive_file_rounded,
     };
     return Container(

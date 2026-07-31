@@ -739,9 +739,23 @@ fn file_change_files(item: &Value) -> Vec<Value> {
 }
 
 fn normalize_file_action(action: &str) -> &str {
-    match action.trim().to_ascii_lowercase().as_str() {
-        "add" | "added" | "create" | "created" => "added",
-        "delete" | "deleted" | "remove" | "removed" => "deleted",
+    match action.trim() {
+        value
+            if value.eq_ignore_ascii_case("add")
+                || value.eq_ignore_ascii_case("added")
+                || value.eq_ignore_ascii_case("create")
+                || value.eq_ignore_ascii_case("created") =>
+        {
+            "added"
+        }
+        value
+            if value.eq_ignore_ascii_case("delete")
+                || value.eq_ignore_ascii_case("deleted")
+                || value.eq_ignore_ascii_case("remove")
+                || value.eq_ignore_ascii_case("removed") =>
+        {
+            "deleted"
+        }
         _ => "updated",
     }
 }
@@ -751,10 +765,10 @@ fn int_field(value: &Value, keys: &[&str]) -> i64 {
         if let Some(number) = value.get(*key).and_then(Value::as_i64) {
             return number;
         }
-        if let Some(text) = value.get(*key).and_then(Value::as_str) {
-            if let Ok(number) = text.parse::<i64>() {
-                return number;
-            }
+        if let Some(text) = value.get(*key).and_then(Value::as_str)
+            && let Ok(number) = text.parse::<i64>()
+        {
+            return number;
         }
     }
     0

@@ -787,8 +787,6 @@ class _ChatScreenState extends State<ChatScreen>
         WidgetsBindingObserver,
         _ChatScreenChannelMixin,
         _ChatScreenA2AMixin {
-  static const String _favoriteAttachmentsKey =
-      'napaxi_demo.favorite_attachments.v1';
   static const String _pinnedSessionsKey = 'napaxi_demo.pinned_sessions.v1';
   static const String _renamedSessionsKey = 'napaxi_demo.renamed_sessions.v1';
   static const String _chatProjectsKey = 'napaxi_demo.chat_projects.v1';
@@ -797,6 +795,8 @@ class _ChatScreenState extends State<ChatScreen>
   static const String _seenAttachmentsKey = 'napaxi_demo.seen_attachments.v1';
   static const String _activeScenarioKey = 'napaxi_demo.active_scenario.v1';
   static const double _sessionMenuFlingVelocity = 650;
+  static const double _sessionMenuOpenDragThreshold = 35;
+  static const double _projectBackHorizontalDragThreshold = 56;
   static const double _bottomFollowThreshold = 72;
   static const double _bottomPinnedTolerance = 1;
   static const double _historyTopLoadThreshold = 360;
@@ -885,8 +885,6 @@ class _ChatScreenState extends State<ChatScreen>
   String? _browserPanelSessionId;
   StreamSubscription<sdk.BackgroundActionEvent>? _backgroundActionSubscription;
   StreamSubscription<DemoChannelBridgeEvent>? _channelBridgeSubscription;
-  final Map<String, Timer> _evolutionPollTimers = {};
-  final Map<String, Timer> _evolutionHideTimers = {};
   final Set<String> _unsavedSessionIds = <String>{};
   final Map<String, ChatSessionRunState> _sessionRuns = {};
   final Set<String> _a2aUnreadConversationSessionIds = <String>{};
@@ -933,7 +931,6 @@ class _ChatScreenState extends State<ChatScreen>
   Map<String, String> _renamedSessionTitles = const {};
   List<_ChatProject> _chatProjects = const [];
   Map<String, String> _projectSessionIds = const {};
-  List<FavoriteAttachment> _favoriteAttachments = const [];
   Map<String, List<ChatAttachment>> _assistantAttachmentCache = const {};
   Map<String, List<ChatAttachment>> _pendingAssistantAttachments = const {};
   Map<String, Set<String>> _seenAttachmentIds = const {};
@@ -1029,16 +1026,6 @@ class _ChatScreenState extends State<ChatScreen>
     return List.unmodifiable(items);
   }
 
-  List<FavoriteAttachment> get _activeFavoriteAttachments {
-    return _favoriteAttachments
-        .where(
-          (favorite) =>
-              favorite.accountId == _activeAccountId &&
-              favorite.agentId == _activeAgentId,
-        )
-        .toList(growable: false);
-  }
-
   /// Flatten the active session's messages into render items, aggregating each
   /// turn's generated attachments into a single block at the END OF THAT TURN.
   ///
@@ -1099,7 +1086,6 @@ class _ChatScreenState extends State<ChatScreen>
     }
     if (message.attachments.isNotEmpty ||
         message.humanRequest != null ||
-        message.evolutionStatus != null ||
         message.action != null) {
       return true;
     }
@@ -1253,7 +1239,6 @@ class _ChatScreenState extends State<ChatScreen>
     _unsavedSessionIds.add(_activeSessionId);
     _restorePersistedStateFuture = _restorePersistedState();
     unawaited(_restorePersistedStateFuture);
-    unawaited(_restoreFavoriteAttachments());
     unawaited(_restorePinnedSessions());
     unawaited(_restoreRenamedSessions());
     unawaited(_restoreChatProjects());
@@ -1297,12 +1282,6 @@ class _ChatScreenState extends State<ChatScreen>
     _terminalSessionMap.clear();
     for (final run in _sessionRuns.values) {
       unawaited(run.subscription.cancel());
-    }
-    for (final timer in _evolutionPollTimers.values) {
-      timer.cancel();
-    }
-    for (final timer in _evolutionHideTimers.values) {
-      timer.cancel();
     }
     for (final timer in _contextCompactionHideTimers.values) {
       timer.cancel();
@@ -2643,7 +2622,11 @@ class _ChatScreenState extends State<ChatScreen>
       if (!_usesInjectedChatClient) {
         await _restoreA2AConversationSessions();
       }
-      _initialStateRestored = true;
+      if (mounted) {
+        setState(() => _initialStateRestored = true);
+      } else {
+        _initialStateRestored = true;
+      }
       if (!_usesInjectedChatClient) {
         unawaited(_ensureConfiguredChannelsConnected());
         _scheduleA2AConnectionRestoreIfAllowed();
@@ -2655,7 +2638,11 @@ class _ChatScreenState extends State<ChatScreen>
       if (!_usesInjectedChatClient) {
         await _restoreA2AConversationSessions();
       }
-      _initialStateRestored = true;
+      if (mounted) {
+        setState(() => _initialStateRestored = true);
+      } else {
+        _initialStateRestored = true;
+      }
       if (!_usesInjectedChatClient) {
         unawaited(_ensureConfiguredChannelsConnected());
         _scheduleA2AConnectionRestoreIfAllowed();
@@ -2702,40 +2689,6 @@ class _ChatScreenState extends State<ChatScreen>
     } catch (_) {
       // Keep the normal no-model prompt if the config store is unavailable.
     }
-  }
-
-  Future<void> _restoreFavoriteAttachments() async {
-    try {
-      final preferences = await SharedPreferences.getInstance();
-      final raw = preferences.getString(_favoriteAttachmentsKey);
-      if (raw == null || raw.trim().isEmpty) return;
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
-      final favorites = decoded
-          .whereType<Map>()
-          .map(
-            (entry) =>
-                FavoriteAttachment.fromMap(Map<String, Object?>.from(entry)),
-          )
-          .where((favorite) => favorite.id.trim().isNotEmpty)
-          .toList(growable: false);
-      if (!mounted) return;
-      setState(
-        () => _favoriteAttachments = _dedupeFavoriteAttachments(favorites),
-      );
-    } catch (_) {
-      // Favorites are a convenience cache; ignore corrupt local state.
-    }
-  }
-
-  Future<void> _persistFavoriteAttachments() async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(
-      _favoriteAttachmentsKey,
-      jsonEncode([
-        for (final favorite in _favoriteAttachments) favorite.toMap(),
-      ]),
-    );
   }
 
   String _pinnedSessionKey(String agentId, String sessionId) {
@@ -4938,7 +4891,6 @@ class _ChatScreenState extends State<ChatScreen>
         _showChatSnackBar('已创建新会话');
         return true;
       case '/model':
-        _appendSlashCommandResult(text, '正在打开模型设置。');
         await _openConfigPage();
         return true;
       case '/tools':
@@ -5698,21 +5650,12 @@ class _ChatScreenState extends State<ChatScreen>
                     output: content,
                     isError: isError,
                   );
-                case sdk.EvolutionQueuedEvent(:final reviewTypes, :final runs):
+                case sdk.EvolutionQueuedEvent():
                   _finishSessionRun(
                     sessionId,
                     currentAssistantMessageId,
                     status: sdk.SessionRunStatus.completed,
                     activity: 'Learning queued',
-                  );
-                  _markEvolutionQueued(
-                    currentAssistantMessageId,
-                    reviewTypes,
-                    runs,
-                  );
-                  _startEvolutionResultPolling(
-                    currentAssistantMessageId,
-                    runs.map((run) => run.id).toList(growable: false),
                   );
                 case sdk.ErrorEvent(:final message):
                   _traceChat(
@@ -5800,6 +5743,7 @@ class _ChatScreenState extends State<ChatScreen>
                   sessionId,
                   currentAssistantMessageId,
                   agentId: agentId,
+                  producedSince: _sessionRuns[sessionId]?.startedAt,
                 ),
               );
               final run = _sessionRuns[sessionId];
@@ -5853,6 +5797,25 @@ class _ChatScreenState extends State<ChatScreen>
       );
       _scrollToBottom(force: true);
     }
+  }
+
+  void _focusHumanRequestAnswer(HumanRequest request) {
+    final pendingRequestId = _activeRun?.pendingHumanRequestId;
+    if (pendingRequestId != request.requestId) {
+      _showChatSnackBar(
+        widget.language == AppLanguage.chinese
+            ? '这个人工确认请求已不可回答'
+            : 'This human request is no longer waiting for an answer.',
+      );
+      return;
+    }
+    _inputFocusNode.requestFocus();
+    _scrollToBottom(force: true);
+    _showChatSnackBar(
+      widget.language == AppLanguage.chinese
+          ? '请输入回答后发送'
+          : 'Type your answer and send it.',
+    );
   }
 
   Future<void> _sendRunningMessage(
@@ -6787,54 +6750,6 @@ class _ChatScreenState extends State<ChatScreen>
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  bool _isFavoriteAttachment(ChatAttachment attachment) {
-    return _activeFavoriteAttachments.any(
-      (favorite) => _favoriteMatchesAttachment(favorite, attachment),
-    );
-  }
-
-  void _toggleFavoriteAttachment(ChatAttachment attachment) {
-    final id = _attachmentFavoriteId(attachment);
-    final index = _favoriteAttachments.indexWhere(
-      (favorite) =>
-          favorite.accountId == _activeAccountId &&
-          favorite.agentId == _activeAgentId &&
-          (favorite.id == id ||
-              _favoriteMatchesAttachment(favorite, attachment)),
-    );
-    setState(() {
-      if (index == -1) {
-        _favoriteAttachments = _dedupeFavoriteAttachments([
-          FavoriteAttachment(
-            id: id,
-            attachment: attachment,
-            createdAt: DateTime.now(),
-            accountId: _activeAccountId,
-            agentId: _activeAgentId,
-          ),
-          ..._favoriteAttachments,
-        ]);
-      } else {
-        _favoriteAttachments = _dedupeFavoriteAttachments([
-          for (var i = 0; i < _favoriteAttachments.length; i++)
-            if (i != index) _favoriteAttachments[i],
-        ]);
-      }
-    });
-    unawaited(_persistFavoriteAttachments());
-  }
-
-  void _openFavoriteAttachment(ChatAttachment attachment) {
-    unawaited(
-      _openAttachment(
-        context,
-        attachment,
-        accountId: _activeAccountId,
-        agentId: _activeAgentId,
-      ),
-    );
-  }
-
   Future<void> _openConversationAttachments() async {
     final items = _activeConversationAttachments;
     _markActiveAttachmentsSeen(_activeSessionId);
@@ -6845,15 +6760,16 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (sheetContext) {
         return _ConversationAttachmentsSheet(
           items: items,
-          onOpenAttachment: (attachment) {
+          onOpenAttachment: (attachment) async {
             Navigator.of(sheetContext).pop();
-            unawaited(
-              _openAttachment(
-                context,
-                attachment,
-                accountId: _activeAccountId,
-                agentId: _activeAgentId,
-              ),
+            await Future<void>.delayed(Duration.zero);
+            if (!mounted) return;
+            await _openAttachment(
+              context,
+              attachment,
+              accountId: _activeAccountId,
+              agentId: _activeAgentId,
+              clientFuture: _getChatClient,
             );
           },
         );
@@ -6942,182 +6858,6 @@ class _ChatScreenState extends State<ChatScreen>
       _inputController.clear();
     });
     _inputFocusNode.requestFocus();
-  }
-
-  void _markEvolutionQueued(
-    String messageId,
-    List<String> reviewTypes,
-    List<sdk.EvolutionQueuedRun> runs,
-  ) {
-    final effectiveReviewTypes = runs.isEmpty
-        ? reviewTypes
-        : runs.map((run) => run.reviewType).toList(growable: false);
-    _evolutionHideTimers.remove(messageId)?.cancel();
-    _updateAssistantMessage(
-      messageId,
-      (message) => message.copyWith(
-        evolutionStatus: ChatEvolutionStatus(
-          runIds: runs.map((run) => run.id).toList(growable: false),
-          reviewTypes: effectiveReviewTypes,
-          stage: ChatEvolutionStage.reviewing,
-        ),
-      ),
-    );
-  }
-
-  void _startEvolutionResultPolling(String messageId, List<String> runIds) {
-    _evolutionPollTimers.remove(messageId)?.cancel();
-    if (runIds.isEmpty) {
-      _scheduleEvolutionStatusHide(messageId);
-      return;
-    }
-
-    var attempts = 0;
-    Future<void> poll() async {
-      if (!mounted) return;
-      attempts += 1;
-      final List<sdk.EvolutionRun> runs;
-      try {
-        final client = await _getChatClient();
-        runs = await client.listEvolutionRuns(runIds: runIds);
-      } catch (_) {
-        return;
-      }
-      if (!mounted || runs.isEmpty) return;
-      final shouldContinue = _applyEvolutionRuns(messageId, runs);
-      if (!shouldContinue) {
-        _evolutionPollTimers.remove(messageId)?.cancel();
-      } else if (attempts >= 30) {
-        _evolutionPollTimers.remove(messageId)?.cancel();
-        _updateEvolutionStatusStage(messageId, ChatEvolutionStage.failed);
-      }
-    }
-
-    unawaited(poll());
-    _evolutionPollTimers[messageId] = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => unawaited(poll()),
-    );
-  }
-
-  bool _applyEvolutionRuns(String messageId, List<sdk.EvolutionRun> runs) {
-    final hasRunning = runs.any((run) => !run.isFinished);
-    final hasFailed = runs.any(
-      (run) => run.status == sdk.EvolutionRunStatus.failed,
-    );
-    final pendingCount = runs.fold<int>(
-      0,
-      (sum, run) => sum + run.pendingCount,
-    );
-    final autoAppliedCount = runs.fold<int>(
-      0,
-      (sum, run) => sum + run.autoAppliedCount,
-    );
-    final reviewTypes = runs.map((run) => run.reviewType).toSet().toList();
-    final stage = hasRunning
-        ? ChatEvolutionStage.reviewing
-        : hasFailed
-        ? ChatEvolutionStage.failed
-        : pendingCount > 0
-        ? ChatEvolutionStage.pending
-        : autoAppliedCount > 0
-        ? ChatEvolutionStage.updated
-        : ChatEvolutionStage.reviewed;
-
-    _updateAssistantMessage(
-      messageId,
-      (message) => message.copyWith(
-        evolutionStatus: ChatEvolutionStatus(
-          runIds: runs.map((run) => run.id).toList(growable: false),
-          reviewTypes: reviewTypes,
-          stage: stage,
-          autoAppliedCount: autoAppliedCount,
-          pendingCount: pendingCount,
-        ),
-      ),
-    );
-    if (stage == ChatEvolutionStage.reviewed) {
-      _scheduleEvolutionStatusHide(messageId);
-    }
-    return hasRunning;
-  }
-
-  void _updateEvolutionStatusStage(String messageId, ChatEvolutionStage stage) {
-    _updateAssistantMessage(messageId, (message) {
-      final status = message.evolutionStatus;
-      if (status == null) return message;
-      return message.copyWith(
-        evolutionStatus: ChatEvolutionStatus(
-          runIds: status.runIds,
-          reviewTypes: status.reviewTypes,
-          stage: stage,
-          autoAppliedCount: status.autoAppliedCount,
-          pendingCount: status.pendingCount,
-        ),
-      );
-    });
-  }
-
-  Future<void> _refreshPendingEvolutionFromSkills() async {
-    final List<Map<String, dynamic>> pending;
-    try {
-      final client = await _getChatClient();
-      pending = await client.listPendingEvolution();
-    } catch (_) {
-      return;
-    }
-    if (!mounted) return;
-
-    final normalizedAgentId = _normalizeSkillGovernanceAgentId(_activeAgentId);
-    final pendingCount = pending
-        .where(
-          (item) =>
-              _normalizeSkillGovernanceAgentId(
-                item['agent_id'] as String? ?? '',
-              ) ==
-              normalizedAgentId,
-        )
-        .length;
-    final pendingMessages = _messages
-        .where(
-          (message) =>
-              message.evolutionStatus?.stage == ChatEvolutionStage.pending,
-        )
-        .map((message) => message.id)
-        .toList();
-
-    for (final messageId in pendingMessages) {
-      _updateAssistantMessage(messageId, (message) {
-        final status = message.evolutionStatus;
-        if (status == null) return message;
-        return message.copyWith(
-          evolutionStatus: ChatEvolutionStatus(
-            runIds: status.runIds,
-            reviewTypes: status.reviewTypes,
-            stage: pendingCount == 0
-                ? ChatEvolutionStage.reviewed
-                : ChatEvolutionStage.pending,
-            autoAppliedCount: status.autoAppliedCount,
-            pendingCount: pendingCount,
-          ),
-        );
-      });
-      if (pendingCount == 0) {
-        _scheduleEvolutionStatusHide(messageId);
-      }
-    }
-  }
-
-  void _scheduleEvolutionStatusHide(String messageId) {
-    _evolutionHideTimers.remove(messageId)?.cancel();
-    _evolutionHideTimers[messageId] = Timer(const Duration(seconds: 4), () {
-      if (!mounted) return;
-      _updateAssistantMessage(
-        messageId,
-        (message) => message.copyWith(clearEvolutionStatus: true),
-      );
-      _evolutionHideTimers.remove(messageId);
-    });
   }
 
   void _markHumanRequestAnswered(String sessionId, String requestId) {
@@ -7380,6 +7120,7 @@ class _ChatScreenState extends State<ChatScreen>
     String sessionId,
     String messageId, {
     required String agentId,
+    DateTime? producedSince,
   }) async {
     final message = _messageById(messageId);
     if (message == null) return;
@@ -7387,6 +7128,11 @@ class _ChatScreenState extends State<ChatScreen>
     if (producedText.trim().isNotEmpty) {
       _appendProducedFileAttachments(sessionId, producedText, agentId: agentId);
     }
+    await _appendRecentApkAttachments(
+      sessionId,
+      agentId: agentId,
+      producedSince: producedSince,
+    );
     await _appendInlineHtmlAttachment(sessionId, messageId);
     _flushPendingAssistantAttachments(sessionId, messageId);
   }
@@ -7407,14 +7153,13 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   /// Tools whose result reliably names files the assistant actually created or
-  /// modified — these explicitly declare the affected paths in their structured
-  /// result. `shell` is intentionally excluded: its result is plain
-  /// stdout/stderr with no file manifest, so (matching Codex) files written as
-  /// a side effect of shell commands are NOT surfaced as generated attachments.
-  /// This avoids noise like a `python -m venv` run dumping the whole venv tree.
+  /// modified. `shell` is still excluded for generic files because its side
+  /// effects can be huge/noisy (for example a venv or build tree), but APKs get
+  /// a narrow exception: build commands commonly produce an installable APK
+  /// without going through write_file/apply_patch.
   bool _isGeneratedFileTool(String toolName) {
     return switch (_canonicalToolName(toolName)) {
-      'write_file' || 'apply_patch' => true,
+      'write_file' || 'apply_patch' || 'shell' => true,
       _ => false,
     };
   }
@@ -7439,12 +7184,45 @@ class _ChatScreenState extends State<ChatScreen>
     AgentToolCall toolCall,
   ) {
     final canonicalName = _canonicalToolName(toolCall.name);
+    if (canonicalName == 'shell') {
+      _appendApkPathsFromShellToolCall(buffer, toolCall);
+      return;
+    }
     if (canonicalName != 'write_file' && canonicalName != 'apply_patch') {
       return;
     }
     for (final file in _collectWriteFileResults(toolCall)) {
       if (file.action == 'deleted' || file.path.trim().isEmpty) continue;
       buffer.writeln(file.path);
+    }
+  }
+
+  void _appendApkPathsFromShellToolCall(
+    StringBuffer buffer,
+    AgentToolCall toolCall,
+  ) {
+    final text = StringBuffer()
+      ..writeln(toolCall.arguments)
+      ..writeln(toolCall.streamingOutput)
+      ..writeln(toolCall.output ?? '');
+    for (final chunk in toolCall.outputChunks) {
+      text.writeln(chunk.content);
+    }
+    final seen = <String>{};
+    for (final match in RegExp(
+      r'''(?:^|[\s"'`=:\[\](),])([^\s"'`<>|]+\.apk)(?=$|[\s"'`<>|,).])''',
+      caseSensitive: false,
+      multiLine: true,
+    ).allMatches(text.toString())) {
+      final raw = match.group(1)?.trim();
+      if (raw == null || raw.isEmpty) continue;
+      final candidate = raw.replaceAll(RegExp(r'[),.;]+$'), '');
+      if (!candidate.toLowerCase().endsWith('.apk')) continue;
+      if (seen.add(candidate)) buffer.writeln(candidate);
+      if (!candidate.startsWith('/') && !candidate.contains('://')) {
+        final workspaceCandidate = '/workspace/$candidate';
+        if (seen.add(workspaceCandidate)) buffer.writeln(workspaceCandidate);
+      }
     }
   }
 
@@ -7480,6 +7258,76 @@ $candidate
 </body>
 </html>
 ''';
+  }
+
+  Future<void> _appendRecentApkAttachments(
+    String sessionId, {
+    required String agentId,
+    DateTime? producedSince,
+  }) async {
+    if (!sdk.NapaxiFileBridge.isInitialized) return;
+    final since = producedSince?.subtract(const Duration(minutes: 2));
+    if (since == null) return;
+
+    final bridge = sdk.NapaxiFileBridge.instance;
+    final workspaceDir = bridge.workspaceDirScoped(
+      accountId: _activeAccountId,
+      agentId: agentId,
+    );
+    if (!await workspaceDir.exists()) return;
+
+    final attachments = <ChatAttachment>[];
+    var visited = 0;
+    const maxVisited = 30000;
+    const maxApks = 20;
+    try {
+      await for (final entity in workspaceDir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (++visited > maxVisited || attachments.length >= maxApks) break;
+        if (entity is! File || !entity.path.toLowerCase().endsWith('.apk')) {
+          continue;
+        }
+        DateTime modified;
+        try {
+          modified = await entity.lastModified();
+        } catch (_) {
+          continue;
+        }
+        if (modified.isBefore(since)) continue;
+        final sandboxPath = bridge.realToSandboxScoped(
+          entity.path,
+          accountId: _activeAccountId,
+          agentId: agentId,
+        );
+        if (sandboxPath == null || sandboxPath.trim().isEmpty) continue;
+        attachments.add(
+          ChatAttachment(
+            name: entity.uri.pathSegments.isEmpty
+                ? 'app.apk'
+                : entity.uri.pathSegments.last,
+            path: entity.path,
+            sandboxPath: sandboxPath,
+            type: ChatAttachmentType.file,
+            mimeTypeOverride: 'application/vnd.android.package-archive',
+          ),
+        );
+      }
+    } catch (_) {
+      return;
+    }
+    if (attachments.isEmpty) return;
+    attachments.sort((a, b) {
+      try {
+        return File(
+          b.path,
+        ).lastModifiedSync().compareTo(File(a.path).lastModifiedSync());
+      } catch (_) {
+        return 0;
+      }
+    });
+    _queueAssistantAttachments(sessionId, attachments);
   }
 
   void _appendProducedFileAttachments(
@@ -9347,79 +9195,6 @@ $candidate
     unawaited(_showSettingsSheet(_SettingsSection.scenarios));
   }
 
-  void _openSkillOrganizeFromChat(ChatMessage message) {
-    final status = message.evolutionStatus;
-    if (status == null || status.stage != ChatEvolutionStage.pending) return;
-    _dismissKeyboard();
-    // Show a unified pending sheet that displays both memory and skill
-    // suggestions. The sheet internally filters by type and shows all items.
-    _showMemoryPendingSheet(message.id);
-  }
-
-  void _showMemoryPendingSheet(String messageId) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        minChildSize: 0.3,
-        maxChildSize: 0.85,
-        expand: false,
-        builder: (context, scrollController) => _MemoryPendingSheet(
-          clientFuture: _getChatClient(),
-          scrollController: scrollController,
-          onApplied: () {
-            unawaited(_refreshEvolutionStatus(messageId));
-          },
-        ),
-      ),
-    );
-  }
-
-  Future<void> _refreshEvolutionStatus(String messageId) async {
-    // Re-query pending count — only clear the badge when nothing is left.
-    final List<Map<String, dynamic>> pending;
-    try {
-      final client = await _getChatClient();
-      pending = await client.listPendingEvolution();
-    } catch (_) {
-      return;
-    }
-    if (!mounted) return;
-    final normalizedAgentId = _normalizeSkillGovernanceAgentId(_activeAgentId);
-    final pendingCount = pending
-        .where(
-          (item) =>
-              _normalizeSkillGovernanceAgentId(
-                item['agent_id'] as String? ?? '',
-              ) ==
-              normalizedAgentId,
-        )
-        .length;
-    if (pendingCount == 0) {
-      _updateEvolutionStatusStage(messageId, ChatEvolutionStage.reviewed);
-      _scheduleEvolutionStatusHide(messageId);
-    } else {
-      _updateAssistantMessage(messageId, (message) {
-        final status = message.evolutionStatus;
-        if (status == null) return message;
-        return message.copyWith(
-          evolutionStatus: ChatEvolutionStatus(
-            runIds: status.runIds,
-            reviewTypes: status.reviewTypes,
-            stage: ChatEvolutionStage.pending,
-            autoAppliedCount: status.autoAppliedCount,
-            pendingCount: pendingCount,
-          ),
-        );
-      });
-    }
-  }
-
   void _closeSessionHistory() {
     if (_isSessionHistorySearching) {
       _handleSessionHistorySearchModeChanged(false);
@@ -9516,7 +9291,9 @@ $candidate
     final totalDelta = event.position - start;
     final isProjectBackGesture =
         _isActiveProjectChat || _primaryView == _ChatPrimaryView.projectDetail;
-    final horizontalThreshold = isProjectBackGesture ? 56.0 : 8.0;
+    final horizontalThreshold = isProjectBackGesture
+        ? _projectBackHorizontalDragThreshold
+        : _sessionMenuOpenDragThreshold;
     final isHorizontalOpenDrag =
         totalDelta.dx > horizontalThreshold &&
         totalDelta.dx.abs() > totalDelta.dy.abs() * 1.2;
@@ -9726,7 +9503,6 @@ $candidate
       child: _SkillsPage(
         clientFuture: _primarySkillsClientFuture ??= _buildSkillsClientFuture(),
         agentId: _activeAgentId,
-        onPendingEvolutionChanged: _refreshPendingEvolutionFromSkills,
         onMenu: _openSessionHistory,
       ),
     );
@@ -9784,7 +9560,6 @@ $candidate
                     .where((project) => project.agentId == _activeAgentId)
                     .toList(growable: false),
                 projectSessionIds: _activeProjectSessionMap(),
-                favoriteAttachments: _activeFavoriteAttachments,
                 initialView: _sessionHistoryInitialView,
                 initialSettingsSection: _sessionHistoryInitialSettingsSection,
                 initialSkillsTab: _sessionHistoryInitialSkillsTab,
@@ -9803,8 +9578,6 @@ $candidate
                 onConfigChanged: _handleConfigChanged,
                 onLanguageChanged: widget.onLanguageChanged,
                 onEngineConfigChanged: _handleEngineConfigChanged,
-                onFavoriteTap: _openFavoriteAttachment,
-                onFavoriteRemove: _toggleFavoriteAttachment,
                 onCheckForUpdates: () => _checkForUpdates(automatic: false),
                 onNearbyStart: () => _setA2AConnectionAllowedFromSettings(true),
                 onNearbyStop: () => _setA2AConnectionAllowedFromSettings(false),
@@ -9844,7 +9617,6 @@ $candidate
                 onSessionDelete: (sessionId) {
                   unawaited(_confirmDeleteSession(sessionId));
                 },
-                onPendingEvolutionChanged: _refreshPendingEvolutionFromSkills,
               ),
             ),
           ),
@@ -9860,6 +9632,12 @@ $candidate
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    if (!_initialStateRestored && !_usesInjectedChatClient) {
+      return const Scaffold(
+        key: Key('chat_root_scaffold'),
+        body: SizedBox.expand(),
+      );
+    }
     final keyboardVisible =
         MediaQuery.viewInsetsOf(context).bottom > 0 &&
         !_isSessionHistorySearching;
@@ -10004,10 +9782,6 @@ $candidate
                                                       accountId:
                                                           _activeAccountId,
                                                       agentId: _activeAgentId,
-                                                      isFavoriteAttachment:
-                                                          _isFavoriteAttachment,
-                                                      onToggleFavoriteAttachment:
-                                                          _toggleFavoriteAttachment,
                                                     );
                                                   }
                                                   final message =
@@ -10021,12 +9795,6 @@ $candidate
                                                         _loadFullHistoryToolCall,
                                                     onOpenConfiguration:
                                                         _openModelSettingsPage,
-                                                    isFavoriteAttachment:
-                                                        _isFavoriteAttachment,
-                                                    onToggleFavoriteAttachment:
-                                                        _toggleFavoriteAttachment,
-                                                    onOpenSkillOrganize:
-                                                        _openSkillOrganizeFromChat,
                                                     onCopyUserMessage:
                                                         (message) {
                                                           unawaited(
@@ -10049,6 +9817,8 @@ $candidate
                                                             ),
                                                           );
                                                         },
+                                                    onFocusHumanRequest:
+                                                        _focusHumanRequestAnswer,
                                                     aggregatedAttachmentIdentities:
                                                         generatedIdentities,
                                                   );

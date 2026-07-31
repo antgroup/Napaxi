@@ -35,17 +35,19 @@ pub(crate) async fn export_prompt_skills(
 ) -> Result<SkillExportReport, String> {
     let agent_id = normalize_agent_id(agent_id);
     let target_root = prompt_skills_dir(files_dir);
-    rebuild_empty_dir(&target_root).await?;
+    prepare_mirror_root(&target_root).await?;
 
     let registry = registry(files_dir, &agent_id).await;
     let mut exported = Vec::new();
     let mut skipped = Vec::new();
+    let mut active_safe_names = std::collections::BTreeSet::new();
     for skill in registry.skills_for_user(&agent_id) {
         let name = skill.name();
         let Ok(safe_name) = safe_skill_name(name) else {
             skipped.push(name.to_string());
             continue;
         };
+        active_safe_names.insert(safe_name.to_string());
         let Some(source_dir) = skill_source_dir(&skill) else {
             skipped.push(name.to_string());
             continue;
@@ -63,6 +65,7 @@ pub(crate) async fn export_prompt_skills(
             }
         }
     }
+    remove_stale_skill_dirs(&target_root, &active_safe_names).await?;
     exported.sort();
     skipped.sort();
     Ok(SkillExportReport {
@@ -79,21 +82,54 @@ pub(crate) fn prompt_skills_dir(files_dir: &str) -> PathBuf {
     Path::new(files_dir).join(PROMPT_SKILLS_DIR)
 }
 
-async fn rebuild_empty_dir(path: &Path) -> Result<(), String> {
-    if let Ok(metadata) = tokio::fs::symlink_metadata(path).await {
-        if metadata.file_type().is_symlink() || metadata.is_file() {
-            tokio::fs::remove_file(path)
-                .await
-                .map_err(|e| format!("remove prompt skills file {}: {e}", path.display()))?;
-        } else if metadata.is_dir() {
-            tokio::fs::remove_dir_all(path)
-                .await
-                .map_err(|e| format!("remove prompt skills mirror {}: {e}", path.display()))?;
-        }
+async fn prepare_mirror_root(path: &Path) -> Result<(), String> {
+    if let Ok(metadata) = tokio::fs::symlink_metadata(path).await
+        && (metadata.file_type().is_symlink() || metadata.is_file())
+    {
+        tokio::fs::remove_file(path)
+            .await
+            .map_err(|e| format!("remove prompt skills file {}: {e}", path.display()))?;
     }
     tokio::fs::create_dir_all(path)
         .await
         .map_err(|e| format!("create prompt skills mirror {}: {e}", path.display()))
+}
+
+async fn remove_stale_skill_dirs(
+    target_root: &Path,
+    active_safe_names: &std::collections::BTreeSet<String>,
+) -> Result<(), String> {
+    let mut entries = tokio::fs::read_dir(target_root)
+        .await
+        .map_err(|e| format!("read prompt skills mirror {}: {e}", target_root.display()))?;
+    while let Some(entry) = entries.next_entry().await.map_err(|e| {
+        format!(
+            "read prompt skills mirror entry {}: {e}",
+            target_root.display()
+        )
+    })? {
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
+            continue;
+        };
+        if active_safe_names.contains(name) {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(metadata) = tokio::fs::symlink_metadata(&path).await else {
+            continue;
+        };
+        if metadata.is_dir() && !metadata.file_type().is_symlink() {
+            tokio::fs::remove_dir_all(&path)
+                .await
+                .map_err(|e| format!("remove stale exported skill {}: {e}", path.display()))?;
+        } else {
+            tokio::fs::remove_file(&path)
+                .await
+                .map_err(|e| format!("remove stale exported skill file {}: {e}", path.display()))?;
+        }
+    }
+    Ok(())
 }
 
 fn skill_source_dir(skill: &napaxi_skills::LoadedSkill) -> Option<&Path> {

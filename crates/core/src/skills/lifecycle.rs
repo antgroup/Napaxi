@@ -8,7 +8,7 @@ use super::afs::registry;
 use super::limits::{MAX_EXTRA_FILE_SIZE, invalid_handle_json};
 use super::paths::{
     agent_skills_dir, archive_dir, backups_dir, normalize_agent_id, safe_skill_relative_path,
-    skill_dir_path, skill_target_path, validate_delete_target,
+    skill_dir_path, validate_delete_target,
 };
 use super::types::{ArchivedSkillRecord, SkillBackup, SkillLifecycleState};
 use super::usage::{
@@ -38,7 +38,12 @@ pub async fn list_skills_handle(handle: i64, agent_id: &str) -> String {
 pub async fn remove_skill(files_dir: &str, agent_id: &str, skill_name: &str) -> bool {
     let agent_id = normalize_agent_id(agent_id);
     let registry = registry(files_dir, &agent_id).await;
-    registry.remove_skill(skill_name, &agent_id).await.is_ok()
+    if registry.remove_skill(skill_name, &agent_id).await.is_err() {
+        return false;
+    }
+    super::export::export_prompt_skills(files_dir, &agent_id)
+        .await
+        .is_ok()
 }
 
 pub async fn remove_skill_handle(handle: i64, agent_id: &str, skill_name: &str) -> bool {
@@ -50,6 +55,9 @@ pub async fn remove_skill_handle(handle: i64, agent_id: &str, skill_name: &str) 
 
 pub async fn reload_skills(files_dir: &str, agent_id: &str) -> String {
     let agent_id = normalize_agent_id(agent_id);
+    if let Err(error) = super::export::export_prompt_skills(files_dir, &agent_id).await {
+        return serde_json::json!({"error": error}).to_string();
+    }
     let registry = registry(files_dir, &agent_id).await;
     let names: Vec<_> = registry
         .skills_for_user(&agent_id)
@@ -147,7 +155,10 @@ pub async fn pin_skill_handle(
 pub async fn archive_skill(files_dir: &str, agent_id: &str, skill_name: &str) -> String {
     let agent_id = normalize_agent_id(agent_id);
     match archive_skill_dir(files_dir, &agent_id, skill_name, None).await {
-        Ok(record) => serde_json::json!({"success": true, "archive": record}).to_string(),
+        Ok(record) => match super::export::export_prompt_skills(files_dir, &agent_id).await {
+            Ok(_) => serde_json::json!({"success": true, "archive": record}).to_string(),
+            Err(error) => serde_json::json!({"error": error}).to_string(),
+        },
         Err(error) => serde_json::json!({"error": error}).to_string(),
     }
 }
@@ -162,7 +173,10 @@ pub async fn archive_skill_handle(handle: i64, agent_id: &str, skill_name: &str)
 pub async fn restore_skill(files_dir: &str, agent_id: &str, skill_name: &str) -> String {
     let agent_id = normalize_agent_id(agent_id);
     match restore_archived_skill_dir(files_dir, &agent_id, skill_name).await {
-        Ok(record) => serde_json::json!({"success": true, "restore": record}).to_string(),
+        Ok(record) => match super::export::export_prompt_skills(files_dir, &agent_id).await {
+            Ok(_) => serde_json::json!({"success": true, "restore": record}).to_string(),
+            Err(error) => serde_json::json!({"error": error}).to_string(),
+        },
         Err(error) => serde_json::json!({"error": error}).to_string(),
     }
 }
@@ -188,17 +202,25 @@ pub async fn read_skill_support_file(
         }
         Err(error) => return serde_json::json!({"error": error}).to_string(),
     };
-    let target = match skill_target_path(
-        files_dir,
-        &agent_id,
-        skill_name,
-        Some(&relative_path.display().to_string()),
-    ) {
-        Ok(path) => path,
-        Err(error) => return serde_json::json!({"error": error}).to_string(),
+    let active_registry = registry(files_dir, &agent_id).await;
+    let skill = match active_registry.find_by_name_for_user(skill_name, &agent_id) {
+        Some(skill) => skill,
+        None => {
+            return serde_json::json!({"error": format!("Skill '{}' was not found", skill_name)})
+                .to_string();
+        }
     };
+    let skill_dir = match skill_source_dir(&skill) {
+        Some(dir) => dir.to_path_buf(),
+        None => {
+            return serde_json::json!({"error": "skill source has no readable directory"})
+                .to_string();
+        }
+    };
+    let target = skill_dir.join(&relative_path);
     if let Err(error) =
-        ensure_support_path_contained(files_dir, &agent_id, skill_name, &target).await
+        ensure_support_path_contained(&skill_dir, &target, &relative_path.display().to_string())
+            .await
     {
         return serde_json::json!({"error": error}).to_string();
     }
@@ -296,18 +318,20 @@ fn is_hidden_skill_path(path: &Path, skill_dir: &Path) -> bool {
 }
 
 async fn ensure_support_path_contained(
-    files_dir: &str,
-    agent_id: &str,
-    skill_name: &str,
+    skill_dir: &Path,
     target: &Path,
+    relative_path: &str,
 ) -> Result<(), String> {
-    let skill_dir = skill_dir_path(files_dir, agent_id, skill_name)?;
-    let root = tokio::fs::canonicalize(&skill_dir)
+    let root = tokio::fs::canonicalize(skill_dir)
         .await
         .map_err(|e| format!("canonicalize {}: {e}", skill_dir.display()))?;
-    let target = tokio::fs::canonicalize(target)
-        .await
-        .map_err(|e| format!("canonicalize support file: {e}"))?;
+    let target = tokio::fs::canonicalize(target).await.map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            format!("support file not found: {relative_path}")
+        } else {
+            format!("canonicalize support file {relative_path}: {e}")
+        }
+    })?;
     if target.starts_with(&root) {
         Ok(())
     } else {

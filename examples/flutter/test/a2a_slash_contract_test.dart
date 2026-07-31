@@ -137,7 +137,7 @@ void main() {
     expect(source, contains('!message.isStreaming'));
     expect(source, contains('message.content.trim().isNotEmpty'));
     expect(
-      bubbleSource,
+      bubbleSource.replaceAll(RegExp(r'\s+'), ' '),
       contains(
         'if (message.content.isEmpty && !hasVisibleAgentTrace && message.isStreaming)',
       ),

@@ -1549,6 +1549,19 @@ public class NapaxiEngine private constructor(
             .put("session_key_json", session.toJson()),
     )
 
+    public fun deleteCodexAgentEngineThread(
+        threadId: String,
+        session: SessionKey,
+        agentId: String = "engine.codex",
+    ): CodexAgentEngineHistoryResult = queryCodexAgentEngineHistory(
+        JSONObject()
+            .put("operation", "history_delete_thread")
+            .put("thread_id", threadId)
+            .put("account_id", session.accountId)
+            .put("agent_id", agentId)
+            .put("session_key_json", session.toJson()),
+    )
+
     private fun queryCodexAgentEngineHistory(request: JSONObject): CodexAgentEngineHistoryResult =
         CodexAgentEngineHistoryResult(
             bridge(

@@ -315,11 +315,6 @@ class AppStrings {
     required this.removeSkillConfirmationTitle,
     required this.removeSkillConfirmationMessage,
     required this.configureToViewSkills,
-    required this.favorites,
-    required this.noFavoritesTitle,
-    required this.noFavoritesDescription,
-    required this.addFavorite,
-    required this.removeFavorite,
     required this.recent,
     required this.currentChat,
     required this.pinned,
@@ -657,11 +652,6 @@ class AppStrings {
   final String removeSkillConfirmationTitle;
   final String Function(String name) removeSkillConfirmationMessage;
   final String configureToViewSkills;
-  final String favorites;
-  final String noFavoritesTitle;
-  final String noFavoritesDescription;
-  final String addFavorite;
-  final String removeFavorite;
   final String recent;
   final String currentChat;
   final String pinned;
@@ -1044,11 +1034,6 @@ class AppStrings {
     removeSkillConfirmationMessage: (name) => 'Remove "$name" from this agent?',
     configureToViewSkills:
         'Configure an LLM model and API key before managing skills.',
-    favorites: 'Favorites',
-    noFavoritesTitle: 'No favorites yet',
-    noFavoritesDescription: 'Tap the star on any attachment to keep it here.',
-    addFavorite: 'Add to favorites',
-    removeFavorite: 'Remove from favorites',
     recent: 'Recent',
     currentChat: 'Current',
     pinned: 'Pinned',
@@ -1398,11 +1383,6 @@ class AppStrings {
     removeSkillConfirmationTitle: '移除技能？',
     removeSkillConfirmationMessage: (name) => '确定从当前 Agent 移除“$name”吗？',
     configureToViewSkills: '请先配置 LLM 模型和 API Key，再管理技能。',
-    favorites: '收藏',
-    noFavoritesTitle: '还没有收藏',
-    noFavoritesDescription: '点击任意附件上的星星，就会保存在这里。',
-    addFavorite: '收藏附件',
-    removeFavorite: '取消收藏',
     recent: '最近',
     currentChat: '当前',
     pinned: '已置顶',

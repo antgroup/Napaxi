@@ -722,6 +722,78 @@ async fn legacy_skill_path_is_still_readable() {
 }
 
 #[tokio::test]
+async fn app_bundled_android_apk_build_overrides_stale_agent_copy() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy();
+    let root = tmp.path().join("agent_runtime/skills");
+    let app_dir = root.join("app_bundled/android-apk-build");
+    let agent_dir = root.join("agents/napaxi/android-apk-build");
+    tokio::fs::create_dir_all(app_dir.join("scripts"))
+        .await
+        .unwrap();
+    tokio::fs::create_dir_all(&agent_dir).await.unwrap();
+    tokio::fs::write(
+        app_dir.join("SKILL.md"),
+        "---
+name: android-apk-build
+description: bundled copy
+version: 2.0.0
+---
+
+Bundled copy.
+",
+    )
+    .await
+    .unwrap();
+    tokio::fs::write(
+        agent_dir.join("SKILL.md"),
+        "---
+name: android-apk-build
+description: stale agent copy
+version: 1.0.0
+---
+
+Stale agent copy.
+",
+    )
+    .await
+    .unwrap();
+    tokio::fs::write(app_dir.join("scripts/build_apk.sh"), "echo bundled build")
+        .await
+        .unwrap();
+
+    let active = active_skill_prompt_with_metadata(&files_dir, "", "android apk").await;
+    assert!(active.catalog_prompt.contains("bundled copy"));
+    assert!(!active.catalog_prompt.contains("stale agent copy"));
+
+    let detail: serde_json::Value =
+        serde_json::from_str(&get_skill(&files_dir, "", "android-apk-build").await).unwrap();
+    assert_eq!(detail["version"], "2.0.0");
+    assert!(detail["source"].as_str().unwrap().contains("Bundled"));
+    assert!(
+        detail["support_files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|path| path == "scripts/build_apk.sh")
+    );
+
+    let support =
+        read_skill_support_file(&files_dir, "", "android-apk-build", "scripts/build_apk.sh").await;
+    assert!(support.contains(r#""content":"echo bundled build""#));
+    assert!(!support.contains("support file not found"));
+
+    export_prompt_skills(&files_dir, "").await.unwrap();
+    let mirrored_script = tmp
+        .path()
+        .join("prompt_skills/android-apk-build/scripts/build_apk.sh");
+    assert_eq!(
+        tokio::fs::read_to_string(mirrored_script).await.unwrap(),
+        "echo bundled build"
+    );
+}
+
+#[tokio::test]
 async fn source_registry_priority_prefers_agent_created_skill() {
     let tmp = tempfile::tempdir().unwrap();
     let files_dir = tmp.path().to_string_lossy();
@@ -1547,6 +1619,59 @@ fn rejects_unsafe_zip_entries() {
     let bytes = zip_skill_fixture(&[("../SKILL.md", SKILL.as_bytes())]);
     let err = extract_skill_from_zip_bytes(&bytes).unwrap_err();
     assert!(err.contains("unsafe ZIP entry path"));
+}
+
+#[tokio::test]
+async fn install_bundle_syncs_nested_support_files_to_prompt_skills_mirror() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy();
+    let helper = base64::engine::general_purpose::STANDARD.encode("echo nested");
+    let asset = base64::engine::general_purpose::STANDARD.encode("asset payload");
+    let payload = serde_json::json!({
+        "skill_md": SKILL,
+        "extra_files": [
+            {"path": "scripts/nested/run.sh", "content_base64": helper},
+            {"path": "assets/images/icon.txt", "content_base64": asset}
+        ]
+    });
+
+    let result = install_skill(&files_dir, "", &payload.to_string()).await;
+    let value: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(value["success"], true, "{result}");
+
+    let mirror = tmp.path().join("prompt_skills/demo-skill");
+    assert_eq!(
+        tokio::fs::read_to_string(mirror.join("scripts/nested/run.sh"))
+            .await
+            .unwrap(),
+        "echo nested"
+    );
+    assert_eq!(
+        tokio::fs::read_to_string(mirror.join("assets/images/icon.txt"))
+            .await
+            .unwrap(),
+        "asset payload"
+    );
+}
+
+#[tokio::test]
+async fn remove_skill_syncs_prompt_skills_mirror() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy();
+    assert!(
+        install_skill(&files_dir, "", SKILL)
+            .await
+            .contains(r#""success":true"#)
+    );
+    assert!(
+        tmp.path()
+            .join("prompt_skills/demo-skill/SKILL.md")
+            .exists()
+    );
+
+    assert!(remove_skill(&files_dir, "", "demo-skill").await);
+
+    assert!(!tmp.path().join("prompt_skills/demo-skill").exists());
 }
 
 #[tokio::test]

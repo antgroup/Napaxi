@@ -625,6 +625,20 @@ public final class NapaxiEngine: @unchecked Sendable {
         ])
     }
 
+    public func deleteCodexAgentEngineThread(
+        _ threadId: String,
+        session: NapaxiSessionKey,
+        agentId: String = "engine.codex"
+    ) throws -> NapaxiCodexAgentEngineHistoryResult {
+        try queryCodexAgentEngineHistory([
+            "operation": .string("history_delete_thread"),
+            "thread_id": .string(threadId),
+            "account_id": .string(session.accountId),
+            "agent_id": .string(agentId),
+            "session_key_json": .string(try session.jsonString()),
+        ])
+    }
+
     private func queryCodexAgentEngineHistory(
         _ request: [String: NapaxiJSONValue]
     ) throws -> NapaxiCodexAgentEngineHistoryResult {
