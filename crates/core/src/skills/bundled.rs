@@ -149,7 +149,7 @@ mod tests {
         assert!(base.join(".version").exists());
 
         let version = std::fs::read_to_string(base.join(".version")).unwrap();
-        assert_eq!(version.trim(), "10");
+        assert_eq!(version.trim(), BUNDLED_VERSION.to_string());
     }
 
     #[test]
