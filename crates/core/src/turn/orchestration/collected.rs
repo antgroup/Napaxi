@@ -50,6 +50,7 @@ where
         tools.as_ref(),
         &extra_tools,
         is_group_context,
+        agent_engine.as_ref(),
         &mut context,
         hooks,
     )
@@ -300,6 +301,7 @@ where
                     tools.as_ref(),
                     &extra_tools,
                     is_group_context,
+                    agent_engine.as_ref(),
                     &mut context,
                     hooks,
                 )

@@ -239,6 +239,7 @@ async fn chat_config_includes_workspace_host_time_and_shell_context() {
             has_shell_tool: true,
             has_browser_tool: false,
             is_group_context: false,
+            include_first_run_bootstrap: true,
         },
     )
     .await;
@@ -294,6 +295,7 @@ async fn chat_config_includes_enabled_scene_guidance() {
             has_shell_tool: false,
             has_browser_tool: false,
             is_group_context: false,
+            include_first_run_bootstrap: true,
         },
     )
     .await;

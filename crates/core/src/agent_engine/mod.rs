@@ -142,6 +142,12 @@ pub(crate) fn normalize_engine_id(engine_id: &str) -> String {
     }
 }
 
+pub(crate) fn selection_is_codex(selection: Option<&AgentEngineSelection>) -> bool {
+    selection
+        .map(|selection| normalize_engine_id(&selection.engine_id) == CODEX_ENGINE_ID)
+        .unwrap_or(false)
+}
+
 pub(crate) fn selection_from_definition(
     definition: Option<&crate::agent_definitions::AgentDefinition>,
 ) -> AgentEngineSelection {

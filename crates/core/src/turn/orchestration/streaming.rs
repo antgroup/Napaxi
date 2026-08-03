@@ -58,6 +58,7 @@ pub(crate) async fn stream_turn_with_hooks<H, E, C>(
             tools.as_ref(),
             &extra_tools,
             is_group_context,
+            agent_engine.as_ref(),
             &mut context,
             &mut prepare_hooks,
         )
@@ -371,6 +372,7 @@ pub(crate) async fn stream_turn_with_hooks<H, E, C>(
                         tools.as_ref(),
                         &extra_tools,
                         is_group_context,
+                        agent_engine.as_ref(),
                         &mut context,
                         &mut prepare_hooks,
                     )

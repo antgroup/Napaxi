@@ -61,6 +61,7 @@ pub(crate) async fn prepare_turn(
         tools,
         extra_tools,
         is_group_context,
+        None,
         &mut context,
         &mut hooks,
     )
@@ -79,6 +80,7 @@ pub(crate) async fn prepare_turn_with_hooks<H>(
     tools: Option<&Arc<ToolRegistry>>,
     extra_tools: &[ToolDescriptor],
     is_group_context: bool,
+    agent_engine: Option<&crate::agent_engine::AgentEngineSelection>,
     context: &mut TurnLifecycleContext,
     hooks: &mut H,
 ) -> std::result::Result<PreparedTurn, ChatEvent>
@@ -128,6 +130,7 @@ where
             has_shell_tool,
             has_browser_tool,
             is_group_context,
+            include_first_run_bootstrap: !crate::agent_engine::selection_is_codex(agent_engine),
         },
     )
     .await;
@@ -226,6 +229,7 @@ pub(crate) async fn reprepare_turn_after_context_overflow_with_hooks<H>(
     tools: Option<&Arc<ToolRegistry>>,
     extra_tools: &[ToolDescriptor],
     is_group_context: bool,
+    agent_engine: Option<&crate::agent_engine::AgentEngineSelection>,
     context: &mut TurnLifecycleContext,
     hooks: &mut H,
 ) -> std::result::Result<PreparedTurn, ChatEvent>
@@ -276,6 +280,7 @@ where
             has_shell_tool,
             has_browser_tool,
             is_group_context,
+            include_first_run_bootstrap: !crate::agent_engine::selection_is_codex(agent_engine),
         },
     )
     .await;
