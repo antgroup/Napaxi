@@ -180,9 +180,11 @@ async fn search_bing(
     language: &str,
     freshness: &str,
 ) -> Result<Vec<SearchResult>, String> {
+    let encoded_query = urlencoding::encode(query);
     let mut url = format!(
-        "https://www.bing.com/search?q={}&setlang={}&cc=&count={}",
-        urlencoding::encode(query),
+        "https://www.bing.com/search?q={}&pq={}&setlang={}&cc=&count={}",
+        encoded_query.as_ref(),
+        encoded_query.as_ref(),
         urlencoding::encode(language),
         count * 2,
     );
