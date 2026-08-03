@@ -577,3 +577,113 @@ async fn trusted_allow_still_rejects_hard_gate() {
         .unwrap_err();
     assert!(error.contains("blocked"), "got: {error}");
 }
+
+#[test]
+fn platform_tools_require_mobile_platform_and_host_bridge() {
+    let context = BuiltinToolContext {
+        files_dir: "/tmp/napaxi".to_string(),
+        workspace_files_dir: "/tmp/napaxi/workspace-files".to_string(),
+        agent_id: "agent".to_string(),
+        platform: "android".to_string(),
+        native_library_dir: None,
+        account_id: "user".to_string(),
+        approval_bridge: None,
+        llm_config: PlatformLlmConfig::default(),
+        current_thread_id: None,
+    };
+    let (tools, _) = builtin_tools_and_handler(context, Vec::new(), None);
+    assert!(!tools.iter().any(|tool| tool.name == "open_url"));
+
+    let registry = std::sync::Arc::new(crate::tool_registry::ToolRegistry::new());
+    registry.set_dispatcher(std::sync::Arc::new(|_, _, _, _| {}));
+    let context = BuiltinToolContext {
+        files_dir: "/tmp/napaxi".to_string(),
+        workspace_files_dir: "/tmp/napaxi/workspace-files".to_string(),
+        agent_id: "agent".to_string(),
+        platform: "unknown".to_string(),
+        native_library_dir: None,
+        account_id: "user".to_string(),
+        approval_bridge: registry.request_bridge(),
+        llm_config: PlatformLlmConfig::default(),
+        current_thread_id: None,
+    };
+    let (tools, _) = builtin_tools_and_handler(context, Vec::new(), None);
+    assert!(!tools.iter().any(|tool| tool.name == "open_url"));
+}
+
+#[tokio::test]
+async fn android_platform_tools_are_advertised_and_dispatch_through_host_bridge() {
+    let registry = std::sync::Arc::new(crate::tool_registry::ToolRegistry::new());
+    registry.set_dispatcher(std::sync::Arc::new(
+        |request_id, tool_name, params_json, context| {
+            assert_eq!(tool_name, "open_url");
+            assert!(params_json.contains("https://example.com"));
+            let context = context.expect("platform tool dispatch should carry workspace context");
+            assert_eq!(context.files_dir, "/tmp/napaxi");
+            assert_eq!(context.workspace_files_dir, "/tmp/napaxi/workspace-files");
+            assert_eq!(context.agent_id, "agent");
+            crate::tool_registry::resolve_tool_execution(
+                request_id,
+                r#"{"success":true,"opened":true}"#.to_string(),
+                false,
+            );
+        },
+    ));
+    let context = BuiltinToolContext {
+        files_dir: "/tmp/napaxi".to_string(),
+        workspace_files_dir: "/tmp/napaxi/workspace-files".to_string(),
+        agent_id: "agent".to_string(),
+        platform: "android".to_string(),
+        native_library_dir: None,
+        account_id: "user".to_string(),
+        approval_bridge: registry.request_bridge(),
+        llm_config: PlatformLlmConfig::default(),
+        current_thread_id: None,
+    };
+
+    let (tools, handler) = builtin_tools_and_handler(context, Vec::new(), None);
+    assert!(tools.iter().any(|tool| tool.name == "open_url"));
+    let handler = handler.expect("platform handler should be installed");
+    let result = handler(
+        "open_url",
+        serde_json::json!({"url":"https://example.com"}),
+        None,
+    )
+    .expect("open_url should be handled")
+    .await
+    .expect("host bridge should resolve platform tool");
+    assert!(result.output.contains("opened"));
+}
+
+#[tokio::test]
+async fn android_platform_tools_pass_capability_preflight_by_default_when_supported() {
+    let registry = std::sync::Arc::new(crate::tool_registry::ToolRegistry::new());
+    registry.set_dispatcher(std::sync::Arc::new(|_, _, _, _| {}));
+    let mut llm_config = PlatformLlmConfig::default();
+    llm_config.capability_profile = crate::capabilities::CapabilityProfile {
+        platform: Some("android".to_string()),
+        supported_capabilities: vec!["napaxi.platform_tool.*".to_string()],
+        ..crate::capabilities::CapabilityProfile::default()
+    };
+    let context = BuiltinToolContext {
+        files_dir: "/tmp/napaxi".to_string(),
+        workspace_files_dir: "/tmp/napaxi/workspace-files".to_string(),
+        agent_id: "agent".to_string(),
+        platform: "android".to_string(),
+        native_library_dir: None,
+        account_id: "user".to_string(),
+        approval_bridge: registry.request_bridge(),
+        llm_config: llm_config.clone(),
+        current_thread_id: None,
+    };
+    let (extra_tools, _) = builtin_tools_and_handler(context, Vec::new(), None);
+
+    let admitted = crate::tool_loop::gather_tool_descriptors_for_config(
+        &llm_config,
+        Some(&registry),
+        extra_tools,
+    )
+    .await;
+
+    assert!(admitted.iter().any(|tool| tool.name == "open_url"));
+}

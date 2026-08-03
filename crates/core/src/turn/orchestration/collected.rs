@@ -50,6 +50,7 @@ where
         tools.as_ref(),
         &extra_tools,
         is_group_context,
+        agent_engine.as_ref(),
         &mut context,
         hooks,
     )
@@ -63,15 +64,16 @@ where
     let _human_loop_guard =
         crate::human_loop::activate_session_scoped(&files_dir, &session_key_json);
     let mut history_recorder = turn_history_recorder_for(TurnMode::Collected);
-    let codex_request = match crate::agent_engine::codex_turn_request(
+    let codex_request = match crate::agent_engine::codex_turn_plan(
         agent_engine.as_ref(),
         &prepared,
+        tools.as_ref(),
+        internal_tool_handler.as_ref(),
         &files_dir,
         &workspace_files_dir,
         &agent_id,
         &session_key_json,
         &message,
-        &attachments_json,
         &config_json,
     ) {
         Ok(request) => request,
@@ -299,6 +301,7 @@ where
                     tools.as_ref(),
                     &extra_tools,
                     is_group_context,
+                    agent_engine.as_ref(),
                     &mut context,
                     hooks,
                 )

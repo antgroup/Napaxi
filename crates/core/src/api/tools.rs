@@ -376,6 +376,13 @@ mod tests {
     }
 
     #[test]
+    fn is_platform_tool_accepts_bare_names_and_capability_ids() {
+        assert!(is_platform_tool("open_url"));
+        assert!(is_platform_tool("napaxi.platform_tool.open_url"));
+        assert!(!is_platform_tool("napaxi.tool.shell"));
+    }
+
+    #[test]
     fn is_platform_tool_and_is_browser_tool_are_disjoint() {
         let platform = platform_tool_descriptors();
         let browser = browser_tool_descriptors();

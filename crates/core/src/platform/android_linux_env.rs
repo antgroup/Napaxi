@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use flate2::read::GzDecoder;
 use tar::Archive;
 
-const ROOTFS_VERSION: i32 = 2;
+const ROOTFS_VERSION: i32 = 3;
 const STANDARD_PROOT_BINDS: &[(&str, &str)] =
     &[("/proc", "/proc"), ("/dev", "/dev"), ("/sys", "/sys")];
 pub(super) const PROCESS_EXIT_GRACE: Duration = Duration::from_secs(2);
@@ -123,6 +123,7 @@ pub fn setup(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn install_package(
     files_dir: &str,
     native_library_dir: &str,
@@ -139,6 +140,7 @@ pub fn install_package(
     )
 }
 
+#[allow(dead_code)]
 pub fn execute_shell(
     files_dir: &str,
     native_library_dir: &str,
@@ -403,6 +405,7 @@ fn resolve_link_target_for_copy(
     out_path.parent().map(|parent| parent.join(link_name))
 }
 
+#[allow(dead_code)]
 fn run_proot(paths: &LinuxEnvPaths, workdir: &str, tail_args: &[&str]) -> anyhow::Result<String> {
     run_proot_with_timeout(paths, workdir, tail_args, None, None)
 }

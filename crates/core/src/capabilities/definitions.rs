@@ -453,6 +453,7 @@ fn platform_tool_definitions() -> Vec<CapabilityDefinition> {
 }
 
 pub(crate) fn platform_tool_capability_id(tool_name: &str) -> String {
+    let tool_name = crate::platform_capabilities::normalize_platform_tool_name(tool_name);
     format!("napaxi.platform_tool.{tool_name}")
 }
 

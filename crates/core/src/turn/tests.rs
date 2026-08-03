@@ -237,6 +237,98 @@ fn image_attachments_never_inline_visual_parts_for_main_chat() {
 }
 
 #[tokio::test]
+async fn core_prepare_turn_keeps_sandbox_attachment_metadata_and_admitted_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().join("files");
+    let workspace_dir = dir.path().join("workspace-files");
+    std::fs::create_dir_all(&files_dir).unwrap();
+    std::fs::create_dir_all(&workspace_dir).unwrap();
+    let source = dir.path().join("picked-image.png");
+    std::fs::write(&source, b"png-bytes").unwrap();
+    let mut config = config();
+    config.capability_profile = crate::capabilities::CapabilityProfile {
+        platform: Some("android".to_string()),
+        supported_capabilities: vec!["napaxi.tool.custom_host".to_string()],
+        ..crate::capabilities::CapabilityProfile::default()
+    };
+    config.capability_selection = crate::capabilities::CapabilitySelection {
+        enabled_capabilities: vec!["napaxi.tool.custom_host".to_string()],
+        ..crate::capabilities::CapabilitySelection::default()
+    };
+    let config_json = serde_json::to_string(&config).unwrap();
+    let session_key_json =
+        crate::session::create_session(files_dir.to_str().unwrap(), "napaxi", "app", "user", None);
+    let thread_id =
+        serde_json::from_str::<serde_json::Value>(&session_key_json).unwrap()["thread_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+    let descriptor = ToolDescriptor {
+        name: "custom_echo".to_string(),
+        description: "Echo a value".to_string(),
+        parameters: serde_json::json!({"type":"object"}),
+        effect: crate::tool_registry::ToolEffect::External,
+    };
+    let attachments_json = format!(
+        r#"[{{"kind":"image","mime_type":"image/png","filename":"picked-image.png","path":"{}"}}]"#,
+        source.display()
+    );
+
+    let prepared = prepare_turn(
+        files_dir.to_str().unwrap(),
+        workspace_dir.to_str().unwrap(),
+        &config_json,
+        "napaxi",
+        &session_key_json,
+        "what is this?",
+        None,
+        &attachments_json,
+        None,
+        std::slice::from_ref(&descriptor),
+        false,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(prepared.tool_descriptors, vec![descriptor]);
+    let expected_sandbox_path = format!("/workspace/attachments/{thread_id}/picked-image.png");
+    assert_eq!(
+        prepared.attachments[0].storage_key.as_deref(),
+        Some(expected_sandbox_path.as_str())
+    );
+    assert_eq!(prepared.attachments[0].size_bytes, Some(9));
+    let user_message = prepared
+        .raw_history
+        .iter()
+        .rev()
+        .find(|message| message.get("role").and_then(serde_json::Value::as_str) == Some("user"))
+        .unwrap();
+    let text = user_message["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains(&format!("sandbox_path=\"{expected_sandbox_path}\"")));
+    assert!(
+        !text.contains(source.to_str().unwrap()),
+        "default Rust engine prompt path must not leak raw host picker paths after persistence"
+    );
+    assert!(
+        crate::agent_engine::codex_turn_plan(
+            None,
+            &prepared,
+            None,
+            None,
+            files_dir.to_str().unwrap(),
+            workspace_dir.to_str().unwrap(),
+            "napaxi",
+            &session_key_json,
+            "what is this?",
+            "{}",
+        )
+        .unwrap()
+        .is_none(),
+        "default Napaxi/Rust engine turns must not be diverted to Codex"
+    );
+}
+
+#[tokio::test]
 async fn image_attachment_prompt_requires_image_analyze_tool_when_available() {
     let dir = tempfile::tempdir().unwrap();
     let files_dir = dir.path().to_str().unwrap();
@@ -279,6 +371,7 @@ async fn image_attachment_prompt_requires_image_analyze_tool_when_available() {
             has_shell_tool: false,
             has_browser_tool: false,
             is_group_context: false,
+            include_first_run_bootstrap: true,
         },
     )
     .await;
@@ -337,6 +430,7 @@ async fn prompt_sections_keep_source_order_and_compile_to_existing_prompt_order(
             has_shell_tool: true,
             has_browser_tool: true,
             is_group_context: true,
+            include_first_run_bootstrap: true,
         },
     )
     .await;
@@ -419,6 +513,7 @@ async fn volatile_workspace_sinks_below_static_sections_and_keeps_stable_prefix(
         has_shell_tool: true,
         has_browser_tool: false,
         is_group_context: false,
+        include_first_run_bootstrap: true,
     };
 
     let prompt = prepare_prompt_sections(&config(), runtime_input("hello")).await;
@@ -479,6 +574,7 @@ async fn prompt_sections_use_sdk_language_preference() {
             has_shell_tool: true,
             has_browser_tool: true,
             is_group_context: false,
+            include_first_run_bootstrap: true,
         },
     )
     .await;
@@ -524,6 +620,7 @@ async fn current_time_prompt_includes_user_timezone_context() {
             has_shell_tool: false,
             has_browser_tool: false,
             is_group_context: false,
+            include_first_run_bootstrap: true,
         },
     )
     .await;
@@ -561,6 +658,7 @@ async fn group_prompt_section_uses_existing_group_safe_workspace_prompt() {
             has_shell_tool: false,
             has_browser_tool: false,
             is_group_context: true,
+            include_first_run_bootstrap: true,
         },
     )
     .await;
@@ -573,6 +671,87 @@ async fn group_prompt_section_uses_existing_group_safe_workspace_prompt() {
     assert_eq!(workspace.visibility, PromptSectionVisibility::GroupSafe);
     assert!(workspace.content.contains("Shared user note"));
     assert!(!workspace.content.contains("Private profile note"));
+}
+
+#[tokio::test]
+async fn codex_engine_prepare_turn_suppresses_first_run_bootstrap() {
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_string_lossy().to_string();
+    let config_json = serde_json::to_string(&config()).unwrap();
+    let codex_selection = crate::agent_engine::AgentEngineSelection {
+        engine_id: "codex".to_string(),
+        engine_profile_id: String::new(),
+        engine_config: serde_json::json!({}),
+    };
+
+    let napaxi_session = crate::session::create_session(&files_dir, "napaxi", "app", "user", None);
+    let mut napaxi_context = TurnLifecycleContext::new(TurnMode::Collected, "napaxi", false);
+    let mut napaxi_hooks = RecordingHooks::default();
+    let napaxi_prepared = prepare_turn_with_hooks(
+        &files_dir,
+        &files_dir,
+        &config_json,
+        "napaxi",
+        &napaxi_session,
+        "hello",
+        None,
+        "[]",
+        None,
+        &[],
+        false,
+        None,
+        &mut napaxi_context,
+        &mut napaxi_hooks,
+    )
+    .await
+    .unwrap();
+    assert!(
+        napaxi_prepared
+            .config
+            .system_prompt
+            .contains("## First-Run Bootstrap")
+    );
+
+    let codex_session =
+        crate::session::create_session(&files_dir, "engine.codex", "app", "user", None);
+    let mut codex_context = TurnLifecycleContext::new(TurnMode::Collected, "engine.codex", false);
+    let mut codex_hooks = RecordingHooks::default();
+    let codex_prepared = prepare_turn_with_hooks(
+        &files_dir,
+        &files_dir,
+        &config_json,
+        "engine.codex",
+        &codex_session,
+        "hello",
+        None,
+        "[]",
+        None,
+        &[],
+        false,
+        Some(&codex_selection),
+        &mut codex_context,
+        &mut codex_hooks,
+    )
+    .await
+    .unwrap();
+    assert!(
+        !codex_prepared
+            .config
+            .system_prompt
+            .contains("## First-Run Bootstrap")
+    );
+    assert!(
+        !codex_prepared
+            .config
+            .system_prompt
+            .contains("You are starting up for the first time")
+    );
+    assert!(
+        codex_prepared
+            .config
+            .system_prompt
+            .contains("## Agent Instructions")
+    );
 }
 
 #[tokio::test]
@@ -598,6 +777,7 @@ async fn prepare_turn_hooks_record_same_stage_names_for_collected_and_streaming(
             None,
             &[],
             false,
+            None,
             &mut context,
             &mut hooks,
         )
@@ -664,6 +844,7 @@ async fn prepare_turn_can_deliver_context_compaction_progress_before_returning()
         None,
         &[],
         false,
+        None,
         &mut context,
         &mut hooks,
     )
@@ -783,6 +964,8 @@ fn post_turn_hooks_record_successful_persistence_and_emit_order() {
         history: Vec::new(),
         raw_history: Vec::new(),
         context_events: Vec::new(),
+        attachments: Vec::new(),
+        tool_descriptors: Vec::new(),
     };
     let mut recorder = TurnHistoryRecorder::default();
     recorder.record(&ChatEvent::ReasoningDelta {
@@ -872,6 +1055,8 @@ fn diagnostics_recorder_persists_success_record_with_prompt_summary() {
         history: Vec::new(),
         raw_history: Vec::new(),
         context_events: Vec::new(),
+        attachments: Vec::new(),
+        tool_descriptors: Vec::new(),
     };
     let mut history_recorder = TurnHistoryRecorder::default();
     let outcome = finish_successful_turn(

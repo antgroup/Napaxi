@@ -24,8 +24,10 @@ public struct NapaxiToolAPI: NapaxiCoreAPI, Sendable {
     public func startRequestListener() {
         // Swift registers host tool routing during NapaxiEngine.create(...).
     }
-    public func mobilePlatformToolDescriptors() throws -> NapaxiJSONValue { try call("tools", "mobile_platform_tool_descriptors") }
-    public func isMobilePlatformTool(_ name: String) throws -> NapaxiJSONValue { try call("tools", "is_mobile_platform_tool", ["name": .string(name)]) }
+    public func platformToolDescriptors() throws -> NapaxiJSONValue { try call("tools", "platform_tool_descriptors") }
+    public func isPlatformTool(_ name: String) throws -> NapaxiJSONValue { try call("tools", "is_platform_tool", ["name": .string(name)]) }
+    public func mobilePlatformToolDescriptors() throws -> NapaxiJSONValue { try platformToolDescriptors() }
+    public func isMobilePlatformTool(_ name: String) throws -> NapaxiJSONValue { try isPlatformTool(name) }
     public func browserToolDescriptors() throws -> NapaxiJSONValue { try call("tools", "browser_tool_descriptors") }
     public func isBrowserTool(_ name: String) throws -> NapaxiJSONValue { try call("tools", "is_browser_tool", ["name": .string(name)]) }
     public func mobilePlatformToolDefinitions() throws -> [NapaxiCustomToolDefinition] {

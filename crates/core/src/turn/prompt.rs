@@ -17,6 +17,7 @@ pub struct ChatRuntimeInput<'a> {
     pub has_shell_tool: bool,
     pub has_browser_tool: bool,
     pub is_group_context: bool,
+    pub include_first_run_bootstrap: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,10 +149,11 @@ pub(crate) async fn prepare_prompt_sections(
     let _ = crate::workspace::reseed_workspace(workspace_files_dir);
 
     let response_language = config.response_language.as_str();
-    let workspace_split = crate::workspace::workspace_prompt_split_with_language(
+    let workspace_split = crate::workspace::workspace_prompt_split_with_language_and_bootstrap(
         workspace_files_dir,
         input.is_group_context,
         response_language,
+        input.include_first_run_bootstrap,
     );
     let skill_prompt = crate::skills::active_skill_prompt_with_metadata_for_turn(
         input.files_dir,

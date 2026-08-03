@@ -19,7 +19,10 @@ use super::paths::{
     normalize_workspace_path, scoped_files_dir,
 };
 use super::profile::write_profile_json;
-use super::prompt::{system_prompt, system_prompt_for_context, system_prompt_handle};
+use super::prompt::{
+    system_prompt, system_prompt_for_context, system_prompt_handle,
+    workspace_prompt_split_with_language_and_bootstrap,
+};
 use super::recall;
 use super::reseed::{reseed_workspace, reseed_workspace_handle};
 use super::search::{is_hybrid_match, search_memory_results, search_terms, snippet};
@@ -334,6 +337,18 @@ fn first_run_prompt_keeps_bootstrap_until_profile_is_populated() {
     write_profile_json(&files_dir, r#"{"name":"Wenyu"}"#, true).unwrap();
     let prompt = system_prompt_for_context(&files_dir, false);
     assert!(!prompt.contains("## First-Run Bootstrap"));
+}
+
+#[test]
+fn first_run_prompt_can_be_suppressed_for_codex_engine() {
+    let dir = temp_dir("codex_no_first_run_bootstrap");
+    let files_dir = dir.to_string_lossy().to_string();
+    reseed_workspace(&files_dir);
+
+    let prompt = workspace_prompt_split_with_language_and_bootstrap(&files_dir, false, "zh", false);
+    assert!(!prompt.stable.contains("## 首次启动引导"));
+    assert!(!prompt.stable.contains("你正在首次启动"));
+    assert!(prompt.stable.contains("## Agent 指令"));
 }
 
 #[test]

@@ -15,6 +15,15 @@ android {
         versionName = "0.1.0"
     }
 
+    packaging {
+        jniLibs {
+            // Codex and shell tools execute PRoot by filesystem path from
+            // applicationInfo.nativeLibraryDir. Keep native runtime libraries
+            // extracted instead of APK-compressed for the native SDK demo.
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

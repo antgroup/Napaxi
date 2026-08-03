@@ -9,6 +9,33 @@ import java.nio.file.Paths
 
 class AndroidBridgeContractTest {
     @Test
+    fun androidIntegrationDemoIncludesCodexAppServerDeviceProbe() {
+        val root = repoRoot()
+        val demo = readText(
+            root.resolve("examples/integration/android/app/src/main/kotlin/com/napaxi/examples/androidintegration/MainActivity.kt"),
+        )
+        val requiredSnippets = listOf(
+            "Codex Engine Probe",
+            "syncCodexAgentEngineModel(codexConfig)",
+            "engineId = \"napaxi.agent_engine.codex\"",
+            "localPath = textFile.absolutePath",
+            "localPath = imageFile.absolutePath",
+            "ToolFilter.Allowlist",
+            "android_integration_ping",
+            "napaxi.platform_tool.get_device_info",
+            "sendToSessionFlow(",
+            "listCodexAgentEngineThreads(agentId = agentId)",
+            "apiKey = null",
+        )
+
+        val missing = requiredSnippets.filterNot(demo::contains)
+        assertTrue(
+            "Android integration demo is missing Codex app-server/device probe coverage: $missing",
+            missing.isEmpty(),
+        )
+    }
+
+    @Test
     fun androidManifestPreservesFlutterBackgroundProviderAndFileBridgeCapabilities() {
         val root = repoRoot()
         val flutterManifest = readText(root.resolve("packages/flutter/android/AndroidManifest.xml"))
@@ -68,6 +95,7 @@ class AndroidBridgeContractTest {
         val androidPlatformContext = readText(root.resolve("packages/android/src/main/kotlin/com/napaxi/android/PlatformContext.kt"))
         val androidBuild = readText(root.resolve("packages/android/build.gradle.kts"))
         val androidRuntimeContext = androidEngine + "\n" + androidPlatformContext
+        val integrationAppBuild = readText(root.resolve("examples/integration/android/app/build.gradle.kts"))
 
         val requiredFlutterContextSnippets = listOf(
             "platformContextMap['capability_profile']",
@@ -99,11 +127,15 @@ class AndroidBridgeContractTest {
             "libnapaxi_api_bridge.so",
             "api(\"agent.provider:android_agent_provider:",
         )
+        val requiredIntegrationBuildSnippets = listOf(
+            "useLegacyPackaging = true",
+        )
 
         val missingFlutterSnippets = requiredFlutterContextSnippets.filterNot(flutterEngine::contains)
         val missingAndroidSnippets = requiredAndroidContextSnippets.filterNot(androidRuntimeContext::contains)
         val missingCapabilitySnippets = requiredAndroidCapabilitySnippets.filterNot(androidEngine::contains)
         val missingBuildSnippets = requiredBuildSnippets.filterNot(androidBuild::contains)
+        val missingIntegrationBuildSnippets = requiredIntegrationBuildSnippets.filterNot(integrationAppBuild::contains)
         val selectionBody = classFunctionBody(androidEngine, "buildHostCapabilitySelection")
 
         assertTrue("Expected Flutter engine platform context shape to be discovered: $missingFlutterSnippets", missingFlutterSnippets.isEmpty())
@@ -122,6 +154,10 @@ class AndroidBridgeContractTest {
         assertTrue(
             "Android native SDK build is missing Flutter runtime asset/JNI/provider inputs: $missingBuildSnippets",
             missingBuildSnippets.isEmpty(),
+        )
+        assertTrue(
+            "Android integration demo must extract JNI libs so PRoot is executable from nativeLibraryDir: $missingIntegrationBuildSnippets",
+            missingIntegrationBuildSnippets.isEmpty(),
         )
     }
 
@@ -157,6 +193,32 @@ class AndroidBridgeContractTest {
             missing.isEmpty(),
         )
         assertTrue("Expected Kotlin bridge methods to be discovered", kotlinMethods.isNotEmpty())
+    }
+
+    @Test
+    fun androidCompatibilityBridgeAliasesAgentDefinitionMethods() {
+        val root = repoRoot()
+        val cApiSource = readText(root.resolve("packages/api_bridge/c_api/mod.rs"))
+        val androidApis = readText(root.resolve("packages/android/src/main/kotlin/com/napaxi/android/Apis.kt"))
+
+        val requiredAndroidCalls = listOf(
+            "engine.bridgeBool(",
+            "agent_defs.create_agent",
+            "agent_defs.import_md",
+        )
+        val requiredAliases = listOf(
+            "(\"agent_defs\", \"create_agent\") => (\"agent_defs\", \"create_from_definition\")",
+            "(\"agent_defs\", \"import_md\") => (\"agent_defs\", \"import_markdown\")",
+        )
+
+        assertTrue(
+            "Expected Android SDK to retain compatibility agent definition bridge calls",
+            requiredAndroidCalls.all(androidApis::contains),
+        )
+        assertTrue(
+            "C API Android bridge aliases must route compatibility agent definition calls to canonical methods: ${requiredAliases.filterNot(cApiSource::contains)}",
+            requiredAliases.all(cApiSource::contains),
+        )
     }
 
     @Test

@@ -6,6 +6,11 @@
 
 #[cfg(any(target_os = "android", test))]
 mod config;
+mod configure;
+#[cfg(any(target_os = "android", test))]
+mod dynamic_tools;
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+mod env;
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod events;
 mod history;
@@ -15,10 +20,10 @@ mod protocol;
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 mod state;
 
+pub(crate) use configure::configure_codex_agent_engine_json;
 #[cfg(test)]
 pub(crate) use events::map_app_server_message;
 pub(crate) use process::answer_human_request;
-pub(crate) use process::configure_codex_agent_engine_json;
 pub(crate) use process::run_codex_turn;
 pub(crate) use state::register_android_native_library_dir;
 
@@ -132,16 +137,24 @@ mod tests {
     }
 
     #[test]
-    fn maps_final_app_server_error_and_ignores_retry_notice() {
+    fn maps_final_app_server_error_and_surfaces_retry_notice() {
         let retry = map_app_server_message(&json!({
             "jsonrpc": "2.0",
             "method": "error",
             "params": {
-                "error": {"message": "Reconnecting... 2/5"},
+                "error": {
+                    "message": "Reconnecting... 2/5",
+                    "additionalDetails": "stream disconnected before completion"
+                },
                 "willRetry": true
             }
         }));
-        assert!(retry.event.is_none());
+        assert!(matches!(
+            retry.event,
+            Some(ChatEvent::StreamReset { reason })
+                if reason.contains("Reconnecting... 2/5")
+                    && reason.contains("stream disconnected before completion")
+        ));
         assert!(!retry.completed);
 
         let final_error = map_app_server_message(&json!({
@@ -499,6 +512,7 @@ mod tests {
         let state = super::state::CodexSessionState {
             native_thread_id: Some("thread".to_string()),
             config_fingerprint: String::new(),
+            dynamic_tools_fingerprint: String::new(),
         };
         let line =
             super::protocol::turn_start_request(&mut rpc, &test_turn_request("hello"), &state);
@@ -516,6 +530,7 @@ mod tests {
         let state = super::state::CodexSessionState {
             native_thread_id: Some("thread".to_string()),
             config_fingerprint: String::new(),
+            dynamic_tools_fingerprint: String::new(),
         };
         let line = super::protocol::turn_start_request(
             &mut rpc,

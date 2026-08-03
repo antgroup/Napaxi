@@ -216,8 +216,24 @@ struct HistoryRpc {
 }
 
 #[cfg(target_os = "android")]
+fn ensure_codex_cli_available(files_dir: &str) -> anyhow::Result<()> {
+    let rootfs_dir = std::path::Path::new(files_dir).join("linux-env/rootfs");
+    let candidates = [
+        rootfs_dir.join("root/.local/bin/codex"),
+        rootfs_dir.join("usr/local/bin/codex"),
+        rootfs_dir.join("usr/bin/codex"),
+    ];
+    if candidates.iter().any(|path| path.exists()) {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "Codex CLI is missing from the Android Linux rootfs; rebuild the bundled rootfs with tools/scripts/bake_android_rootfs.sh so `codex app-server` is available"
+    )
+}
+
+#[cfg(target_os = "android")]
 impl HistoryRpc {
-    fn open(handle: i64, files_dir: &str, request: &CodexHistoryRequest) -> anyhow::Result<Self> {
+    fn open(handle: i64, files_dir: &str, _request: &CodexHistoryRequest) -> anyhow::Result<Self> {
         let config_dir = config::config_dir(files_dir);
         if !config_dir.join("config.toml").is_file() || !config_dir.join("auth.json").is_file() {
             anyhow::bail!("Codex sandbox configuration is missing");
@@ -235,6 +251,7 @@ impl HistoryRpc {
         .workspace_dir()
         .display()
         .to_string();
+        ensure_codex_cli_available(files_dir)?;
         let argv = vec![
             "/bin/sh".to_string(),
             "-lc".to_string(),

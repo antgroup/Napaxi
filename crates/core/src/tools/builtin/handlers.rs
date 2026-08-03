@@ -5,7 +5,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::tool_loop::{InternalToolHandler, InternalToolResult};
-use crate::tool_registry::{ToolDescriptor, ToolRequestBridge, request_host_tool_execution};
+use crate::tool_registry::{
+    ToolDescriptor, ToolExecutionContext, ToolRequestBridge, request_host_tool_execution,
+    request_host_tool_execution_with_context,
+};
 
 use super::{APPROVAL_TOOL_NAME, BuiltinToolContext, normalize_agent_id, parse_approval_response};
 
@@ -172,6 +175,53 @@ pub(super) fn http_handler(
         }))
     });
     (vec![crate::http_tool::descriptor()], Some(handler))
+}
+
+pub(super) fn platform_handler(
+    context: &BuiltinToolContext,
+    fallback: Option<InternalToolHandler>,
+) -> (Vec<ToolDescriptor>, Option<InternalToolHandler>) {
+    let Some(bridge) = context.approval_bridge.clone() else {
+        return (Vec::new(), fallback);
+    };
+    let platform = context.platform.trim().to_ascii_lowercase();
+    if platform != "android" && platform != "ios" {
+        return (Vec::new(), fallback);
+    }
+    let tool_context = ToolExecutionContext {
+        files_dir: context.files_dir.clone(),
+        workspace_files_dir: context.workspace_files_dir.clone(),
+        agent_id: context.agent_id.clone(),
+        session_key_json: None,
+    };
+    let handler: InternalToolHandler = Arc::new(move |tool_name, params, _progress| {
+        if !crate::platform_capabilities::is_platform_tool(tool_name) {
+            return fallback
+                .as_ref()
+                .and_then(|fallback| fallback(tool_name, params, None));
+        }
+        let bridge = bridge.clone();
+        let tool_context = tool_context.clone();
+        let tool_name = tool_name.to_string();
+        Some(Box::pin(async move {
+            let output = request_host_tool_execution_with_context(
+                bridge,
+                &tool_name,
+                params,
+                Duration::from_secs(600),
+                Some(&tool_context),
+            )
+            .await?;
+            Ok(InternalToolResult {
+                output,
+                events: Vec::new(),
+            })
+        }))
+    });
+    (
+        crate::platform_capabilities::platform_tool_descriptors(),
+        Some(handler),
+    )
 }
 
 pub(super) fn media_handler(

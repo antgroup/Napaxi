@@ -58,6 +58,7 @@ pub(crate) async fn stream_turn_with_hooks<H, E, C>(
             tools.as_ref(),
             &extra_tools,
             is_group_context,
+            agent_engine.as_ref(),
             &mut context,
             &mut prepare_hooks,
         )
@@ -86,15 +87,16 @@ pub(crate) async fn stream_turn_with_hooks<H, E, C>(
         }
     }
 
-    let codex_request = match crate::agent_engine::codex_turn_request(
+    let codex_request = match crate::agent_engine::codex_turn_plan(
         agent_engine.as_ref(),
         &prepared,
+        tools.as_ref(),
+        internal_tool_handler.as_ref(),
         &files_dir,
         &workspace_files_dir,
         &agent_id,
         &session_key_json,
         &message,
-        &attachments_json,
         &config_json,
     ) {
         Ok(request) => request,
@@ -370,6 +372,7 @@ pub(crate) async fn stream_turn_with_hooks<H, E, C>(
                         tools.as_ref(),
                         &extra_tools,
                         is_group_context,
+                        agent_engine.as_ref(),
                         &mut context,
                         &mut prepare_hooks,
                     )

@@ -32,7 +32,7 @@ pub fn default_engine_workspace_files_dir(files_dir: &str) -> String {
     crate::workspace::default_scoped_files_dir(files_dir, DEFAULT_AGENT_ID)
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
 pub fn default_engine_workspace_files_dir_from_handle(handle: i64) -> Option<String> {
     // SAFETY: `handle` is a live engine handle produced by `create_engine_handle`; `handle_to_arc` returns `None` for a `0`/invalid handle rather than dereferencing it.
     let engine = unsafe { handle_to_arc(handle) }?;

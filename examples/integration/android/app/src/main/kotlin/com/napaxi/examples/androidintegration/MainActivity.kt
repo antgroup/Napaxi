@@ -3,7 +3,10 @@ package com.napaxi.examples.androidintegration
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -43,7 +46,11 @@ import com.napaxi.android.NapaxiConfigSelection
 import com.napaxi.android.NapaxiConfigStore
 import com.napaxi.android.NapaxiEngine
 import com.napaxi.android.NapaxiFileBridge
+import com.napaxi.android.ToolFilter
 import com.napaxi.android.PendingAgentProviderInstall
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -52,6 +59,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 
@@ -68,6 +76,7 @@ class MainActivity : Activity() {
     private var runSmokeAfterProviderAction: Boolean = false
     private var lastProviderActionStatus: String = "none"
     private var runSmokeAfterNotificationPermission: Boolean = false
+    private var codexProbeNetworkEnv: JSONObject = JSONObject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -130,12 +139,14 @@ class MainActivity : Activity() {
             ),
         )
         setContentView(rootContainer)
+        maybeImportIntegrationApiKey(intent)
         maybeRunRequestedSmoke(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        maybeImportIntegrationApiKey(intent)
         maybeRunRequestedSmoke(intent)
     }
 
@@ -217,6 +228,9 @@ class MainActivity : Activity() {
             "Config + Engine" to { runDemo("Config + Engine") { runEngineDemo() } },
             "Capabilities" to { runDemo("Capabilities") { runCapabilityDemo() } },
             "Tools + Browser" to { runDemo("Tools + Browser") { runToolDemo() } },
+            "Codex Engine Probe" to {
+                runDemo("Codex Engine Probe", CODEX_PROBE_ACTION_TIMEOUT_MS) { runCodexEngineProbe() }
+            },
         )
         addSection(
             "Conversation",
@@ -299,20 +313,82 @@ class MainActivity : Activity() {
         )
     }
 
+    private fun localDevProfile(): NapaxiConfigProfile =
+        NapaxiConfigProfile(
+            id = "local-dev",
+            name = "Local Dev",
+            provider = "openai",
+            model = "gpt-4.1",
+            systemPrompt = "You are a helpful Android-native Napaxi agent.",
+            metadata = JSONObject().put("response_language", "zh"),
+        )
+
+    private fun maybeImportIntegrationApiKey(intent: Intent?) {
+        val apiKey = intent?.getStringExtra("napaxi_api_key")
+            ?.takeIf { it.trim().isNotEmpty() }
+        val baseUrl = intent?.getStringExtra("napaxi_base_url")
+            ?.takeIf { it.trim().isNotEmpty() }
+        val model = intent?.getStringExtra("napaxi_model")
+            ?.takeIf { it.trim().isNotEmpty() }
+        val networkEnv = codexProbeNetworkEnvFromIntent(intent)
+        if (networkEnv.length() > 0) {
+            codexProbeNetworkEnv = networkEnv
+        }
+        if (apiKey == null && baseUrl == null && model == null && networkEnv.length() == 0) return
+
+        val configStore = NapaxiConfigStore.sharedPreferences(this)
+        val existing = configStore.loadProfiles().firstOrNull { it.id == "local-dev" }
+        val profile = (existing ?: localDevProfile()).copy(
+            model = model ?: existing?.model ?: "gpt-4.1",
+            baseUrl = baseUrl ?: existing?.baseUrl,
+        )
+        configStore.saveProfile(profile, apiKey = apiKey)
+        configStore.saveSelection(NapaxiConfigSelection(selectedProfileId = "local-dev"))
+        intent?.removeExtra("napaxi_api_key")
+        intent?.removeExtra("napaxi_base_url")
+        intent?.removeExtra("napaxi_model")
+        intent?.removeExtra("napaxi_https_proxy")
+        intent?.removeExtra("napaxi_http_proxy")
+        intent?.removeExtra("napaxi_all_proxy")
+        intent?.removeExtra("napaxi_no_proxy")
+        setStatus(
+            listOf(
+                "Imported Codex probe launch config for local-dev profile.",
+                "apiKey=${apiKey != null}",
+                "baseUrl=${baseUrl != null}",
+                "model=${profile.model}",
+                "networkEnv=${jsonKeys(codexProbeNetworkEnv).joinToString().ifBlank { "none" }}",
+            ).joinToString(" "),
+        )
+    }
+
+    private fun codexProbeNetworkEnvFromIntent(intent: Intent?): JSONObject {
+        val env = JSONObject()
+        listOf(
+            "napaxi_https_proxy" to "https_proxy",
+            "napaxi_http_proxy" to "http_proxy",
+            "napaxi_all_proxy" to "all_proxy",
+            "napaxi_no_proxy" to "no_proxy",
+        ).forEach { (extra, key) ->
+            intent?.getStringExtra(extra)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { env.put(key, it) }
+        }
+        return env
+    }
+
+    private fun jsonKeys(value: JSONObject): List<String> =
+        value.keys().asSequence().toList()
+
     private fun createEngine(): NapaxiEngine {
         engine?.let { return it }
         val configStore = NapaxiConfigStore.sharedPreferences(this)
-        configStore.saveProfile(
-            NapaxiConfigProfile(
-                id = "local-dev",
-                name = "Local Dev",
-                provider = "openai",
-                model = "gpt-4.1",
-                systemPrompt = "You are a helpful Android-native Napaxi agent.",
-                metadata = JSONObject().put("response_language", "zh"),
-            ),
-            apiKey = "",
-        )
+        // Preserve any local-dev profile fields and API key the host/test device
+        // has already stored; only create the profile when it is absent.
+        if (configStore.loadProfiles().none { it.id == "local-dev" }) {
+            configStore.saveProfile(localDevProfile(), apiKey = null)
+        }
         configStore.saveSelection(NapaxiConfigSelection(selectedProfileId = "local-dev"))
         val config = configStore.resolveSelectedConfig() ?: LlmConfig(
             provider = "openai",
@@ -428,6 +504,172 @@ class MainActivity : Activity() {
             "custom=${customTools.joinToString { it.name }}",
             "platformSample=${platform.take(8).joinToString { it.name }}",
         ).joinToString("\n")
+    }
+
+    private suspend fun runCodexEngineProbe(): String {
+        val sdk = createEngine()
+        val customTools = listOf(
+            CustomToolDef(
+                name = "android_integration_ping",
+                description = "Return Android native demo host state to the active Codex turn.",
+                parameters = JSONObject("""{"type":"object","properties":{"message":{"type":"string"}}}"""),
+                effect = "read",
+            ),
+        )
+        val customUpdated = sdk.tools.updateCustomTools(customTools)
+        sdk.tools.startRequestListener()
+
+        val fileSentinel = "NAPAXI_FILE_LINK_OK"
+        val imageSentinel = "NPX42"
+        val textFile = File(cacheDir, "napaxi-codex-probe.txt").apply {
+            writeText(
+                "Napaxi Android Codex probe attachment created at ${Instant.now()}\n" +
+                    "file_sentinel=$fileSentinel\n",
+            )
+        }
+        val imageFile = File(cacheDir, "napaxi-codex-probe.png").apply {
+            writeProbePng(this, imageSentinel)
+        }
+        val attachments = listOf(
+            McAttachment(
+                kind = "document",
+                mimeType = "text/plain",
+                filename = textFile.name,
+                localPath = textFile.absolutePath,
+            ),
+            McAttachment(
+                kind = "image",
+                mimeType = "image/png",
+                filename = imageFile.name,
+                localPath = imageFile.absolutePath,
+            ),
+        )
+
+        val codexConfig = sdk.config.copy(
+            systemPrompt = "You are validating Napaxi Android Codex app-server file, image, and dynamic tool routing.",
+            maxToolIterations = 4,
+        )
+        val sync = sdk.syncCodexAgentEngineModel(codexConfig)
+        val hostApiNetwork = probeHostHttps(codexConfig.baseUrl)
+        val agentId = "android-native-codex-probe"
+        val engineConfig = JSONObject().apply {
+            if (codexProbeNetworkEnv.length() > 0) {
+                put("network_env", JSONObject(codexProbeNetworkEnv.toString()))
+            }
+        }
+        runCatching { sdk.agents.deleteDefinition(agentId) }
+        val definition = sdk.agents.createDefinition(
+            AgentDefinition.create(
+                id = agentId,
+                name = "Android Native Codex Probe",
+                description = "Demo-only probe for Codex app-server attachments and Napaxi dynamic tools.",
+                systemPrompt = "Validate local attachments and call the admitted Napaxi ping and get_device_info tools when useful.",
+                engineId = "napaxi.agent_engine.codex",
+                engineConfig = engineConfig.takeIf { it.length() > 0 },
+                toolFilter = ToolFilter.Allowlist,
+                toolList = listOf("android_integration_ping", "napaxi.platform_tool.get_device_info"),
+            ),
+        )
+        val agentCreated = runCatching { sdk.agents.createFromDefinition(definition.id, codexConfig) }.getOrDefault(false)
+        val definitionStored = sdk.agents.getDefinition(agentId)?.id == agentId
+        val session = sdk.sessions.create(agentId = agentId)
+        val events = mutableListOf<String>()
+        val toolNames = mutableListOf<String>()
+        val responseText = StringBuilder()
+        val errors = mutableListOf<String>()
+        val warnings = mutableListOf<String>()
+        var chatTimedOut = false
+        val chatFailure = runCatching {
+            val completed = withTimeoutOrNull(CODEX_PROBE_CHAT_TIMEOUT_MS) {
+                sdk.sendToSessionFlow(
+                    session,
+                    "Android Codex probe: read the attached text file and image. In your final answer include exactly these labels after checking the attachments: file_sentinel=$fileSentinel and image_sentinel=$imageSentinel. Then call the dynamic tools android_integration_ping with message='codex-probe' and get_device_info with empty arguments. Do not mutate files.",
+                    agentId = agentId,
+                    attachments = attachments,
+                    maxIterations = 2,
+                    requestConfig = codexConfig,
+                ).collect { event ->
+                    events += event.type
+                    when (event) {
+                        is ChatEvent.ResponseEvent -> responseText.append(event.content)
+                        is ChatEvent.ResponseDeltaEvent -> responseText.append(event.content)
+                        is ChatEvent.ToolCallEvent -> toolNames += event.toolName
+                        is ChatEvent.ToolResultEvent -> toolNames += "${event.toolName}:result"
+                        is ChatEvent.ErrorEvent -> errors += event.message.ifBlank { event.rawJson }
+                        is ChatEvent.StreamResetEvent -> warnings += event.reason.ifBlank { event.rawJson }
+                        else -> Unit
+                    }
+                }
+                true
+            } ?: false
+            chatTimedOut = !completed
+            null
+        }.getOrElse { error -> error.message ?: error::class.java.simpleName }
+
+        val response = responseText.toString()
+        val fileSeen = response.contains(fileSentinel)
+        val imageSeen = response.contains(imageSentinel, ignoreCase = true)
+        val threads = sdk.listCodexAgentEngineThreads(agentId = agentId)
+        return listOf(
+            "codexConfigSuccess=${sync.success}, providerAvailable=${sync.providerAvailable}, model=${sync.model.ifBlank { codexConfig.model }}",
+            "hostApiNetwork=$hostApiNetwork",
+            "codexNetworkEnv=${jsonKeys(codexProbeNetworkEnv).joinToString().ifBlank { "none" }}",
+            "customTools=$customUpdated, platformDeviceInfo=${sdk.tools.isPlatformTool("napaxi.platform_tool.get_device_info")}",
+            "agent=${definition.id}, engine=${definition.engineId}, createFromDefinition=$agentCreated, definitionStored=$definitionStored",
+            "localAttachments=${attachments.mapNotNull { it.localPath }.joinToString()}",
+            "responseChecks=fileSentinel=$fileSeen, imageSentinel=$imageSeen",
+            "responseSnippet=${response.replace(Regex("\\s+"), " ").take(160).ifBlank { "none" }}",
+            "session=${session.threadId}, codexThreads=${threads.threads.size}",
+            "events=${events.take(20).joinToString().ifBlank { "none" }}",
+            "tools=${toolNames.distinct().joinToString().ifBlank { "none" }}",
+            "errors=${errors.take(3).joinToString(" | ").ifBlank { "none" }}",
+            "warnings=${warnings.take(3).joinToString(" | ").ifBlank { "none" }}",
+            "chatTimedOut=$chatTimedOut",
+            "chatFailure=${chatFailure ?: "none"}",
+        ).joinToString("\n")
+    }
+
+    private fun writeProbePng(file: File, label: String) {
+        val bitmap = Bitmap.createBitmap(320, 160, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(20, 90, 210)
+            textSize = 58f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        canvas.drawText(label, 34f, 92f, paint)
+        paint.color = Color.rgb(220, 40, 40)
+        canvas.drawRect(34f, 110f, 286f, 134f, paint)
+        file.outputStream().use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
+        bitmap.recycle()
+    }
+
+    private suspend fun probeHostHttps(baseUrl: String?): String = withContext(Dispatchers.IO) {
+        val root = baseUrl?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return@withContext "skipped:missing_base_url"
+        val endpoint = runCatching {
+            URL(root.trimEnd('/') + "/models")
+        }.getOrElse { error ->
+            return@withContext "fail:invalid_base_url:${error::class.java.simpleName}"
+        }
+        val host = endpoint.host.ifBlank { "unknown_host" }
+        runCatching {
+            val connection = (endpoint.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = HOST_API_NETWORK_TIMEOUT_MS
+                readTimeout = HOST_API_NETWORK_TIMEOUT_MS
+                setRequestProperty("Accept", "application/json")
+            }
+            try {
+                val code = connection.responseCode
+                "ok:$host:http_$code"
+            } finally {
+                connection.disconnect()
+            }
+        }.getOrElse { error ->
+            "fail:$host:${error::class.java.simpleName}"
+        }
     }
 
     private suspend fun runSessionChatDemo(): String {
@@ -797,6 +1039,7 @@ class MainActivity : Activity() {
                 "Config + Engine" to { runEngineDemo() },
                 "Capabilities" to { runCapabilityDemo() },
                 "Tools + Browser" to { runToolDemo() },
+                "Codex Engine Probe" to { runCodexEngineProbe() },
                 "Sessions + Chat" to { runSessionChatDemo() },
                 "Agents + Groups" to { runAgentGroupDemo() },
                 "Session Runs" to { runSessionRunDemo() },
@@ -826,12 +1069,16 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun runDemo(title: String, block: suspend () -> String) {
+    private fun runDemo(
+        title: String,
+        timeoutMs: Long = DEMO_ACTION_TIMEOUT_MS,
+        block: suspend () -> String,
+    ) {
         setStatus("Running $title...")
         hostScope.launch {
             val result = runCatching {
-                withTimeoutOrNull(DEMO_ACTION_TIMEOUT_MS) { block() }
-                    ?: "Timed out after ${DEMO_ACTION_TIMEOUT_MS / 1_000}s; external service or model input may be missing."
+                withTimeoutOrNull(timeoutMs) { block() }
+                    ?: "Timed out after ${timeoutMs / 1_000}s; external service or model input may be missing."
             }
                 .getOrElse { error -> "Failed: ${error.message ?: error::class.java.simpleName}" }
             setStatus("[$title]\n$result")
@@ -1023,5 +1270,8 @@ class MainActivity : Activity() {
         const val EXTRA_INSTALL_FIRST_PROVIDER = "install_first_provider"
         const val EXTRA_PROVIDER_AUTO_EXECUTE = "napaxi_auto_execute"
         const val DEMO_ACTION_TIMEOUT_MS = 15_000L
+        const val CODEX_PROBE_ACTION_TIMEOUT_MS = 35_000L
+        const val CODEX_PROBE_CHAT_TIMEOUT_MS = 25_000L
+        const val HOST_API_NETWORK_TIMEOUT_MS = 7_000
     }
 }

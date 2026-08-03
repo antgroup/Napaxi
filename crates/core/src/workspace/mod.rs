@@ -47,7 +47,7 @@ pub use paths::{
 };
 pub(crate) use profile::is_profile_populated;
 pub use profile::{sync_profile_documents, write_profile_json};
-pub(crate) use prompt::{WorkspacePromptSplit, workspace_prompt_split_with_language};
+pub(crate) use prompt::{WorkspacePromptSplit, workspace_prompt_split_with_language_and_bootstrap};
 pub use prompt::{system_prompt, system_prompt_for_context, system_prompt_handle};
 pub use recall::MemoryRecallSession;
 pub use reseed::{reseed_workspace, reseed_workspace_handle};

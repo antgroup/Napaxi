@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::tool_registry::{ToolEffect, ToolExecutionContext, ToolRequestBridge};
+use crate::tool_registry::{ToolDescriptor, ToolEffect, ToolExecutionContext, ToolRequestBridge};
 use crate::types::ChatEvent;
 
 pub(crate) mod codex;
@@ -142,6 +142,12 @@ pub(crate) fn normalize_engine_id(engine_id: &str) -> String {
     }
 }
 
+pub(crate) fn selection_is_codex(selection: Option<&AgentEngineSelection>) -> bool {
+    selection
+        .map(|selection| normalize_engine_id(&selection.engine_id) == CODEX_ENGINE_ID)
+        .unwrap_or(false)
+}
+
 pub(crate) fn selection_from_definition(
     definition: Option<&crate::agent_definitions::AgentDefinition>,
 ) -> AgentEngineSelection {
@@ -162,6 +168,14 @@ pub(crate) fn selection_from_definition(
 pub(crate) struct ExternalHostTurnPlan {
     pub(crate) request: AgentEngineTurnRequest,
     pub(crate) bridge: ToolRequestBridge,
+}
+
+#[allow(dead_code)]
+pub(crate) struct CodexTurnPlan {
+    pub(crate) request: AgentEngineTurnRequest,
+    pub(crate) tools: Option<Arc<crate::tool_registry::ToolRegistry>>,
+    pub(crate) internal_tool_handler: Option<crate::tool_loop::InternalToolHandler>,
+    pub(crate) tool_descriptors: Vec<ToolDescriptor>,
 }
 
 pub(crate) fn external_host_turn_plan(
@@ -223,17 +237,18 @@ pub(crate) fn external_host_turn_plan(
     }))
 }
 
-pub(crate) fn codex_turn_request(
+pub(crate) fn codex_turn_plan(
     selection: Option<&AgentEngineSelection>,
     prepared: &crate::turn::PreparedTurn,
+    tools: Option<&Arc<crate::tool_registry::ToolRegistry>>,
+    internal_tool_handler: Option<&crate::tool_loop::InternalToolHandler>,
     files_dir: &str,
     workspace_files_dir: &str,
     agent_id: &str,
     session_key_json: &str,
     message: &str,
-    attachments_json: &str,
     fallback_config_json: &str,
-) -> Result<Option<AgentEngineTurnRequest>, String> {
+) -> Result<Option<CodexTurnPlan>, String> {
     let Some(selection) = selection else {
         return Ok(None);
     };
@@ -253,20 +268,28 @@ pub(crate) fn codex_turn_request(
         &prepared.config.capability_profile,
         &prepared.config.capability_selection,
     )?;
-    Ok(Some(AgentEngineTurnRequest {
-        engine_id,
-        engine_profile_id: selection.engine_profile_id.clone(),
-        engine_config: selection.engine_config.clone(),
-        run_id: uuid::Uuid::new_v4().to_string(),
-        files_dir: files_dir.to_string(),
-        workspace_files_dir: workspace_files_dir.to_string(),
-        account_id: crate::runtime::session_account_id(session_key_json),
-        agent_id: agent_id.to_string(),
-        session_key_json: session_key_json.to_string(),
-        message: message.to_string(),
-        attachments_json: attachments_json.to_string(),
-        config_json: serde_json::to_string(&prepared.config)
-            .unwrap_or_else(|_| fallback_config_json.to_string()),
+    Ok(Some(CodexTurnPlan {
+        request: AgentEngineTurnRequest {
+            engine_id,
+            engine_profile_id: selection.engine_profile_id.clone(),
+            engine_config: selection.engine_config.clone(),
+            run_id: uuid::Uuid::new_v4().to_string(),
+            files_dir: files_dir.to_string(),
+            workspace_files_dir: workspace_files_dir.to_string(),
+            account_id: crate::runtime::session_account_id(session_key_json),
+            agent_id: agent_id.to_string(),
+            session_key_json: session_key_json.to_string(),
+            message: message.to_string(),
+            attachments_json: crate::turn::attachment_metadata_json(&prepared.attachments),
+            config_json: serde_json::to_string(&prepared.config)
+                .unwrap_or_else(|_| fallback_config_json.to_string()),
+        },
+        tools: tools.cloned(),
+        internal_tool_handler: internal_tool_handler.cloned(),
+        tool_descriptors: crate::agent_definitions::filter_tool_descriptors_for_definition(
+            crate::agents::get_definition(files_dir, agent_id).as_ref(),
+            prepared.tool_descriptors.clone(),
+        ),
     }))
 }
 
@@ -505,6 +528,10 @@ async fn list_tools_json_handle_inner(handle: i64, request_json: &str) -> Result
         tool_context.extra_tools,
     )
     .await;
+    let descriptors = crate::agent_definitions::filter_tool_descriptors_for_definition(
+        crate::agents::get_definition(engine.files_dir(), &agent_id).as_ref(),
+        descriptors,
+    );
     serde_json::to_string(&descriptors).map_err(|e| e.to_string())
 }
 
@@ -538,6 +565,10 @@ async fn call_tool_json_handle_inner(handle: i64, request_json: &str) -> Result<
         tool_context.extra_tools.clone(),
     )
     .await;
+    let descriptors = crate::agent_definitions::filter_tool_descriptors_for_definition(
+        crate::agents::get_definition(engine.files_dir(), &agent_id).as_ref(),
+        descriptors,
+    );
     let execution_context = ToolExecutionContext {
         files_dir: engine.files_dir().to_string(),
         workspace_files_dir: tool_context.workspace_files_dir,
@@ -613,165 +644,4 @@ fn error_json(message: String) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalize_engine_id_accepts_codex_aliases() {
-        assert_eq!(normalize_engine_id("codex"), CODEX_ENGINE_ID);
-        assert_eq!(
-            normalize_engine_id("napaxi.agent_engine.codex"),
-            CODEX_ENGINE_ID
-        );
-    }
-
-    #[test]
-    fn run_event_maps_host_completed_event_to_chat_event() {
-        let raw = json!({
-            "run_id": "run-1",
-            "event": {
-                "type": "completed",
-                "status": "completed",
-                "tool_call_count": 2
-            }
-        })
-        .to_string();
-
-        let decoded: Value = serde_json::from_str(&run_event_json(&raw)).unwrap();
-        assert_eq!(decoded["completed"], true);
-        assert_eq!(decoded["is_error"], false);
-        assert_eq!(decoded["event"]["type"], "run_completed");
-        assert_eq!(decoded["event"]["run_id"], "run-1");
-        assert_eq!(decoded["event"]["evidence_kind"], "agent_engine");
-        assert_eq!(decoded["event"]["verification"], "host_reported");
-        assert_eq!(decoded["event"]["tool_call_count"], 2);
-    }
-
-    #[test]
-    fn run_event_accepts_object_tool_call_arguments() {
-        let raw = json!({
-            "run_id": "run-1",
-            "event": {
-                "type": "tool_call",
-                "call_id": "call-1",
-                "name": "shell",
-                "arguments": {"cmd": "pwd"}
-            }
-        })
-        .to_string();
-
-        let decoded: Value = serde_json::from_str(&run_event_json(&raw)).unwrap();
-        assert_eq!(decoded["event"]["type"], "tool_call");
-        assert_eq!(decoded["event"]["arguments"], r#"{"cmd":"pwd"}"#);
-    }
-
-    #[test]
-    fn host_turn_event_decoder_uses_run_event_protocol() {
-        let events = decode_host_events(
-            "run-2",
-            &json!({
-                "events": [
-                    {"type": "thinking", "content": "planning"},
-                    {"type": "completed"}
-                ]
-            })
-            .to_string(),
-        );
-
-        assert!(matches!(
-            events.first(),
-            Some(ChatEvent::Thinking { content }) if content == "planning"
-        ));
-        assert!(matches!(
-            events.get(1),
-            Some(ChatEvent::RunCompleted { run_id, evidence_kind, .. })
-                if run_id == "run-2" && evidence_kind == "agent_engine"
-        ));
-    }
-
-    #[tokio::test]
-    async fn tool_broker_list_respects_tool_capability_selection() {
-        let dir = tempfile::tempdir().unwrap();
-        let config = crate::types::PlatformLlmConfig {
-            provider: "test".to_string(),
-            api_key: "test".to_string(),
-            model: "test-model".to_string(),
-            ..crate::types::PlatformLlmConfig::default()
-        };
-        let config_json = serde_json::to_string(&config).unwrap();
-        let context_json = json!({
-            "platform": "test",
-            "files_dir": dir.path().to_str().unwrap(),
-            "native_library_dir": null,
-            "capability_selection": {
-                "disabled_capabilities": ["napaxi.tool.shell"]
-            }
-        })
-        .to_string();
-        let handle = crate::runtime::create_engine_handle(&config_json, &context_json).unwrap();
-        // SAFETY: `handle` is a live engine handle produced by `create_engine_handle`; `handle_to_arc` returns `None` for a `0`/invalid handle rather than dereferencing it.
-        let engine = unsafe { crate::runtime::handle_to_arc(handle) }.unwrap();
-        let merged_config = engine.config_with_capabilities(engine.config());
-        assert!(
-            merged_config
-                .capability_selection
-                .disabled_capabilities
-                .contains(&"napaxi.tool.shell".to_string())
-        );
-        drop(engine);
-
-        let raw = list_tools_json_handle(handle, "{}").await;
-        let tools: Vec<crate::tool_registry::ToolDescriptor> = serde_json::from_str(&raw).unwrap();
-        assert!(
-            !tools.iter().any(|tool| tool.name == "shell"),
-            "disabled shell capability must not be listed for external engines"
-        );
-
-        // SAFETY: `handle` was created in this test and is consumed exactly once here, satisfying `handle_consume`'s contract.
-        let _ = unsafe { crate::runtime::handle_consume(handle) };
-    }
-
-    #[tokio::test]
-    async fn tool_broker_shell_call_uses_existing_approval_policy() {
-        let dir = tempfile::tempdir().unwrap();
-        let config = crate::types::PlatformLlmConfig {
-            provider: "test".to_string(),
-            api_key: "test".to_string(),
-            model: "test-model".to_string(),
-            ..crate::types::PlatformLlmConfig::default()
-        };
-        let config_json = serde_json::to_string(&config).unwrap();
-        let context_json = json!({
-            "platform": "test",
-            "files_dir": dir.path().to_str().unwrap(),
-            "native_library_dir": null
-        })
-        .to_string();
-        let handle = crate::runtime::create_engine_handle(&config_json, &context_json).unwrap();
-
-        let raw = call_tool_json_handle(
-            handle,
-            &json!({
-                "call_id": "call-1",
-                "name": "shell",
-                "arguments": {
-                    "cmd": "git push --force origin main"
-                }
-            })
-            .to_string(),
-        )
-        .await;
-        let result: Value = serde_json::from_str(&raw).unwrap();
-        assert_eq!(result["is_error"], true);
-        assert!(
-            result["output"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("approval"),
-            "expected shell approval policy error, got {result}"
-        );
-
-        // SAFETY: `handle` was created in this test and is consumed exactly once here, satisfying `handle_consume`'s contract.
-        let _ = unsafe { crate::runtime::handle_consume(handle) };
-    }
-}
+mod tests;

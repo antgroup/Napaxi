@@ -213,6 +213,30 @@ final class ToolRequestRouterTests: XCTestCase {
         }
     }
 
+
+    func testRoutesCapabilityIdPlatformToolToPlatformExecutorAsBareName() async throws {
+        let executor = CapturingPlatformExecutor()
+        let router = NapaxiToolRequestRouter(
+            platformExecutor: executor,
+            customExecutor: nil,
+            approvalHandler: nil,
+            structuredApprovalHandler: nil,
+            agentAppActionExecutor: nil,
+            browserController: nil
+        )
+        let requestJSON = try jsonString([
+            "request_id": 200,
+            "tool_name": "napaxi.platform_tool.open_url",
+            "params_json": try jsonString(["url": "https://example.com"]),
+        ])
+
+        let result = try await router.executeForTesting(requestJSON: requestJSON)
+
+        XCTAssertTrue(result.contains(#""handled":true"#))
+        XCTAssertEqual(executor.calls.map(\.name), ["open_url"])
+        XCTAssertEqual(executor.calls.first?.params["url"], .string("https://example.com"))
+    }
+
     func testPlatformToolRequestRejectsNonObjectParamsForParsingToolsLikeFlutter() async throws {
         let executor = CapturingPlatformExecutor()
         let resolver = CapturingToolExecutionResolver()

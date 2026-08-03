@@ -695,25 +695,51 @@ fn completed_outcome(event: &Value) -> CodexTurnOutcome {
 }
 
 fn error_outcome(event: &Value) -> CodexTurnOutcome {
+    let message = event
+        .get("error")
+        .and_then(error_message)
+        .or_else(|| error_message(event))
+        .unwrap_or_else(|| "Codex agent engine failed".to_string());
     if event
         .get("willRetry")
         .and_then(Value::as_bool)
         .unwrap_or(false)
     {
-        return CodexTurnOutcome::default();
+        return CodexTurnOutcome {
+            event: Some(ChatEvent::StreamReset {
+                reason: retry_error_reason(&message, event),
+            }),
+            ..CodexTurnOutcome::default()
+        };
     }
     CodexTurnOutcome {
-        event: Some(ChatEvent::Error {
-            message: event
-                .get("error")
-                .and_then(error_message)
-                .or_else(|| error_message(event))
-                .unwrap_or_else(|| "Codex agent engine failed".to_string()),
-        }),
+        event: Some(ChatEvent::Error { message }),
         completed: true,
         failed: true,
         ..CodexTurnOutcome::default()
     }
+}
+
+fn retry_error_reason(message: &str, event: &Value) -> String {
+    let details = event
+        .get("error")
+        .and_then(error_details)
+        .or_else(|| error_details(event));
+    match details {
+        Some(details) if !details.is_empty() && details != message => {
+            format!("{message}: {details}")
+        }
+        _ => message.to_string(),
+    }
+}
+
+fn error_details(value: &Value) -> Option<String> {
+    first_string(value, &["additionalDetails", "details"]).or_else(|| {
+        value
+            .pointer("/error/additionalDetails")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    })
 }
 
 fn error_message(value: &Value) -> Option<String> {

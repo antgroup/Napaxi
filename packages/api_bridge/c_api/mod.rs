@@ -926,6 +926,35 @@ mod tests {
     }
 
     #[test]
+    fn call_json_accepts_mobile_platform_tool_aliases() {
+        let namespace = CString::new("tools").unwrap();
+        let descriptors = CString::new(concat!("mobile_", "platform_tool_descriptors")).unwrap();
+        let payload = CString::new("{}").unwrap();
+        let ptr = napaxi_api_call_json(
+            0,
+            namespace.as_ptr(),
+            descriptors.as_ptr(),
+            payload.as_ptr(),
+        );
+        let out = roundtrip_owned(ptr);
+        let parsed: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["ok"], true);
+        assert!(
+            parsed["value"]
+                .as_array()
+                .is_some_and(|value| { value.iter().any(|tool| tool["name"] == "open_url") })
+        );
+
+        let is_tool = CString::new(concat!("is_", "mobile_", "platform_tool")).unwrap();
+        let payload = CString::new(r#"{"name":"open_url"}"#).unwrap();
+        let ptr = napaxi_api_call_json(0, namespace.as_ptr(), is_tool.as_ptr(), payload.as_ptr());
+        let out = roundtrip_owned(ptr);
+        let parsed: Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["value"], true);
+    }
+
+    #[test]
     fn stream_error_event_matches_dart_chat_event_contract() {
         // The Dart `ChatEvent.fromMap` switch keys on `type == "error"` and
         // reads `message`. Lock that shape so the two sides cannot drift.

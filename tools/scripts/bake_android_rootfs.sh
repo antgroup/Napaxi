@@ -2,8 +2,8 @@
 # Bake a curated set of Alpine packages into the Android sandbox rootfs
 # (packages/flutter/android/assets/alpine-rootfs.bin) so the sandbox ships
 # common dev tools (python3, nodejs, npm, curl, bash, zip, git, OpenJDK 17,
-# qemu-x86_64, the minimal Android APK build-tools/platform jar, and the
-# x86_64 runtime library closure required by aapt2/zipalign) offline instead of
+# qemu-x86_64, Codex CLI, the minimal Android APK build-tools/platform jar,
+# and the x86_64 runtime library closure required by aapt2/zipalign) offline instead of
 # installing them on demand from the environment panel.
 #
 # The rootfs is a clean busybox Alpine aarch64 base provided externally. This
@@ -58,6 +58,8 @@ readonly OPENJDK_PACKAGE=openjdk17-jdk
 readonly ANDROID_BUILD_TOOLS_VERSION=33.0.2
 readonly ANDROID_PLATFORM_API=33
 readonly UBUNTU_SYSROOT_VERSION=22.04
+CODEX_CLI_VERSION="${CODEX_CLI_VERSION:-0.144.6}"
+CODEX_NPM_REGISTRY="${CODEX_NPM_REGISTRY:-https://registry.npmjs.org/}"
 readonly ANDROID_BUILD_TOOLS_URL="https://dl.google.com/android/repository/build-tools_r33.0.2-linux.zip"
 readonly ANDROID_PLATFORM_URL="https://dl.google.com/android/repository/platform-33_r02.zip"
 readonly UBUNTU_SYSROOT_URL="https://mirrors.aliyun.com/ubuntu-cdimage/ubuntu-base/releases/22.04/release/ubuntu-base-22.04-base-amd64.tar.gz"
@@ -71,6 +73,7 @@ readonly EXPECTED_BINARIES=(
     ./usr/bin/python3
     ./usr/bin/node
     ./usr/bin/npm
+    ./usr/bin/codex
     ./usr/bin/curl
     ./bin/bash
     ./usr/bin/zip
@@ -126,6 +129,7 @@ require_command() {
 
 require_command tar
 require_command docker
+require_command npm
 
 [ -f "$INPUT" ] || err "Input rootfs not found: $INPUT"
 OUTPUT_PARENT="$(dirname "$OUTPUT")"
@@ -139,9 +143,10 @@ fi
 
 docker info >/dev/null 2>&1 || err "Docker daemon is not running. Start Docker/OrbStack first."
 
-mkdir -p "$CACHE_DIR/downloads"
+mkdir -p "$CACHE_DIR/downloads" "$CACHE_DIR/npm"
 CACHE_DIR="$(cd "$CACHE_DIR" && pwd)"
 DOWNLOAD_CACHE_DIR="$CACHE_DIR/downloads"
+NPM_TARBALL_CACHE_DIR="$CACHE_DIR/npm"
 
 human_size() {
     awk -v bytes="$1" 'BEGIN { printf "%dM", bytes / 1024 / 1024 }'
@@ -151,6 +156,8 @@ INPUT_SIZE=$(wc -c <"$INPUT" | tr -d '[:space:]')
 info "Input:  $INPUT ($(human_size "$INPUT_SIZE"))"
 info "Baking APK packages: ${BAKE_PACKAGES[*]}"
 info "Baking OpenJDK package: $OPENJDK_PACKAGE"
+info "Baking Codex CLI: @openai/codex@$CODEX_CLI_VERSION"
+info "Using npm registry: $CODEX_NPM_REGISTRY"
 info "Using download cache: $CACHE_DIR"
 
 # Keep the work dir under $HOME so Docker/Colima on macOS can bind-mount it
@@ -222,6 +229,43 @@ docker run --rm --platform linux/arm64 \
     ln -sf python3 "$ROOTFS/usr/bin/python"
 [ -e "$ROOTFS/usr/bin/pip3" ] && [ ! -e "$ROOTFS/usr/bin/pip" ] && \
     ln -sf pip3 "$ROOTFS/usr/bin/pip"
+
+# Install the Codex app-server CLI into the rootfs. The mobile Codex engine
+# launches `codex app-server` from inside PRoot, so the CLI must be available
+# without relying on a demo/environment-panel bootstrap step. Pin the default to
+# the protocol version validated by Napaxi's app-server tests; override
+# CODEX_CLI_VERSION explicitly when updating the schema/fixtures together.
+# Fetch tarballs on the host instead of from inside Docker because some Android
+# build hosts have Docker DNS/networking disabled while host npm still works.
+info "Installing Codex CLI from npm tarballs into rootfs..."
+CODEX_NPM_PACKAGE_TGZ="$NPM_TARBALL_CACHE_DIR/openai-codex-${CODEX_CLI_VERSION}.tgz"
+CODEX_NPM_LINUX_ARM64_TGZ="$NPM_TARBALL_CACHE_DIR/openai-codex-${CODEX_CLI_VERSION}-linux-arm64.tgz"
+if [ ! -f "$CODEX_NPM_PACKAGE_TGZ" ]; then
+    npm_config_update_notifier=false \
+    npm_config_fund=false \
+    npm_config_audit=false \
+    npm_config_registry="$CODEX_NPM_REGISTRY" \
+    npm pack --pack-destination "$NPM_TARBALL_CACHE_DIR" "@openai/codex@$CODEX_CLI_VERSION" >/dev/null
+fi
+if [ ! -f "$CODEX_NPM_LINUX_ARM64_TGZ" ]; then
+    npm_config_update_notifier=false \
+    npm_config_fund=false \
+    npm_config_audit=false \
+    npm_config_registry="$CODEX_NPM_REGISTRY" \
+    npm pack --pack-destination "$NPM_TARBALL_CACHE_DIR" "@openai/codex@${CODEX_CLI_VERSION}-linux-arm64" >/dev/null
+fi
+[ -f "$CODEX_NPM_PACKAGE_TGZ" ] || err "Missing Codex npm tarball: $CODEX_NPM_PACKAGE_TGZ"
+[ -f "$CODEX_NPM_LINUX_ARM64_TGZ" ] || err "Missing Codex linux-arm64 npm tarball: $CODEX_NPM_LINUX_ARM64_TGZ"
+CODEX_NODE_MODULE_DIR="$ROOTFS/usr/lib/node_modules/@openai/codex"
+CODEX_PLATFORM_MODULE_DIR="$CODEX_NODE_MODULE_DIR/node_modules/@openai/codex-linux-arm64"
+rm -rf "$CODEX_NODE_MODULE_DIR"
+mkdir -p "$CODEX_NODE_MODULE_DIR" "$CODEX_PLATFORM_MODULE_DIR" "$ROOTFS/usr/bin"
+tar -C "$CODEX_NODE_MODULE_DIR" --strip-components=1 -xzf "$CODEX_NPM_PACKAGE_TGZ"
+tar -C "$CODEX_PLATFORM_MODULE_DIR" --strip-components=1 -xzf "$CODEX_NPM_LINUX_ARM64_TGZ"
+chmod +x "$CODEX_NODE_MODULE_DIR/bin/codex.js"
+chmod +x "$CODEX_PLATFORM_MODULE_DIR/vendor/aarch64-unknown-linux-musl/bin/codex"
+rm -f "$ROOTFS/usr/bin/codex"
+ln -s ../lib/node_modules/@openai/codex/bin/codex.js "$ROOTFS/usr/bin/codex"
 
 # Install the JDK package directly instead of the heavier `openjdk17` meta
 # package. Keep this separate from the small tool package set because OpenJDK is
@@ -467,6 +511,7 @@ docker run --rm --platform linux/arm64 \
         python3 --version
         node --version
         npm --version
+        codex --version
         curl --version >/dev/null
         unzip -v >/dev/null
         git --version

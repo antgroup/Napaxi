@@ -29,12 +29,19 @@ pub(crate) struct WorkspacePromptSplit {
     pub(crate) volatile: String,
 }
 
-pub(crate) fn workspace_prompt_split_with_language(
+pub(crate) fn workspace_prompt_split_with_language_and_bootstrap(
     files_dir: &str,
     is_group_context: bool,
     response_language: &str,
+    include_first_run_bootstrap: bool,
 ) -> WorkspacePromptSplit {
-    let stable = stable_parts(files_dir, is_group_context, response_language).join(SECTION_SEP);
+    let stable = stable_parts(
+        files_dir,
+        is_group_context,
+        response_language,
+        include_first_run_bootstrap,
+    )
+    .join(SECTION_SEP);
     let volatile = volatile_parts(files_dir, is_group_context, response_language).join(SECTION_SEP);
     WorkspacePromptSplit { stable, volatile }
 }
@@ -59,7 +66,7 @@ fn system_prompt_for_context_inner(
     is_group_context: bool,
     response_language: &str,
 ) -> String {
-    let mut parts = stable_parts(files_dir, is_group_context, response_language);
+    let mut parts = stable_parts(files_dir, is_group_context, response_language, true);
     parts.extend(volatile_parts(
         files_dir,
         is_group_context,
@@ -71,10 +78,15 @@ fn system_prompt_for_context_inner(
 /// Workspace files that change rarely within a session. Order is preserved from
 /// the original combined prompt: BOOTSTRAP (first run only), AGENTS, SOUL, USER,
 /// IDENTITY, TOOLS.
-fn stable_parts(files_dir: &str, _is_group_context: bool, response_language: &str) -> Vec<String> {
+fn stable_parts(
+    files_dir: &str,
+    _is_group_context: bool,
+    response_language: &str,
+    include_first_run_bootstrap: bool,
+) -> Vec<String> {
     let mut parts = Vec::new();
 
-    if !is_profile_populated(files_dir) {
+    if include_first_run_bootstrap && !is_profile_populated(files_dir) {
         let header = localized_header(
             "## First-Run Bootstrap",
             "## 首次启动引导",

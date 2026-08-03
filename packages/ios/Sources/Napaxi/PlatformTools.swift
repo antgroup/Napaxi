@@ -173,8 +173,13 @@ public enum NapaxiPlatformToolProvider {
         "install_apk",
     ]
 
+    public static func normalizedPlatformToolName(_ name: String) -> String {
+        let prefix = "napaxi.platform_tool."
+        return name.hasPrefix(prefix) ? String(name.dropFirst(prefix.count)) : name
+    }
+
     public static func isMobilePlatformTool(_ name: String) -> Bool {
-        platformToolNames.contains(name)
+        platformToolNames.contains(normalizedPlatformToolName(name))
     }
 
     public static func isPlatformTool(_ name: String) -> Bool {
@@ -426,11 +431,12 @@ public final class NapaxiDefaultPlatformToolExecutor: NapaxiPlatformToolExecutor
         _ paramsJSON: String,
         workspaceFilesDir: String? = nil
     ) async -> String {
-        guard canHandle(toolName) else {
+        let normalizedToolName = NapaxiPlatformToolProvider.normalizedPlatformToolName(toolName)
+        guard canHandle(normalizedToolName) else {
             return (try? ["error": NapaxiJSONValue.string("Unknown platform tool: \(toolName)")].jsonString())
                 ?? #"{"error":"Unknown platform tool"}"#
         }
-        if let unsupported = Self.unsupportedPlatformResult(for: toolName) {
+        if let unsupported = Self.unsupportedPlatformResult(for: normalizedToolName) {
             return (try? unsupported.napaxiJSONString())
                 ?? #"{"error":"Platform tool is not supported"}"#
         }
@@ -439,8 +445,8 @@ public final class NapaxiDefaultPlatformToolExecutor: NapaxiPlatformToolExecutor
                 ? self
                 : NapaxiDefaultPlatformToolExecutor(filesDir: filesDir, workspaceFilesDir: workspaceFilesDir)
             return try await executor.executePlatformTool(
-                name: toolName,
-                params: Self.params(from: paramsJSON, forTool: toolName)
+                name: normalizedToolName,
+                params: Self.params(from: paramsJSON, forTool: normalizedToolName)
             ).napaxiJSONString()
         } catch {
             return (try? ["error": NapaxiJSONValue.string(error.localizedDescription)].jsonString())
@@ -449,11 +455,12 @@ public final class NapaxiDefaultPlatformToolExecutor: NapaxiPlatformToolExecutor
     }
 
     public func executePlatformTool(name: String, params: [String: NapaxiJSONValue]) async throws -> NapaxiJSONValue {
-        if let unsupported = Self.unsupportedPlatformResult(for: name) {
+        let normalizedName = NapaxiPlatformToolProvider.normalizedPlatformToolName(name)
+        if let unsupported = Self.unsupportedPlatformResult(for: normalizedName) {
             return unsupported
         }
         #if os(iOS)
-        switch name {
+        switch normalizedName {
         case "open_url":
             return try await openURL(params)
         case "make_call":

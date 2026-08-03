@@ -488,6 +488,10 @@ mod tests {
             tool_capability_id_typed("web_search").as_deref(),
             Some("napaxi.tool.web_search")
         );
+        assert_eq!(
+            tool_capability_id_typed("napaxi.platform_tool.open_url").as_deref(),
+            Some("napaxi.platform_tool.open_url")
+        );
         assert!(tool_capability_id_typed("nonexistent_tool").is_none());
     }
 

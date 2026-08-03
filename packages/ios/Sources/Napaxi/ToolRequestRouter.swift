@@ -96,12 +96,13 @@ public final class NapaxiToolRequestRouter: @unchecked Sendable {
         }
 
         if isPlatformTool(request.toolName), let platformExecutor {
+            let toolName = NapaxiPlatformToolProvider.normalizedPlatformToolName(request.toolName)
             let params = try NapaxiDefaultPlatformToolExecutor.params(
                 from: request.paramsJSON,
-                forTool: request.toolName
+                forTool: toolName
             )
             let value = try await platformExecutor.executePlatformTool(
-                name: request.toolName,
+                name: toolName,
                 params: params
             )
             return try NapaxiRawJSON(value).jsonString()
@@ -168,24 +169,7 @@ public final class NapaxiToolRequestRouter: @unchecked Sendable {
     }
 
     private func isPlatformTool(_ name: String) -> Bool {
-        [
-            "open_url",
-            "make_call",
-            "send_sms",
-            "get_clipboard",
-            "set_clipboard",
-            "get_device_info",
-            "get_location",
-            "send_notification",
-            "get_contacts",
-            "create_calendar_event",
-            "list_calendar_events",
-            "take_photo",
-            "media_library",
-            "record_audio",
-            "set_alarm",
-            "install_apk",
-        ].contains(name)
+        NapaxiPlatformToolProvider.isPlatformTool(name)
     }
 
     private struct ToolRequest: Decodable {

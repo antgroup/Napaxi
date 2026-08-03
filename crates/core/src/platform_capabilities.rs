@@ -43,8 +43,14 @@ const TOOL_NAMES: &[&str] = &[
     INSTALL_APK,
 ];
 
+pub fn normalize_platform_tool_name(name: &str) -> &str {
+    name.trim()
+        .strip_prefix("napaxi.platform_tool.")
+        .unwrap_or_else(|| name.trim())
+}
+
 pub fn is_platform_tool(name: &str) -> bool {
-    TOOL_NAMES.contains(&name)
+    TOOL_NAMES.contains(&normalize_platform_tool_name(name))
 }
 
 pub fn platform_tool_descriptors() -> Vec<ToolDescriptor> {
@@ -394,6 +400,7 @@ mod tests {
 
         assert_eq!(names, TOOL_NAMES);
         assert!(is_platform_tool(TAKE_PHOTO));
+        assert!(is_platform_tool("napaxi.platform_tool.take_photo"));
         assert!(!is_platform_tool("shell"));
     }
 

@@ -114,7 +114,7 @@ pub(crate) fn persist_attachment_files(
     }
 
     for (index, attachment) in attachments.iter_mut().enumerate() {
-        if attachment.data.is_empty() {
+        if attachment.data.is_empty() && attachment.local_path.is_none() {
             continue;
         }
         let filename = attachment
@@ -122,11 +122,31 @@ pub(crate) fn persist_attachment_files(
             .as_deref()
             .map(safe_filename)
             .filter(|name| !name.is_empty())
+            .or_else(|| {
+                attachment
+                    .local_path
+                    .as_deref()
+                    .map(safe_filename)
+                    .filter(|name| !name.is_empty())
+            })
             .unwrap_or_else(|| default_attachment_filename(index, attachment));
         let target = unique_attachment_path(&target_dir, index, &filename);
-        if fs::write(&target, &attachment.data).is_ok()
-            && let Some(path) = bridge.real_to_sandbox(&target.display().to_string())
-        {
+        let persisted = if attachment.data.is_empty() {
+            attachment
+                .local_path
+                .as_deref()
+                .filter(|path| !is_legacy_path_sandbox_path(path))
+                .and_then(|path| fs::copy(path, &target).ok())
+                .map(|bytes| {
+                    if attachment.size_bytes.is_none() {
+                        attachment.size_bytes = Some(bytes);
+                    }
+                })
+                .is_some()
+        } else {
+            fs::write(&target, &attachment.data).is_ok()
+        };
+        if persisted && let Some(path) = bridge.real_to_sandbox(&target.display().to_string()) {
             attachment.storage_key = Some(path);
         }
     }
@@ -164,7 +184,9 @@ pub(crate) fn attachment_metadata_json(attachments: &[IncomingAttachment]) -> St
                     serde_json::Value::String(sandbox_path.clone()),
                 );
             }
-            if let Some(local_path) = &attachment.local_path {
+            if attachment.storage_key.is_none()
+                && let Some(local_path) = &attachment.local_path
+            {
                 item.insert(
                     "path".to_string(),
                     serde_json::Value::String(local_path.clone()),
@@ -439,6 +461,43 @@ mod tests {
         assert_eq!(metadata[0]["path"].as_str(), Some("/tmp/notes.txt"));
         assert!(metadata[0].get("sandbox_path").is_none());
         assert!(metadata[0].get("data_base64").is_none());
+    }
+
+    #[test]
+    fn persist_attachment_files_copies_local_picker_path_into_workspace() {
+        let dir = tempfile::tempdir().unwrap();
+        let files_dir = dir.path().join("files");
+        let workspace_dir = dir.path().join("workspace-files");
+        let source = dir.path().join("picked-image.png");
+        fs::write(&source, b"png-bytes").unwrap();
+        let mut attachments = parse_scene_prompt_attachments(&format!(
+            r#"[{{"kind":"image","mime_type":"image/png","path":"{}"}}]"#,
+            source.display()
+        ));
+
+        persist_attachment_files(
+            files_dir.to_str().unwrap(),
+            workspace_dir.to_str().unwrap(),
+            "thread-1",
+            &mut attachments,
+        );
+
+        let sandbox_path = attachments[0].storage_key.as_deref().unwrap();
+        assert!(sandbox_path.starts_with("/workspace/attachments/thread-1/"));
+        assert_eq!(attachments[0].size_bytes, Some(9));
+        let bridge = crate::storage::FileBridge::new_with_workspace_files_dir(
+            files_dir.to_str().unwrap(),
+            workspace_dir.to_str().unwrap(),
+        );
+        let real_path = bridge.sandbox_to_real(sandbox_path).unwrap();
+        assert_eq!(fs::read(real_path).unwrap(), b"png-bytes");
+        let metadata: serde_json::Value =
+            serde_json::from_str(&attachment_metadata_json(&attachments)).unwrap();
+        assert_eq!(metadata[0]["sandbox_path"].as_str(), Some(sandbox_path));
+        assert!(
+            metadata[0].get("path").is_none(),
+            "persisted picker metadata must not expose host-local paths"
+        );
     }
 
     #[test]
