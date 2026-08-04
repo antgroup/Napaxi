@@ -2753,6 +2753,11 @@ class _SettingsPageState extends State<_SettingsPage>
             : _ConnectedAppDetailPage(
                 package: _selectedConnectedApp!,
                 language: _language,
+                clientFuture: widget.createNearbyClientFuture(),
+                onChanged: (package) {
+                  if (!mounted) return;
+                  setState(() => _selectedConnectedApp = package);
+                },
               ),
       _SettingsSection.agent => _AgentSettingsPage(
         config: _config,
@@ -2926,6 +2931,12 @@ class _AppsPageState extends State<_AppsPage> {
             : _ConnectedAppDetailPage(
                 package: selected,
                 language: widget.language,
+                clientFuture: widget.clientFuture,
+                onChanged: (package) {
+                  if (!mounted) return;
+                  setState(() => _selectedPackage = package);
+                  widget.onConnectedAppsChanged();
+                },
               ),
       ),
     );
@@ -3528,16 +3539,61 @@ class _ConnectedAppRow extends StatelessWidget {
   }
 }
 
-class _ConnectedAppDetailPage extends StatelessWidget {
+class _ConnectedAppDetailPage extends StatefulWidget {
   const _ConnectedAppDetailPage({
     required this.package,
     required this.language,
+    required this.clientFuture,
+    required this.onChanged,
   });
 
   final sdk.AgentAppPackage package;
   final AppLanguage language;
+  final Future<NapaxiChatClient> clientFuture;
+  final ValueChanged<sdk.AgentAppPackage> onChanged;
 
-  bool get _chinese => language == AppLanguage.chinese;
+  @override
+  State<_ConnectedAppDetailPage> createState() =>
+      _ConnectedAppDetailPageState();
+}
+
+class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
+  late sdk.AgentAppPackage _package = widget.package;
+  bool _savingAutoInvoke = false;
+
+  bool get _chinese => widget.language == AppLanguage.chinese;
+
+  @override
+  void didUpdateWidget(_ConnectedAppDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.package.providerId != widget.package.providerId ||
+        oldWidget.package.autoInvokeEnabled !=
+            widget.package.autoInvokeEnabled) {
+      _package = widget.package;
+    }
+  }
+
+  Future<void> _setAutoInvoke(bool enabled) async {
+    if (_savingAutoInvoke) return;
+    setState(() => _savingAutoInvoke = true);
+    try {
+      final client = await widget.clientFuture;
+      final updated = await client.setConnectedAppAutoInvoke(
+        _package.providerId,
+        enabled,
+      );
+      if (!mounted) return;
+      setState(() => _package = updated);
+      widget.onChanged(updated);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyDisplayError(error))));
+    } finally {
+      if (mounted) setState(() => _savingAutoInvoke = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3545,10 +3601,27 @@ class _ConnectedAppDetailPage extends StatelessWidget {
       key: const Key('connected_app_detail_page'),
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
       children: [
+        _SettingsGroupTitle(title: _chinese ? '调用方式' : 'Invocation'),
+        _SettingsGroupCard(
+          dividerInset: 16,
+          children: [
+            _ConnectedAppRow(
+              key: Key('connected_app_auto_invoke_${_package.providerId}'),
+              title: _chinese ? '自动调用' : 'Automatic invocation',
+              subtitle: _chinese
+                  ? '未指定应用时，允许 Napaxi 根据对话内容使用'
+                  : 'Allow Napaxi to use this app when it was not explicitly selected',
+              enabled: _package.autoInvokeEnabled,
+              busy: _savingAutoInvoke,
+              onChanged: (enabled) => unawaited(_setAutoInvoke(enabled)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
         _SettingsGroupTitle(
           title: _chinese
-              ? '${package.actions.length} 项能力'
-              : '${package.actions.length} ${package.actions.length == 1 ? 'capability' : 'capabilities'}',
+              ? '${_package.actions.length} 项能力'
+              : '${_package.actions.length} ${_package.actions.length == 1 ? 'capability' : 'capabilities'}',
         ),
         Material(
           color: _configSurface,
@@ -3557,12 +3630,12 @@ class _ConnectedAppDetailPage extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (var index = 0; index < package.actions.length; index++) ...[
+              for (var index = 0; index < _package.actions.length; index++) ...[
                 _ConnectedAppCapabilityRow(
-                  action: package.actions[index],
-                  language: language,
+                  action: _package.actions[index],
+                  language: widget.language,
                 ),
-                if (index != package.actions.length - 1)
+                if (index != _package.actions.length - 1)
                   const Padding(
                     padding: EdgeInsets.only(left: 16),
                     child: Divider(height: 1, color: _configBorderFaint),

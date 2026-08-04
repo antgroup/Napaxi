@@ -31,6 +31,9 @@ void main() {
       ],
       handoff: {'mode': 'app_handoff'},
       result: {'mode': 'callback'},
+      autoInvokeEnabled: true,
+      lastUsedAt: '2026-08-04T07:00:00Z',
+      useCount: 3,
     );
 
     final decoded = AgentAppPackage.fromMap(
@@ -47,6 +50,9 @@ void main() {
     );
     expect(decoded.actions.single.parameters['properties'], isA<Map>());
     expect(decoded.handoff['mode'], 'app_handoff');
+    expect(decoded.autoInvokeEnabled, isTrue);
+    expect(decoded.lastUsedAt, '2026-08-04T07:00:00Z');
+    expect(decoded.useCount, 3);
   });
 
   test('agent app action request decodes proposal and manifest', () {

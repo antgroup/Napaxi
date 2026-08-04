@@ -17,6 +17,8 @@ String  getAgentAppPackage({required PlatformInt64 handle , required String agen
 
 bool  deleteAgentAppPackage({required PlatformInt64 handle , required String agentId }) => RustLib.instance.api.crateBridgeAgentAppDeleteAgentAppPackage(handle: handle, agentId: agentId);
 
+String  setAgentAppAutoInvoke({required PlatformInt64 handle , required String providerId , required bool enabled }) => RustLib.instance.api.crateBridgeAgentAppSetAgentAppAutoInvoke(handle: handle, providerId: providerId, enabled: enabled);
+
 String  submitAgentAppActionResult({required PlatformInt64 handle , required String resultJson }) => RustLib.instance.api.crateBridgeAgentAppSubmitAgentAppActionResult(handle: handle, resultJson: resultJson);
 
 String  listAgentAppActionProposals({required PlatformInt64 handle , required String agentId }) => RustLib.instance.api.crateBridgeAgentAppListAgentAppActionProposals(handle: handle, agentId: agentId);

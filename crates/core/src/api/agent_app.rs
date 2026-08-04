@@ -20,6 +20,11 @@ pub fn delete_agent_app_package(handle: i64, provider_or_agent_id: &str) -> bool
     crate::agents::agent_app::delete_package_handle(handle, provider_or_agent_id)
 }
 
+/// Enable or disable model-selected invocation for a registered Provider.
+pub fn set_agent_app_auto_invoke(handle: i64, provider_or_agent_id: &str, enabled: bool) -> String {
+    crate::agents::agent_app::set_auto_invoke_handle(handle, provider_or_agent_id, enabled)
+}
+
 /// Submit the result of an executed agent app action back to the engine.
 pub fn submit_agent_app_action_result(handle: i64, result_json: &str) -> String {
     crate::agents::agent_app::submit_result_handle(handle, result_json)
@@ -58,6 +63,7 @@ mod tests {
         assert!(is_error_json(&register_agent_app_package(bad, "{}")));
         assert!(is_error_json(&submit_agent_app_action_result(bad, "{}")));
         assert!(is_error_json(&accept_agent_app_trigger(bad, "{}")));
+        assert!(is_error_json(&set_agent_app_auto_invoke(bad, "any", true)));
 
         // Read operations gracefully degrade: list → empty array, get → error
         // or null, delete → false. This is by design — callers show "no data"
@@ -147,6 +153,10 @@ mod tests {
             get.contains("test.agent"),
             "get should return the package: {get}"
         );
+
+        let automatic = set_agent_app_auto_invoke(handle, "test.provider", true);
+        let automatic_value: serde_json::Value = serde_json::from_str(&automatic).unwrap();
+        assert_eq!(automatic_value["auto_invoke_enabled"], true);
 
         // Delete.
         assert!(delete_agent_app_package(handle, "test.provider"));

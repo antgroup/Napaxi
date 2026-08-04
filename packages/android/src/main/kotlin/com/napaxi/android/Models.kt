@@ -4796,6 +4796,9 @@ public class AgentAppPackage(rawJson: String) : RawJsonModel(rawJson) {
         handoff: JSONObject = JSONObject(),
         result: JSONObject = JSONObject(),
         installBinding: AgentAppInstallBinding? = null,
+        autoInvokeEnabled: Boolean = false,
+        lastUsedAt: String = "",
+        useCount: Long = 0,
         createdAt: String = "",
         updatedAt: String = "",
     ) : this(
@@ -4810,6 +4813,9 @@ public class AgentAppPackage(rawJson: String) : RawJsonModel(rawJson) {
             .put("result", result)
             .apply {
                 installBinding?.let { put("install_binding", it.toJsonObject()) }
+                put("auto_invoke_enabled", autoInvokeEnabled)
+                if (lastUsedAt.isNotBlank()) put("last_used_at", lastUsedAt)
+                if (useCount > 0) put("use_count", useCount)
                 if (createdAt.isNotBlank()) put("created_at", createdAt)
                 if (updatedAt.isNotBlank()) put("updated_at", updatedAt)
             }
@@ -4830,6 +4836,9 @@ public class AgentAppPackage(rawJson: String) : RawJsonModel(rawJson) {
         get() = obj.optJSONObject("install_binding")?.let {
             AgentAppInstallBinding.fromJsonObject(it)
         }
+    public val autoInvokeEnabled: Boolean get() = obj.optBoolean("auto_invoke_enabled", false)
+    public val lastUsedAt: String get() = obj.optString("last_used_at")
+    public val useCount: Long get() = obj.optLong("use_count", 0)
     public val createdAt: String get() = obj.optString("created_at")
     public val updatedAt: String get() = obj.optString("updated_at")
 

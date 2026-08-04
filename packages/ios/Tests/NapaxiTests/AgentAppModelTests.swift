@@ -27,6 +27,9 @@ final class AgentAppModelTests: XCTestCase {
         let deletePackageJSON: (NapaxiAgentAppAPI, String) throws -> NapaxiJSONValue = { api, agentId in
             try api.deletePackageJSON(agentId)
         }
+        let setAutoInvoke: (NapaxiAgentAppAPI, String, Bool) throws -> NapaxiAgentAppPackage = { api, providerId, enabled in
+            try api.setAutoInvoke(providerId: providerId, enabled: enabled)
+        }
         let getProposal: (NapaxiAgentAppAPI, String) throws -> NapaxiAgentAppActionRecord? = { api, requestId in
             try api.getProposal(requestId)
         }
@@ -38,6 +41,7 @@ final class AgentAppModelTests: XCTestCase {
         XCTAssertNotNil(getPackageJSON)
         XCTAssertNotNil(deletePackage)
         XCTAssertNotNil(deletePackageJSON)
+        XCTAssertNotNil(setAutoInvoke)
         XCTAssertNotNil(getProposal)
         XCTAssertNotNil(getProposalJSON)
     }
@@ -130,6 +134,9 @@ final class AgentAppModelTests: XCTestCase {
             "ios_bundle_id": "com.example.provider",
             "host_callback_scheme": "napaxi"
           },
+          "auto_invoke_enabled": true,
+          "last_used_at": "2030-01-02T12:00:00Z",
+          "use_count": 7,
           "unknown_future_field": {"nested": true}
         }
         """
@@ -148,6 +155,9 @@ final class AgentAppModelTests: XCTestCase {
         XCTAssertEqual(package.actions.first?.executionModes, ["handoff"])
         XCTAssertEqual(package.actions.first?.timeoutSeconds, 30)
         XCTAssertEqual(package.installBinding?.platform, "ios")
+        XCTAssertTrue(package.autoInvokeEnabled)
+        XCTAssertEqual(package.lastUsedAt, "2030-01-02T12:00:00Z")
+        XCTAssertEqual(package.useCount, 7)
         XCTAssertEqual(package.installBinding?.protocolVersion, 2)
         XCTAssertEqual(package.installBinding?.iosBundleId, "com.example.provider")
         XCTAssertEqual(package.installBinding?.hostCallbackScheme, "napaxi")

@@ -974,6 +974,15 @@ public struct NapaxiAgentAppAPI: NapaxiCoreAPI, Sendable {
     public func deletePackage(_ agentId: String) throws -> Bool { try deletePackage(agentId: agentId) }
     public func deletePackageJSON(agentId: String) throws -> NapaxiJSONValue { try call("agent_app", "delete_package", ["agent_id": .string(agentId)]) }
     public func deletePackageJSON(_ agentId: String) throws -> NapaxiJSONValue { try deletePackageJSON(agentId: agentId) }
+    public func setAutoInvoke(providerId: String, enabled: Bool) throws -> NapaxiAgentAppPackage {
+        try Self.decodePackage(from: setAutoInvokeJSON(providerId: providerId, enabled: enabled))
+    }
+    public func setAutoInvokeJSON(providerId: String, enabled: Bool) throws -> NapaxiJSONValue {
+        try call("agent_app", "set_auto_invoke", [
+            "provider_id": .string(providerId),
+            "enabled": .bool(enabled),
+        ])
+    }
     public func submitActionResult(_ result: NapaxiAgentAppActionResult) throws -> NapaxiAgentAppActionRecord {
         try Self.decodeActionRecord(from: submitActionResultJSON(resultJSON: result.jsonString()))
     }

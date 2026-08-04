@@ -192,6 +192,7 @@ final class FlutterAliasTests: XCTestCase {
         let listAgentAppPackagesAlias: (Int64) throws -> String = listAgentAppPackages
         let getAgentAppPackageAlias: (Int64, String) throws -> String = getAgentAppPackage
         let deleteAgentAppPackageAlias: (Int64, String) throws -> Bool = deleteAgentAppPackage
+        let setAgentAppAutoInvokeAlias: (Int64, String, Bool) throws -> String = setAgentAppAutoInvoke
         let submitAgentAppActionResultAlias: (Int64, String) throws -> String = submitAgentAppActionResult
         let listAgentAppActionProposalsAlias: (Int64, String) throws -> String = listAgentAppActionProposals
         let getAgentAppActionProposalAlias: (Int64, String) throws -> String = getAgentAppActionProposal
@@ -355,6 +356,7 @@ final class FlutterAliasTests: XCTestCase {
         XCTAssertNotNil(listAgentAppPackagesAlias)
         XCTAssertNotNil(getAgentAppPackageAlias)
         XCTAssertNotNil(deleteAgentAppPackageAlias)
+        XCTAssertNotNil(setAgentAppAutoInvokeAlias)
         XCTAssertNotNil(submitAgentAppActionResultAlias)
         XCTAssertNotNil(listAgentAppActionProposalsAlias)
         XCTAssertNotNil(getAgentAppActionProposalAlias)

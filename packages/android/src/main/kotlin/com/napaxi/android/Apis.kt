@@ -1691,6 +1691,16 @@ public class AgentAppApi internal constructor(private val engine: NapaxiEngine) 
     public suspend fun deletePackage(agentId: String): Boolean =
         withContext(Dispatchers.IO) { engine.bridgeBool("agent_app.delete", JSONObject().put("agent_id", agentId)) }
 
+    public suspend fun setAutoInvoke(providerId: String, enabled: Boolean): AgentAppPackage =
+        withContext(Dispatchers.IO) {
+            AgentAppPackage(
+                engine.bridge(
+                    "agent_app.set_auto_invoke",
+                    JSONObject().put("provider_id", providerId).put("enabled", enabled),
+                ),
+            )
+        }
+
     public suspend fun submitActionResult(resultJson: String): AgentAppActionRecord =
         withContext(Dispatchers.IO) {
             AgentAppActionRecord(engine.bridge("agent_app.submit_result", JSONObject().put("result_json", resultJson)))

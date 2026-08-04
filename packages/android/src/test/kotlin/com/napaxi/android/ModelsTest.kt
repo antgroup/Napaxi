@@ -2138,6 +2138,9 @@ class ModelsTest {
                 "background_trigger_supported":true,
                 "host_background_trigger_service":"TriggerService"
               },
+              "auto_invoke_enabled":true,
+              "last_used_at":"2030-01-02T12:00:00Z",
+              "use_count":7,
               "created_at":"2030-01-01T00:00:00Z",
               "updated_at":"2030-01-02T00:00:00Z"
             }
@@ -2206,6 +2209,9 @@ class ModelsTest {
         assertEquals("ios.bundle", packageDef.installBinding?.iosBundleId)
         assertEquals("napaxi", packageDef.installBinding?.hostCallbackScheme)
         assertEquals(true, packageDef.installBinding?.backgroundTriggerSupported)
+        assertEquals(true, packageDef.autoInvokeEnabled)
+        assertEquals("2030-01-02T12:00:00Z", packageDef.lastUsedAt)
+        assertEquals(7L, packageDef.useCount)
         assertEquals("2030-01-02T00:00:00Z", packageDef.updatedAt)
         assertEquals(packageDef.rawJson, packageDef.toJsonString())
         assertEquals("create_event", manifest.actionId)
@@ -2270,6 +2276,9 @@ class ModelsTest {
             handoff = JSONObject("""{"mode":"activity"}"""),
             result = JSONObject("""{"installed":true}"""),
             installBinding = packageDef.installBinding,
+            autoInvokeEnabled = true,
+            lastUsedAt = "2030-01-02T12:00:00Z",
+            useCount = 7,
             createdAt = "2030-01-01T00:00:00Z",
             updatedAt = "2030-01-02T00:00:00Z",
         )
@@ -2287,6 +2296,8 @@ class ModelsTest {
         assertEquals("Calendar Agent", constructedPackage.displayName)
         assertEquals("create_event", constructedPackage.actions.single().actionId)
         assertEquals("host.app", constructedPackage.installBinding?.hostPackageName)
+        assertEquals(true, constructedPackage.autoInvokeEnabled)
+        assertEquals(7L, constructedPackage.useCount)
         assertEquals("event-2", constructedRecord.result?.result?.getString("event_id"))
         val bindingFromJson = AgentAppInstallBinding.fromJsonObject(packageDef.installBinding!!.toJsonObject())
         val bindingFromMap = AgentAppInstallBinding.fromMap(

@@ -4214,6 +4214,27 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
+  Future<void> _refreshConnectedAgentAppUsage() async {
+    if (_connectedAgentApps.isEmpty) return;
+    try {
+      final client = await _getChatClient();
+      final registered = await client.listConnectedApps();
+      if (!mounted) return;
+      final byProviderId = {
+        for (final package in registered) package.providerId: package,
+      };
+      setState(() {
+        _connectedAgentApps = List.unmodifiable(
+          _connectedAgentApps
+              .map((package) => byProviderId[package.providerId] ?? package)
+              .toList(growable: false),
+        );
+      });
+    } catch (error) {
+      debugPrint('Agent App usage refresh failed: $error');
+    }
+  }
+
   Future<bool?> _showConnectedAppsDiscoverySheet(
     List<sdk.AgentProviderDescriptor> providers,
   ) {
@@ -6078,6 +6099,7 @@ class _ChatScreenState extends State<ChatScreen>
                 );
               }
               unawaited(_refreshContextStatusForSession(agentId, sessionId));
+              unawaited(_refreshConnectedAgentAppUsage());
               _scrollToBottom();
             },
           );

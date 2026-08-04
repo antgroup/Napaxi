@@ -48,6 +48,23 @@ fn registers_provider_without_creating_switchable_agent_definition() {
 }
 
 #[test]
+fn provider_cannot_enable_automatic_invocation_during_registration() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let mut manifest: Value = serde_json::from_str(&package_json()).unwrap();
+    manifest["auto_invoke_enabled"] = json!(true);
+    manifest["last_used_at"] = json!("2099-01-01T00:00:00Z");
+    manifest["use_count"] = json!(99);
+
+    let package: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &manifest.to_string())).unwrap();
+
+    assert!(!package.auto_invoke_enabled);
+    assert!(package.last_used_at.is_empty());
+    assert_eq!(package.use_count, 0);
+}
+
+#[test]
 fn resolves_canonical_and_display_name_provider_mentions() {
     let temp = tempfile::tempdir().unwrap();
     let files_dir = temp.path().to_string_lossy();
@@ -68,6 +85,11 @@ fn resolves_canonical_and_display_name_provider_mentions() {
             .unwrap();
     assert_eq!(display.provider_id, "provider");
     assert_eq!(display.message, "create another order");
+
+    let used: AgentAppPackage =
+        serde_json::from_str(&get_package_json(&files_dir, "provider")).unwrap();
+    assert_eq!(used.use_count, 2);
+    assert!(!used.last_used_at.is_empty());
 
     assert!(
         resolve_explicit_provider_message(&files_dir, "@someone hello")
@@ -250,6 +272,46 @@ fn explicitly_selected_provider_exposes_actions_to_default_agent() {
     );
     assert_eq!(with_selection.len(), 1);
     assert_eq!(with_selection[0].name, "app_action_order_create");
+
+    let enabled: AgentAppPackage =
+        serde_json::from_str(&set_auto_invoke(&files_dir, "provider", true)).unwrap();
+    assert!(enabled.auto_invoke_enabled);
+    let (automatic, _) = action_tools_and_handler_for_provider(
+        &files_dir,
+        "engine.codex",
+        None,
+        Some(ToolRequestBridge::process_scoped(Arc::new(|_, _, _, _| {}))),
+        None,
+    );
+    assert_eq!(automatic.len(), 1);
+    assert_eq!(automatic[0].name, "app_action_order_create");
+
+    let disabled: AgentAppPackage =
+        serde_json::from_str(&set_auto_invoke(&files_dir, "provider", false)).unwrap();
+    assert!(!disabled.auto_invoke_enabled);
+}
+
+#[test]
+fn automatic_invocation_rejects_cross_provider_tool_name_collisions() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+    let _: AgentAppPackage =
+        serde_json::from_str(&set_auto_invoke(&files_dir, "provider", true)).unwrap();
+
+    let mut duplicate: Value = serde_json::from_str(&package_json()).unwrap();
+    duplicate["provider_id"] = json!("provider.other");
+    duplicate["agent_id"] = json!("provider.other.agent");
+    duplicate["display_name"] = json!("Other Provider");
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &duplicate.to_string())).unwrap();
+
+    let error = set_auto_invoke(&files_dir, "provider.other", true);
+    assert!(error.contains("conflicts"));
+    let other: AgentAppPackage =
+        serde_json::from_str(&get_package_json(&files_dir, "provider.other")).unwrap();
+    assert!(!other.auto_invoke_enabled);
 }
 
 #[test]

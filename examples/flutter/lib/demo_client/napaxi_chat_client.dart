@@ -738,6 +738,11 @@ abstract class NapaxiChatClient {
 
   Future<bool> disableConnectedApp(String providerId);
 
+  Future<sdk.AgentAppPackage> setConnectedAppAutoInvoke(
+    String providerId,
+    bool enabled,
+  );
+
   Future<DemoAgent> installAgentProvider(sdk.AgentProviderDescriptor provider);
 
   Future<DemoAgent?> installPendingAgentProvider();
@@ -1688,6 +1693,15 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   Future<bool> disableConnectedApp(String providerId) async {
     final engine = await _ensureManagementEngine();
     return engine.agentApp.deletePackage(providerId);
+  }
+
+  @override
+  Future<sdk.AgentAppPackage> setConnectedAppAutoInvoke(
+    String providerId,
+    bool enabled,
+  ) async {
+    final engine = await _ensureManagementEngine();
+    return engine.agentApp.setAutoInvoke(providerId, enabled);
   }
 
   @override

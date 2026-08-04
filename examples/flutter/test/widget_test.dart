@@ -3455,6 +3455,23 @@ void main() {
     expect(find.text('Create note'), findsOneWidget);
     expect(find.text('Create a new note in the app.'), findsOneWidget);
     expect(find.text('Confirmation required'), findsOneWidget);
+    final autoInvokeRow = find.byKey(
+      const Key('connected_app_auto_invoke_notes.provider'),
+    );
+    expect(autoInvokeRow, findsOneWidget);
+    expect(
+      tester
+          .widget<Switch>(
+            find.descendant(of: autoInvokeRow, matching: find.byType(Switch)),
+          )
+          .value,
+      isFalse,
+    );
+    await tester.tap(
+      find.descendant(of: autoInvokeRow, matching: find.byType(Switch)),
+    );
+    await tester.pumpAndSettle();
+    expect(fakeClient.connectedApps.single.autoInvokeEnabled, isTrue);
 
     await tester.drag(
       find.byKey(const Key('connected_app_detail_page')),
@@ -3571,6 +3588,61 @@ void main() {
     expect(input.focusNode?.hasFocus, isTrue);
     expect(tester.testTextInput.isVisible, isTrue);
     expect(tester.getSize(inputContainer).height, inputHeightWithSuggestions);
+  });
+
+  testWidgets('orders bare @ suggestions by most recent use', (tester) async {
+    sdk.AgentProviderDescriptor provider(String id, String label) =>
+        sdk.AgentProviderDescriptor(
+          packageName: 'com.napaxi.generated.$id',
+          installActivityName: 'ProviderInstallActivity',
+          activityName: 'ProviderActionActivity',
+          label: label,
+        );
+
+    sdk.AgentAppPackage package(String id, String label, String lastUsedAt) =>
+        sdk.AgentAppPackage(
+          providerId: '$id.provider',
+          agentId: '$id.agent',
+          displayName: label,
+          lastUsedAt: lastUsedAt,
+          installBinding: sdk.AgentAppInstallBinding(
+            platform: 'android',
+            appPackageName: 'com.napaxi.generated.$id',
+            activityName: 'ProviderActionActivity',
+            signingCertSha256: 'AA',
+            installedAt: '2026-08-03T00:00:00Z',
+            installRequestId: 'install-$id',
+            protocolVersion: 2,
+          ),
+        );
+
+    final fakeClient = FakeNapaxiChatClient(
+      discoveredAgentProviders: [
+        provider('alpha', 'Alpha'),
+        provider('recent', 'Recent'),
+        provider('older', 'Older'),
+      ],
+      connectedApps: [
+        package('alpha', 'Alpha', ''),
+        package('older', 'Older', '2026-08-01T00:00:00Z'),
+        package('recent', 'Recent', '2026-08-04T00:00:00Z'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await tester.pumpAndSettle();
+    final inputFinder = find.byKey(const Key('chat_input_field'));
+    await tester.showKeyboard(inputFinder);
+    await tester.enterText(inputFinder, '@');
+    await tester.pump();
+
+    final recent = find.byKey(const Key('agent_app_mention_recent.provider'));
+    final older = find.byKey(const Key('agent_app_mention_older.provider'));
+    final alpha = find.byKey(const Key('agent_app_mention_alpha.provider'));
+    expect(tester.getTopLeft(recent).dx, lessThan(tester.getTopLeft(older).dx));
+    expect(tester.getTopLeft(older).dx, lessThan(tester.getTopLeft(alpha).dx));
   });
 
   testWidgets('shows grouped settings and agent configuration', (tester) async {

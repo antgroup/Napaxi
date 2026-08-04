@@ -38,7 +38,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.12.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1788835512;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1278123560;
 
 // Section: executor
 
@@ -7365,6 +7365,43 @@ fn wire__crate__bridge__init__send_to_session_stream_impl(
         },
     )
 }
+fn wire__crate__bridge__agent_app__set_agent_app_auto_invoke_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "set_agent_app_auto_invoke",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_handle = <i64>::sse_decode(&mut deserializer);
+            let api_provider_id = <String>::sse_decode(&mut deserializer);
+            let api_enabled = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok =
+                    Result::<_, ()>::Ok(crate::bridge::agent_app::set_agent_app_auto_invoke(
+                        api_handle,
+                        api_provider_id,
+                        api_enabled,
+                    ))?;
+                Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__bridge__group__set_group_custom_prompt_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -8590,43 +8627,43 @@ fn pde_ffi_dispatcher_primary_impl(
             rust_vec_len,
             data_len,
         ),
-        198 => {
+        199 => {
             wire__crate__bridge__skill__set_skill_enabled_impl(port, ptr, rust_vec_len, data_len)
         }
-        200 => wire__crate__bridge__channel_agent__stream_channel_agent_pump_impl(
+        201 => wire__crate__bridge__channel_agent__stream_channel_agent_pump_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        204 => {
+        205 => {
             wire__crate__bridge__init__tool_broker_call_tool_impl(port, ptr, rust_vec_len, data_len)
         }
-        205 => wire__crate__bridge__init__tool_broker_list_tools_impl(
+        206 => wire__crate__bridge__init__tool_broker_list_tools_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        208 => wire__crate__bridge__agent_defs__update_agent_definition_impl(
+        209 => wire__crate__bridge__agent_defs__update_agent_definition_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        212 => {
+        213 => {
             wire__crate__bridge__group__update_group_members_impl(port, ptr, rust_vec_len, data_len)
         }
-        213 => {
+        214 => {
             wire__crate__bridge__skill__update_skill_config_impl(port, ptr, rust_vec_len, data_len)
         }
-        214 => wire__crate__bridge__skill__update_skill_remediation_run_impl(
+        215 => wire__crate__bridge__skill__update_skill_remediation_run_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        219 => wire__crate__bridge__workspace__write_workspace_file_impl(
+        220 => wire__crate__bridge__workspace__write_workspace_file_impl(
             port,
             ptr,
             rust_vec_len,
@@ -8990,34 +9027,39 @@ fn pde_ffi_dispatcher_sync_impl(
             rust_vec_len,
             data_len,
         ),
-        197 => {
-            wire__crate__bridge__group__set_group_custom_prompt_impl(ptr, rust_vec_len, data_len)
-        }
-        199 => wire__crate__bridge__file_bridge__skills_dir_impl(ptr, rust_vec_len, data_len),
-        201 => wire__crate__bridge__agent_app__submit_agent_app_action_result_impl(
+        197 => wire__crate__bridge__agent_app__set_agent_app_auto_invoke_impl(
             ptr,
             rust_vec_len,
             data_len,
         ),
-        202 => {
+        198 => {
+            wire__crate__bridge__group__set_group_custom_prompt_impl(ptr, rust_vec_len, data_len)
+        }
+        200 => wire__crate__bridge__file_bridge__skills_dir_impl(ptr, rust_vec_len, data_len),
+        202 => wire__crate__bridge__agent_app__submit_agent_app_action_result_impl(
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        203 => {
             wire__crate__bridge__channel__submit_channel_inbound_impl(ptr, rust_vec_len, data_len)
         }
-        203 => wire__crate__bridge__channel__take_channel_inbound_impl(ptr, rust_vec_len, data_len),
-        206 => {
+        204 => wire__crate__bridge__channel__take_channel_inbound_impl(ptr, rust_vec_len, data_len),
+        207 => {
             wire__crate__bridge__capability__tool_capability_id_impl(ptr, rust_vec_len, data_len)
         }
-        207 => wire__crate__bridge__channel__unregister_channel_impl(ptr, rust_vec_len, data_len),
-        209 => {
+        208 => wire__crate__bridge__channel__unregister_channel_impl(ptr, rust_vec_len, data_len),
+        210 => {
             wire__crate__bridge__automation__update_automation_job_impl(ptr, rust_vec_len, data_len)
         }
-        210 => wire__crate__bridge__init__update_config_impl(ptr, rust_vec_len, data_len),
-        211 => wire__crate__bridge__init__update_custom_tools_impl(ptr, rust_vec_len, data_len),
-        215 => wire__crate__bridge__file_bridge__workspace_dir_impl(ptr, rust_vec_len, data_len),
-        216 => {
+        211 => wire__crate__bridge__init__update_config_impl(ptr, rust_vec_len, data_len),
+        212 => wire__crate__bridge__init__update_custom_tools_impl(ptr, rust_vec_len, data_len),
+        216 => wire__crate__bridge__file_bridge__workspace_dir_impl(ptr, rust_vec_len, data_len),
+        217 => {
             wire__crate__bridge__file_bridge__workspace_dir_scoped_impl(ptr, rust_vec_len, data_len)
         }
-        217 => wire__crate__bridge__file_bridge__workspace_size_impl(ptr, rust_vec_len, data_len),
-        218 => wire__crate__bridge__file_bridge__workspace_size_scoped_impl(
+        218 => wire__crate__bridge__file_bridge__workspace_size_impl(ptr, rust_vec_len, data_len),
+        219 => wire__crate__bridge__file_bridge__workspace_size_scoped_impl(
             ptr,
             rust_vec_len,
             data_len,

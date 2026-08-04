@@ -183,6 +183,16 @@ pub(super) fn dispatch(handle: i64, namespace: &str, method: &str, payload: &Val
                 &get_string(payload, "agent_id"),
             )
         )),
+        ("agent_app", "set_auto_invoke") => {
+            ok_raw(napaxi_core::api::agent_app::set_agent_app_auto_invoke(
+                handle,
+                &get_string(payload, "provider_id"),
+                payload
+                    .get("enabled")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false),
+            ))
+        }
         ("agent_app", "submit_action_result") => {
             ok_raw(napaxi_core::api::agent_app::submit_agent_app_action_result(
                 handle,

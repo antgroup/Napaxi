@@ -45,6 +45,7 @@ mod android {
         "agent_app.list",
         "agent_app.list_proposals",
         "agent_app.register",
+        "agent_app.set_auto_invoke",
         "agent_app.submit_result",
         "a2a.accept_deep_link",
         "a2a.accept_peer_invite",

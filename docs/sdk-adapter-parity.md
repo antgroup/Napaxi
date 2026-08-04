@@ -60,6 +60,12 @@ facades. The adapters encode the same one-turn canonical marker,
 before tool assembly, leaves the current/default Agent identity unchanged, and
 does not persist the selection into later turns.
 
+The same Agent App APIs expose `setAutoInvoke`/`set_auto_invoke` and return the
+host-owned `auto_invoke_enabled`, `last_used_at`, and `use_count` package
+metadata. Automatic invocation defaults off. Flutter, Android, and iOS must not
+let Provider manifest values enable it; Core owns persistence and collision
+validation for automatically exposed action tools.
+
 ## Codex Model Configuration
 
 Flutter, Android, and iOS expose matching typed model sync and clear methods.

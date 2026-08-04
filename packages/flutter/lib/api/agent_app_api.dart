@@ -40,6 +40,17 @@ class AgentAppApi {
     );
   }
 
+  /// Controls whether the model can use this Provider without an explicit @.
+  AgentAppPackage setAutoInvoke(String providerId, bool enabled) {
+    final json = rust_agent_app.setAgentAppAutoInvoke(
+      handle: _handle(),
+      providerId: providerId,
+      enabled: enabled,
+    );
+    _throwIfError(json);
+    return AgentAppPackage.fromMap(jsonDecode(json) as Map);
+  }
+
   AgentAppActionRecord submitResult(AgentAppActionResult result) {
     final json = rust_agent_app.submitAgentAppActionResult(
       handle: _handle(),

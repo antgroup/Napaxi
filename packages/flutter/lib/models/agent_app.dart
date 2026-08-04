@@ -104,6 +104,9 @@ class AgentAppPackage {
     this.handoff = const <String, dynamic>{},
     this.result = const <String, dynamic>{},
     this.installBinding,
+    this.autoInvokeEnabled = false,
+    this.lastUsedAt = '',
+    this.useCount = 0,
     this.createdAt = '',
     this.updatedAt = '',
   });
@@ -124,6 +127,9 @@ class AgentAppPackage {
       installBinding: map['install_binding'] is Map
           ? AgentAppInstallBinding.fromMap(map['install_binding'] as Map)
           : null,
+      autoInvokeEnabled: map['auto_invoke_enabled'] as bool? ?? false,
+      lastUsedAt: map['last_used_at'] as String? ?? '',
+      useCount: (map['use_count'] as num?)?.toInt() ?? 0,
       createdAt: map['created_at'] as String? ?? '',
       updatedAt: map['updated_at'] as String? ?? '',
     );
@@ -139,9 +145,21 @@ class AgentAppPackage {
     'handoff': handoff,
     'result': result,
     if (installBinding != null) 'install_binding': installBinding!.toJson(),
+    'auto_invoke_enabled': autoInvokeEnabled,
+    if (lastUsedAt.isNotEmpty) 'last_used_at': lastUsedAt,
+    if (useCount > 0) 'use_count': useCount,
     if (createdAt.isNotEmpty) 'created_at': createdAt,
     if (updatedAt.isNotEmpty) 'updated_at': updatedAt,
   };
+
+  /// Whether the host may expose this app's actions without an explicit @.
+  final bool autoInvokeEnabled;
+
+  /// Host-recorded timestamp of the most recent explicit or actual use.
+  final String lastUsedAt;
+
+  /// Host-recorded number of explicit selections and actual invocations.
+  final int useCount;
 
   String toJsonString() => jsonEncode(toJson());
 }

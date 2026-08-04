@@ -473,6 +473,7 @@ fn android_bridge_alias<'a>(namespace: &'a str, method: &'a str) -> (&'a str, &'
         ("agent_app", "list") => ("agent_app", "list_packages"),
         ("agent_app", "get") => ("agent_app", "get_package"),
         ("agent_app", "delete") => ("agent_app", "delete_package"),
+        ("agent_app", "set_auto_invoke") => ("agent_app", "set_auto_invoke"),
         ("agent_app", "submit_result") => ("agent_app", "submit_action_result"),
         ("a2a", "agent_card") => ("a2a", "agent_card"),
         ("a2a", "create_peer_invite") => ("a2a", "create_peer_invite"),

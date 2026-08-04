@@ -236,6 +236,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppPackageTag {
         handoff: [String: NapaxiJSONValue] = [:],
         result: [String: NapaxiJSONValue] = [:],
         installBinding: NapaxiAgentAppInstallBinding? = nil,
+        autoInvokeEnabled: Bool = false,
+        lastUsedAt: String = "",
+        useCount: Int = 0,
         createdAt: String = "",
         updatedAt: String = ""
     ) {
@@ -250,6 +253,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppPackageTag {
             "result": .object(result),
         ]
         if let installBinding { raw["install_binding"] = .object(installBinding.raw) }
+        raw["auto_invoke_enabled"] = .bool(autoInvokeEnabled)
+        raw.setNonEmpty("last_used_at", lastUsedAt)
+        if useCount > 0 { raw["use_count"] = .number(Double(useCount)) }
         raw.setNonEmpty("created_at", createdAt)
         raw.setNonEmpty("updated_at", updatedAt)
         self.init(raw: raw)
@@ -287,6 +293,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppPackageTag {
             handoff: map.object("handoff") ?? [:],
             result: map.object("result") ?? [:],
             installBinding: installBinding,
+            autoInvokeEnabled: map.bool("auto_invoke_enabled") ?? false,
+            lastUsedAt: map.string("last_used_at") ?? "",
+            useCount: map.int("use_count") ?? 0,
             createdAt: map.string("created_at") ?? "",
             updatedAt: map.string("updated_at") ?? ""
         )
@@ -304,6 +313,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppPackageTag {
             "result": .object(result),
         ]
         if let installBinding { object["install_binding"] = .object(installBinding.toJson()) }
+        object["auto_invoke_enabled"] = .bool(autoInvokeEnabled)
+        object.setNonEmpty("last_used_at", lastUsedAt)
+        if useCount > 0 { object["use_count"] = .number(Double(useCount)) }
         object.setNonEmpty("created_at", createdAt)
         object.setNonEmpty("updated_at", updatedAt)
         return object
@@ -322,6 +334,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppPackageTag {
     var handoff: [String: NapaxiJSONValue] { raw.object("handoff") ?? [:] }
     var result: [String: NapaxiJSONValue] { raw.object("result") ?? [:] }
     var installBinding: NapaxiAgentAppInstallBinding? { raw.model("install_binding") ?? raw.model("installBinding") }
+    var autoInvokeEnabled: Bool { bool("auto_invoke_enabled") ?? bool("autoInvokeEnabled") ?? false }
+    var lastUsedAt: String { string("last_used_at") ?? string("lastUsedAt") ?? "" }
+    var useCount: Int { raw.int("use_count") ?? raw.int("useCount") ?? 0 }
     var createdAt: String { string("created_at") ?? string("createdAt") ?? "" }
     var updatedAt: String { string("updated_at") ?? string("updatedAt") ?? "" }
 }

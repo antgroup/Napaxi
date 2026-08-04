@@ -315,6 +315,11 @@ pub mod agent_app {
     }
 
     #[flutter_rust_bridge::frb(sync)]
+    pub fn set_agent_app_auto_invoke(handle: i64, provider_id: String, enabled: bool) -> String {
+        napaxi_core::api::agent_app::set_agent_app_auto_invoke(handle, &provider_id, enabled)
+    }
+
+    #[flutter_rust_bridge::frb(sync)]
     pub fn submit_agent_app_action_result(handle: i64, result_json: String) -> String {
         napaxi_core::api::agent_app::submit_agent_app_action_result(handle, &result_json)
     }

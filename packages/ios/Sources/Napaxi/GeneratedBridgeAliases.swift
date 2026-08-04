@@ -21,6 +21,13 @@ public func deleteAgentAppPackage(handle: Int64, agentId: String) throws -> Bool
     try NapaxiAgentAppAPI(rawAPI: NapaxiRawAPI(handle: handle)).deletePackage(agentId: agentId)
 }
 
+public func setAgentAppAutoInvoke(handle: Int64, providerId: String, enabled: Bool) throws -> String {
+    try napaxiBridgeJSON(NapaxiAgentAppAPI(rawAPI: NapaxiRawAPI(handle: handle)).setAutoInvokeJSON(
+        providerId: providerId,
+        enabled: enabled
+    ))
+}
+
 public func submitAgentAppActionResult(handle: Int64, resultJson: String) throws -> String {
     try napaxiBridgeJSON(NapaxiAgentAppAPI(rawAPI: NapaxiRawAPI(handle: handle)).submitActionResultJSON(resultJSON: resultJson))
 }

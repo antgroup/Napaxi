@@ -353,6 +353,23 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   }
 
   @override
+  Future<sdk.AgentAppPackage> setConnectedAppAutoInvoke(
+    String providerId,
+    bool enabled,
+  ) async {
+    final index = connectedApps.indexWhere(
+      (package) => package.providerId == providerId,
+    );
+    if (index < 0) throw StateError('Agent App not found: $providerId');
+    final updated = sdk.AgentAppPackage.fromMap({
+      ...connectedApps[index].toJson(),
+      'auto_invoke_enabled': enabled,
+    });
+    connectedApps[index] = updated;
+    return updated;
+  }
+
+  @override
   Future<List<sdk.NapaxiChannelProviderManifest>> listChannelProviders() async {
     final qqCredentials =
         channelCredentials[sdk.QqBotChannelProvider.channelName];

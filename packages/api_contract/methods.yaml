@@ -325,6 +325,9 @@ namespaces:
       delete_package:
         params: [agent_id]
         return: bool
+      set_auto_invoke:
+        params: [provider_id, enabled]
+        return: AgentAppPackage
       submit_result:
         params: [result]
         return: AgentAppActionRecord

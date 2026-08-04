@@ -174,6 +174,15 @@ Package/proposal/result APIs live under `api::agent_app` and the Flutter
 `AgentAppApi`. See `docs/agent-app-actions.md` for the runtime flow
 and SDK integration contract.
 
+Each registered package also has host-owned automatic-invocation state. The
+state defaults to disabled and can only be changed through
+`set_agent_app_auto_invoke`; Provider manifest input cannot enable it. Without
+an explicit `@{provider:...}` selection, Core exposes actions only from packages
+whose automatic-invocation state is enabled. Explicit selections and actual
+action dispatches update host-owned `last_used_at` and `use_count` metadata for
+adapter UI ranking. Action execution still passes descriptor/invocation
+admission and Provider-side confirmation unchanged.
+
 ## Channel Capabilities
 
 IM channel ingress and egress use the host-carried service capability

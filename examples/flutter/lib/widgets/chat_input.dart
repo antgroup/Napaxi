@@ -342,15 +342,44 @@ class _ChatInputBarState extends State<_ChatInputBar> {
     final query = _agentAppQuery;
     if (query == null) return const [];
     final seenNames = <String>{};
-    return widget.agentApps
+    final matches = widget.agentApps
         .where((package) {
           final name = package.displayName.trim();
           if (name.isEmpty) return false;
           final normalized = name.toLowerCase();
           return seenNames.add(normalized) && normalized.contains(query);
         })
-        .take(5)
         .toList(growable: false);
+    matches.sort((left, right) {
+      final matchOrder = _agentAppMatchRank(
+        left.displayName,
+        query,
+      ).compareTo(_agentAppMatchRank(right.displayName, query));
+      if (matchOrder != 0) return matchOrder;
+      final recentOrder = _agentAppLastUsed(
+        right,
+      ).compareTo(_agentAppLastUsed(left));
+      if (recentOrder != 0) return recentOrder;
+      final countOrder = right.useCount.compareTo(left.useCount);
+      if (countOrder != 0) return countOrder;
+      return left.displayName.toLowerCase().compareTo(
+        right.displayName.toLowerCase(),
+      );
+    });
+    return matches.take(5).toList(growable: false);
+  }
+
+  int _agentAppMatchRank(String name, String query) {
+    if (query.isEmpty) return 0;
+    final normalized = name.trim().toLowerCase();
+    if (normalized == query) return 0;
+    if (normalized.startsWith(query)) return 1;
+    return 2;
+  }
+
+  DateTime _agentAppLastUsed(sdk.AgentAppPackage package) {
+    return DateTime.tryParse(package.lastUsedAt)?.toUtc() ??
+        DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
   }
 
   @override

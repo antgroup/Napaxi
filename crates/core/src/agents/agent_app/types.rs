@@ -28,6 +28,15 @@ pub struct AgentAppPackage {
     pub result: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install_binding: Option<AgentAppInstallBinding>,
+    /// Host-owned preference. Provider manifests cannot enable this field.
+    #[serde(default)]
+    pub auto_invoke_enabled: bool,
+    /// Host-owned usage timestamp used to rank explicit provider suggestions.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub last_used_at: String,
+    /// Host-owned usage count for explicit selections and actual invocations.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub use_count: u64,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
@@ -209,6 +218,10 @@ fn default_timeout_seconds() -> u64 {
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+fn is_zero(value: &u64) -> bool {
+    *value == 0
 }
 
 pub(super) fn now() -> String {

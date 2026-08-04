@@ -492,11 +492,15 @@ class AndroidBridgeContractTest {
             "val proposal: AgentAppActionProposal",
             "val displayName: String",
             "val systemPrompt: String",
+            "val autoInvokeEnabled: Boolean",
+            "val lastUsedAt: String",
+            "val useCount: Long",
             "fun decodeAgentAppPackages(rawJson: String): List<AgentAppPackage>",
             "fun decodeAgentAppActionRecords(rawJson: String): List<AgentAppActionRecord>",
         )
         val requiredAgentAppApiSnippets = listOf(
             "registerPackage(packageDef: AgentAppPackage)",
+            "suspend fun setAutoInvoke(providerId: String, enabled: Boolean): AgentAppPackage",
             "suspend fun submitActionResult(resultJson: String): AgentAppActionRecord",
             "suspend fun submitActionResult(result: AgentAppActionResult): AgentAppActionRecord",
             "suspend fun submitResult(resultJson: String): AgentAppActionRecord",
