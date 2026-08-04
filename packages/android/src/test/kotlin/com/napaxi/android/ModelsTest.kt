@@ -2068,7 +2068,10 @@ class ModelsTest {
         val manifest = AgentAppActionManifest(
             actionId = "create_event",
             toolName = "app_action_create_event",
+            displayName = "Create event",
+            localizedDisplayNames = mapOf("zh-CN" to "创建日程"),
             description = "Create event",
+            localizedDescriptions = mapOf("zh-CN" to "在日历中创建一个新日程。"),
             parameters = JSONObject("""{"type":"object"}"""),
             executionModes = listOf("activity"),
             timeoutSeconds = 300,
@@ -2077,7 +2080,10 @@ class ModelsTest {
             mapOf(
                 "action_id" to "create_event",
                 "tool_name" to "app_action_create_event",
+                "display_name" to "Create event",
+                "localized_display_names" to mapOf("zh-CN" to "创建日程"),
                 "description" to "Create event",
+                "localized_descriptions" to mapOf("zh-CN" to "在日历中创建一个新日程。"),
                 "parameters" to mapOf("type" to "object"),
                 "execution_modes" to listOf("activity"),
                 "timeout_seconds" to 300,
@@ -2095,7 +2101,10 @@ class ModelsTest {
                 {
                   "action_id":"create_event",
                   "tool_name":"app_action_create_event",
+                  "display_name":"Create event",
+                  "localized_display_names":{"zh-CN":"创建日程"},
                   "description":"Create event",
+                  "localized_descriptions":{"zh-CN":"在日历中创建一个新日程。"},
                   "parameters":{"type":"object"},
                   "result_schema":{"type":"object"},
                   "risk":"high",
@@ -2187,6 +2196,9 @@ class ModelsTest {
         assertEquals(true, packageDef.result.getBoolean("installed"))
         assertEquals("activity", packageDef.handoff.getString("mode"))
         assertEquals("create_event", packageDef.actions.single().actionId)
+        assertEquals("Create event", packageDef.actions.single().displayName)
+        assertEquals("创建日程", packageDef.actions.single().localizedDisplayNames["zh-CN"])
+        assertEquals("在日历中创建一个新日程。", packageDef.actions.single().localizedDescriptions["zh-CN"])
         assertEquals("object", packageDef.actions.single().parameters.getString("type"))
         assertEquals(listOf("activity"), packageDef.actions.single().executionModes)
         assertEquals(300, packageDef.actions.single().timeoutSeconds)
@@ -2197,6 +2209,8 @@ class ModelsTest {
         assertEquals("2030-01-02T00:00:00Z", packageDef.updatedAt)
         assertEquals(packageDef.rawJson, packageDef.toJsonString())
         assertEquals("create_event", manifest.actionId)
+        assertEquals("Create event", manifest.displayName)
+        assertEquals("创建日程", manifest.localizedDisplayNames["zh-CN"])
         assertEquals("provider_required", manifest.confirmationPolicy)
         assertEquals("object", manifest.parameters.getString("type"))
         assertEquals("activity", manifestFromMap.executionModes.single())

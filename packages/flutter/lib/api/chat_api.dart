@@ -1,5 +1,6 @@
 import '../engine.dart';
 import '../models/chat_event.dart';
+import '../models/agent_provider_install.dart';
 import '../models/session.dart';
 
 /// Chat API: send messages to the default or a specific session and stream
@@ -12,11 +13,13 @@ class ChatApi {
   Stream<ChatEvent> send(
     String message, {
     List<McAttachment>? attachments,
+    AgentProviderSelection? providerSelection,
     int maxIterations = 0,
   }) {
     return _core.send(
       message,
       attachments: attachments,
+      providerSelection: providerSelection,
       maxIterations: maxIterations,
     );
   }
@@ -25,6 +28,7 @@ class ChatApi {
     SessionKey session,
     String message, {
     List<McAttachment>? attachments,
+    AgentProviderSelection? providerSelection,
     int maxIterations = 0,
     String agentId = NapaxiEngine.defaultAgentId,
   }) {
@@ -32,6 +36,7 @@ class ChatApi {
       session,
       message,
       attachments: attachments,
+      providerSelection: providerSelection,
       maxIterations: maxIterations,
       agentId: agentId,
     );

@@ -12,6 +12,15 @@ final class AgentProviderHostTests: XCTestCase {
         super.tearDown()
     }
 
+    func testProviderSelectionEncodesOneTurnCanonicalMarker() throws {
+        let selection = AgentProviderSelection(providerId: "demo.notes")
+
+        XCTAssertEqual(
+            try selection.applyToMessage("  create a note"),
+            "@{provider:demo.notes} create a note"
+        )
+    }
+
     func testProviderDescriptorFromURL() {
         let host = NapaxiAgentProviderHost(callbackScheme: "napaxi-test")
         let url = URL(string: "napaxi-test://provider?install_url=https%3A%2F%2Fwallet.example%2Finstall&action_url=https%3A%2F%2Fwallet.example%2Faction&label=Wallet&ios_bundle_id=com.example.wallet&ios_team_id=TEAM")!

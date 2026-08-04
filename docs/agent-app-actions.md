@@ -43,7 +43,8 @@ admission to `napaxi.tool.agent_app_action`.
 
 ## Package
 
-`AgentAppPackage` binds provider action data to one Agent:
+`AgentAppPackage` declares one Provider. Protocol v2 retains `agent_id` only as
+a compatibility identity for signed proposals and triggers:
 
 ```json
 {
@@ -58,9 +59,11 @@ admission to `napaxi.tool.agent_app_action`.
 }
 ```
 
-Registering a package persists it under the core files dir and creates or
-updates the matching `AgentDefinition`. During a turn, only the current Agent's
-package actions are exposed as descriptors. Other Agents cannot see them.
+Registering a package persists it by canonical `provider_id` in the independent
+Provider registry. It does not create, update, or expose an `AgentDefinition`.
+Legacy agent-keyed files are migrated on read, and legacy ids remain accepted
+by get/delete APIs. A turn exposes Provider actions only after an explicit
+Provider selection (with a compatibility fallback for legacy callers).
 
 ## Proposal And Result
 

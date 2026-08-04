@@ -11,8 +11,8 @@ part of '../engine.dart';
 /// [NapaxiEngine] and is reached via `_engine._x`.
 class EngineCore {
   EngineCore(NapaxiEngine engine)
-      : _engine = engine,
-        _bg = engine._backgroundController;
+    : _engine = engine,
+      _bg = engine._backgroundController;
 
   /// Test-only constructor: builds a core with no owning engine and an injected
   /// (optional) background controller, so the session-run state machine and
@@ -22,7 +22,7 @@ class EngineCore {
   /// would throw on the unset [_engine] if called.
   @visibleForTesting
   EngineCore.forTest({NapaxiBackgroundController? backgroundController})
-      : _bg = backgroundController;
+    : _bg = backgroundController;
 
   /// Owning engine. Reached only by production methods that need
   /// handle/config/executors; unset (and never accessed) under [forTest].
@@ -53,8 +53,7 @@ class EngineCore {
   Stream<ChatEvent> wrapWithBackgroundForTest(
     Stream<ChatEvent> rawStream, {
     SessionRunInfo? runInfo,
-  }) =>
-      _wrapWithBackground(rawStream, runInfo: runInfo);
+  }) => _wrapWithBackground(rawStream, runInfo: runInfo);
 
   /// The foreground-service controller, or null if background execution is not
   /// configured. Exposed for [BackgroundApi].
@@ -80,8 +79,7 @@ class EngineCore {
   bool hasActiveSessionRun(
     SessionKey key, {
     String agentId = NapaxiEngine.defaultAgentId,
-  }) =>
-      _activeSessionRuns.containsKey(_sessionRunId(agentId, key));
+  }) => _activeSessionRuns.containsKey(_sessionRunId(agentId, key));
 
   SessionRunInfo? activeSessionRun(
     SessionKey key, {
@@ -233,7 +231,8 @@ class EngineCore {
           }
           bg
               ?.showErrorNotification(
-                title: bg.currentConfig?.notificationConfig.ongoingTitle ??
+                title:
+                    bg.currentConfig?.notificationConfig.ongoingTitle ??
                     'Napaxi Agent',
                 message:
                     '${bg.currentConfig?.notificationConfig.errorPrefix ?? 'Error'}: ${error.toString()}',
@@ -261,11 +260,12 @@ class EngineCore {
               _activeSessionRuns.isEmpty) {
             bg
                 .showCompletionNotification(
-                  title: bg.currentConfig?.notificationConfig.ongoingTitle ??
+                  title:
+                      bg.currentConfig?.notificationConfig.ongoingTitle ??
                       'Napaxi Agent',
                   message:
                       bg.currentConfig?.notificationConfig.completionMessage ??
-                          'Task completed',
+                      'Task completed',
                 )
                 .catchError((_) {});
             bg.stop().catchError((_) {});
@@ -289,97 +289,98 @@ class EngineCore {
     }
     return switch (event) {
       ToolCallEvent(:final name) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: 'Running: $name',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: 'Running: $name',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       ToolCallDeltaEvent(:final name) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity:
-              name.trim().isEmpty ? 'Preparing tool call' : 'Preparing: $name',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: name.trim().isEmpty
+            ? 'Preparing tool call'
+            : 'Preparing: $name',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       AgentToolCallEvent(:final name, :final agentId) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: 'Agent $agentId: $name',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: 'Agent $agentId: $name',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       AgentToolCallDeltaEvent(:final name, :final agentId) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: name.trim().isEmpty
-              ? 'Agent $agentId: preparing tool call'
-              : 'Agent $agentId: preparing $name',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: name.trim().isEmpty
+            ? 'Agent $agentId: preparing tool call'
+            : 'Agent $agentId: preparing $name',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       ToolOutputChunkEvent(:final stream) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: stream == 'stderr' ? 'Reading stderr' : 'Reading output',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: stream == 'stderr' ? 'Reading stderr' : 'Reading output',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       ReasoningDeltaEvent() || ThinkingEvent() => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: 'Thinking',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: 'Thinking',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       ResponseDeltaEvent() || ResponseEvent() => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: 'Writing response',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: 'Writing response',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       AskingHumanEvent(:final requestId) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.waitingForInput,
-          activity: 'Waiting for input',
-          humanRequestId: requestId,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.waitingForInput,
+        activity: 'Waiting for input',
+        humanRequestId: requestId,
+        clearError: true,
+      ),
       HumanResponseEvent() || MessageInjectedEvent() => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: 'Continuing',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: 'Continuing',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       StreamResetEvent() => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: 'Reconnecting',
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: 'Reconnecting',
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       ErrorEvent(:final message) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.failed,
-          activity: message,
-          error: message,
-        ),
+        run,
+        status: SessionRunStatus.failed,
+        activity: message,
+        error: message,
+      ),
       EvolutionQueuedEvent() => _updateSessionRun(
-          run,
-          status: SessionRunStatus.completed,
-          activity: 'Queued learning',
-          clearHumanRequest: true,
-        ),
+        run,
+        status: SessionRunStatus.completed,
+        activity: 'Queued learning',
+        clearHumanRequest: true,
+      ),
       SkillActivatedEvent(:final skills) => _updateSessionRun(
-          run,
-          status: SessionRunStatus.running,
-          activity: _skillActivity(skills),
-          clearHumanRequest: true,
-          clearError: true,
-        ),
+        run,
+        status: SessionRunStatus.running,
+        activity: _skillActivity(skills),
+        clearHumanRequest: true,
+        clearError: true,
+      ),
       _ => run,
     };
   }
@@ -443,7 +444,8 @@ class EngineCore {
       case ErrorEvent(:final message):
         bg
             .showErrorNotification(
-              title: bg.currentConfig?.notificationConfig.ongoingTitle ??
+              title:
+                  bg.currentConfig?.notificationConfig.ongoingTitle ??
                   'Napaxi Agent',
               message: message,
             )
@@ -602,8 +604,10 @@ class EngineCore {
             workspaceFilesDir: workspaceFilesDir,
           );
         } else if (_engine._browserToolHost?.canHandle(toolName) == true) {
-          result =
-              await _engine._browserToolHost!.execute(toolName, paramsJson);
+          result = await _engine._browserToolHost!.execute(
+            toolName,
+            paramsJson,
+          );
           isError = _jsonResultIndicatesFailure(result);
         } else if (_engine._toolExecutor != null) {
           result = await _engine._toolExecutor.execute(toolName, paramsJson);
@@ -754,14 +758,17 @@ class EngineCore {
   Stream<ChatEvent> send(
     String message, {
     List<McAttachment>? attachments,
+    AgentProviderSelection? providerSelection,
     int maxIterations = 0,
   }) {
     final attachmentsJson = _encodeAttachments(attachments);
+    final requestMessage =
+        providerSelection?.applyToMessage(message) ?? message;
     final rawStream = rust_init
         .sendMessageStream(
           handle: _engine._handle,
           configJson: _engine._config.toJson(),
-          message: message,
+          message: requestMessage,
           attachmentsJson: attachmentsJson,
           maxIterations: maxIterations,
         )
@@ -783,6 +790,7 @@ class EngineCore {
     List<McAttachment>? attachments,
     List<String>? sandboxPaths,
     int? userMsgIndex,
+    AgentProviderSelection? providerSelection,
     int maxIterations = 0,
   }) {
     final runId = _sessionRunId(agentId, sessionKey);
@@ -794,13 +802,15 @@ class EngineCore {
       attachments,
       sandboxPaths: sandboxPaths,
     );
+    final requestMessage =
+        providerSelection?.applyToMessage(message) ?? message;
     final rawStream = rust_init
         .sendToSessionStream(
           handle: _engine._handle,
           configJson: _engine._config.toJson(),
           agentId: agentId,
           sessionKeyJson: sessionKey.toJson(),
-          message: message,
+          message: requestMessage,
           attachmentsJson: attachmentsJson,
           maxIterations: maxIterations,
         )

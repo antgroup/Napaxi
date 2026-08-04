@@ -51,7 +51,13 @@ enum WalletPackage {
                 risk: "high",
                 confirmationPolicy: "provider_required",
                 executionModes: ["app_handoff"],
-                timeoutSeconds: 300
+                timeoutSeconds: 300,
+                displayName: "Make payment",
+                localizedDisplayNames: ["en": "Make payment", "zh-CN": "虚拟支付"],
+                localizedDescriptions: [
+                    "en": "Create a virtual payment record after provider policy and confirmation.",
+                    "zh-CN": "在应用确认后创建一笔虚拟支付记录。",
+                ]
             ),
             AgentAction(
                 actionId: actionListRecords,
@@ -71,7 +77,13 @@ enum WalletPackage {
                 risk: "low",
                 confirmationPolicy: "none",
                 executionModes: ["app_handoff"],
-                timeoutSeconds: 120
+                timeoutSeconds: 120,
+                displayName: "View payment records",
+                localizedDisplayNames: ["en": "View payment records", "zh-CN": "查看支付记录"],
+                localizedDescriptions: [
+                    "en": "List recent virtual wallet payment records.",
+                    "zh-CN": "查看最近的虚拟钱包支付记录。",
+                ]
             ),
             AgentAction(
                 actionId: actionConfigureQuietPay,
@@ -91,7 +103,13 @@ enum WalletPackage {
                 risk: "high",
                 confirmationPolicy: "provider_required",
                 executionModes: ["app_handoff"],
-                timeoutSeconds: 300
+                timeoutSeconds: 300,
+                displayName: "Configure quiet pay",
+                localizedDisplayNames: ["en": "Configure quiet pay", "zh-CN": "配置小额免打扰支付"],
+                localizedDescriptions: [
+                    "en": "Configure small no-interruption virtual payments.",
+                    "zh-CN": "启用、关闭或调整小额免打扰支付额度。",
+                ]
             ),
         ],
         handoff: ["mode": .string("ios_url_handoff"), "display": .string("wallet_confirmation")],

@@ -663,14 +663,15 @@ public final class NapaxiEngine: @unchecked Sendable {
     public func send(
         _ message: String,
         attachments: [NapaxiAttachment] = [],
-        maxIterations: Int = NapaxiChatDefaults.maxIterations
+        maxIterations: Int = NapaxiChatDefaults.maxIterations,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) async throws -> NapaxiJSONValue {
         try ensureNotDisposed()
         let attachmentsJSON = try attachmentsJSON(attachments)
         return try NapaxiNativeBridge.sendMessage(
             handle: handle,
             configJSON: config.jsonString(),
-            message: message,
+            message: try providerSelection?.applyToMessage(message) ?? message,
             attachmentsJSON: attachmentsJSON,
             maxIterations: NapaxiChatDefaults.bridgeMaxIterations(maxIterations)
         )
@@ -679,13 +680,14 @@ public final class NapaxiEngine: @unchecked Sendable {
     public func sendStream(
         _ message: String,
         attachments: [NapaxiAttachment] = [],
-        maxIterations: Int = NapaxiChatDefaults.maxIterations
+        maxIterations: Int = NapaxiChatDefaults.maxIterations,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) throws -> AsyncThrowingStream<NapaxiChatEvent, Error> {
         try ensureNotDisposed()
         let rawStream = NapaxiNativeBridge.sendMessageStream(
             handle: handle,
             configJSON: try config.jsonString(),
-            message: message,
+            message: try providerSelection?.applyToMessage(message) ?? message,
             attachmentsJSON: try attachmentsJSON(attachments),
             maxIterations: NapaxiChatDefaults.bridgeMaxIterations(maxIterations)
         )
@@ -697,7 +699,8 @@ public final class NapaxiEngine: @unchecked Sendable {
         sessionKey: NapaxiSessionKey,
         message: String,
         attachments: [NapaxiAttachment] = [],
-        maxIterations: Int = NapaxiChatDefaults.maxIterations
+        maxIterations: Int = NapaxiChatDefaults.maxIterations,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) async throws -> NapaxiJSONValue {
         try ensureNotDisposed()
         let run = try sessionRunTracker.start(agentId: agentId, key: sessionKey)
@@ -708,7 +711,7 @@ public final class NapaxiEngine: @unchecked Sendable {
                 configJSON: config.jsonString(),
                 agentId: agentId,
                 sessionKeyJSON: sessionKeyJSON,
-                message: message,
+                message: try providerSelection?.applyToMessage(message) ?? message,
                 attachmentsJSON: attachmentsJSON(attachments),
                 maxIterations: NapaxiChatDefaults.bridgeMaxIterations(maxIterations)
             )
@@ -725,14 +728,16 @@ public final class NapaxiEngine: @unchecked Sendable {
         _ message: String,
         attachments: [NapaxiAttachment] = [],
         maxIterations: Int = NapaxiChatDefaults.maxIterations,
-        agentId: String = NapaxiEngine.defaultAgentId
+        agentId: String = NapaxiEngine.defaultAgentId,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) async throws -> NapaxiJSONValue {
         try await sendToSession(
             agentId: agentId,
             sessionKey: sessionKey,
             message: message,
             attachments: attachments,
-            maxIterations: maxIterations
+            maxIterations: maxIterations,
+            providerSelection: providerSelection
         )
     }
 
@@ -741,7 +746,8 @@ public final class NapaxiEngine: @unchecked Sendable {
         sessionKey: NapaxiSessionKey,
         message: String,
         attachments: [NapaxiAttachment] = [],
-        maxIterations: Int = NapaxiChatDefaults.maxIterations
+        maxIterations: Int = NapaxiChatDefaults.maxIterations,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) throws -> AsyncThrowingStream<NapaxiChatEvent, Error> {
         try ensureNotDisposed()
         let startedRun = try sessionRunTracker.start(agentId: agentId, key: sessionKey)
@@ -751,7 +757,7 @@ public final class NapaxiEngine: @unchecked Sendable {
             configJSON: try config.jsonString(),
             agentId: agentId,
             sessionKeyJSON: sessionKeyJSON,
-            message: message,
+            message: try providerSelection?.applyToMessage(message) ?? message,
             attachmentsJSON: try attachmentsJSON(attachments),
             maxIterations: NapaxiChatDefaults.bridgeMaxIterations(maxIterations)
         )
@@ -763,14 +769,16 @@ public final class NapaxiEngine: @unchecked Sendable {
         _ message: String,
         attachments: [NapaxiAttachment] = [],
         maxIterations: Int = NapaxiChatDefaults.maxIterations,
-        agentId: String = NapaxiEngine.defaultAgentId
+        agentId: String = NapaxiEngine.defaultAgentId,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) throws -> AsyncThrowingStream<NapaxiChatEvent, Error> {
         try sendToSessionStream(
             agentId: agentId,
             sessionKey: sessionKey,
             message: message,
             attachments: attachments,
-            maxIterations: maxIterations
+            maxIterations: maxIterations,
+            providerSelection: providerSelection
         )
     }
 

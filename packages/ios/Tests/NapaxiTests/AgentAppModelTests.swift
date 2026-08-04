@@ -114,7 +114,10 @@ final class AgentAppModelTests: XCTestCase {
             {
               "action_id": "book",
               "tool_name": "provider.book",
+              "display_name": "Book appointment",
+              "localized_display_names": {"zh-CN": "预约"},
               "description": "Book",
+              "localized_descriptions": {"zh-CN": "在应用中预约时间。"},
               "parameters": {"type": "object"},
               "execution_modes": ["handoff"],
               "timeout_seconds": 30
@@ -139,6 +142,9 @@ final class AgentAppModelTests: XCTestCase {
         XCTAssertEqual(package.systemPrompt, "Help")
         XCTAssertEqual(package.actions.first?.actionId, "book")
         XCTAssertEqual(package.actions.first?.toolName, "provider.book")
+        XCTAssertEqual(package.actions.first?.displayName, "Book appointment")
+        XCTAssertEqual(package.actions.first?.localizedDisplayNames["zh-CN"], "预约")
+        XCTAssertEqual(package.actions.first?.localizedDescriptions["zh-CN"], "在应用中预约时间。")
         XCTAssertEqual(package.actions.first?.executionModes, ["handoff"])
         XCTAssertEqual(package.actions.first?.timeoutSeconds, 30)
         XCTAssertEqual(package.installBinding?.platform, "ios")
@@ -153,6 +159,9 @@ final class AgentAppModelTests: XCTestCase {
             actionId: "lookup",
             toolName: "provider.lookup",
             description: "Lookup",
+            displayName: "Look up",
+            localizedDisplayNames: ["zh-CN": "查询"],
+            localizedDescriptions: ["zh-CN": "查询应用中的内容。"],
             parameters: ["type": .string("object")]
         )
         let binding = NapaxiAgentAppInstallBinding(
@@ -185,6 +194,8 @@ final class AgentAppModelTests: XCTestCase {
            case .object(let first)? = actions.first {
             XCTAssertEqual(first["action_id"], .string("lookup"))
             XCTAssertEqual(first["tool_name"], .string("provider.lookup"))
+            XCTAssertEqual(first["display_name"], .string("Look up"))
+            XCTAssertEqual(first["localized_display_names"], .object(["zh-CN": .string("查询")]))
         } else {
             XCTFail("actions should encode as object array")
         }

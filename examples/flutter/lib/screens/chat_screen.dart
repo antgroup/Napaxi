@@ -4,6 +4,8 @@ const String _debugHotReloadTargetFromEnvironment = String.fromEnvironment(
   'NAPAXI_DEBUG_HOT_RELOAD_TARGET',
   defaultValue: '',
 );
+const String _seenConnectedAppPackagesKey =
+    'napaxi.connected_apps.seen_packages.v1';
 
 /// Hot-reload-friendly debug target.
 ///
@@ -419,7 +421,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-enum _ChatPrimaryView { chat, files, skills, projects, projectDetail }
+enum _ChatPrimaryView { chat, files, skills, apps, projects, projectDetail }
 
 class _CodexInstallProgress {
   const _CodexInstallProgress({
@@ -896,6 +898,8 @@ class _ChatScreenState extends State<ChatScreen>
   _ChatPrimaryView _primaryView = _ChatPrimaryView.chat;
   Future<NapaxiChatClient>? _primaryFilesClientFuture;
   Future<NapaxiChatClient>? _primarySkillsClientFuture;
+  Future<NapaxiChatClient>? _primaryAppsClientFuture;
+  final GlobalKey<_AppsPageState> _appsPageKey = GlobalKey<_AppsPageState>();
   String? _selectedChatProjectId;
   bool _isRenamingSessionTitle = false;
   bool _isSessionHistorySearching = false;
@@ -909,6 +913,7 @@ class _ChatScreenState extends State<ChatScreen>
   int _nextInterjectionId = 1;
   bool _isHandlingNotificationStop = false;
   bool _isHandlingProviderInstall = false;
+  bool _isScanningConnectedApps = false;
   bool _isHandlingAgentTrigger = false;
   bool _isCheckingCodexEnvironment = false;
   Future<bool>? _codexEnvironmentPreflight;
@@ -924,6 +929,7 @@ class _ChatScreenState extends State<ChatScreen>
   Future<void>? _restorePersistedStateFuture;
   bool _isCheckingForUpdate = false;
   List<DemoChannelInputSource> _channelInputSources = const [];
+  List<sdk.AgentAppPackage> _connectedAgentApps = const [];
   String? _channelInputBusyAccountId;
   String? _channelInputActiveAccountId;
   final Map<String, sdk.SessionKey> _sdkSessions = {};
@@ -1320,7 +1326,7 @@ class _ChatScreenState extends State<ChatScreen>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       unawaited(_enqueueCodexConfigSync(_config));
-      unawaited(_handlePendingProviderInstall());
+      unawaited(_refreshConnectedAppsAfterResume());
       unawaited(_handlePendingAgentTrigger());
       unawaited(_ensureConfiguredChannelsConnected());
       _scheduleA2AConnectionRestoreIfAllowed();
@@ -2631,7 +2637,9 @@ class _ChatScreenState extends State<ChatScreen>
         unawaited(_ensureConfiguredChannelsConnected());
         _scheduleA2AConnectionRestoreIfAllowed();
       }
+      unawaited(_refreshConnectedAgentApps());
       await _handlePendingProviderInstall();
+      unawaited(_scanForConnectedApps());
       await _handlePendingAgentTrigger();
     } catch (_) {
       // Best-effort restore: failures should not block a fresh chat session.
@@ -2647,7 +2655,9 @@ class _ChatScreenState extends State<ChatScreen>
         unawaited(_ensureConfiguredChannelsConnected());
         _scheduleA2AConnectionRestoreIfAllowed();
       }
+      unawaited(_refreshConnectedAgentApps());
       await _handlePendingProviderInstall();
+      unawaited(_scanForConnectedApps());
       await _handlePendingAgentTrigger();
     }
   }
@@ -2922,6 +2932,15 @@ class _ChatScreenState extends State<ChatScreen>
     _closeSessionHistory();
   }
 
+  void _showAppsFromMenu() {
+    _dismissKeyboard();
+    setState(() {
+      _primaryView = _ChatPrimaryView.apps;
+      _primaryAppsClientFuture = _getChatClient();
+    });
+    _closeSessionHistory();
+  }
+
   Future<void> _showSettingsSheet(
     _SettingsSection section, {
     bool focusContextSettings = false,
@@ -3034,6 +3053,7 @@ class _ChatScreenState extends State<ChatScreen>
         ),
       ),
     );
+    if (mounted) unawaited(_refreshConnectedAgentApps());
   }
 
   void _handleEngineConfigChanged() {
@@ -4065,24 +4085,18 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _handlePendingProviderInstall() async {
     if (!_initialStateRestored) return;
-    if (!_activeRuntimeProfile.supportsAgents) return;
     if (_isHandlingProviderInstall) return;
     _isHandlingProviderInstall = true;
     try {
       final client = await _getChatClient();
       final agent = await client.installPendingAgentProvider();
       if (agent == null || !mounted) return;
-      await _refreshAgents();
-      if (!mounted) return;
-      if (!_agents.any((candidate) => candidate.id == agent.id)) {
-        setState(() {
-          _agents = List.unmodifiable([..._agents, agent]);
-        });
-      }
-      await _selectAgent(agent.id);
+      await _refreshConnectedAgentApps();
       if (!mounted) return;
       _showSnackBar(
-        'Installed ${agent.name}. Tap the provider button again to trigger Agent.',
+        widget.language == AppLanguage.chinese
+            ? '已启用 ${agent.name}。在对话中输入 @${agent.name} 即可使用。'
+            : '${agent.name} enabled. Type @${agent.name} in chat to use it.',
       );
     } catch (error) {
       if (mounted) {
@@ -4090,6 +4104,250 @@ class _ChatScreenState extends State<ChatScreen>
       }
     } finally {
       _isHandlingProviderInstall = false;
+    }
+  }
+
+  Future<void> _refreshConnectedAppsAfterResume() async {
+    await _handlePendingProviderInstall();
+    await _scanForConnectedApps();
+  }
+
+  void _setConnectedAgentApps(
+    List<sdk.AgentProviderDescriptor> discovered,
+    List<sdk.AgentAppPackage> connected,
+  ) {
+    if (!mounted) return;
+    final installedIds = {
+      for (final provider in discovered) _providerPlatformId(provider),
+    }..remove('');
+    final next =
+        connected
+            .where(
+              (package) =>
+                  installedIds.contains(_connectedAppPlatformId(package)),
+            )
+            .toList(growable: false)
+          ..sort((left, right) {
+            return left.displayName.toLowerCase().compareTo(
+              right.displayName.toLowerCase(),
+            );
+          });
+    setState(() => _connectedAgentApps = List.unmodifiable(next));
+  }
+
+  Future<void> _refreshConnectedAgentApps() async {
+    try {
+      final client = await _getChatClient();
+      final results = await Future.wait<Object>([
+        client.discoverAgentProviders(),
+        client.listConnectedApps(),
+      ]);
+      _setConnectedAgentApps(
+        results[0] as List<sdk.AgentProviderDescriptor>,
+        results[1] as List<sdk.AgentAppPackage>,
+      );
+    } catch (error) {
+      debugPrint('Agent App mention refresh failed: $error');
+    }
+  }
+
+  Future<bool?> _showConnectedAppsDiscoverySheet(
+    List<sdk.AgentProviderDescriptor> providers,
+  ) {
+    final single = providers.length == 1;
+    final providerName = single
+        ? (providers.single.label.trim().isEmpty
+              ? _providerPlatformId(providers.single)
+              : providers.single.label.trim())
+        : '';
+    final chinese = widget.language == AppLanguage.chinese;
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.24),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Material(
+          color: _appSurfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 12, 22, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Center(
+                  child: SizedBox(
+                    width: 38,
+                    height: 4,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Color(0xFFD2D4D8),
+                        borderRadius: BorderRadius.all(Radius.circular(2)),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  single
+                      ? (chinese
+                            ? '发现“$providerName”'
+                            : '$providerName is available')
+                      : (chinese
+                            ? '有 ${providers.length} 个应用可以连接'
+                            : '${providers.length} apps can connect'),
+                  style: const TextStyle(
+                    color: _sessionMenuText,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  single
+                      ? (chinese
+                            ? '这个应用可以与 Napaxi 连接。连接后，你可以在对话开头输入 @$providerName 使用它提供的能力。'
+                            : 'This app can connect with Napaxi. Once connected, start a message with @$providerName to use its capabilities.')
+                      : (chinese
+                            ? '这些应用已经安装在设备上。你可以选择需要连接的应用，连接后通过 @应用名 使用。'
+                            : 'These apps are installed on this device. Choose the apps you want to connect, then use them with @AppName.'),
+                  style: const TextStyle(
+                    color: _sessionMenuMuted,
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: _sessionMenuText,
+                          minimumSize: const Size.fromHeight(48),
+                          side: const BorderSide(color: _appSurfaceBorderColor),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(chinese ? '稍后' : 'Not now'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        key: single
+                            ? const Key(
+                                'enable_discovered_connected_app_button',
+                              )
+                            : const Key(
+                                'review_discovered_connected_apps_button',
+                              ),
+                        onPressed: () => Navigator.of(sheetContext).pop(true),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: _sessionMenuText,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: Text(
+                          single
+                              ? (chinese ? '连接' : 'Connect')
+                              : (chinese ? '管理应用' : 'Manage apps'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _scanForConnectedApps() async {
+    if (!_initialStateRestored || _isScanningConnectedApps) return;
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+    _isScanningConnectedApps = true;
+    try {
+      final client = await _getChatClient();
+      final results = await Future.wait<Object>([
+        client.discoverAgentProviders(),
+        client.listConnectedApps(),
+      ]);
+      final discovered = results[0] as List<sdk.AgentProviderDescriptor>;
+      final connected = results[1] as List<sdk.AgentAppPackage>;
+      if (!mounted) return;
+      _setConnectedAgentApps(discovered, connected);
+
+      final installedIds = {
+        for (final provider in discovered) _providerPlatformId(provider),
+      }..remove('');
+      final connectedIds = {
+        for (final package in connected) _connectedAppPlatformId(package),
+      }..remove('');
+      final preferences = await SharedPreferences.getInstance();
+      final seenIds =
+          (preferences.getStringList(_seenConnectedAppPackagesKey) ??
+                  const <String>[])
+              .toSet();
+      // Forget packages that disappeared so a later reinstall is discoverable.
+      seenIds.retainAll(installedIds);
+      final candidates = discovered
+          .where((provider) {
+            final id = _providerPlatformId(provider);
+            return id.isNotEmpty &&
+                !connectedIds.contains(id) &&
+                !seenIds.contains(id);
+          })
+          .toList(growable: false);
+      if (candidates.isEmpty) {
+        await preferences.setStringList(
+          _seenConnectedAppPackagesKey,
+          seenIds.toList()..sort(),
+        );
+        return;
+      }
+
+      seenIds.addAll(candidates.map(_providerPlatformId));
+      await preferences.setStringList(
+        _seenConnectedAppPackagesKey,
+        seenIds.toList()..sort(),
+      );
+      if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
+
+      if (candidates.length == 1) {
+        final provider = candidates.single;
+        final shouldEnable = await _showConnectedAppsDiscoverySheet(candidates);
+        if (shouldEnable == true && mounted) {
+          final package = await client.enableAgentProvider(provider);
+          await _refreshConnectedAgentApps();
+          if (!mounted) return;
+          _showSnackBar(
+            widget.language == AppLanguage.chinese
+                ? '已启用 ${package.displayName}。现在可以输入 @${package.displayName} 使用。'
+                : '${package.displayName} enabled. You can now use @${package.displayName}.',
+          );
+        }
+        return;
+      }
+
+      final openSettings = await _showConnectedAppsDiscoverySheet(candidates);
+      if (openSettings == true && mounted) {
+        _showAppsFromMenu();
+      }
+    } catch (error) {
+      debugPrint('Connected App discovery failed: $error');
+    } finally {
+      _isScanningConnectedApps = false;
     }
   }
 
@@ -9289,9 +9547,14 @@ $candidate
     if (start == null || lastPosition == null) return;
 
     final totalDelta = event.position - start;
-    final isProjectBackGesture =
-        _isActiveProjectChat || _primaryView == _ChatPrimaryView.projectDetail;
-    final horizontalThreshold = isProjectBackGesture
+    final isAppsDetailBackGesture =
+        _primaryView == _ChatPrimaryView.apps &&
+        (_appsPageKey.currentState?.isShowingDetails ?? false);
+    final isNestedBackGesture =
+        _isActiveProjectChat ||
+        _primaryView == _ChatPrimaryView.projectDetail ||
+        isAppsDetailBackGesture;
+    final horizontalThreshold = isNestedBackGesture
         ? _projectBackHorizontalDragThreshold
         : _sessionMenuOpenDragThreshold;
     final isHorizontalOpenDrag =
@@ -9304,7 +9567,7 @@ $candidate
 
     _isOpeningSessionMenuDrag = true;
     _dismissKeyboard();
-    if (isProjectBackGesture) {
+    if (isNestedBackGesture) {
       _chatDragLastPosition = event.position;
       return;
     }
@@ -9321,6 +9584,9 @@ $candidate
         _returnToActiveProject();
       } else if (_primaryView == _ChatPrimaryView.projectDetail) {
         _returnToProjects();
+      } else if (_primaryView == _ChatPrimaryView.apps &&
+          (_appsPageKey.currentState?.isShowingDetails ?? false)) {
+        _appsPageKey.currentState?._closeDetails();
       } else if (_sessionMenuController.value >= 0.25) {
         _sessionMenuController.forward();
       } else {
@@ -9508,10 +9774,28 @@ $candidate
     );
   }
 
+  Widget _buildAppsPrimarySurface() {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleChatPointerDown,
+      onPointerMove: _handleChatPointerMove,
+      onPointerUp: _handleChatPointerEnd,
+      onPointerCancel: _handleChatPointerEnd,
+      child: _AppsPage(
+        key: _appsPageKey,
+        clientFuture: _primaryAppsClientFuture ??= _getChatClient(),
+        language: widget.language,
+        onMenu: _openSessionHistory,
+        onConnectedAppsChanged: () => unawaited(_refreshConnectedAgentApps()),
+      ),
+    );
+  }
+
   Widget _buildNonChatPrimarySurface() {
     return switch (_primaryView) {
       _ChatPrimaryView.files => _buildFilesPrimarySurface(),
       _ChatPrimaryView.skills => _buildSkillsPrimarySurface(),
+      _ChatPrimaryView.apps => _buildAppsPrimarySurface(),
       _ChatPrimaryView.projects ||
       _ChatPrimaryView.projectDetail => _buildProjectsPrimarySurface(),
       _ChatPrimaryView.chat => const SizedBox.shrink(),
@@ -9601,6 +9885,7 @@ $candidate
                 onProjectSessionRemove: _removeSessionFromProject,
                 onFilesSelected: _showFilesFromMenu,
                 onSkillsSelected: _showSkillsFromMenu,
+                onAppsSelected: _showAppsFromMenu,
                 onProjectsSelected: _showProjectsFromMenu,
                 onSettingsSelected: _showSettingsFromMenu,
                 primaryView: _primaryView,
@@ -9974,6 +10259,7 @@ $candidate
                                   isSending: _isActiveSessionSending,
                                   isEditing: _editingMessageId != null,
                                   slashCommands: _availableSlashCommands,
+                                  agentApps: _connectedAgentApps,
                                   contextStatus: _activeContextStatus,
                                   isContextStatusLoading:
                                       _isActiveContextStatusLoading,

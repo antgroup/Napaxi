@@ -161,8 +161,9 @@ flows.
 Connected app or backend actions use one generic host-carried capability:
 `napaxi.tool.agent_app_action`. Core owns the capability definition, action
 proposal schema, result schema, persistence lifecycle, and admission checks.
-Specific provider actions are runtime package data scoped to one Agent; they
-are not dynamic native plugins and are not global custom host tools.
+Specific provider actions are runtime package data selected by `provider_id`;
+they are not Agent definitions, dynamic native plugins, or global custom host
+tools. Protocol-v2 `agent_id` fields remain wire-compatibility identities only.
 
 Hosts declare and enable the capability only when they provide an Agent App
 action dispatcher. Action tool names are reserved with the `app_action_`

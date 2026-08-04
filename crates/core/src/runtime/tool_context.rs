@@ -70,6 +70,24 @@ pub(super) fn prepare_session_tool_context_with_config_and_thread(
     llm_config: PlatformLlmConfig,
     current_thread_id: Option<String>,
 ) -> SessionToolContext {
+    prepare_session_tool_context_with_config_thread_and_provider(
+        engine,
+        account_id,
+        agent_id,
+        llm_config,
+        current_thread_id,
+        None,
+    )
+}
+
+pub(super) fn prepare_session_tool_context_with_config_thread_and_provider(
+    engine: &Engine,
+    account_id: &str,
+    agent_id: &str,
+    llm_config: PlatformLlmConfig,
+    current_thread_id: Option<String>,
+    selected_provider_id: Option<&str>,
+) -> SessionToolContext {
     let account_id = if account_id.trim().is_empty() {
         DEFAULT_ACCOUNT_ID.to_string()
     } else {
@@ -84,9 +102,10 @@ pub(super) fn prepare_session_tool_context_with_config_and_thread(
         .request_bridge()
         .or_else(|| tool_request_dispatcher().map(ToolRequestBridge::process_scoped));
     let (mut app_action_tools, app_action_handler) =
-        crate::agents::agent_app::action_tools_and_handler(
+        crate::agents::agent_app::action_tools_and_handler_for_provider(
             engine.files_dir(),
             &agent_id,
+            selected_provider_id,
             tool_bridge.clone(),
             mcp_handler,
         );

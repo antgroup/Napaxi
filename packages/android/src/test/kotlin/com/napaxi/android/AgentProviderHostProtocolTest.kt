@@ -10,6 +10,16 @@ import java.time.Instant
 
 class AgentProviderHostProtocolTest {
     @Test
+    fun providerSelectionEncodesOneTurnCanonicalMarker() {
+        val selection = AgentProviderSelection(providerId = "demo.notes")
+
+        assertEquals(
+            "@{provider:demo.notes} create a note",
+            selection.applyToMessage("  create a note"),
+        )
+    }
+
+    @Test
     fun providerProtocolAliasesExposeSdkModelsFromAndroidPackage() {
         val action = AgentAction(
             actionId = "pay",

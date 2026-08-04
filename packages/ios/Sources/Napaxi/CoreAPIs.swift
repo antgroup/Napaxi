@@ -80,9 +80,15 @@ public struct NapaxiChatAPI: Sendable {
     public func send(
         _ message: String,
         attachments: [NapaxiAttachment] = [],
-        maxIterations: Int = NapaxiChatDefaults.maxIterations
+        maxIterations: Int = NapaxiChatDefaults.maxIterations,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) throws -> AsyncThrowingStream<NapaxiChatEvent, Error> {
-        try engine.sendStream(message, attachments: attachments, maxIterations: maxIterations)
+        try engine.sendStream(
+            message,
+            attachments: attachments,
+            maxIterations: maxIterations,
+            providerSelection: providerSelection
+        )
     }
 
     public func sendToSession(
@@ -90,14 +96,16 @@ public struct NapaxiChatAPI: Sendable {
         _ message: String,
         attachments: [NapaxiAttachment] = [],
         maxIterations: Int = NapaxiChatDefaults.maxIterations,
-        agentId: String = NapaxiEngine.defaultAgentId
+        agentId: String = NapaxiEngine.defaultAgentId,
+        providerSelection: NapaxiAgentProviderSelection? = nil
     ) throws -> AsyncThrowingStream<NapaxiChatEvent, Error> {
         try engine.sendToSessionStream(
             agentId: agentId,
             sessionKey: sessionKey,
             message: message,
             attachments: attachments,
-            maxIterations: maxIterations
+            maxIterations: maxIterations,
+            providerSelection: providerSelection
         )
     }
 }

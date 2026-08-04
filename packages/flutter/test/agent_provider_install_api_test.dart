@@ -7,6 +7,15 @@ import 'package:napaxi_flutter/models/agent_app.dart';
 import 'package:napaxi_flutter/models/agent_provider_install.dart';
 
 void main() {
+  test('AgentProviderSelection encodes one-turn canonical marker', () {
+    const selection = AgentProviderSelection(providerId: 'demo.notes');
+
+    expect(
+      selection.applyToMessage('create a note'),
+      '@{provider:demo.notes} create a note',
+    );
+  });
+
   const channel = MethodChannel('com.napaxi.flutter/background');
 
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +23,30 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null);
+  });
+
+  test('discoverProviderForPackage resolves an installed provider', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'listAgentProviders') {
+            return <Map<String, String>>[
+              {
+                'packageName': 'demo.generated.notes',
+                'installActivityName': 'InstallActivity',
+                'activityName': 'ActionActivity',
+                'label': 'Generated Notes',
+              },
+            ];
+          }
+          return null;
+        });
+    final api = AgentProviderInstallApi(registerPackage: (package) => package);
+
+    final provider = await api.discoverProviderForPackage(
+      'demo.generated.notes',
+    );
+
+    expect(provider?.label, 'Generated Notes');
   });
 
   test('requestInstall overrides provider supplied binding', () async {
@@ -28,51 +61,48 @@ void main() {
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'getAgentProviderHostInfo') {
-        return {
-          'packageName': 'host.app',
-          'signingCertSha256': 'host123',
-        };
-      }
-      if (call.method == 'requestAgentProviderInstall') {
-        final args = Map<String, dynamic>.from(call.arguments as Map);
-        final request = jsonDecode(args['requestJson'] as String) as Map;
-        final package = _packageJson(
-          installBinding: const AgentAppInstallBinding(
-            platform: 'android',
-            appPackageName: 'forged.app',
-            activityName: 'forged.Activity',
-            signingCertSha256: 'forged',
-            installedAt: '2026-05-26T00:00:00Z',
-            installRequestId: 'forged',
-            protocolVersion: 1,
-          ),
-        );
-        return {
-          'installResultJson': jsonEncode({
-            'status': 'succeeded',
-            'request_id': request['request_id'],
-            'nonce': request['nonce'],
-            'package': jsonDecode(package),
-            'completed_at': '2026-05-26T00:00:00Z',
-          }),
-          'installBinding': {
-            'platform': 'android',
-            'app_package_name': 'trusted.app',
-            'activity_name': 'trusted.Activity',
-            'signing_cert_sha256': 'abc123',
-            'installed_at': '2026-05-26T00:00:00Z',
-            'install_request_id': request['request_id'],
-            'protocol_version': request['protocol_version'],
-            'host_package_name': request['host_package_name'],
-            'host_signing_cert_sha256': request['host_signing_cert_sha256'],
-            'host_instance_id': request['host_instance_id'],
-            'host_shared_secret': request['host_shared_secret'],
-          },
-        };
-      }
-      fail('unexpected method ${call.method}');
-    });
+          if (call.method == 'getAgentProviderHostInfo') {
+            return {'packageName': 'host.app', 'signingCertSha256': 'host123'};
+          }
+          if (call.method == 'requestAgentProviderInstall') {
+            final args = Map<String, dynamic>.from(call.arguments as Map);
+            final request = jsonDecode(args['requestJson'] as String) as Map;
+            final package = _packageJson(
+              installBinding: const AgentAppInstallBinding(
+                platform: 'android',
+                appPackageName: 'forged.app',
+                activityName: 'forged.Activity',
+                signingCertSha256: 'forged',
+                installedAt: '2026-05-26T00:00:00Z',
+                installRequestId: 'forged',
+                protocolVersion: 1,
+              ),
+            );
+            return {
+              'installResultJson': jsonEncode({
+                'status': 'succeeded',
+                'request_id': request['request_id'],
+                'nonce': request['nonce'],
+                'package': jsonDecode(package),
+                'completed_at': '2026-05-26T00:00:00Z',
+              }),
+              'installBinding': {
+                'platform': 'android',
+                'app_package_name': 'trusted.app',
+                'activity_name': 'trusted.Activity',
+                'signing_cert_sha256': 'abc123',
+                'installed_at': '2026-05-26T00:00:00Z',
+                'install_request_id': request['request_id'],
+                'protocol_version': request['protocol_version'],
+                'host_package_name': request['host_package_name'],
+                'host_signing_cert_sha256': request['host_signing_cert_sha256'],
+                'host_instance_id': request['host_instance_id'],
+                'host_shared_secret': request['host_shared_secret'],
+              },
+            };
+          }
+          fail('unexpected method ${call.method}');
+        });
 
     final installed = await api.requestInstall(
       const AgentProviderDescriptor(
@@ -99,36 +129,33 @@ void main() {
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'getAgentProviderHostInfo') {
-        return {
-          'packageName': 'host.app',
-          'signingCertSha256': 'host123',
-        };
-      }
-      if (call.method == 'requestAgentProviderInstall') {
-        final args = Map<String, dynamic>.from(call.arguments as Map);
-        final request = jsonDecode(args['requestJson'] as String) as Map;
-        return {
-          'installResultJson': jsonEncode({
-            'status': 'succeeded',
-            'request_id': request['request_id'],
-            'nonce': 'other',
-            'package': jsonDecode(_packageJson()),
-            'completed_at': '2026-05-26T00:00:00Z',
-          }),
-          'installBinding': {
-            'platform': 'android',
-            'app_package_name': 'trusted.app',
-            'activity_name': 'trusted.Activity',
-            'signing_cert_sha256': 'abc123',
-            'installed_at': '2026-05-26T00:00:00Z',
-            'install_request_id': request['request_id'],
-            'protocol_version': 1,
-          },
-        };
-      }
-      fail('unexpected method ${call.method}');
-    });
+          if (call.method == 'getAgentProviderHostInfo') {
+            return {'packageName': 'host.app', 'signingCertSha256': 'host123'};
+          }
+          if (call.method == 'requestAgentProviderInstall') {
+            final args = Map<String, dynamic>.from(call.arguments as Map);
+            final request = jsonDecode(args['requestJson'] as String) as Map;
+            return {
+              'installResultJson': jsonEncode({
+                'status': 'succeeded',
+                'request_id': request['request_id'],
+                'nonce': 'other',
+                'package': jsonDecode(_packageJson()),
+                'completed_at': '2026-05-26T00:00:00Z',
+              }),
+              'installBinding': {
+                'platform': 'android',
+                'app_package_name': 'trusted.app',
+                'activity_name': 'trusted.Activity',
+                'signing_cert_sha256': 'abc123',
+                'installed_at': '2026-05-26T00:00:00Z',
+                'install_request_id': request['request_id'],
+                'protocol_version': 1,
+              },
+            };
+          }
+          fail('unexpected method ${call.method}');
+        });
 
     await expectLater(
       api.requestInstall(
@@ -150,53 +177,55 @@ void main() {
 
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'getAgentProviderHostInfo') {
-        return {
-          'bundleId': 'host.app',
-          'teamId': 'HOST123456',
-          'callbackScheme': 'agent-host',
-        };
-      }
-      if (call.method == 'requestAgentProviderInstall') {
-        final args = Map<String, dynamic>.from(call.arguments as Map);
-        final provider = Map<String, dynamic>.from(args['provider'] as Map);
-        final request = jsonDecode(args['requestJson'] as String) as Map;
-        expect(request['host_bundle_id'], 'host.app');
-        expect(request['host_team_id'], 'HOST123456');
-        expect(request['host_callback_scheme'], 'agent-host');
-        expect(request['callback_url'],
-            'agent-host://agent-provider/install-callback');
-        return {
-          'installResultJson': jsonEncode({
-            'status': 'succeeded',
-            'request_id': request['request_id'],
-            'nonce': request['nonce'],
-            'package': jsonDecode(_packageJson()),
-            'completed_at': '2026-05-26T00:00:00Z',
-          }),
-          'installBinding': {
-            'platform': 'ios',
-            'app_package_name': '',
-            'activity_name': '',
-            'signing_cert_sha256': '',
-            'installed_at': '2026-05-26T00:00:00Z',
-            'install_request_id': request['request_id'],
-            'protocol_version': request['protocol_version'],
-            'host_instance_id': request['host_instance_id'],
-            'host_shared_secret': request['host_shared_secret'],
-            'ios_bundle_id': provider['iosBundleId'],
-            'ios_team_id': provider['iosTeamId'],
-            'install_url': provider['installUrl'],
-            'action_url': provider['actionUrl'],
-            'universal_link_domain': provider['universalLinkDomain'],
-            'host_bundle_id': request['host_bundle_id'],
-            'host_team_id': request['host_team_id'],
-            'host_callback_scheme': request['host_callback_scheme'],
-          },
-        };
-      }
-      fail('unexpected method ${call.method}');
-    });
+          if (call.method == 'getAgentProviderHostInfo') {
+            return {
+              'bundleId': 'host.app',
+              'teamId': 'HOST123456',
+              'callbackScheme': 'agent-host',
+            };
+          }
+          if (call.method == 'requestAgentProviderInstall') {
+            final args = Map<String, dynamic>.from(call.arguments as Map);
+            final provider = Map<String, dynamic>.from(args['provider'] as Map);
+            final request = jsonDecode(args['requestJson'] as String) as Map;
+            expect(request['host_bundle_id'], 'host.app');
+            expect(request['host_team_id'], 'HOST123456');
+            expect(request['host_callback_scheme'], 'agent-host');
+            expect(
+              request['callback_url'],
+              'agent-host://agent-provider/install-callback',
+            );
+            return {
+              'installResultJson': jsonEncode({
+                'status': 'succeeded',
+                'request_id': request['request_id'],
+                'nonce': request['nonce'],
+                'package': jsonDecode(_packageJson()),
+                'completed_at': '2026-05-26T00:00:00Z',
+              }),
+              'installBinding': {
+                'platform': 'ios',
+                'app_package_name': '',
+                'activity_name': '',
+                'signing_cert_sha256': '',
+                'installed_at': '2026-05-26T00:00:00Z',
+                'install_request_id': request['request_id'],
+                'protocol_version': request['protocol_version'],
+                'host_instance_id': request['host_instance_id'],
+                'host_shared_secret': request['host_shared_secret'],
+                'ios_bundle_id': provider['iosBundleId'],
+                'ios_team_id': provider['iosTeamId'],
+                'install_url': provider['installUrl'],
+                'action_url': provider['actionUrl'],
+                'universal_link_domain': provider['universalLinkDomain'],
+                'host_bundle_id': request['host_bundle_id'],
+                'host_team_id': request['host_team_id'],
+                'host_callback_scheme': request['host_callback_scheme'],
+              },
+            };
+          }
+          fail('unexpected method ${call.method}');
+        });
 
     final installed = await api.requestInstall(
       const AgentProviderDescriptor(

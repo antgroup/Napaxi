@@ -85,6 +85,9 @@ public struct AgentAction: Codable, Equatable {
     public var confirmationPolicy: String
     public var executionModes: [String]
     public var timeoutSeconds: Int
+    public var displayName: String
+    public var localizedDisplayNames: [String: String]
+    public var localizedDescriptions: [String: String]
 
     public init(
         actionId: String,
@@ -95,7 +98,10 @@ public struct AgentAction: Codable, Equatable {
         risk: String = "high",
         confirmationPolicy: String = "provider_required",
         executionModes: [String] = [],
-        timeoutSeconds: Int = 600
+        timeoutSeconds: Int = 600,
+        displayName: String = "",
+        localizedDisplayNames: [String: String] = [:],
+        localizedDescriptions: [String: String] = [:]
     ) {
         self.actionId = actionId
         self.toolName = toolName
@@ -106,6 +112,9 @@ public struct AgentAction: Codable, Equatable {
         self.confirmationPolicy = confirmationPolicy
         self.executionModes = executionModes
         self.timeoutSeconds = timeoutSeconds
+        self.displayName = displayName
+        self.localizedDisplayNames = localizedDisplayNames
+        self.localizedDescriptions = localizedDescriptions
     }
 }
 

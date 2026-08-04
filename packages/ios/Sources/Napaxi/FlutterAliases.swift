@@ -200,6 +200,7 @@ public typealias McpServerActionResult = NapaxiMcpServerActionResult
 public typealias McpOAuthStartResult = NapaxiMcpOAuthStartResult
 
 public typealias AgentProviderDescriptor = NapaxiAgentProviderDescriptor
+public typealias AgentProviderSelection = NapaxiAgentProviderSelection
 public typealias AgentInstallRequest = NapaxiAgentInstallRequest
 public typealias AgentTriggerRequest = NapaxiAgentTriggerRequest
 public typealias AcceptedAgentTrigger = NapaxiAcceptedAgentTrigger

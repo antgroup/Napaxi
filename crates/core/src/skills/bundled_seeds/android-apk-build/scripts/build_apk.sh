@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: build_apk.sh --project-dir <project> [--app-name <name>]
+Usage: build_apk.sh --project-dir <project> [--app-name <name>] [--without-agent-provider] [--validate-only]
 
 Builds exactly one universal, pure-Java Android APK from the fixed Napaxi
 project layout. Do not edit this script; pass parameters instead.
@@ -13,6 +13,9 @@ Options:
   --app-name NAME      Final APK basename; defaults to APP_NAME or app
   --android-sdk PATH   Android SDK path; defaults to ANDROID_SDK or /opt/android/sdk
   --x86-sysroot PATH   x86_64 sysroot; defaults to X86_SYSROOT or /opt/x86root/sysroot
+  --without-agent-provider
+                       Explicitly build without Agent App Provider support
+  --validate-only      Validate project/Provider wiring without Android build tools
   -h, --help           Show this help
 USAGE
 }
@@ -21,6 +24,10 @@ PROJECT_DIR="${PROJECT_DIR:-}"
 APP_NAME="${APP_NAME:-app}"
 ANDROID_SDK="${ANDROID_SDK:-/opt/android/sdk}"
 X86_SYSROOT="${X86_SYSROOT:-/opt/x86root/sysroot}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+AGENT_PROVIDER_SDK_DIR="${AGENT_PROVIDER_SDK_DIR:-$SCRIPT_DIR/../sdk/java}"
+WITHOUT_AGENT_PROVIDER=false
+VALIDATE_ONLY=false
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -43,6 +50,14 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { echo "--x86-sysroot requires a value" >&2; exit 2; }
       X86_SYSROOT="$2"
       shift 2
+      ;;
+    --without-agent-provider)
+      WITHOUT_AGENT_PROVIDER=true
+      shift
+      ;;
+    --validate-only)
+      VALIDATE_ONLY=true
+      shift
       ;;
     -h|--help)
       usage
@@ -86,8 +101,6 @@ cleanup_intermediate_outputs() {
     find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' ! -path "$FINAL_APK" -delete 2>/dev/null || true
   fi
 }
-trap cleanup_intermediate_outputs EXIT
-
 run_x86_64() {
   qemu-x86_64 -L "$X86_SYSROOT" "$@"
 }
@@ -113,22 +126,121 @@ case "$APP_NAME" in
     ;;
 esac
 
-require_file "$ANDROID_JAR"
-require_file "$BUILD_TOOLS/aapt2"
-require_file "$BUILD_TOOLS/lib/d8.jar"
-require_file "$BUILD_TOOLS/zipalign"
-require_file "$BUILD_TOOLS/lib/apksigner.jar"
 require_file "$SRC_DIR/AndroidManifest.xml"
 require_dir "$SRC_DIR/java"
 require_dir "$SRC_DIR/res"
-
-rm -rf "$BUILD_DIR"
-mkdir -p "$GEN_DIR" "$CLASS_DIR" "$DEX_DIR" "$RES_FLAT_DIR" "$APK_WORK_DIR"
 
 if [ -d "$SRC_DIR/assets/www" ] && [ ! -f "$SRC_DIR/assets/www/index.html" ]; then
   echo "WebView assets directory exists but index.html is missing: $SRC_DIR/assets/www/index.html" >&2
   exit 1
 fi
+
+PROVIDER_ENABLED=false
+if [ -f "$SRC_DIR/assets/agent-app.json" ]; then
+  if [ "$WITHOUT_AGENT_PROVIDER" = true ]; then
+    echo "--without-agent-provider conflicts with assets/agent-app.json; remove the declaration and Provider manifest entries" >&2
+    exit 1
+  fi
+  PROVIDER_ENABLED=true
+elif grep -q 'agent.provider.action.INSTALL_AGENT\|agent.provider.action.HANDLE_PROPOSAL' "$SRC_DIR/AndroidManifest.xml"; then
+  echo "AndroidManifest.xml exposes Agent Provider entry points but assets/agent-app.json is missing" >&2
+  exit 1
+elif [ "$WITHOUT_AGENT_PROVIDER" = true ]; then
+  echo "      Agent App Provider explicitly disabled"
+else
+  echo "      Legacy project without Agent App Provider; new projects enable it by default"
+fi
+
+if [ "$PROVIDER_ENABLED" = true ]; then
+  if ! grep -q '"provider_id"' "$SRC_DIR/assets/agent-app.json" || \
+     ! grep -q '"agent_id"' "$SRC_DIR/assets/agent-app.json" || \
+     ! grep -q '"display_name"' "$SRC_DIR/assets/agent-app.json" || \
+     ! grep -q '"actions"' "$SRC_DIR/assets/agent-app.json"; then
+    echo "invalid assets/agent-app.json: provider_id, agent_id, display_name, and actions are required" >&2
+    exit 1
+  fi
+  if ! grep -q 'agent.provider.action.INSTALL_AGENT' "$SRC_DIR/AndroidManifest.xml" || \
+     ! grep -q 'agent.provider.action.HANDLE_PROPOSAL' "$SRC_DIR/AndroidManifest.xml"; then
+    echo "AndroidManifest.xml must expose Agent Provider install and action entry points" >&2
+    exit 1
+  fi
+  if ! grep -R -q 'AgentProviderActionRegistry' "$SRC_DIR/java"; then
+    echo "Provider apps must route actions through AgentProviderActionRegistry" >&2
+    exit 1
+  fi
+  DECLARED_ACTION_IDS=()
+  while IFS= read -r action_id; do
+    DECLARED_ACTION_IDS+=("$action_id")
+  done < <(
+    sed -n 's/^[[:space:]]*"action_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      "$SRC_DIR/assets/agent-app.json"
+  )
+  if [ "${#DECLARED_ACTION_IDS[@]}" -eq 0 ]; then
+    echo "assets/agent-app.json must declare at least one action_id" >&2
+    exit 1
+  fi
+  if printf '%s\n' "${DECLARED_ACTION_IDS[@]}" | sort | uniq -d | grep -q .; then
+    echo "assets/agent-app.json contains duplicate action_id values" >&2
+    exit 1
+  fi
+  REGISTERED_ACTION_IDS=()
+  while IFS= read -r java_source; do
+    while IFS= read -r action_id; do
+      REGISTERED_ACTION_IDS+=("$action_id")
+    done < <(
+      sed -n 's/.*\.register[[:space:]]*([[:space:]]*"\([^"]*\)".*/\1/p' "$java_source"
+    )
+  done < <(find "$SRC_DIR/java" -type f -name '*.java' | sort)
+  if [ "${#REGISTERED_ACTION_IDS[@]}" -eq 0 ]; then
+    echo "Provider app has no AgentProviderActionRegistry handlers" >&2
+    exit 1
+  fi
+  if printf '%s\n' "${REGISTERED_ACTION_IDS[@]}" | sort | uniq -d | grep -q .; then
+    echo "Provider app contains duplicate AgentProviderActionRegistry handlers" >&2
+    exit 1
+  fi
+  for action_id in "${DECLARED_ACTION_IDS[@]}"; do
+    registered=false
+    for registered_action_id in "${REGISTERED_ACTION_IDS[@]}"; do
+      if [ "$registered_action_id" = "$action_id" ]; then
+        registered=true
+        break
+      fi
+    done
+    if [ "$registered" = false ]; then
+      echo "No AgentProviderActionRegistry handler for declared action_id: $action_id" >&2
+      exit 1
+    fi
+  done
+  for action_id in "${REGISTERED_ACTION_IDS[@]}"; do
+    declared=false
+    for declared_action_id in "${DECLARED_ACTION_IDS[@]}"; do
+      if [ "$declared_action_id" = "$action_id" ]; then
+        declared=true
+        break
+      fi
+    done
+    if [ "$declared" = false ]; then
+      echo "AgentProviderActionRegistry handler is not declared in agent-app.json: $action_id" >&2
+      exit 1
+    fi
+  done
+fi
+
+if [ "$VALIDATE_ONLY" = true ]; then
+  echo "Agent App project validation passed"
+  exit 0
+fi
+
+require_file "$ANDROID_JAR"
+require_file "$BUILD_TOOLS/aapt2"
+require_file "$BUILD_TOOLS/lib/d8.jar"
+require_file "$BUILD_TOOLS/zipalign"
+require_file "$BUILD_TOOLS/lib/apksigner.jar"
+
+rm -rf "$BUILD_DIR"
+mkdir -p "$GEN_DIR" "$CLASS_DIR" "$DEX_DIR" "$RES_FLAT_DIR" "$APK_WORK_DIR"
+trap cleanup_intermediate_outputs EXIT
 
 echo "[1/7] aapt2 compile resources"
 run_x86_64 "$BUILD_TOOLS/aapt2" compile --dir "$SRC_DIR/res" -o "$RES_FLAT_DIR"
@@ -154,11 +266,21 @@ run_x86_64 "$BUILD_TOOLS/aapt2" link \
 
 echo "[3/7] javac Java sources"
 mapfile -t JAVA_SOURCES < <(find "$SRC_DIR/java" "$GEN_DIR" -name '*.java' | sort)
+if [ "$PROVIDER_ENABLED" = true ]; then
+  require_dir "$AGENT_PROVIDER_SDK_DIR"
+  mapfile -t PROVIDER_SDK_SOURCES < <(find "$AGENT_PROVIDER_SDK_DIR" -name '*.java' | sort)
+  if [ "${#PROVIDER_SDK_SOURCES[@]}" -eq 0 ]; then
+    echo "Agent Provider Lite SDK contains no Java sources: $AGENT_PROVIDER_SDK_DIR" >&2
+    exit 1
+  fi
+  JAVA_SOURCES+=("${PROVIDER_SDK_SOURCES[@]}")
+  echo "      Agent App Provider support enabled"
+fi
 if [ "${#JAVA_SOURCES[@]}" -eq 0 ]; then
   echo "no Java sources found" >&2
   exit 1
 fi
-javac -source 11 -target 11 \
+javac --release 11 \
   -classpath "$ANDROID_JAR" \
   -d "$CLASS_DIR" \
   "${JAVA_SOURCES[@]}"

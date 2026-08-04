@@ -220,6 +220,7 @@ class _ChatInputBar extends StatefulWidget {
     required this.isSending,
     this.isEditing = false,
     required this.slashCommands,
+    this.agentApps = const [],
     required this.contextStatus,
     required this.isContextStatusLoading,
     required this.hasContextSession,
@@ -247,6 +248,7 @@ class _ChatInputBar extends StatefulWidget {
   final bool isSending;
   final bool isEditing;
   final List<_SlashCommandSpec> slashCommands;
+  final List<sdk.AgentAppPackage> agentApps;
   final sdk.ContextStatus? contextStatus;
   final bool isContextStatusLoading;
   final bool hasContextSession;
@@ -284,6 +286,9 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   final ImagePicker _imagePicker = ImagePicker();
   final ScrollController _inputScrollController = ScrollController();
   final LayerLink _attachmentMenuLink = LayerLink();
+  final LayerLink _agentAppSuggestionsLink = LayerLink();
+  final OverlayPortalController _agentAppSuggestionsController =
+      OverlayPortalController();
   final GlobalKey _attachmentButtonKey = GlobalKey();
 
   bool _hasText = false;
@@ -320,20 +325,55 @@ class _ChatInputBarState extends State<_ChatInputBar> {
         .toList();
   }
 
+  String? get _agentAppQuery {
+    final text = widget.controller.text;
+    final selection = widget.controller.selection;
+    if (!selection.isCollapsed || selection.baseOffset != text.length) {
+      return null;
+    }
+    final trimmedLeft = text.trimLeft();
+    if (!trimmedLeft.startsWith('@') || trimmedLeft.contains('\n')) return null;
+    final query = trimmedLeft.substring(1);
+    if (query.contains(RegExp(r'\s'))) return null;
+    return query.trim().toLowerCase();
+  }
+
+  List<sdk.AgentAppPackage> get _agentAppSuggestions {
+    final query = _agentAppQuery;
+    if (query == null) return const [];
+    final seenNames = <String>{};
+    return widget.agentApps
+        .where((package) {
+          final name = package.displayName.trim();
+          if (name.isEmpty) return false;
+          final normalized = name.toLowerCase();
+          return seenNames.add(normalized) && normalized.contains(query);
+        })
+        .take(5)
+        .toList(growable: false);
+  }
+
   @override
   void initState() {
     super.initState();
     _hasText = widget.controller.text.trim().isNotEmpty;
     widget.controller.addListener(_handleTextChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncAgentAppSuggestionsOverlay();
+    });
   }
 
   @override
   void didUpdateWidget(_ChatInputBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller == widget.controller) return;
-    oldWidget.controller.removeListener(_handleTextChanged);
-    _hasText = widget.controller.text.trim().isNotEmpty;
-    widget.controller.addListener(_handleTextChanged);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_handleTextChanged);
+      _hasText = widget.controller.text.trim().isNotEmpty;
+      widget.controller.addListener(_handleTextChanged);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncAgentAppSuggestionsOverlay();
+    });
   }
 
   @override
@@ -345,11 +385,23 @@ class _ChatInputBarState extends State<_ChatInputBar> {
 
   void _handleTextChanged() {
     final hasText = widget.controller.text.trim().isNotEmpty;
+    _syncAgentAppSuggestionsOverlay();
     if (hasText == _hasText) {
       setState(() {});
       return;
     }
     setState(() => _hasText = hasText);
+  }
+
+  void _syncAgentAppSuggestionsOverlay() {
+    if (!mounted) return;
+    final shouldShow = _agentAppSuggestions.isNotEmpty;
+    if (shouldShow == _agentAppSuggestionsController.isShowing) return;
+    if (shouldShow) {
+      _agentAppSuggestionsController.show();
+    } else {
+      _agentAppSuggestionsController.hide();
+    }
   }
 
   void _selectSlashCommand(_SlashCommandSpec command) {
@@ -358,6 +410,22 @@ class _ChatInputBarState extends State<_ChatInputBar> {
       selection: TextSelection.collapsed(offset: command.name.length + 1),
     );
     widget.focusNode.requestFocus();
+  }
+
+  void _selectAgentApp(sdk.AgentAppPackage package) {
+    final name = package.displayName.trim();
+    if (name.isEmpty) return;
+    final text = '@$name ';
+    widget.controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    widget.focusNode.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.focusNode.requestFocus();
+      unawaited(SystemChannels.textInput.invokeMethod<void>('TextInput.show'));
+    });
   }
 
   Future<void> _pickFile() async {
@@ -548,6 +616,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
     final slashSuggestions = _slashSuggestions;
+    final agentAppSuggestions = _agentAppSuggestions;
     final primaryAction = _canSend
         ? _ChatInputPrimaryAction.send
         : widget.pendingMessageCount > 0 && widget.onRetractPending != null
@@ -572,155 +641,194 @@ class _ChatInputBarState extends State<_ChatInputBar> {
           12,
           12 + MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: Container(
-          key: const Key('chat_input_container'),
-          decoration: BoxDecoration(
-            color: _appSurfaceColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: _appSurfaceBorderColor),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.025),
-                blurRadius: 12,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.isEditing) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 10, 0),
-                  child: _EditingMessageHeader(
-                    onCancelEdit: widget.onCancelEdit ?? () {},
-                  ),
-                ),
-              ],
-              if (_attachments.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-                  child: _AttachmentPreviewRow(
-                    attachments: _attachments,
-                    onRemove: _removeAttachment,
-                  ),
-                ),
-              if (_pinnedSkillNames.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                  child: _PinnedSkillChipsRow(
-                    skills: _pinnedSkillNames,
-                    onRemove: _removePinnedSkill,
-                  ),
-                ),
-              if (slashSuggestions.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                  child: _SlashCommandSuggestions(
-                    commands: slashSuggestions,
-                    onSelected: _selectSlashCommand,
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 156),
-                  child: Scrollbar(
-                    controller: _inputScrollController,
-                    child: TextField(
-                      key: widget.inputFieldKey,
-                      controller: widget.controller,
-                      focusNode: widget.focusNode,
-                      scrollController: _inputScrollController,
-                      maxLines: null,
-                      minLines: 1,
-                      textInputAction: TextInputAction.newline,
-                      onTapOutside: (_) => widget.focusNode.unfocus(),
-                      decoration: InputDecoration(
-                        hintText: widget.messageHint ?? strings.messageHint,
-                        hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
+        child: LayoutBuilder(
+          builder: (context, constraints) => OverlayPortal(
+            controller: _agentAppSuggestionsController,
+            overlayChildBuilder: (context) => Align(
+              alignment: Alignment.topLeft,
+              child: CompositedTransformFollower(
+                link: _agentAppSuggestionsLink,
+                showWhenUnlinked: false,
+                targetAnchor: Alignment.topLeft,
+                followerAnchor: Alignment.bottomLeft,
+                offset: const Offset(0, -8),
+                child: SizedBox(
+                  key: const Key('agent_app_mention_overlay'),
+                  width: constraints.maxWidth,
+                  height: 58,
+                  child: TextFieldTapRegion(
+                    child: _AgentAppMentionOverlay(
+                      apps: agentAppSuggestions,
+                      onSelected: _selectAgentApp,
                     ),
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 2, 6, 6),
-                child: Row(
+            ),
+            child: CompositedTransformTarget(
+              link: _agentAppSuggestionsLink,
+              child: Container(
+                key: const Key('chat_input_container'),
+                decoration: BoxDecoration(
+                  color: _appSurfaceColor,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: _appSurfaceBorderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.025),
+                      blurRadius: 12,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    CompositedTransformTarget(
-                      link: _attachmentMenuLink,
-                      child: _ToolbarIconButton(
-                        key: _attachmentButtonKey,
-                        semanticKey: const Key('add_attachment_button'),
-                        icon: Icons.add_rounded,
-                        tooltip: strings.addAttachmentTooltip,
-                        onTap: _openAttachmentMenu,
+                    if (widget.isEditing) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 10, 0),
+                        child: _EditingMessageHeader(
+                          onCancelEdit: widget.onCancelEdit ?? () {},
+                        ),
+                      ),
+                    ],
+                    if (_attachments.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                        child: _AttachmentPreviewRow(
+                          attachments: _attachments,
+                          onRemove: _removeAttachment,
+                        ),
+                      ),
+                    if (_pinnedSkillNames.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                        child: _PinnedSkillChipsRow(
+                          skills: _pinnedSkillNames,
+                          onRemove: _removePinnedSkill,
+                        ),
+                      ),
+                    if (slashSuggestions.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                        child: _SlashCommandSuggestions(
+                          commands: slashSuggestions,
+                          onSelected: _selectSlashCommand,
+                        ),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 156),
+                        child: Scrollbar(
+                          controller: _inputScrollController,
+                          child: TextField(
+                            key: widget.inputFieldKey,
+                            controller: widget.controller,
+                            focusNode: widget.focusNode,
+                            scrollController: _inputScrollController,
+                            maxLines: null,
+                            minLines: 1,
+                            textInputAction: TextInputAction.newline,
+                            onTapOutside: (_) => widget.focusNode.unfocus(),
+                            decoration: InputDecoration(
+                              hintText:
+                                  widget.messageHint ?? strings.messageHint,
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF9CA3AF),
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                              isDense: true,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    if (channelInputsAvailable) ...[
-                      const SizedBox(width: 2),
-                      _ChannelInputButton(
-                        sources: widget.channelInputSources,
-                        busyAccountId: widget.channelInputBusyAccountId,
-                        activeAccountId: widget.channelInputActiveAccountId,
-                        onTap: _openChannelInputPicker,
-                      ),
-                    ],
-                    const Spacer(),
-                    if (widget.showContextStatus) ...[
-                      _ContextStatusButton(
-                        status: widget.contextStatus,
-                        isLoading: widget.isContextStatusLoading,
-                        hasSession: widget.hasContextSession,
-                        onTap: widget.onContextStatusTap,
-                      ),
-                      const SizedBox(width: 6),
-                    ],
-                    SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: IconButton.filled(
-                        key: switch (primaryAction) {
-                          _ChatInputPrimaryAction.send => widget.sendButtonKey,
-                          _ChatInputPrimaryAction.stop => widget.stopButtonKey,
-                          _ChatInputPrimaryAction.retract => const Key(
-                            'retract_queued_messages_button',
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 2, 6, 6),
+                      child: Row(
+                        children: [
+                          CompositedTransformTarget(
+                            link: _attachmentMenuLink,
+                            child: _ToolbarIconButton(
+                              key: _attachmentButtonKey,
+                              semanticKey: const Key('add_attachment_button'),
+                              icon: Icons.add_rounded,
+                              tooltip: strings.addAttachmentTooltip,
+                              onTap: _openAttachmentMenu,
+                            ),
                           ),
-                        },
-                        tooltip: switch (primaryAction) {
-                          _ChatInputPrimaryAction.send => strings.sendTooltip,
-                          _ChatInputPrimaryAction.stop => strings.stopTooltip,
-                          _ChatInputPrimaryAction.retract =>
-                            strings.retractQueuedTooltip,
-                        },
-                        onPressed: switch (primaryAction) {
-                          _ChatInputPrimaryAction.send =>
-                            _canSend ? _send : null,
-                          _ChatInputPrimaryAction.stop => widget.onStop,
-                          _ChatInputPrimaryAction.retract =>
-                            widget.onRetractPending,
-                        },
-                        style: IconButton.styleFrom(
-                          backgroundColor: sendColor,
-                          foregroundColor: Colors.white,
-                        ),
-                        icon: Icon(switch (primaryAction) {
-                          _ChatInputPrimaryAction.send =>
-                            Icons.arrow_upward_rounded,
-                          _ChatInputPrimaryAction.stop => Icons.stop_rounded,
-                          _ChatInputPrimaryAction.retract => Icons.undo_rounded,
-                        }, size: 18),
+                          if (channelInputsAvailable) ...[
+                            const SizedBox(width: 2),
+                            _ChannelInputButton(
+                              sources: widget.channelInputSources,
+                              busyAccountId: widget.channelInputBusyAccountId,
+                              activeAccountId:
+                                  widget.channelInputActiveAccountId,
+                              onTap: _openChannelInputPicker,
+                            ),
+                          ],
+                          const Spacer(),
+                          if (widget.showContextStatus) ...[
+                            _ContextStatusButton(
+                              status: widget.contextStatus,
+                              isLoading: widget.isContextStatusLoading,
+                              hasSession: widget.hasContextSession,
+                              onTap: widget.onContextStatusTap,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          SizedBox(
+                            width: 40,
+                            height: 40,
+                            child: IconButton.filled(
+                              key: switch (primaryAction) {
+                                _ChatInputPrimaryAction.send =>
+                                  widget.sendButtonKey,
+                                _ChatInputPrimaryAction.stop =>
+                                  widget.stopButtonKey,
+                                _ChatInputPrimaryAction.retract => const Key(
+                                  'retract_queued_messages_button',
+                                ),
+                              },
+                              tooltip: switch (primaryAction) {
+                                _ChatInputPrimaryAction.send =>
+                                  strings.sendTooltip,
+                                _ChatInputPrimaryAction.stop =>
+                                  strings.stopTooltip,
+                                _ChatInputPrimaryAction.retract =>
+                                  strings.retractQueuedTooltip,
+                              },
+                              onPressed: switch (primaryAction) {
+                                _ChatInputPrimaryAction.send =>
+                                  _canSend ? _send : null,
+                                _ChatInputPrimaryAction.stop => widget.onStop,
+                                _ChatInputPrimaryAction.retract =>
+                                  widget.onRetractPending,
+                              },
+                              style: IconButton.styleFrom(
+                                backgroundColor: sendColor,
+                                foregroundColor: Colors.white,
+                              ),
+                              icon: Icon(switch (primaryAction) {
+                                _ChatInputPrimaryAction.send =>
+                                  Icons.arrow_upward_rounded,
+                                _ChatInputPrimaryAction.stop =>
+                                  Icons.stop_rounded,
+                                _ChatInputPrimaryAction.retract =>
+                                  Icons.undo_rounded,
+                              }, size: 18),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),
@@ -836,6 +944,84 @@ class _SlashCommandSuggestions extends StatelessWidget {
             onPressed: () => onSelected(command),
           );
         },
+      ),
+    );
+  }
+}
+
+class _AgentAppMentionSuggestions extends StatelessWidget {
+  const _AgentAppMentionSuggestions({
+    required this.apps,
+    required this.onSelected,
+  });
+
+  final List<sdk.AgentAppPackage> apps;
+  final ValueChanged<sdk.AgentAppPackage> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const Key('agent_app_mention_suggestions'),
+      height: 42,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: apps.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final app = apps[index];
+          return Material(
+            color: const Color(0xFFF5F5F5),
+            shape: RoundedRectangleBorder(
+              side: const BorderSide(color: Color(0xFFE5E5E5)),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              key: Key('agent_app_mention_${app.providerId}'),
+              canRequestFocus: false,
+              onTap: () => onSelected(app),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Center(
+                  widthFactor: 1,
+                  child: Text(
+                    '@${app.displayName.trim()}',
+                    style: const TextStyle(
+                      color: Color(0xFF171717),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _AgentAppMentionOverlay extends StatelessWidget {
+  const _AgentAppMentionOverlay({required this.apps, required this.onSelected});
+
+  final List<sdk.AgentAppPackage> apps;
+  final ValueChanged<sdk.AgentAppPackage> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _appSurfaceColor,
+      elevation: 8,
+      shadowColor: Colors.black.withValues(alpha: 0.14),
+      shape: RoundedRectangleBorder(
+        side: const BorderSide(color: _appSurfaceBorderColor),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: _AgentAppMentionSuggestions(apps: apps, onSelected: onSelected),
       ),
     );
   }

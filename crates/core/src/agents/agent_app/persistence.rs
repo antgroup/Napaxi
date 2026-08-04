@@ -6,6 +6,7 @@
 //! tolerate missing files (return `None`/empty list); writes return
 //! `bool` so callers can surface a clean error_json.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -13,7 +14,7 @@ use super::types::{ActionProposal, ActionProposalRecord, AgentAppPackage, AgentT
 use super::{PACKAGE_DIR, PROPOSAL_DIR, TRIGGER_DIR};
 
 pub(super) fn save_package(files_dir: &str, package: &AgentAppPackage) -> bool {
-    let path = package_file(files_dir, &package.agent_id);
+    let path = package_file(files_dir, &package.provider_id);
     let Some(parent) = path.parent() else {
         return false;
     };
@@ -23,29 +24,69 @@ pub(super) fn save_package(files_dir: &str, package: &AgentAppPackage) -> bool {
     let Ok(content) = serde_json::to_string_pretty(package) else {
         return false;
     };
-    fs::write(path, content).is_ok()
+    if fs::write(&path, content).is_err() {
+        return false;
+    }
+    remove_matching_legacy_package_file(files_dir, package, &path);
+    true
 }
 
-pub(super) fn load_package(files_dir: &str, agent_id: &str) -> Option<AgentAppPackage> {
-    let content = fs::read_to_string(package_file(files_dir, agent_id)).ok()?;
-    serde_json::from_str(&content).ok()
+pub(super) fn load_package(files_dir: &str, provider_or_agent_id: &str) -> Option<AgentAppPackage> {
+    let direct = fs::read_to_string(package_file(files_dir, provider_or_agent_id))
+        .ok()
+        .and_then(|content| serde_json::from_str::<AgentAppPackage>(&content).ok());
+    if let Some(package) = direct
+        && (package.provider_id == provider_or_agent_id || package.agent_id == provider_or_agent_id)
+    {
+        let _ = save_package(files_dir, &package);
+        return Some(package);
+    }
+    list_packages(files_dir).into_iter().find(|package| {
+        package.provider_id == provider_or_agent_id || package.agent_id == provider_or_agent_id
+    })
 }
 
 pub(super) fn list_packages(files_dir: &str) -> Vec<AgentAppPackage> {
     let Ok(entries) = fs::read_dir(package_dir(files_dir)) else {
         return Vec::new();
     };
-    let mut packages = Vec::new();
+    let mut packages = BTreeMap::<String, (bool, AgentAppPackage)>::new();
     for entry in entries.flatten() {
         let Ok(content) = fs::read_to_string(entry.path()) else {
             continue;
         };
         if let Ok(package) = serde_json::from_str::<AgentAppPackage>(&content) {
-            packages.push(package);
+            let canonical = entry.path() == package_file(files_dir, &package.provider_id);
+            match packages.entry(package.provider_id.clone()) {
+                std::collections::btree_map::Entry::Vacant(slot) => {
+                    slot.insert((canonical, package));
+                }
+                std::collections::btree_map::Entry::Occupied(mut slot)
+                    if canonical && !slot.get().0 =>
+                {
+                    slot.insert((true, package));
+                }
+                _ => {}
+            }
         }
     }
-    packages.sort_by(|a, b| a.agent_id.cmp(&b.agent_id));
     packages
+        .into_values()
+        .map(|(_, package)| {
+            let _ = save_package(files_dir, &package);
+            package
+        })
+        .collect()
+}
+
+pub(super) fn delete_package_files(files_dir: &str, package: &AgentAppPackage) -> bool {
+    let canonical = package_file(files_dir, &package.provider_id);
+    let legacy = package_file(files_dir, &package.agent_id);
+    let mut removed = fs::remove_file(&canonical).is_ok();
+    if legacy != canonical && matching_package_at_path(&legacy, &package.provider_id) {
+        removed |= fs::remove_file(legacy).is_ok();
+    }
+    removed
 }
 
 pub(super) fn persist_proposal(files_dir: &str, proposal: &ActionProposal) -> Result<(), String> {
@@ -117,6 +158,24 @@ pub(super) fn load_trigger_record(files_dir: &str, request_id: &str) -> Option<A
 
 pub(super) fn package_file(files_dir: &str, agent_id: &str) -> PathBuf {
     package_dir(files_dir).join(format!("{}.json", safe_file_component(agent_id)))
+}
+
+fn remove_matching_legacy_package_file(
+    files_dir: &str,
+    package: &AgentAppPackage,
+    canonical: &Path,
+) {
+    let legacy = package_file(files_dir, &package.agent_id);
+    if legacy != canonical && matching_package_at_path(&legacy, &package.provider_id) {
+        let _ = fs::remove_file(legacy);
+    }
+}
+
+fn matching_package_at_path(path: &Path, provider_id: &str) -> bool {
+    fs::read_to_string(path)
+        .ok()
+        .and_then(|content| serde_json::from_str::<AgentAppPackage>(&content).ok())
+        .is_some_and(|package| package.provider_id == provider_id)
 }
 
 fn package_dir(files_dir: &str) -> PathBuf {

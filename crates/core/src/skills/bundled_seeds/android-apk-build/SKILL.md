@@ -1,6 +1,6 @@
 ---
 name: android-apk-build
-version: "1.2.6"
+version: "1.4.0"
 display_name: Android APK Build
 description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a bundled immutable build script that AI must only run with parameters; Android framework WebView/local HTML assets are allowed only when the user is asking for an installable Android app/APK wrapper; when using HTML, bundle all local resources into the APK assets and reference them with relative paths instead of fixed device/workspace paths; do not turn ordinary HTML/webpage/front-end requests into APKs by default, and do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
 activation:
@@ -57,6 +57,7 @@ Before writing code, mentally pin these constants and do not reinterpret them fr
 - Keep the signing certificate stable across app updates. Generate the debug keystore only if it does not already exist, store it at `<project>/debug.keystore`, and never delete it during `rm -rf build`. Reusing this keystore lets Android install a newer APK over the previous one with the same package name.
 - Do not place the keystore inside `build/`, because `build/` is cleaned on every run and would change the signature on every rebuild.
 - Use the bundled script resource `scripts/build_apk.sh`. Do not write, copy, patch, or regenerate a project-local `build.sh`; AI is only allowed to pass parameters to the bundled script.
+- Every newly generated app must expose at least one useful Agent App action by default. Put the package declaration at `app/src/main/assets/agent-app.json`, use the bundled Java Lite SDK from `sdk/java/`, route handlers through `AgentProviderActionRegistry`, and keep UI and Agent actions on the same app-owned domain service. Do not copy or rewrite the SDK sources into the project. Only omit Provider support when the user explicitly requests it; in that case omit the declaration/Provider activities and pass `--without-agent-provider`. Existing legacy projects without a declaration remain buildable.
 
 ## Required project layout
 
@@ -72,6 +73,7 @@ Create files in this layout exactly:
             │   └── <package path>/
             │       └── MainActivity.java
             ├── assets/                 # optional: bundled WebView app assets
+            │   ├── agent-app.json      # required: Agent App Provider declaration
             │   └── www/
             │       ├── index.html
             │       ├── style.css
@@ -126,6 +128,22 @@ Use reverse-domain lowercase package names such as `com.napaxi.generated.todo`. 
         android:roundIcon="@drawable/ic_launcher"
         android:allowBackup="false"
         android:supportsRtl="true">
+        <activity
+            android:name="agent.provider.lite.AgentProviderInstallActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="agent.provider.action.INSTALL_AGENT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".NapaxiActionActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="agent.provider.action.HANDLE_PROPOSAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -172,6 +190,88 @@ Use reverse-domain lowercase package names such as `com.napaxi.generated.todo`. 
 </vector>
 ```
 
+## Default Agent App Provider contract
+
+For every new app, first identify stable domain operations that are useful from
+Napaxi. Expose business operations such as `note.create`, `task.complete`, or
+`expense.list`; do not expose brittle UI operations such as `tap_button_3`.
+The launcher Activity and Provider action Activity must call the same domain
+service so manual and Agent-driven changes stay consistent.
+
+Create `app/src/main/assets/agent-app.json`. This is the single source of truth
+for Provider metadata and action schemas. The first version uses the existing
+protocol-v2 `AgentPackage` wire shape for Host compatibility, but the generated
+Agent id is an internal legacy identifier and must not be presented as a
+switchable Agent in the app UI.
+
+Start from `templates/agent-app.json.template` and
+`templates/NapaxiActionActivity.java.template` beside this skill. Replace every
+`{{PLACEHOLDER}}`; do not leave template markers in generated source. The
+manifest action array and registry registrations are the only app-specific
+capability declarations. Domain handler bodies remain app-owned.
+
+```json
+{
+  "provider_id": "com.napaxi.generated.sample",
+  "agent_id": "com.napaxi.generated.sample.agent",
+  "display_name": "Sample",
+  "description": "Capabilities provided by the generated Sample app.",
+  "system_prompt": "",
+  "actions": [
+    {
+      "action_id": "sample.item.create",
+      "tool_name": "app_action_sample_item_create",
+      "display_name": "Create item",
+      "localized_display_names": {"zh-CN": "创建项目"},
+      "description": "Create an item in Sample.",
+      "localized_descriptions": {"zh-CN": "在 Sample 中创建一个新项目。"},
+      "parameters": {
+        "type": "object",
+        "properties": {"content": {"type": "string"}},
+        "required": ["content"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "low",
+      "confirmation_policy": "none",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    }
+  ],
+  "handoff": {"mode": "android_activity_result"},
+  "result": {"mode": "activity_result"}
+}
+```
+
+Every action must provide a short, user-facing `display_name` and
+`description`. Add `localized_display_names` and `localized_descriptions` for
+each locale supported by the app. Napaxi uses these fields in the Agent App
+capability detail page; keep technical identifiers such as `action_id` and
+`tool_name` out of user-facing copy.
+
+Create an exported `.NapaxiActionActivity` that:
+
+1. Calls `AgentProviderLite.validateTrustedProposal(this)` before reading any
+   arguments or touching app data.
+2. Immediately returns `AgentProviderLite.validationFailureResult(validation)`
+   when validation fails.
+3. Creates an `AgentProviderActionRegistry` and registers every declared action
+   id exactly once with the same domain service used by the UI. Keep each
+   `.register("<action_id>", ...)` literal on one line so the build validator can
+   compare source handlers with the manifest.
+4. Shows Provider-owned confirmation UI when
+   `validation.requiresProviderConfirmation()` is true. High and critical risk
+   actions must never auto-execute.
+5. Marks mutating handlers as non-idempotent in the registry. The shared SDK
+   persists replay state immediately before the domain operation executes.
+6. Executes through `registry.execute(this, validation)` so missing/extra
+   handlers fail closed and exactly one result is returned.
+
+The reusable SDK files live beside this skill under `sdk/java/`. The bundled
+build script automatically compiles them when `assets/agent-app.json` exists
+and verifies that declared action ids have matching registry handlers.
+Do not copy them into the generated project and do not implement custom HMAC,
+caller-certificate, expiry, nonce, idempotency, or replay validation.
+
 `app/src/main/res/values/styles.xml`:
 
 ```xml
@@ -212,10 +312,10 @@ public class MainActivity extends Activity {
 
 ## Build workflow
 
-1. Create the fixed project layout only. Do not create, edit, or copy `build.sh`; the build script lives in this skill at `scripts/build_apk.sh`.
+1. Create the fixed project layout, `assets/agent-app.json`, a shared domain service, and a validated `NapaxiActionActivity`. Do not create, edit, or copy `build.sh`; the build script lives in this skill at `scripts/build_apk.sh`.
 2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading `file:///android_asset/www/index.html` only when the user asks for a web/HTML-style installable Android app or APK wrapper. Put every local HTML/CSS/JS/image/font/data asset under `app/src/main/assets/www/` and use relative links inside the HTML bundle; never reference fixed workspace/device paths.
-3. Run `bash /skills/android-apk-build/scripts/build_apk.sh --project-dir <project> --app-name <APP_NAME>` (or the same `scripts/build_apk.sh` path from the active skill directory if `/skills` is mounted differently).
-4. If build succeeds, report exactly one APK path and note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that the bundled script cleaned and verified the absence of intermediate APK files. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
+3. Run `bash /skills/android-apk-build/scripts/build_apk.sh --project-dir <project> --app-name <APP_NAME>` (or the same `scripts/build_apk.sh` path from the active skill directory if `/skills` is mounted differently). If and only if the user explicitly opted out, omit all Provider files/manifest entries and add `--without-agent-provider`. A legacy project that predates Provider-by-default can still rebuild without that flag when it has no Provider declaration.
+4. If build succeeds, report exactly one APK path and summarize the generated Provider id and exact action ids/tool names. Note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that the bundled script cleaned and verified the absence of intermediate APK files. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
 5. If the user asks to install, use the available APK install flow/tool if present; otherwise provide the APK path.
 
 ## Common mistakes to avoid
@@ -230,4 +330,5 @@ public class MainActivity extends Activity {
 - Do not omit the launcher icon and do not reference nonexistent `@mipmap/ic_launcher` resources. Use `@drawable/ic_launcher` unless the user explicitly supplies a complete replacement icon asset.
 - Do not automatically convert plain HTML/H5/webpage/frontend requests into APK projects. Web content is supported here only when the user wants an Android app/APK/installable wrapper; in that case use Android's built-in `android.webkit.WebView`, bundle the complete local web asset tree under `app/src/main/assets/www/`, load `file:///android_asset/www/index.html`, and keep all resource references relative. Do not point at `/workspace`, `/sdcard`, `/data`, Downloads, localhost, or machine-specific absolute paths.
 - Do not fetch Gradle, Maven, AndroidX, Compose, Cordova, Capacitor, Ionic, Flutter, React Native, npm packages, or iOS tooling to “improve compatibility”. That makes builds slower, requires unsupported tools, or leaves this phone sandbox workflow.
+- Do not omit `agent-app.json` from a newly generated app unless the user explicitly opts out. Do not copy the Lite SDK into the app project, invent a second protocol implementation, bypass `AgentProviderActionRegistry`, or expose high-risk actions without Provider-owned confirmation UI.
 - Do not produce multiple APKs for arm64/x86 unless the app actually contains native code, which this skill forbids by default.

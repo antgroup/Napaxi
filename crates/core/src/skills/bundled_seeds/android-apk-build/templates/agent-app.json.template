@@ -1,0 +1,12 @@
+{
+  "provider_id": "{{PROVIDER_ID}}",
+  "agent_id": "{{LEGACY_AGENT_ID}}",
+  "display_name": "{{APP_DISPLAY_NAME}}",
+  "description": "{{PROVIDER_DESCRIPTION}}",
+  "system_prompt": "",
+  "actions": [
+{{ACTIONS_JSON}}
+  ],
+  "handoff": {"mode": "android_activity_result"},
+  "result": {"mode": "activity_result"}
+}

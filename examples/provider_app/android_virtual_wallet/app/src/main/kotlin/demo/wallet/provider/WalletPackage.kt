@@ -37,6 +37,9 @@ object WalletPackage {
                     confirmationPolicy = ConfirmationPolicy.PROVIDER_REQUIRED,
                     executionModes = executionModes,
                     timeoutSeconds = 300,
+                    displayName = "Make payment",
+                    localizedDisplayNames = names("Make payment", "虚拟支付"),
+                    localizedDescriptions = descriptions("Create a virtual payment record after provider policy and confirmation.", "在应用确认后创建一笔虚拟支付记录。"),
                 ),
                 AgentAction(
                     actionId = ACTION_LIST_RECORDS,
@@ -48,6 +51,9 @@ object WalletPackage {
                     confirmationPolicy = ConfirmationPolicy.NONE,
                     executionModes = executionModes,
                     timeoutSeconds = 120,
+                    displayName = "View payment records",
+                    localizedDisplayNames = names("View payment records", "查看支付记录"),
+                    localizedDescriptions = descriptions("List recent virtual wallet payment records.", "查看最近的虚拟钱包支付记录。"),
                 ),
                 AgentAction(
                     actionId = ACTION_CONFIGURE_QUIET_PAY,
@@ -59,6 +65,9 @@ object WalletPackage {
                     confirmationPolicy = ConfirmationPolicy.PROVIDER_REQUIRED,
                     executionModes = executionModes,
                     timeoutSeconds = 300,
+                    displayName = "Configure quiet pay",
+                    localizedDisplayNames = names("Configure quiet pay", "配置小额免打扰支付"),
+                    localizedDescriptions = descriptions("Configure small no-interruption virtual payments.", "启用、关闭或调整小额免打扰支付额度。"),
                 ),
             ),
             handoffJson = """{"mode":"android_activity_result","display":"wallet_confirmation"}""",
@@ -78,4 +87,10 @@ object WalletPackage {
 
     private const val resultSchema =
         """{"type":"object","properties":{"status":{"type":"string"},"record":{"type":"object"},"records":{"type":"array"},"balance":{"type":"number"},"balance_display":{"type":"string"},"remaining_balance_text":{"type":"string"},"quiet_pay_applied":{"type":"boolean"},"message":{"type":"string"}}}"""
+
+    private fun names(english: String, chinese: String) =
+        mapOf("en" to english, "zh-CN" to chinese)
+
+    private fun descriptions(english: String, chinese: String) =
+        mapOf("en" to english, "zh-CN" to chinese)
 }

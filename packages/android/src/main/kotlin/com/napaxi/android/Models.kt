@@ -4857,11 +4857,23 @@ public class AgentAppActionManifest(rawJson: String) : RawJsonModel(rawJson) {
         confirmationPolicy: String = "provider_required",
         executionModes: List<String> = emptyList(),
         timeoutSeconds: Int = 600,
+        displayName: String = "",
+        localizedDisplayNames: Map<String, String> = emptyMap(),
+        localizedDescriptions: Map<String, String> = emptyMap(),
     ) : this(
         JSONObject()
             .put("action_id", actionId)
             .put("tool_name", toolName)
             .put("description", description)
+            .apply {
+                if (displayName.isNotBlank()) put("display_name", displayName)
+                if (localizedDisplayNames.isNotEmpty()) {
+                    put("localized_display_names", JSONObject(localizedDisplayNames))
+                }
+                if (localizedDescriptions.isNotEmpty()) {
+                    put("localized_descriptions", JSONObject(localizedDescriptions))
+                }
+            }
             .put("parameters", parameters)
             .put("result_schema", resultSchema)
             .put("risk", risk)
@@ -4874,6 +4886,11 @@ public class AgentAppActionManifest(rawJson: String) : RawJsonModel(rawJson) {
     public val actionId: String get() = obj.optString("action_id")
     public val toolName: String get() = obj.optString("tool_name")
     public val description: String get() = obj.optString("description")
+    public val displayName: String get() = obj.optString("display_name")
+    public val localizedDisplayNames: Map<String, String>
+        get() = obj.optJSONObject("localized_display_names")?.toStringMap().orEmpty()
+    public val localizedDescriptions: Map<String, String>
+        get() = obj.optJSONObject("localized_descriptions")?.toStringMap().orEmpty()
     public val parameters: JSONObject get() = obj.optJSONObject("parameters") ?: JSONObject("""{"type":"object","properties":{}}""")
     public val resultSchema: JSONObject get() = obj.optJSONObject("result_schema") ?: JSONObject("""{"type":"object"}""")
     public val risk: String get() = obj.optString("risk", "high")
@@ -4885,6 +4902,15 @@ public class AgentAppActionManifest(rawJson: String) : RawJsonModel(rawJson) {
         .put("action_id", actionId)
         .put("tool_name", toolName)
         .put("description", description)
+        .apply {
+            if (displayName.isNotBlank()) put("display_name", displayName)
+            if (localizedDisplayNames.isNotEmpty()) {
+                put("localized_display_names", JSONObject(localizedDisplayNames))
+            }
+            if (localizedDescriptions.isNotEmpty()) {
+                put("localized_descriptions", JSONObject(localizedDescriptions))
+            }
+        }
         .put("parameters", parameters)
         .put("result_schema", resultSchema)
         .put("risk", risk)
