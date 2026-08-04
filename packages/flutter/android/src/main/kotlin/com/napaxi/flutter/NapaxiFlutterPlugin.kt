@@ -2093,9 +2093,10 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             }
             ctx.startActivity(intent)
             result.success(mapOf(
-                "success" to true,
+                "success" to false,
                 "installerOpened" to true,
-                "apkPath" to apkPath
+                "apkPath" to apkPath,
+                "code" to "installer_opened"
             ))
         } catch (e: Exception) {
             result.success(mapOf(

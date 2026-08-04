@@ -75,8 +75,10 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     this.supportsBackgroundExecution = true,
     this.backgroundPermissionGranted = true,
     this.codexSyncResult,
+    Set<String> inactiveSessionThreadIds = const {},
   }) : connectedApps = List<sdk.AgentAppPackage>.from(connectedApps),
-       pendingEvolution = List<Map<String, dynamic>>.from(pendingEvolution);
+       pendingEvolution = List<Map<String, dynamic>>.from(pendingEvolution),
+       inactiveSessionThreadIds = Set<String>.from(inactiveSessionThreadIds);
 
   final List<sdk.ChatEvent>? events;
   final Stream<sdk.ChatEvent>? eventStream;
@@ -118,6 +120,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   final bool supportsBackgroundExecution;
   bool backgroundPermissionGranted;
   final sdk.CodexAgentEngineConfigResult? codexSyncResult;
+  final Set<String> inactiveSessionThreadIds;
   LlmModelProfile? configuredProfile;
   String configuredResponseLanguage = 'en';
   sdk.NapaxiCapabilitySelection? configuredCapabilitySelection;
@@ -606,6 +609,11 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
         content: 'Fake SDK reply from ${configuredProfile?.model}: $message',
       ),
     );
+  }
+
+  @override
+  bool hasActiveSessionRun(sdk.SessionKey session, {required String agentId}) {
+    return !inactiveSessionThreadIds.contains(session.threadId);
   }
 
   Future<String?> importAttachmentToWorkspace(

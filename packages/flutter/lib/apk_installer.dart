@@ -29,7 +29,10 @@ class NapaxiApkInstallResult {
     );
   }
 
-  /// Whether the APK was installed (or the install flow completed) successfully.
+  /// Whether APK installation completed successfully.
+  ///
+  /// Opening the installer alone does not count as installation. In that case
+  /// [installerOpened] is true and Android still awaits the user's decision.
   final bool success;
 
   /// Whether the system package-installer UI was launched for the user.
