@@ -62,6 +62,8 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     this.scenarioStatuses = const [],
     this.scenarioResolution,
     this.agents = const [],
+    this.discoveredAgentProviders = const [],
+    List<sdk.AgentAppPackage> connectedApps = const [],
     this.skills = const [],
     this.skillStatusReport,
     this.skillUsage = const [],
@@ -73,7 +75,8 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     this.supportsBackgroundExecution = true,
     this.backgroundPermissionGranted = true,
     this.codexSyncResult,
-  }) : pendingEvolution = List<Map<String, dynamic>>.from(pendingEvolution);
+  }) : connectedApps = List<sdk.AgentAppPackage>.from(connectedApps),
+       pendingEvolution = List<Map<String, dynamic>>.from(pendingEvolution);
 
   final List<sdk.ChatEvent>? events;
   final Stream<sdk.ChatEvent>? eventStream;
@@ -101,6 +104,8 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   final List<sdk.NapaxiScenarioStatus> scenarioStatuses;
   final sdk.NapaxiScenarioResolution? scenarioResolution;
   final List<DemoAgent> agents;
+  final List<sdk.AgentProviderDescriptor> discoveredAgentProviders;
+  final List<sdk.AgentAppPackage> connectedApps;
   List<sdk.SkillInfo> skills;
   final sdk.SkillStatusReport? skillStatusReport;
   final List<sdk.SkillUsageRecord> skillUsage;
@@ -303,7 +308,45 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
 
   @override
   Future<List<sdk.AgentProviderDescriptor>> discoverAgentProviders() async {
-    return const [];
+    return discoveredAgentProviders;
+  }
+
+  @override
+  Future<List<sdk.AgentAppPackage>> listConnectedApps() async {
+    return List.unmodifiable(connectedApps);
+  }
+
+  @override
+  Future<sdk.AgentAppPackage> enableAgentProvider(
+    sdk.AgentProviderDescriptor provider,
+  ) async {
+    final package = sdk.AgentAppPackage(
+      providerId: provider.packageName,
+      agentId: provider.packageName,
+      displayName: provider.label.isEmpty
+          ? provider.packageName
+          : provider.label,
+      installBinding: sdk.AgentAppInstallBinding(
+        platform: provider.platform,
+        appPackageName: provider.packageName,
+        activityName: provider.activityName,
+        signingCertSha256: provider.signingCertSha256,
+        installedAt: DateTime.now().toUtc().toIso8601String(),
+        installRequestId: 'fake-install',
+        protocolVersion: 2,
+      ),
+    );
+    connectedApps
+      ..removeWhere((item) => item.providerId == package.providerId)
+      ..add(package);
+    return package;
+  }
+
+  @override
+  Future<bool> disableConnectedApp(String providerId) async {
+    final before = connectedApps.length;
+    connectedApps.removeWhere((item) => item.providerId == providerId);
+    return connectedApps.length != before;
   }
 
   @override

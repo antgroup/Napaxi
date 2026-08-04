@@ -61,6 +61,9 @@ data class AgentAction @JvmOverloads constructor(
     val confirmationPolicy: String = ConfirmationPolicy.PROVIDER_REQUIRED,
     val executionModes: List<String> = listOf(ExecutionMode.APP_HANDOFF),
     val timeoutSeconds: Int = 600,
+    val displayName: String = "",
+    val localizedDisplayNames: Map<String, String> = emptyMap(),
+    val localizedDescriptions: Map<String, String> = emptyMap(),
 ) {
     fun toJson(): String = toJsonObject().toString()
     fun toJsonString(): String = toJson()
@@ -70,6 +73,15 @@ data class AgentAction @JvmOverloads constructor(
             .put("action_id", actionId)
             .put("tool_name", toolName)
             .put("description", description)
+            .apply {
+                if (displayName.isNotBlank()) put("display_name", displayName)
+                if (localizedDisplayNames.isNotEmpty()) {
+                    put("localized_display_names", JSONObject(localizedDisplayNames))
+                }
+                if (localizedDescriptions.isNotEmpty()) {
+                    put("localized_descriptions", JSONObject(localizedDescriptions))
+                }
+            }
             .put("parameters", JSONObject(parametersJson))
             .put("result_schema", JSONObject(resultSchemaJson))
             .put("risk", risk)
@@ -87,6 +99,11 @@ data class AgentAction @JvmOverloads constructor(
                 actionId = obj.optString("action_id", ""),
                 toolName = obj.optString("tool_name", ""),
                 description = obj.optString("description", ""),
+                displayName = obj.optString("display_name", ""),
+                localizedDisplayNames = obj.optJSONObject("localized_display_names")
+                    ?.toStringMap().orEmpty(),
+                localizedDescriptions = obj.optJSONObject("localized_descriptions")
+                    ?.toStringMap().orEmpty(),
                 parametersJson = obj.optJSONObject("parameters")?.toString() ?: "{}",
                 resultSchemaJson = obj.optJSONObject("result_schema")?.toString() ?: "{}",
                 risk = obj.optString("risk", ActionRisk.HIGH),
@@ -512,3 +529,6 @@ private fun <T> JSONArray.toObjectList(transform: (JSONObject) -> T): List<T> =
 
 private fun JSONObject.optNullableString(name: String): String? =
     if (has(name) && !isNull(name)) getString(name) else null
+
+private fun JSONObject.toStringMap(): Map<String, String> =
+    keys().asSequence().associateWith { key -> optString(key) }

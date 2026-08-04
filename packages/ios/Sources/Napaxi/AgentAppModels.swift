@@ -11,6 +11,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppActionManifestTag 
         actionId: String,
         toolName: String,
         description: String,
+        displayName: String = "",
+        localizedDisplayNames: [String: String] = [:],
+        localizedDescriptions: [String: String] = [:],
         parameters: [String: NapaxiJSONValue] = ["type": .string("object"), "properties": .object([:])],
         resultSchema: [String: NapaxiJSONValue] = ["type": .string("object")],
         risk: String = "high",
@@ -22,6 +25,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppActionManifestTag 
             "action_id": .string(actionId),
             "tool_name": .string(toolName),
             "description": .string(description),
+            "display_name": .string(displayName),
+            "localized_display_names": .object(localizedDisplayNames.mapValues { .string($0) }),
+            "localized_descriptions": .object(localizedDescriptions.mapValues { .string($0) }),
             "parameters": .object(parameters),
             "result_schema": .object(resultSchema),
             "risk": .string(risk),
@@ -40,6 +46,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppActionManifestTag 
             actionId: map.string("action_id") ?? "",
             toolName: map.string("tool_name") ?? "",
             description: map.string("description") ?? "",
+            displayName: map.string("display_name") ?? "",
+            localizedDisplayNames: map.object("localized_display_names")?.compactMapValues { $0.stringValue } ?? [:],
+            localizedDescriptions: map.object("localized_descriptions")?.compactMapValues { $0.stringValue } ?? [:],
             parameters: map.object("parameters") ?? ["type": .string("object"), "properties": .object([:])],
             resultSchema: map.object("result_schema") ?? ["type": .string("object")],
             risk: map.string("risk") ?? "high",
@@ -54,6 +63,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppActionManifestTag 
             "action_id": .string(actionId),
             "tool_name": .string(toolName),
             "description": .string(description),
+            "display_name": .string(displayName),
+            "localized_display_names": .object(localizedDisplayNames.mapValues { .string($0) }),
+            "localized_descriptions": .object(localizedDescriptions.mapValues { .string($0) }),
             "parameters": .object(parameters),
             "result_schema": .object(resultSchema),
             "risk": .string(risk),
@@ -66,6 +78,15 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppActionManifestTag 
     var actionId: String { string("action_id") ?? string("actionId") ?? "" }
     var toolName: String { string("tool_name") ?? string("toolName") ?? "" }
     var description: String { string("description") ?? "" }
+    var displayName: String { string("display_name") ?? string("displayName") ?? "" }
+    var localizedDisplayNames: [String: String] {
+        (raw.object("localized_display_names") ?? raw.object("localizedDisplayNames"))?
+            .compactMapValues { $0.stringValue } ?? [:]
+    }
+    var localizedDescriptions: [String: String] {
+        (raw.object("localized_descriptions") ?? raw.object("localizedDescriptions"))?
+            .compactMapValues { $0.stringValue } ?? [:]
+    }
     var parameters: [String: NapaxiJSONValue] { raw.object("parameters") ?? ["type": .string("object"), "properties": .object([:])] }
     var resultSchema: [String: NapaxiJSONValue] { raw.object("result_schema") ?? raw.object("resultSchema") ?? ["type": .string("object")] }
     var risk: String { string("risk") ?? "high" }

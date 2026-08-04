@@ -52,6 +52,14 @@ cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
 
 Native iOS checks are documented in [`sdk-integration.md`](sdk-integration.md).
 
+## Explicit Agent App Provider Selection
+
+Flutter, Android, and iOS expose `AgentProviderSelection` on their chat send
+facades. The adapters encode the same one-turn canonical marker,
+`@{provider:<provider_id>}`, before entering Core. Core resolves the Provider
+before tool assembly, leaves the current/default Agent identity unchanged, and
+does not persist the selection into later turns.
+
 ## Codex Model Configuration
 
 Flutter, Android, and iOS expose matching typed model sync and clear methods.

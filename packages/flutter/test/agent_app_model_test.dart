@@ -15,13 +15,16 @@ void main() {
         AgentAppActionManifest(
           actionId: 'provider.order.create',
           toolName: 'app_action_order_create',
+          displayName: 'Create order',
+          localizedDisplayNames: {'zh-CN': '创建订单'},
           description: 'Create order proposal.',
+          localizedDescriptions: {'zh-CN': '在应用中创建一个新订单。'},
           parameters: {
             'type': 'object',
             'properties': {
-              'amount': {'type': 'number'}
+              'amount': {'type': 'number'},
             },
-            'required': ['amount']
+            'required': ['amount'],
           },
           executionModes: ['app_handoff'],
         ),
@@ -36,6 +39,12 @@ void main() {
 
     expect(decoded.providerId, 'provider');
     expect(decoded.actions.single.toolName, 'app_action_order_create');
+    expect(decoded.actions.single.displayName, 'Create order');
+    expect(decoded.actions.single.localizedDisplayNames['zh-CN'], '创建订单');
+    expect(
+      decoded.actions.single.localizedDescriptions['zh-CN'],
+      '在应用中创建一个新订单。',
+    );
     expect(decoded.actions.single.parameters['properties'], isA<Map>());
     expect(decoded.handoff['mode'], 'app_handoff');
   });
@@ -63,7 +72,7 @@ void main() {
         'tool_name': 'app_action_order_create',
         'description': 'Create order proposal.',
       },
-      'package': {'provider_id': 'provider'}
+      'package': {'provider_id': 'provider'},
     });
 
     expect(request.proposal.requestId, 'req');

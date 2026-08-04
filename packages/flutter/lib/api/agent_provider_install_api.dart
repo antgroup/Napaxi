@@ -13,8 +13,8 @@ class AgentProviderInstallApi {
   AgentProviderInstallApi({
     required AgentAppPackage Function(AgentAppPackage package) registerPackage,
     MethodChannel? channel,
-  })  : _registerPackage = registerPackage,
-        _channel = channel ?? const MethodChannel(_channelName);
+  }) : _registerPackage = registerPackage,
+       _channel = channel ?? const MethodChannel(_channelName);
 
   static const _channelName = 'com.napaxi.flutter/background';
   static const _installTimeout = Duration(minutes: 10);
@@ -32,6 +32,32 @@ class AgentProviderInstallApi {
         .toList(growable: false);
   }
 
+  /// Finds an installed Provider by its OS package/bundle identifier.
+  Future<AgentProviderDescriptor?> discoverProviderForPackage(
+    String packageName,
+  ) async {
+    final expected = packageName.trim();
+    if (expected.isEmpty) return null;
+    final providers = await discoverProviders();
+    for (final provider in providers) {
+      if (provider.packageName == expected ||
+          provider.iosBundleId == expected) {
+        return provider;
+      }
+    }
+    return null;
+  }
+
+  /// Discovers and runs the trusted enable handshake for a newly installed
+  /// Provider App. APK installation itself remains an explicit OS/user step.
+  Future<AgentAppPackage> enableInstalledProvider(String packageName) async {
+    final provider = await discoverProviderForPackage(packageName);
+    if (provider == null) {
+      throw StateError('Installed Agent App provider not found: $packageName');
+    }
+    return requestInstall(provider);
+  }
+
   Future<AgentAppPackage> requestInstall(
     AgentProviderDescriptor provider,
   ) async {
@@ -47,7 +73,8 @@ class AgentProviderInstallApi {
     final installResultJson = response['installResultJson'] as String? ?? '';
     if (installResultJson.isEmpty) {
       throw StateError(
-          response['error']?.toString() ?? 'Install result missing');
+        response['error']?.toString() ?? 'Install result missing',
+      );
     }
 
     final installResult = AgentInstallResult.fromMap(
@@ -103,7 +130,8 @@ class AgentProviderInstallApi {
       protocolVersion: 2,
       requestId: requestId,
       nonce: _randomHex(16),
-      hostPackageName: (hostInfo['packageName'] as String?) ??
+      hostPackageName:
+          (hostInfo['packageName'] as String?) ??
           (hostInfo['bundleId'] as String?) ??
           '',
       createdAt: now.toIso8601String(),
@@ -170,7 +198,7 @@ class AgentProviderInstallApi {
 /// background method channel.
 class AndroidAgentProviderActionExecutor implements AgentAppActionExecutor {
   AndroidAgentProviderActionExecutor({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel(_channelName);
+    : _channel = channel ?? const MethodChannel(_channelName);
 
   static const _channelName = 'com.napaxi.flutter/background';
 
@@ -201,7 +229,7 @@ class AndroidAgentProviderActionExecutor implements AgentAppActionExecutor {
 /// background method channel.
 class IosAgentProviderActionExecutor implements AgentAppActionExecutor {
   IosAgentProviderActionExecutor({MethodChannel? channel})
-      : _channel = channel ?? const MethodChannel(_channelName);
+    : _channel = channel ?? const MethodChannel(_channelName);
 
   static const _channelName = 'com.napaxi.flutter/background';
 
@@ -229,9 +257,9 @@ class IosAgentProviderActionExecutor implements AgentAppActionExecutor {
 }
 
 Map<String, dynamic> agentProviderRequestToJson(
-        AgentAppActionRequest request) =>
-    {
-      'proposal': request.proposal.toJson(),
-      'action': request.action.toJson(),
-      'package': request.package,
-    };
+  AgentAppActionRequest request,
+) => {
+  'proposal': request.proposal.toJson(),
+  'action': request.action.toJson(),
+  'package': request.package,
+};

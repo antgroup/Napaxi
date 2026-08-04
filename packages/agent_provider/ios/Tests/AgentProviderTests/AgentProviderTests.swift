@@ -11,6 +11,9 @@ final class AgentProviderTests: XCTestCase {
 
         XCTAssertEqual(parsed.providerId, "wallet.provider")
         XCTAssertEqual(parsed.actions.first?.toolName, "app_action_wallet_payment_pay")
+        XCTAssertEqual(parsed.actions.first?.displayName, "Pay")
+        XCTAssertEqual(parsed.actions.first?.localizedDisplayNames["zh-CN"], "付款")
+        XCTAssertEqual(parsed.actions.first?.localizedDescriptions["zh-CN"], "完成一笔虚拟付款。")
     }
 
     func testInstallRequestAndResultUrlRoundTrip() throws {
@@ -136,7 +139,10 @@ private func samplePackage() -> AgentPackage {
             AgentAction(
                 actionId: "wallet.payment.pay",
                 toolName: "app_action_wallet_payment_pay",
-                description: "Create a virtual payment."
+                description: "Create a virtual payment.",
+                displayName: "Pay",
+                localizedDisplayNames: ["zh-CN": "付款"],
+                localizedDescriptions: ["zh-CN": "完成一笔虚拟付款。"]
             ),
         ]
     )

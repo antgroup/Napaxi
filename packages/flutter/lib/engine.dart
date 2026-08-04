@@ -16,6 +16,7 @@ import 'models/background.dart';
 import 'models/capability.dart';
 import 'models/channel.dart';
 import 'models/agent_app.dart';
+import 'models/agent_provider_install.dart';
 import 'agent_engine.dart';
 import 'mcp.dart';
 import 'file_bridge.dart';
@@ -643,10 +644,12 @@ class NapaxiEngine {
   Stream<ChatEvent> send(
     String message, {
     List<McAttachment>? attachments,
+    AgentProviderSelection? providerSelection,
     int maxIterations = 0,
   }) => _core.send(
     message,
     attachments: attachments,
+    providerSelection: providerSelection,
     maxIterations: maxIterations,
   );
 
@@ -663,6 +666,7 @@ class NapaxiEngine {
     List<McAttachment>? attachments,
     List<String>? sandboxPaths,
     int? userMsgIndex,
+    AgentProviderSelection? providerSelection,
     int maxIterations = 0,
   }) => _core.sendToSession(
     sessionKey,
@@ -671,6 +675,7 @@ class NapaxiEngine {
     attachments: attachments,
     sandboxPaths: sandboxPaths,
     userMsgIndex: userMsgIndex,
+    providerSelection: providerSelection,
     maxIterations: maxIterations,
   );
 

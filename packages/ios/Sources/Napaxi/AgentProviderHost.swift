@@ -2,6 +2,26 @@ import Foundation
 import CryptoKit
 import Security
 
+/// A one-turn explicit selection of an installed Agent App Provider.
+public struct NapaxiAgentProviderSelection: Equatable, Sendable {
+    public let providerId: String
+
+    public init(providerId: String) {
+        self.providerId = providerId
+    }
+
+    public func applyToMessage(_ message: String) throws -> String {
+        let id = providerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty else {
+            throw NapaxiError.invalidJSON("providerId must not be empty")
+        }
+        guard !id.contains("}") else {
+            throw NapaxiError.invalidJSON("providerId must not contain }")
+        }
+        return "@{provider:\(id)} \(message.drop(while: { $0.isWhitespace }))"
+    }
+}
+
 public struct NapaxiAgentProviderDescriptor: Codable, Equatable, Sendable {
     public var platform: String
     public var packageName: String

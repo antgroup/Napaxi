@@ -21,6 +21,18 @@ import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+/** A one-turn explicit selection of an installed Agent App Provider. */
+public data class AgentProviderSelection(
+    val providerId: String,
+) {
+    public fun applyToMessage(message: String): String {
+        val id = providerId.trim()
+        require(id.isNotEmpty()) { "providerId must not be empty" }
+        require('}' !in id) { "providerId must not contain }" }
+        return "@{provider:$id} ${message.trimStart()}"
+    }
+}
+
 public data class AgentProviderDescriptor(
     val packageName: String,
     val activityName: String,
@@ -113,6 +125,15 @@ public class AgentProviderInstallApi internal constructor(
     public fun discoverProviders(): List<AgentProviderDescriptor> =
         host.discoverProviders()
 
+    /** Finds an installed Provider by its OS package identifier. */
+    public fun discoverProviderForPackage(packageName: String): AgentProviderDescriptor? {
+        val expected = packageName.trim()
+        if (expected.isEmpty()) return null
+        return discoverProviders().firstOrNull {
+            it.packageName == expected || it.iosBundleId == expected
+        }
+    }
+
     public fun buildInstallRequest(
         expiresAt: Instant = Instant.now().plusSeconds(600),
     ): AgentInstallRequest =
@@ -125,6 +146,19 @@ public class AgentProviderInstallApi internal constructor(
         requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
     ): AgentInstallRequest =
         host.requestInstall(activity, provider, request, requestCode)
+
+    /** Discovers and starts the trusted enable handshake for an installed app. */
+    public fun enableInstalledProvider(
+        activity: Activity,
+        packageName: String,
+        request: AgentInstallRequest = buildInstallRequest(),
+        requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
+    ): AgentInstallRequest {
+        val provider = requireNotNull(discoverProviderForPackage(packageName)) {
+            "Installed Agent App Provider not found: $packageName"
+        }
+        return requestInstall(activity, provider, request, requestCode)
+    }
 
     public fun beginInstallFromLaunchIntent(
         activity: Activity,

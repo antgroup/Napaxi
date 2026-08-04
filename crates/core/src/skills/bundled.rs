@@ -10,7 +10,7 @@ use super::paths::app_bundled_skills_dir;
 
 /// Current bundled skill set version. Increment when updating seed content
 /// to trigger re-deployment on next engine start.
-const BUNDLED_VERSION: u32 = 12;
+const BUNDLED_VERSION: u32 = 14;
 
 struct BundledSkill {
     slug: &'static str,
@@ -29,6 +29,34 @@ const BUNDLED_SKILLS: &[BundledSkill] = &[
             (
                 "scripts/build_apk.sh",
                 include_str!("bundled_seeds/android-apk-build/scripts/build_apk.sh"),
+            ),
+            (
+                "templates/agent-app.json.template",
+                include_str!("bundled_seeds/android-apk-build/templates/agent-app.json.template"),
+            ),
+            (
+                "templates/NapaxiActionActivity.java.template",
+                include_str!(
+                    "bundled_seeds/android-apk-build/templates/NapaxiActionActivity.java.template"
+                ),
+            ),
+            (
+                "sdk/java/agent/provider/lite/AgentProviderLite.java",
+                include_str!(
+                    "../../../../packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderLite.java"
+                ),
+            ),
+            (
+                "sdk/java/agent/provider/lite/AgentProviderInstallActivity.java",
+                include_str!(
+                    "../../../../packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderInstallActivity.java"
+                ),
+            ),
+            (
+                "sdk/java/agent/provider/lite/AgentProviderActionRegistry.java",
+                include_str!(
+                    "../../../../packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderActionRegistry.java"
+                ),
             ),
         ],
     },
@@ -124,6 +152,7 @@ fn is_current_version(version_file: &PathBuf) -> bool {
 mod tests {
     use super::*;
     use std::path::Path;
+    use std::process::Command;
 
     #[test]
     fn test_ensure_bundled_skills_creates_files() {
@@ -139,7 +168,29 @@ mod tests {
         let build_script_content = std::fs::read_to_string(build_script).unwrap();
         assert!(build_script_content.contains("base.zip"));
         assert!(build_script_content.contains("cleanup_intermediate_outputs"));
+        assert!(build_script_content.contains("Agent App Provider support enabled"));
+        assert!(build_script_content.contains("--without-agent-provider"));
+        assert!(build_script_content.contains("AgentProviderActionRegistry"));
+        assert!(build_script_content.contains("agent.provider.action.HANDLE_PROPOSAL"));
         assert!(!build_script_content.contains("base.apk"));
+        assert!(
+            base.join("android-apk-build/sdk/java/agent/provider/lite/AgentProviderLite.java")
+                .exists()
+        );
+        assert!(
+            base.join(
+                "android-apk-build/sdk/java/agent/provider/lite/AgentProviderActionRegistry.java"
+            )
+            .exists()
+        );
+        assert!(
+            base.join("android-apk-build/templates/agent-app.json.template")
+                .exists()
+        );
+        assert!(
+            base.join("android-apk-build/templates/NapaxiActionActivity.java.template")
+                .exists()
+        );
         assert!(base.join("web-researcher/SKILL.md").exists());
         assert!(base.join("code-helper/SKILL.md").exists());
         assert!(base.join("translator/SKILL.md").exists());
@@ -149,7 +200,7 @@ mod tests {
         assert!(base.join(".version").exists());
 
         let version = std::fs::read_to_string(base.join(".version")).unwrap();
-        assert_eq!(version.trim(), "10");
+        assert_eq!(version.trim(), BUNDLED_VERSION.to_string());
     }
 
     #[test]
@@ -170,6 +221,130 @@ mod tests {
         ensure_bundled_skills(files_dir);
         let after = std::fs::read_to_string(&skill_file).unwrap();
         assert_eq!(after, "modified");
+    }
+
+    #[test]
+    fn test_android_provider_project_validator_is_generic_and_fails_closed() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let script = root
+            .join("crates/core/src/skills/bundled_seeds/android-apk-build/scripts/build_apk.sh");
+        for example in ["android_generated_notes", "android_generated_tasks"] {
+            let status = Command::new("bash")
+                .arg(&script)
+                .args(["--project-dir"])
+                .arg(root.join("examples/provider_app").join(example))
+                .arg("--validate-only")
+                .status()
+                .unwrap();
+            assert!(status.success(), "validator rejected {example}");
+        }
+
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("app/src/main");
+        std::fs::create_dir_all(source.join("assets")).unwrap();
+        std::fs::create_dir_all(source.join("java/demo/invalid")).unwrap();
+        std::fs::create_dir_all(source.join("res/values")).unwrap();
+        std::fs::write(
+            source.join("AndroidManifest.xml"),
+            r#"<manifest><application>
+              <activity><intent-filter><action android:name="agent.provider.action.INSTALL_AGENT" /></intent-filter></activity>
+              <activity><intent-filter><action android:name="agent.provider.action.HANDLE_PROPOSAL" /></intent-filter></activity>
+            </application></manifest>"#,
+        )
+        .unwrap();
+        std::fs::write(
+            source.join("assets/agent-app.json"),
+            r#"{
+              "provider_id": "demo.invalid",
+              "agent_id": "demo.invalid.agent",
+              "display_name": "Invalid",
+              "actions": [
+                {
+                  "action_id": "item.create"
+                }
+              ]
+            }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            source.join("java/demo/invalid/NapaxiActionActivity.java"),
+            "class NapaxiActionActivity { AgentProviderActionRegistry registry; }",
+        )
+        .unwrap();
+        std::fs::write(source.join("res/values/strings.xml"), "<resources/>").unwrap();
+
+        let output = Command::new("bash")
+            .arg(&script)
+            .args(["--project-dir"])
+            .arg(temp.path())
+            .arg("--validate-only")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(
+            String::from_utf8_lossy(&output.stderr)
+                .contains("has no AgentProviderActionRegistry handlers")
+        );
+
+        std::fs::write(
+            source.join("java/demo/invalid/NapaxiActionActivity.java"),
+            r#"class NapaxiActionActivity {
+              AgentProviderActionRegistry registry;
+              void register() {
+                registry.register("item.create", true, null);
+                registry.register("item.extra", false, null);
+              }
+            }"#,
+        )
+        .unwrap();
+        let extra_handler = Command::new("bash")
+            .arg(&script)
+            .args(["--project-dir"])
+            .arg(temp.path())
+            .arg("--validate-only")
+            .output()
+            .unwrap();
+        assert!(!extra_handler.status.success());
+        assert!(
+            String::from_utf8_lossy(&extra_handler.stderr)
+                .contains("handler is not declared in agent-app.json: item.extra")
+        );
+
+        let conflicting_opt_out = Command::new("bash")
+            .arg(&script)
+            .args(["--project-dir"])
+            .arg(temp.path())
+            .args(["--without-agent-provider", "--validate-only"])
+            .output()
+            .unwrap();
+        assert!(!conflicting_opt_out.status.success());
+        assert!(
+            String::from_utf8_lossy(&conflicting_opt_out.stderr)
+                .contains("conflicts with assets/agent-app.json")
+        );
+
+        std::fs::remove_file(source.join("assets/agent-app.json")).unwrap();
+        std::fs::write(
+            source.join("AndroidManifest.xml"),
+            "<manifest><application /></manifest>",
+        )
+        .unwrap();
+        let legacy = Command::new("bash")
+            .arg(&script)
+            .args(["--project-dir"])
+            .arg(temp.path())
+            .arg("--validate-only")
+            .status()
+            .unwrap();
+        assert!(legacy.success(), "legacy project should remain buildable");
+        let explicit_opt_out = Command::new("bash")
+            .arg(&script)
+            .args(["--project-dir"])
+            .arg(temp.path())
+            .args(["--without-agent-provider", "--validate-only"])
+            .status()
+            .unwrap();
+        assert!(explicit_opt_out.success());
     }
 
     #[test]

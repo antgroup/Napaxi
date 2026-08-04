@@ -56,6 +56,9 @@ object SmartHomePackage {
                     confirmationPolicy = ConfirmationPolicy.NONE,
                     executionModes = executionModes,
                     timeoutSeconds = 300,
+                    displayName = "Control light",
+                    localizedDisplayNames = names("Control light", "控制灯光"),
+                    localizedDescriptions = descriptions("Turn a light on/off and optionally set brightness 0-100.", "打开或关闭灯光，并可设置 0 到 100 的亮度。"),
                 ),
                 AgentAction(
                     actionId = ACTION_LIGHT_MATRIX_PRESET,
@@ -71,6 +74,9 @@ object SmartHomePackage {
                     confirmationPolicy = ConfirmationPolicy.NONE,
                     executionModes = executionModes,
                     timeoutSeconds = 300,
+                    displayName = "Show matrix preset",
+                    localizedDisplayNames = names("Show matrix preset", "显示矩阵预设"),
+                    localizedDescriptions = descriptions("Show a named preset on the Yeelight Cube matrix.", "在 Yeelight Cube 矩阵上显示预设图案。"),
                 ),
                 AgentAction(
                     actionId = ACTION_LIGHT_MATRIX_ANIMATION,
@@ -86,6 +92,9 @@ object SmartHomePackage {
                     confirmationPolicy = ConfirmationPolicy.NONE,
                     executionModes = executionModes,
                     timeoutSeconds = 300,
+                    displayName = "Play matrix animation",
+                    localizedDisplayNames = names("Play matrix animation", "播放矩阵动画"),
+                    localizedDescriptions = descriptions("Play a short Yeelight Cube matrix animation.", "在 Yeelight Cube 矩阵上播放短动画。"),
                 ),
                 AgentAction(
                     actionId = ACTION_LIGHT_MATRIX_DRAW,
@@ -102,6 +111,9 @@ object SmartHomePackage {
                     confirmationPolicy = ConfirmationPolicy.NONE,
                     executionModes = executionModes,
                     timeoutSeconds = 300,
+                    displayName = "Draw pixel frame",
+                    localizedDisplayNames = names("Draw pixel frame", "绘制像素画面"),
+                    localizedDescriptions = descriptions("Draw one still frame on the Yeelight Cube 20 x 5 RGB matrix.", "在 Yeelight Cube 20×5 RGB 矩阵上绘制一帧像素画面。"),
                 ),
             ),
             handoffJson = """{"mode":"android_activity_result","display":"home_dashboard_confirmation"}""",
@@ -126,4 +138,10 @@ object SmartHomePackage {
 
     private val matrixParametersJson: String
         get() = LightCatalog.matrixParamsSchemaJson()
+
+    private fun names(english: String, chinese: String) =
+        mapOf("en" to english, "zh-CN" to chinese)
+
+    private fun descriptions(english: String, chinese: String) =
+        mapOf("en" to english, "zh-CN" to chinese)
 }

@@ -62,6 +62,9 @@ class AgentProviderTest {
 
         assertEquals(action.actionId, parsed.actionId)
         assertEquals(action.toolName, parsed.toolName)
+        assertEquals("Create order", parsed.displayName)
+        assertEquals("创建订单", parsed.localizedDisplayNames["zh-CN"])
+        assertEquals("在应用中创建一个新订单。", parsed.localizedDescriptions["zh-CN"])
         assertEquals(ActionRisk.HIGH, parsed.risk)
         assertEquals(listOf(ExecutionMode.APP_HANDOFF), parsed.executionModes)
         assertEquals(action.toJson(), action.toJsonString())
@@ -642,6 +645,9 @@ class AgentProviderTest {
             description = "Create an order proposal.",
             parametersJson = """{"type":"object","properties":{}}""",
             resultSchemaJson = """{"type":"object"}""",
+            displayName = "Create order",
+            localizedDisplayNames = mapOf("zh-CN" to "创建订单"),
+            localizedDescriptions = mapOf("zh-CN" to "在应用中创建一个新订单。"),
         )
 
     private fun sampleProposal(

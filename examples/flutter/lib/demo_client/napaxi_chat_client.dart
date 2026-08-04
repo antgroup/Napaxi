@@ -730,6 +730,14 @@ abstract class NapaxiChatClient {
 
   Future<List<sdk.AgentProviderDescriptor>> discoverAgentProviders();
 
+  Future<List<sdk.AgentAppPackage>> listConnectedApps();
+
+  Future<sdk.AgentAppPackage> enableAgentProvider(
+    sdk.AgentProviderDescriptor provider,
+  );
+
+  Future<bool> disableConnectedApp(String providerId);
+
   Future<DemoAgent> installAgentProvider(sdk.AgentProviderDescriptor provider);
 
   Future<DemoAgent?> installPendingAgentProvider();
@@ -1230,6 +1238,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   NapaxiSdkChatClient();
 
   static final sdk.A2AApi _a2aStatelessHelper = sdk.A2AApi(() => 0);
+  static const _legacyMockAgentAppProviderId = 'demo_provider';
 
   sdk.NapaxiEngine? _engine;
   sdk.NapaxiCapabilitySelection _activeCapabilitySelection =
@@ -1253,7 +1262,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   }
 
   final Set<String> _memorySeededAgents = {};
-  bool _mockAgentAppRegistered = false;
   final Map<String, sdk.QqBotChannelProvider> _demoQqChannelProviders = {};
   final Map<String, sdk.NapaxiChannelAgentBridge> _demoQqChannelBridges = {};
   final Map<String, StreamSubscription<DemoChannelBridgeEvent>>
@@ -1507,7 +1515,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
         owner: this,
       );
       await _ensureRuntimeAgent(engine);
-      _registerMockAgentApp(engine);
+      engine.agentApp.deletePackage(_legacyMockAgentAppProviderId);
       _syncScenarioTools(engine);
       if (autoConnectChannels) {
         unawaited(_autoConnectConfiguredDemoQqChannel(engine));
@@ -1545,7 +1553,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       owner: this,
     );
     await _ensureRuntimeAgent(createdEngine);
-    _registerMockAgentApp(createdEngine);
+    createdEngine.agentApp.deletePackage(_legacyMockAgentAppProviderId);
     createdEngine.startToolRequestListener();
     _syncScenarioTools(createdEngine);
     _engine = createdEngine;
@@ -1645,61 +1653,44 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     }
   }
 
-  void _registerMockAgentApp(sdk.NapaxiEngine engine) {
-    if (_mockAgentAppRegistered) return;
-    engine.agentApp.registerPackage(
-      const sdk.AgentAppPackage(
-        providerId: 'demo_provider',
-        agentId: 'demo.agent_app',
-        displayName: 'Demo Agent App',
-        description: 'Mock provider-backed Agent for validating action flow.',
-        systemPrompt:
-            'You are a demo provider-backed Agent. Use app_action_demo_order_create when the user asks to create or confirm an order.',
-        actions: [
-          sdk.AgentAppActionManifest(
-            actionId: 'demo.order.create',
-            toolName: 'app_action_demo_order_create',
-            description: 'Create a mock order proposal in the demo provider.',
-            parameters: {
-              'type': 'object',
-              'properties': {
-                'item': {'type': 'string'},
-                'amount': {'type': 'number'},
-              },
-              'required': ['item'],
-            },
-            resultSchema: {'type': 'object'},
-            risk: 'high',
-            confirmationPolicy: 'provider_required',
-            executionModes: ['app_handoff'],
-            timeoutSeconds: 600,
-          ),
-        ],
-        handoff: {'mode': 'app_handoff', 'demo': true},
-        result: {'mode': 'immediate_mock'},
-      ),
-    );
-    _mockAgentAppRegistered = true;
+  @override
+  Future<List<sdk.AgentProviderDescriptor>> discoverAgentProviders() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return const [];
+    await _ensureManagementEngine();
+    return _agentProviderInstallApi().discoverProviders();
   }
 
   @override
-  Future<List<sdk.AgentProviderDescriptor>> discoverAgentProviders() {
-    if (!Platform.isAndroid) return Future.value(const []);
-    return _agentProviderInstallApi().discoverProviders();
+  Future<List<sdk.AgentAppPackage>> listConnectedApps() async {
+    final engine = await _ensureManagementEngine();
+    return engine.agentApp.listPackages();
+  }
+
+  @override
+  Future<sdk.AgentAppPackage> enableAgentProvider(
+    sdk.AgentProviderDescriptor provider,
+  ) async {
+    if (!Platform.isAndroid && provider.platform != 'ios') {
+      throw UnsupportedError('Connected App enable is not supported');
+    }
+    await _ensureManagementEngine();
+    return _agentProviderInstallApi().requestInstall(provider);
+  }
+
+  @override
+  Future<bool> disableConnectedApp(String providerId) async {
+    final engine = await _ensureManagementEngine();
+    return engine.agentApp.deletePackage(providerId);
   }
 
   @override
   Future<DemoAgent?> installPendingAgentProvider() async {
     final package = await _agentProviderInstallApi().installFromLaunchIntent();
     if (package == null) return null;
-    await _reloadProviderAgent(package.agentId);
-    final engine = await _ensureManagementEngine();
-    final definition = await engine.getAgentDefinition(package.agentId);
-    if (definition != null) return DemoAgent.fromDefinition(definition);
     return DemoAgent(
-      id: package.agentId,
+      id: package.providerId,
       name: package.displayName.trim().isEmpty
-          ? package.agentId
+          ? package.providerId
           : package.displayName,
       icon: Icons.sensors_rounded,
       systemPrompt: package.systemPrompt,
@@ -3813,19 +3804,11 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   Future<DemoAgent> installAgentProvider(
     sdk.AgentProviderDescriptor provider,
   ) async {
-    if (!Platform.isAndroid && provider.platform != 'ios') {
-      throw UnsupportedError('Provider Agent install is not supported');
-    }
-    final package = await _agentProviderInstallApi().requestInstall(provider);
-    await _reloadProviderAgent(package.agentId);
-    final definition = await _requireEngine().getAgentDefinition(
-      package.agentId,
-    );
-    if (definition != null) return DemoAgent.fromDefinition(definition);
+    final package = await enableAgentProvider(provider);
     return DemoAgent(
-      id: package.agentId,
+      id: package.providerId,
       name: package.displayName.trim().isEmpty
-          ? package.agentId
+          ? package.providerId
           : package.displayName,
       icon: Icons.sensors_rounded,
       systemPrompt: package.systemPrompt,
@@ -6632,6 +6615,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       final name = preset.name.trim().toLowerCase();
       if (name.isEmpty) continue;
       if (installed.contains(name) && preset.supportFiles.isEmpty) continue;
+      if (preset.skillContent.trim().isEmpty) continue;
       final result = await engine.installSkill(
         preset.installPayload,
         agentId: runtimeProfile.agentId,
@@ -6657,21 +6641,6 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
           .toList(growable: false);
     }
     return const [];
-  }
-
-  Future<void> _reloadProviderAgent(String agentId) async {
-    final engine = await _ensureManagementEngine();
-    if (agentId == sdk.NapaxiEngine.defaultAgentId) {
-      engine.ensureAgent();
-      return;
-    }
-    engine.deleteAgent(agentId);
-    final definition = await engine.getAgentDefinition(agentId);
-    if (definition != null) {
-      final created = await engine.createAgentFromDefinition(agentId);
-      if (created) return;
-    }
-    await engine.getOrCreateAgent(agentId);
   }
 }
 

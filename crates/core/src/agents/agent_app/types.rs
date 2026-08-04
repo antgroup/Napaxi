@@ -7,6 +7,7 @@
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 use super::{DEFAULT_CONFIRMATION_POLICY, DEFAULT_RISK, DEFAULT_TIMEOUT_SECONDS};
 
@@ -77,6 +78,12 @@ pub struct AgentAppActionManifest {
     pub action_id: String,
     pub tool_name: String,
     pub description: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub display_name: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub localized_display_names: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub localized_descriptions: BTreeMap<String, String>,
     #[serde(default = "default_parameters")]
     pub parameters: Value,
     #[serde(default = "default_result_schema")]

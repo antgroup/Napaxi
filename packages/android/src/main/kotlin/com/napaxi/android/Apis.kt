@@ -18,7 +18,8 @@ public class ChatApi internal constructor(private val engine: NapaxiEngine) {
         message: String,
         attachments: List<McAttachment> = emptyList(),
         maxIterations: Int = 0,
-    ): Flow<ChatEvent> = engine.send(message, attachments, maxIterations)
+        providerSelection: AgentProviderSelection? = null,
+    ): Flow<ChatEvent> = engine.send(message, attachments, maxIterations, providerSelection)
 
     public fun sendToSession(
         session: SessionKey,
@@ -27,7 +28,16 @@ public class ChatApi internal constructor(private val engine: NapaxiEngine) {
         attachments: List<McAttachment> = emptyList(),
         maxIterations: Int = 0,
         sandboxPaths: List<String>? = null,
-    ): Flow<ChatEvent> = engine.sendToSessionFlow(session, message, agentId, attachments, maxIterations, sandboxPaths)
+        providerSelection: AgentProviderSelection? = null,
+    ): Flow<ChatEvent> = engine.sendToSessionFlow(
+        session = session,
+        message = message,
+        agentId = agentId,
+        attachments = attachments,
+        maxIterations = maxIterations,
+        sandboxPaths = sandboxPaths,
+        providerSelection = providerSelection,
+    )
 }
 
 public class SessionApi internal constructor(private val engine: NapaxiEngine) {

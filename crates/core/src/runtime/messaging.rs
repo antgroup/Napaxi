@@ -26,6 +26,20 @@ async fn send_to_session_event_jsons(
     is_group_context: bool,
 ) -> Vec<String> {
     let files_dir = engine.files_dir().to_string();
+    let explicit_provider =
+        match crate::agents::agent_app::resolve_explicit_provider_message(&files_dir, message) {
+            Ok(selection) => selection,
+            Err(error) => return vec![event_json(chat_error(error.to_string()))],
+        };
+    let effective_message = explicit_provider
+        .as_ref()
+        .map(|selection| selection.message.as_str())
+        .unwrap_or(message);
+    let effective_display_message = display_message.or_else(|| {
+        explicit_provider
+            .as_ref()
+            .map(|selection| selection.display_message.as_str())
+    });
     let account_id = session_account_id(session_key_json);
     let llm_config = match parse_config(config_json) {
         Ok(config) => engine.config_with_capabilities(config),
@@ -34,13 +48,17 @@ async fn send_to_session_event_jsons(
     let effective_config_json =
         serde_json::to_string(&llm_config).unwrap_or_else(|_| config_json.to_string());
     let current_thread_id = session_thread_id(session_key_json);
-    let tool_context = prepare_session_tool_context_with_config_and_thread(
-        &engine,
-        &account_id,
-        agent_id,
-        llm_config,
-        current_thread_id,
-    );
+    let tool_context =
+        super::tool_context::prepare_session_tool_context_with_config_thread_and_provider(
+            &engine,
+            &account_id,
+            agent_id,
+            llm_config,
+            current_thread_id,
+            explicit_provider
+                .as_ref()
+                .map(|selection| selection.provider_id.as_str()),
+        );
     let turn_runtime = engine.begin_session_turn(session_key_json);
     crate::capabilities::with_admission_sink(
         engine.admission_sink(),
@@ -51,8 +69,8 @@ async fn send_to_session_event_jsons(
                 config_json: effective_config_json,
                 agent_id: agent_id.to_string(),
                 session_key_json: session_key_json.to_string(),
-                message: message.to_string(),
-                display_message: display_message.map(str::to_string),
+                message: effective_message.to_string(),
+                display_message: effective_display_message.map(str::to_string),
                 attachments_json: attachments_json.to_string(),
                 tools: Some(engine.tools()),
                 max_iterations,
@@ -165,6 +183,23 @@ async fn stream_session_event_jsons<F>(
     F: FnMut(String),
 {
     let files_dir = engine.files_dir().to_string();
+    let explicit_provider =
+        match crate::agents::agent_app::resolve_explicit_provider_message(&files_dir, message) {
+            Ok(selection) => selection,
+            Err(error) => {
+                emit(event_json(chat_error(error.to_string())));
+                return;
+            }
+        };
+    let effective_message = explicit_provider
+        .as_ref()
+        .map(|selection| selection.message.as_str())
+        .unwrap_or(message);
+    let effective_display_message = display_message.or_else(|| {
+        explicit_provider
+            .as_ref()
+            .map(|selection| selection.display_message.as_str())
+    });
     let account_id = session_account_id(session_key_json);
     let llm_config: PlatformLlmConfig = match parse_config(config_json) {
         Ok(config) => engine.config_with_capabilities(config),
@@ -176,13 +211,17 @@ async fn stream_session_event_jsons<F>(
     let effective_config_json =
         serde_json::to_string(&llm_config).unwrap_or_else(|_| config_json.to_string());
     let current_thread_id = session_thread_id(session_key_json);
-    let tool_context = prepare_session_tool_context_with_config_and_thread(
-        &engine,
-        &account_id,
-        agent_id,
-        llm_config,
-        current_thread_id,
-    );
+    let tool_context =
+        super::tool_context::prepare_session_tool_context_with_config_thread_and_provider(
+            &engine,
+            &account_id,
+            agent_id,
+            llm_config,
+            current_thread_id,
+            explicit_provider
+                .as_ref()
+                .map(|selection| selection.provider_id.as_str()),
+        );
     let turn_runtime = engine.begin_session_turn(session_key_json);
     crate::capabilities::with_admission_sink(
         engine.admission_sink(),
@@ -193,8 +232,8 @@ async fn stream_session_event_jsons<F>(
                 config_json: effective_config_json,
                 agent_id: agent_id.to_string(),
                 session_key_json: session_key_json.to_string(),
-                message: message.to_string(),
-                display_message: display_message.map(str::to_string),
+                message: effective_message.to_string(),
+                display_message: effective_display_message.map(str::to_string),
                 attachments_json: attachments_json.to_string(),
                 tools: Some(engine.tools()),
                 max_iterations,

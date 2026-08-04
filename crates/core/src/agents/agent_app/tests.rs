@@ -34,15 +34,305 @@ fn package_json() -> String {
 }
 
 #[test]
-fn registers_package_and_agent_definition() {
+fn registers_provider_without_creating_switchable_agent_definition() {
     let temp = tempfile::tempdir().unwrap();
     let files_dir = temp.path().to_string_lossy();
     let registered = register_package(&files_dir, &package_json());
     let package: AgentAppPackage = serde_json::from_str(&registered).unwrap();
     assert_eq!(package.agent_id, "provider.agent");
-    assert!(super::super::get_definition(&files_dir, "provider.agent").is_some());
+    assert!(super::super::get_definition(&files_dir, "provider.agent").is_none());
+    assert!(get_package_json(&files_dir, "provider").contains("provider.agent"));
+    assert!(get_package_json(&files_dir, "provider.agent").contains("provider.agent"));
     let tools = descriptors_for_package(&package);
     assert_eq!(tools[0].name, "app_action_order_create");
+}
+
+#[test]
+fn resolves_canonical_and_display_name_provider_mentions() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+
+    let canonical =
+        resolve_explicit_provider_message(&files_dir, "@{provider:provider} create an order")
+            .unwrap()
+            .unwrap();
+    assert_eq!(canonical.provider_id, "provider");
+    assert_eq!(canonical.message, "create an order");
+    assert_eq!(canonical.display_message, "@Provider Agent create an order");
+
+    let display =
+        resolve_explicit_provider_message(&files_dir, "@Provider Agent: create another order")
+            .unwrap()
+            .unwrap();
+    assert_eq!(display.provider_id, "provider");
+    assert_eq!(display.message, "create another order");
+
+    assert!(
+        resolve_explicit_provider_message(&files_dir, "@someone hello")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn duplicate_display_name_is_ambiguous_but_canonical_provider_id_is_stable() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+    let mut duplicate: Value = serde_json::from_str(&package_json()).unwrap();
+    duplicate["provider_id"] = json!("provider.other");
+    duplicate["agent_id"] = json!("provider.other.agent");
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &duplicate.to_string())).unwrap();
+
+    let ambiguous =
+        resolve_explicit_provider_message(&files_dir, "@Provider Agent create an order")
+            .unwrap_err();
+    assert_eq!(
+        ambiguous,
+        ExplicitProviderSelectionError::AmbiguousName {
+            label: "Provider Agent".to_string(),
+            provider_ids: vec!["provider".to_string(), "provider.other".to_string()],
+        }
+    );
+
+    let canonical =
+        resolve_explicit_provider_message(&files_dir, "@{provider:provider.other} create an order")
+            .unwrap()
+            .unwrap();
+    assert_eq!(canonical.provider_id, "provider.other");
+
+    assert_eq!(
+        resolve_explicit_provider_message(&files_dir, "@{provider:missing} create an order")
+            .unwrap_err(),
+        ExplicitProviderSelectionError::ProviderNotFound {
+            provider_id: "missing".to_string(),
+        }
+    );
+}
+
+#[tokio::test]
+async fn ambiguous_display_name_returns_chat_error_before_model_execution() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let config = json!({
+        "provider": "openai",
+        "api_key": "test",
+        "base_url": null,
+        "model": "test-model",
+        "system_prompt": "",
+        "max_tokens": 128
+    })
+    .to_string();
+    let context = json!({
+        "platform": "test",
+        "files_dir": files_dir,
+        "native_library_dir": null
+    })
+    .to_string();
+    let handle = crate::runtime::create_engine_handle(&config, &context).unwrap();
+    let _ = register_package_handle(handle, &package_json());
+    let mut duplicate: Value = serde_json::from_str(&package_json()).unwrap();
+    duplicate["provider_id"] = json!("provider.other");
+    duplicate["agent_id"] = json!("provider.other.agent");
+    let _ = register_package_handle(handle, &duplicate.to_string());
+    let session = crate::session::create_session(&files_dir, "napaxi", "app", "user", None);
+
+    let events = crate::runtime::send_to_session_events_handle(
+        handle,
+        &config,
+        "napaxi",
+        &session,
+        "@Provider Agent create an order",
+        "[]",
+        0,
+        false,
+    )
+    .await;
+
+    assert_eq!(events.len(), 1);
+    assert!(events[0].contains("ambiguous"));
+    assert!(events[0].contains("provider.other"));
+
+    let unknown = crate::runtime::send_to_session_events_handle(
+        handle,
+        &config,
+        "napaxi",
+        &session,
+        "@{provider:missing} create an order",
+        "[]",
+        0,
+        false,
+    )
+    .await;
+    assert_eq!(unknown.len(), 1);
+    assert!(unknown[0].contains("not installed or enabled"));
+    crate::runtime::dispose_engine_handle(handle);
+}
+
+#[test]
+fn migrates_legacy_agent_keyed_package_and_generated_definition() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let package: AgentAppPackage = serde_json::from_str(&package_json()).unwrap();
+    let legacy_path = persistence::package_file(&files_dir, &package.agent_id);
+    std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+    std::fs::write(
+        &legacy_path,
+        serde_json::to_string_pretty(&package).unwrap(),
+    )
+    .unwrap();
+
+    let mut definition =
+        crate::agent_definitions::AgentDefinition::new(package.display_name.clone(), String::new());
+    definition.id = package.agent_id.clone();
+    definition.description = package.description.clone();
+    definition.provider = String::new();
+    definition.model = String::new();
+    definition.system_prompt = package.system_prompt.clone();
+    definition.tool_filter = crate::agent_definitions::ToolFilter::AllTools;
+    definition.source = crate::agent_definitions::AgentSource::UserCreated;
+    let _ = super::super::create_definition_value(&files_dir, definition);
+
+    let listed: Vec<AgentAppPackage> =
+        serde_json::from_str(&list_packages_json(&files_dir)).unwrap();
+
+    assert_eq!(listed.len(), 1);
+    assert!(persistence::package_file(&files_dir, &package.provider_id).exists());
+    assert!(!legacy_path.exists());
+    assert!(super::super::get_definition(&files_dir, &package.agent_id).is_none());
+}
+
+#[test]
+fn migration_does_not_delete_a_distinct_user_agent_with_same_legacy_id() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let mut definition = crate::agent_definitions::AgentDefinition::new(
+        "My custom Agent".to_string(),
+        "custom-model".to_string(),
+    );
+    definition.id = "provider.agent".to_string();
+    let _ = super::super::create_definition_value(&files_dir, definition);
+
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+
+    let preserved = super::super::get_definition(&files_dir, "provider.agent").unwrap();
+    assert_eq!(preserved.name, "My custom Agent");
+    assert_eq!(preserved.model, "custom-model");
+}
+
+#[test]
+fn explicitly_selected_provider_exposes_actions_to_default_agent() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+
+    let (without_selection, _) = action_tools_and_handler_for_provider(
+        &files_dir,
+        "engine.codex",
+        None,
+        Some(ToolRequestBridge::process_scoped(Arc::new(|_, _, _, _| {}))),
+        None,
+    );
+    assert!(without_selection.is_empty());
+
+    let (with_selection, _) = action_tools_and_handler_for_provider(
+        &files_dir,
+        "engine.codex",
+        Some("provider"),
+        Some(ToolRequestBridge::process_scoped(Arc::new(|_, _, _, _| {}))),
+        None,
+    );
+    assert_eq!(with_selection.len(), 1);
+    assert_eq!(with_selection[0].name, "app_action_order_create");
+}
+
+#[test]
+fn generated_cross_domain_examples_are_valid_provider_packages() {
+    let notes_raw = include_str!(
+        "../../../../../examples/provider_app/android_generated_notes/app/src/main/assets/agent-app.json"
+    );
+    let tasks_raw = include_str!(
+        "../../../../../examples/provider_app/android_generated_tasks/app/src/main/assets/agent-app.json"
+    );
+    let notes: AgentAppPackage = prepare_package(serde_json::from_str(notes_raw).unwrap()).unwrap();
+    let tasks: AgentAppPackage = prepare_package(serde_json::from_str(tasks_raw).unwrap()).unwrap();
+
+    assert_eq!(notes.provider_id, "demo.generated_notes_provider");
+    assert_eq!(notes.actions.len(), 5);
+    let note_delete = notes
+        .actions
+        .iter()
+        .find(|action| action.action_id == "note.delete")
+        .unwrap();
+    assert_eq!(note_delete.risk, "high");
+    assert_eq!(note_delete.confirmation_policy, "provider_required");
+
+    assert_eq!(tasks.provider_id, "demo.generated_tasks_provider");
+    assert_eq!(tasks.actions.len(), 4);
+    assert!(
+        tasks
+            .actions
+            .iter()
+            .all(|action| action.action_id.starts_with("task."))
+    );
+    let task_delete = tasks
+        .actions
+        .iter()
+        .find(|action| action.action_id == "task.delete")
+        .unwrap();
+    assert_eq!(task_delete.risk, "high");
+    assert_eq!(task_delete.confirmation_policy, "provider_required");
+}
+
+#[tokio::test]
+async fn selected_provider_action_completes_proposal_result_round_trip() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy().to_string();
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+    let dispatcher: crate::tool_registry::ToolRequestDispatcher =
+        Arc::new(|request_id, tool_name, params_json, _context| {
+            assert_eq!(tool_name, ACTION_DISPATCH_TOOL_NAME);
+            let payload: Value = serde_json::from_str(params_json).unwrap();
+            let proposal_request_id = payload["proposal"]["request_id"].as_str().unwrap();
+            let result = json!({
+                "request_id": proposal_request_id,
+                "status": "succeeded",
+                "result": {"note_id": "note-1"},
+                "completed_at": now()
+            });
+            assert!(crate::tool_registry::resolve_tool_execution(
+                request_id,
+                result.to_string(),
+                false,
+            ));
+        });
+    let (_, handler) = action_tools_and_handler_for_provider(
+        &files_dir,
+        "napaxi",
+        Some("provider"),
+        Some(ToolRequestBridge::process_scoped(dispatcher)),
+        None,
+    );
+
+    let output = handler.unwrap()("app_action_order_create", json!({"amount": 12}), None)
+        .unwrap()
+        .await
+        .unwrap();
+
+    assert!(output.output.contains("note-1"));
+    assert!(output.events.iter().any(|event| matches!(
+        event,
+        ChatEvent::ActionResultReceived { status, .. } if status == "succeeded"
+    )));
+    let records: Value = serde_json::from_str(&list_proposals_json(&files_dir, "")).unwrap();
+    assert_eq!(records[0]["status"], "succeeded");
 }
 
 #[test]

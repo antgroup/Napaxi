@@ -131,12 +131,14 @@ mapping. Platform tool names, parameter schemas, risk, and permission
 requirements remain core contracts shared by all adapters.
 
 Agent App actions are a specialized host-carried tool capability:
-`napaxi.tool.agent_app_action`. Agent App packages live in the agent domain,
-generate or update an `AgentDefinition`, and expose only that Agent's action
-manifest as tools during its turns. Core creates persisted proposals and
-brokers results, while the connected app or backend owns confirmation, risk
-checks, execution, and trusted result return. The detailed contract lives in
-`docs/agent-app-actions.md`.
+`napaxi.tool.agent_app_action`. Provider packages live in an independent
+`provider_id` registry and never generate a switchable `AgentDefinition`.
+Explicit one-turn selection exposes only that Provider's action manifest while
+leaving Agent/session/memory identity unchanged. Core creates persisted
+proposals and brokers results, while the connected app or backend owns
+confirmation, risk checks, execution, and trusted result return. Protocol-v2
+`agent_id` values remain wire-compatibility fields. The detailed contract lives
+in `docs/agent-app-actions.md`.
 
 Policy capabilities are core gates, not optional side modules. Descriptor
 admission, invocation admission, provider admission, agent-engine admission,

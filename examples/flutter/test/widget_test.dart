@@ -3278,6 +3278,252 @@ void main() {
     },
   );
 
+  testWidgets('manages discovered and enabled connected apps', (tester) async {
+    const notesProvider = sdk.AgentProviderDescriptor(
+      packageName: 'com.napaxi.generated.notes',
+      installActivityName: 'ProviderInstallActivity',
+      activityName: 'ProviderActionActivity',
+      label: 'Notes',
+    );
+    const tasksProvider = sdk.AgentProviderDescriptor(
+      packageName: 'com.napaxi.generated.tasks',
+      installActivityName: 'ProviderInstallActivity',
+      activityName: 'ProviderActionActivity',
+      label: 'Tasks',
+    );
+    final fakeClient = FakeNapaxiChatClient(
+      discoveredAgentProviders: const [notesProvider, tasksProvider],
+      connectedApps: const [
+        sdk.AgentAppPackage(
+          providerId: 'notes.provider',
+          agentId: 'notes.agent',
+          displayName: 'Notes',
+          actions: [
+            sdk.AgentAppActionManifest(
+              actionId: 'notes.create',
+              toolName: 'app_action_notes_create',
+              description: 'Create a note.',
+              parameters: {'type': 'object'},
+            ),
+          ],
+          installBinding: sdk.AgentAppInstallBinding(
+            platform: 'android',
+            appPackageName: 'com.napaxi.generated.notes',
+            activityName: 'ProviderActionActivity',
+            signingCertSha256: 'AA',
+            installedAt: '2026-08-03T00:00:00Z',
+            installRequestId: 'install-notes',
+            protocolVersion: 2,
+          ),
+        ),
+        sdk.AgentAppPackage(
+          providerId: 'archive.provider',
+          agentId: 'archive.agent',
+          displayName: 'Archived',
+          actions: [
+            sdk.AgentAppActionManifest(
+              actionId: 'archive.search',
+              toolName: 'app_action_archive_search',
+              description: 'Search the archive.',
+            ),
+          ],
+          installBinding: sdk.AgentAppInstallBinding(
+            platform: 'android',
+            appPackageName: 'com.napaxi.generated.archive',
+            activityName: 'ProviderActionActivity',
+            signingCertSha256: 'CC',
+            installedAt: '2026-08-03T00:00:00Z',
+            installRequestId: 'install-archive',
+            protocolVersion: 2,
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('apps_menu_item')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('apps_primary_page')), findsOneWidget);
+    expect(find.byKey(const Key('settings_bottom_sheet')), findsNothing);
+    expect(
+      find.byKey(const Key('connected_apps_settings_page')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('connected_app_enabled_com.napaxi.generated.notes')),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<Switch>(
+            find.descendant(
+              of: find.byKey(
+                const Key('connected_app_enabled_com.napaxi.generated.notes'),
+              ),
+              matching: find.byType(Switch),
+            ),
+          )
+          .value,
+      isTrue,
+    );
+    expect(
+      find.text(
+        'Once connected, type @ in the message box to choose an Agent app. Napaxi will not guess or switch apps automatically.',
+      ),
+      findsNothing,
+    );
+    final uninstalledRow = find.byKey(
+      const Key('connected_app_uninstalled_com.napaxi.generated.archive'),
+    );
+    expect(uninstalledRow, findsOneWidget);
+    expect(
+      find.descendant(of: uninstalledRow, matching: find.byType(Switch)),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('connected_app_capabilities_Archived')),
+      findsNothing,
+    );
+    await tester.tap(find.byKey(const Key('remove_uninstalled_app_Archived')));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove app record?'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirm_remove_uninstalled_app')));
+    await tester.pumpAndSettle();
+    expect(fakeClient.connectedApps, hasLength(1));
+    expect(uninstalledRow, findsNothing);
+
+    await tester.tap(find.byKey(const Key('connected_app_capabilities_Notes')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('connected_app_detail_page')), findsOneWidget);
+    expect(find.text('1 capability'), findsOneWidget);
+    expect(find.text('Create note'), findsOneWidget);
+    expect(find.text('Create a new note in the app.'), findsOneWidget);
+    expect(find.text('Confirmation required'), findsOneWidget);
+
+    await tester.drag(
+      find.byKey(const Key('connected_app_detail_page')),
+      const Offset(200, 0),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('connected_app_detail_page')), findsNothing);
+    expect(find.byKey(const Key('session_history_sheet')), findsNothing);
+
+    final tasksRow = find.byKey(
+      const Key('connected_app_available_com.napaxi.generated.tasks'),
+    );
+    expect(tasksRow, findsOneWidget);
+    await tester.tap(
+      find.descendant(of: tasksRow, matching: find.byType(Switch)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fakeClient.connectedApps, hasLength(2));
+    expect(
+      find.byKey(const Key('connected_app_enabled_com.napaxi.generated.tasks')),
+      findsOneWidget,
+    );
+    expect(find.text('0 capabilities'), findsOneWidget);
+
+    final notesRow = find.byKey(
+      const Key('connected_app_enabled_com.napaxi.generated.notes'),
+    );
+    await tester.tap(
+      find.descendant(of: notesRow, matching: find.byType(Switch)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(fakeClient.connectedApps, hasLength(1));
+    expect(
+      find.byKey(
+        const Key('connected_app_available_com.napaxi.generated.notes'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('suggests connected Agent apps after typing @', (tester) async {
+    const provider = sdk.AgentProviderDescriptor(
+      packageName: 'com.napaxi.generated.calendar',
+      installActivityName: 'ProviderInstallActivity',
+      activityName: 'ProviderActionActivity',
+      label: 'Calendar',
+    );
+    final fakeClient = FakeNapaxiChatClient(
+      discoveredAgentProviders: const [provider],
+      connectedApps: const [
+        sdk.AgentAppPackage(
+          providerId: 'calendar.provider',
+          agentId: 'calendar.agent',
+          displayName: 'Calendar',
+          actions: [
+            sdk.AgentAppActionManifest(
+              actionId: 'calendar.event.create',
+              toolName: 'app_action_calendar_event_create',
+              description: 'Create a calendar event.',
+              parameters: {'type': 'object'},
+            ),
+          ],
+          installBinding: sdk.AgentAppInstallBinding(
+            platform: 'android',
+            appPackageName: 'com.napaxi.generated.calendar',
+            activityName: 'ProviderActionActivity',
+            signingCertSha256: 'AA',
+            installedAt: '2026-08-03T00:00:00Z',
+            installRequestId: 'install-calendar',
+            protocolVersion: 2,
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await tester.pumpAndSettle();
+    final inputFinder = find.byKey(const Key('chat_input_field'));
+    await tester.showKeyboard(inputFinder);
+    await tester.enterText(inputFinder, '@');
+    await tester.pump();
+
+    expect(
+      find.byKey(const Key('agent_app_mention_suggestions')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('agent_app_mention_overlay'))).height,
+      58,
+    );
+    final mentionChip = find.byKey(
+      const Key('agent_app_mention_calendar.provider'),
+    );
+    expect(tester.getSize(mentionChip).height, 42);
+    expect(tester.getSize(mentionChip).width, lessThan(200));
+    final inputContainer = find.byKey(const Key('chat_input_container'));
+    final inputHeightWithSuggestions = tester.getSize(inputContainer).height;
+    expect(
+      find.descendant(
+        of: inputContainer,
+        matching: find.byKey(const Key('agent_app_mention_suggestions')),
+      ),
+      findsNothing,
+    );
+    await tester.tap(mentionChip);
+    await tester.pump();
+
+    final input = tester.widget<TextField>(inputFinder);
+    expect(input.controller?.text, '@Calendar ');
+    expect(input.focusNode?.hasFocus, isTrue);
+    expect(tester.testTextInput.isVisible, isTrue);
+    expect(tester.getSize(inputContainer).height, inputHeightWithSuggestions);
+  });
+
   testWidgets('shows grouped settings and agent configuration', (tester) async {
     final preferencesStore = MemoryDemoPreferencesStore();
     await preferencesStore.saveLanguage(AppLanguage.chinese);

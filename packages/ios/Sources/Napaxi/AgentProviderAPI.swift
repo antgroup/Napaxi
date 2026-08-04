@@ -60,12 +60,34 @@ public struct NapaxiAgentProviderAPI: Sendable {
         try await discoverProvidersHandler()
     }
 
+    /// Finds an installed Provider by its package or bundle identifier.
+    public func discoverProviderForPackage(
+        _ packageName: String
+    ) async throws -> NapaxiAgentProviderDescriptor? {
+        let expected = packageName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expected.isEmpty else { return nil }
+        return try await discoverProviders().first {
+            $0.packageName == expected || $0.iosBundleId == expected
+        }
+    }
+
     public func requestInstall(
         _ provider: NapaxiAgentProviderDescriptor,
         timeoutSeconds: UInt64 = NapaxiAgentProviderAPI.defaultInstallTimeoutSeconds
     ) async throws -> NapaxiAgentAppPackage {
         try await requestInstallJSON(provider, timeoutSeconds: timeoutSeconds)
             .decodedObject(of: NapaxiAgentAppPackage.self)
+    }
+
+    /// Discovers and runs the trusted enable handshake for an installed app.
+    public func enableInstalledProvider(
+        _ packageName: String,
+        timeoutSeconds: UInt64 = NapaxiAgentProviderAPI.defaultInstallTimeoutSeconds
+    ) async throws -> NapaxiAgentAppPackage {
+        guard let provider = try await discoverProviderForPackage(packageName) else {
+            throw NapaxiError.invalidState("Installed Agent App Provider not found: \(packageName)")
+        }
+        return try await requestInstall(provider, timeoutSeconds: timeoutSeconds)
     }
 
     public func requestInstallJSON(

@@ -31,7 +31,12 @@ Host 必须在 capability profile 和 selection 中声明并启用它。Flutter 
 
 ## Package
 
-`AgentAppPackage` 将 provider action data 绑定到一个 Agent。注册 package 后，core 会持久化 package，并创建或更新对应 `AgentDefinition`。一次 turn 中，只有当前 Agent 的 package actions 会暴露为 tool descriptors。
+`AgentAppPackage` 声明一个独立 Provider；协议 V2 的 `agent_id` 只保留为
+签名 proposal/trigger 的兼容身份。注册 package 后，core 按规范化
+`provider_id` 持久化到独立 Provider registry，不会创建、更新或暴露
+`AgentDefinition`。旧版按 Agent id 保存的文件会在读取时迁移，get/delete
+API 仍接受 legacy id。Provider actions 只在单轮显式选择后挂载（旧调用方
+保留兼容 fallback）。
 
 Provider actions 是 package data，不是动态 native plugin。Action tool name 必须使用 `app_action_` 前缀，以便 admission 映射到 `napaxi.tool.agent_app_action`。
 

@@ -48,6 +48,13 @@ cd packages/flutter && flutter analyze --no-fatal-infos && flutter test
 
 iOS native 检查见 [`sdk-integration.zh-CN.md`](sdk-integration.zh-CN.md)。
 
+## 显式选择 Agent App Provider
+
+Flutter、Android 和 iOS 的聊天发送接口都提供 `AgentProviderSelection`。
+三个 adapter 在进入 Core 前统一编码单轮标记
+`@{provider:<provider_id>}`。Core 在组装 tools 前解析 Provider，保持当前/
+默认 Agent 身份不变，并且不会把本次选择延续到后续消息。
+
 ## 避免
 
 - Adapter 直接调用 `mobile_*` implementation modules。

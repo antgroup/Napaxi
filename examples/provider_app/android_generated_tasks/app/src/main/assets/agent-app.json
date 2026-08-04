@@ -1,0 +1,82 @@
+{
+  "provider_id": "demo.generated_tasks_provider",
+  "agent_id": "demo.generated_tasks.agent",
+  "display_name": "Generated Tasks",
+  "description": "A pure-Java task app generated with built-in Agent App actions.",
+  "system_prompt": "",
+  "actions": [
+    {
+      "action_id": "task.add",
+      "tool_name": "app_action_task_add",
+      "display_name": "Add task",
+      "localized_display_names": {"zh-CN": "添加任务", "en": "Add task"},
+      "description": "Add a task to Generated Tasks.",
+      "localized_descriptions": {"zh-CN": "在应用中添加一项新任务。", "en": "Add a task to Generated Tasks."},
+      "parameters": {
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "low",
+      "confirmation_policy": "none",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    },
+    {
+      "action_id": "task.list",
+      "tool_name": "app_action_task_list",
+      "display_name": "View tasks",
+      "localized_display_names": {"zh-CN": "查看任务", "en": "View tasks"},
+      "description": "List tasks, optionally filtered by completion state.",
+      "localized_descriptions": {"zh-CN": "查看全部任务或按完成状态筛选。", "en": "List tasks, optionally filtered by completion state."},
+      "parameters": {
+        "type": "object",
+        "properties": {"completed": {"type": "boolean"}}
+      },
+      "result_schema": {"type": "object"},
+      "risk": "low",
+      "confirmation_policy": "none",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    },
+    {
+      "action_id": "task.complete",
+      "tool_name": "app_action_task_complete",
+      "display_name": "Complete task",
+      "localized_display_names": {"zh-CN": "完成任务", "en": "Complete task"},
+      "description": "Mark a task completed.",
+      "localized_descriptions": {"zh-CN": "将一项指定任务标记为已完成。", "en": "Mark a task completed."},
+      "parameters": {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "medium",
+      "confirmation_policy": "provider_required",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    },
+    {
+      "action_id": "task.delete",
+      "tool_name": "app_action_task_delete",
+      "display_name": "Delete task",
+      "localized_display_names": {"zh-CN": "删除任务", "en": "Delete task"},
+      "description": "Delete a task from Generated Tasks.",
+      "localized_descriptions": {"zh-CN": "删除一项指定任务。", "en": "Delete a task from Generated Tasks."},
+      "parameters": {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "high",
+      "confirmation_policy": "provider_required",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    }
+  ],
+  "handoff": {"mode": "android_activity_result"},
+  "result": {"mode": "activity_result"}
+}

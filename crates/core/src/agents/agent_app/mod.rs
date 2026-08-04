@@ -26,7 +26,7 @@ use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::agent_definitions::{AgentDefinition, AgentSource, ToolFilter};
+use crate::agent_definitions::{AgentSource, ToolFilter};
 use crate::crypto::{constant_time_eq, hmac_sha256_base64_no_pad};
 use crate::tool_loop::{InternalToolHandler, InternalToolResult};
 use crate::tool_registry::{
@@ -40,8 +40,8 @@ pub use types::{
 };
 
 use persistence::{
-    list_packages, list_proposal_records, load_package, load_proposal_record, load_trigger_record,
-    package_file, persist_proposal, save_package, save_proposal_record, save_trigger_record,
+    delete_package_files, list_packages, list_proposal_records, load_package, load_proposal_record,
+    load_trigger_record, persist_proposal, save_package, save_proposal_record, save_trigger_record,
 };
 use signing::{sign_proposal_if_possible, trigger_signature_payload};
 use types::{AgentTriggerRecord, now};
@@ -59,8 +59,136 @@ const SIGNATURE_ALGORITHM_HMAC_SHA256_V1: &str = "hmac-sha256-v1";
 pub const AGENT_APP_ACTION_TOOL_PREFIX: &str = "app_action_";
 pub const AGENT_APP_ACTION_CAPABILITY_ID: &str = "napaxi.tool.agent_app_action";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExplicitProviderMessage {
+    pub provider_id: String,
+    pub message: String,
+    pub display_message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExplicitProviderSelectionError {
+    ProviderNotFound {
+        provider_id: String,
+    },
+    AmbiguousName {
+        label: String,
+        provider_ids: Vec<String>,
+    },
+}
+
+impl std::fmt::Display for ExplicitProviderSelectionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ProviderNotFound { provider_id } => write!(
+                formatter,
+                "Agent App Provider '{}' is not installed or enabled",
+                provider_id
+            ),
+            Self::AmbiguousName {
+                label,
+                provider_ids,
+            } => write!(
+                formatter,
+                "Agent App Provider name '@{}' is ambiguous; choose one by provider id: {}",
+                label,
+                provider_ids.join(", ")
+            ),
+        }
+    }
+}
+
 pub fn is_agent_app_action_tool_name(tool_name: &str) -> bool {
     tool_name.starts_with(AGENT_APP_ACTION_TOOL_PREFIX)
+}
+
+/// Resolves an explicit provider mention at the beginning of a user message.
+///
+/// The canonical form is `@{provider:<provider_id>}` and is intended for
+/// adapter capability chips. A human-readable `@<display_name>` or
+/// `@<provider_id>` prefix is also accepted when it uniquely identifies an
+/// installed package. The marker is removed from the model-facing message but
+/// retained as a friendly mention in persisted chat history.
+pub fn resolve_explicit_provider_message(
+    files_dir: &str,
+    message: &str,
+) -> Result<Option<ExplicitProviderMessage>, ExplicitProviderSelectionError> {
+    let trimmed = message.trim_start();
+    let packages = registered_packages(files_dir);
+
+    if let Some(rest) = trimmed.strip_prefix("@{provider:") {
+        let Some(marker_end) = rest.find('}') else {
+            return Ok(None);
+        };
+        let provider_id = rest[..marker_end].trim();
+        let package = packages
+            .iter()
+            .find(|package| package.provider_id == provider_id);
+        let Some(package) = package else {
+            return Err(ExplicitProviderSelectionError::ProviderNotFound {
+                provider_id: provider_id.to_string(),
+            });
+        };
+        let effective_message = rest[marker_end + 1..].trim_start().to_string();
+        return Ok(Some(ExplicitProviderMessage {
+            provider_id: package.provider_id.clone(),
+            display_message: explicit_provider_display_message(package, &effective_message),
+            message: effective_message,
+        }));
+    }
+
+    let mut matches = Vec::<(&AgentAppPackage, &str, String)>::new();
+    for package in &packages {
+        for label in [&package.display_name, &package.provider_id] {
+            if label.trim().is_empty() {
+                continue;
+            }
+            let prefix = format!("@{label}");
+            let Some(rest) = trimmed.strip_prefix(&prefix) else {
+                continue;
+            };
+            if !rest.is_empty()
+                && !rest.starts_with(char::is_whitespace)
+                && !rest.starts_with(':')
+                && !rest.starts_with('：')
+            {
+                continue;
+            }
+            let effective_message = rest
+                .trim_start_matches(|ch: char| ch.is_whitespace() || ch == ':' || ch == '：')
+                .to_string();
+            matches.push((package, label.as_str(), effective_message));
+        }
+    }
+    let Some(longest) = matches.iter().map(|(_, label, _)| label.len()).max() else {
+        return Ok(None);
+    };
+    matches.retain(|(_, label, _)| label.len() == longest);
+    matches.sort_by(|(left, _, _), (right, _, _)| left.provider_id.cmp(&right.provider_id));
+    matches.dedup_by(|(left, _, _), (right, _, _)| left.provider_id == right.provider_id);
+    if matches.len() > 1 {
+        return Err(ExplicitProviderSelectionError::AmbiguousName {
+            label: matches[0].1.to_string(),
+            provider_ids: matches
+                .into_iter()
+                .map(|(package, _, _)| package.provider_id.clone())
+                .collect(),
+        });
+    }
+    let (package, _, effective_message) = matches.remove(0);
+    Ok(Some(ExplicitProviderMessage {
+        provider_id: package.provider_id.clone(),
+        display_message: explicit_provider_display_message(package, &effective_message),
+        message: effective_message,
+    }))
+}
+
+fn explicit_provider_display_message(package: &AgentAppPackage, message: &str) -> String {
+    if message.is_empty() {
+        format!("@{}", package.display_name)
+    } else {
+        format!("@{} {message}", package.display_name)
+    }
 }
 
 pub fn register_package(files_dir: &str, package_json: &str) -> String {
@@ -83,18 +211,7 @@ fn register_package_value(files_dir: &str, package: AgentAppPackage) -> String {
             if !save_package(files_dir, &package) {
                 return error_json("Failed to save agent app package");
             }
-            let mut definition = AgentDefinition::new(package.display_name.clone(), String::new());
-            definition.id = package.agent_id.clone();
-            definition.description = package.description.clone();
-            definition.provider = String::new();
-            definition.model = String::new();
-            definition.system_prompt = package.system_prompt.clone();
-            definition.tool_filter = ToolFilter::AllTools;
-            definition.source = AgentSource::UserCreated;
-            let created = super::create_definition_value(files_dir, definition);
-            if created.contains(r#""error""#) {
-                return created;
-            }
+            cleanup_legacy_provider_agent_definition(files_dir, &package);
             serde_json::to_string(&package)
                 .unwrap_or_else(|_| error_json("Failed to serialize package"))
         }
@@ -116,7 +233,7 @@ pub fn get_package_json_handle(handle: i64, agent_id: &str) -> String {
 }
 
 pub fn list_packages_json(files_dir: &str) -> String {
-    serde_json::to_string(&list_packages(files_dir)).unwrap_or_else(|_| "[]".to_string())
+    serde_json::to_string(&registered_packages(files_dir)).unwrap_or_else(|_| "[]".to_string())
 }
 
 pub fn list_packages_json_handle(handle: i64) -> String {
@@ -126,9 +243,13 @@ pub fn list_packages_json_handle(handle: i64) -> String {
     list_packages_json(&files_dir)
 }
 
-pub fn delete_package(files_dir: &str, agent_id: &str) -> bool {
-    let path = package_file(files_dir, agent_id);
-    std::fs::remove_file(path).is_ok()
+pub fn delete_package(files_dir: &str, provider_or_agent_id: &str) -> bool {
+    let Some(package) = load_package(files_dir, provider_or_agent_id) else {
+        return false;
+    };
+    let removed = delete_package_files(files_dir, &package);
+    cleanup_legacy_provider_agent_definition(files_dir, &package);
+    removed
 }
 
 pub fn delete_package_handle(handle: i64, agent_id: &str) -> bool {
@@ -138,13 +259,22 @@ pub fn delete_package_handle(handle: i64, agent_id: &str) -> bool {
     delete_package(&files_dir, agent_id)
 }
 
-pub fn action_tools_and_handler(
+pub fn action_tools_and_handler_for_provider(
     files_dir: &str,
     agent_id: &str,
+    selected_provider_id: Option<&str>,
     bridge: Option<ToolRequestBridge>,
     fallback: Option<InternalToolHandler>,
 ) -> (Vec<ToolDescriptor>, Option<InternalToolHandler>) {
-    let Some(package) = load_package(files_dir, agent_id) else {
+    let package = selected_provider_id
+        .filter(|provider_id| !provider_id.trim().is_empty())
+        .and_then(|provider_id| {
+            registered_packages(files_dir)
+                .into_iter()
+                .find(|package| package.provider_id == provider_id)
+        })
+        .or_else(|| load_package(files_dir, agent_id));
+    let Some(package) = package else {
         return (Vec::new(), fallback);
     };
     let descriptors = if bridge.is_some() {
@@ -173,6 +303,30 @@ pub fn action_tools_and_handler(
         }))
     });
     (descriptors, Some(handler))
+}
+
+fn registered_packages(files_dir: &str) -> Vec<AgentAppPackage> {
+    let packages = list_packages(files_dir);
+    for package in &packages {
+        cleanup_legacy_provider_agent_definition(files_dir, package);
+    }
+    packages
+}
+
+fn cleanup_legacy_provider_agent_definition(files_dir: &str, package: &AgentAppPackage) {
+    let Some(definition) = super::get_definition(files_dir, &package.agent_id) else {
+        return;
+    };
+    let generated_by_legacy_provider_registration = definition.name == package.display_name
+        && definition.description == package.description
+        && definition.system_prompt == package.system_prompt
+        && definition.provider.is_empty()
+        && definition.model.is_empty()
+        && definition.source == AgentSource::UserCreated
+        && definition.tool_filter == ToolFilter::AllTools;
+    if generated_by_legacy_provider_registration {
+        let _ = super::delete_definition(files_dir, &package.agent_id);
+    }
 }
 
 async fn execute_action(
@@ -365,7 +519,9 @@ pub fn accept_trigger(files_dir: &str, trigger_json: &str) -> String {
     if load_trigger_record(files_dir, &trigger.request_id).is_some() {
         return error_json("agent app trigger already consumed");
     }
-    let Some(package) = load_package(files_dir, &trigger.agent_id) else {
+    let Some(package) = load_package(files_dir, &trigger.provider_id)
+        .or_else(|| load_package(files_dir, &trigger.agent_id))
+    else {
         return error_json("triggered agent app package not found");
     };
     if package.provider_id != trigger.provider_id {
@@ -453,6 +609,27 @@ fn prepare_package(mut package: AgentAppPackage) -> Result<AgentAppPackage, Stri
         action.action_id = action.action_id.trim().to_string();
         action.tool_name = action.tool_name.trim().to_string();
         action.description = action.description.trim().to_string();
+        action.display_name = action.display_name.trim().to_string();
+        action.localized_display_names = action
+            .localized_display_names
+            .iter()
+            .filter_map(|(locale, value)| {
+                let locale = locale.trim();
+                let value = value.trim();
+                (!locale.is_empty() && !value.is_empty())
+                    .then(|| (locale.to_string(), value.to_string()))
+            })
+            .collect();
+        action.localized_descriptions = action
+            .localized_descriptions
+            .iter()
+            .filter_map(|(locale, value)| {
+                let locale = locale.trim();
+                let value = value.trim();
+                (!locale.is_empty() && !value.is_empty())
+                    .then(|| (locale.to_string(), value.to_string()))
+            })
+            .collect();
         action.risk = normalize_risk(&action.risk)?;
         action.confirmation_policy = normalize_confirmation_policy(&action.confirmation_policy);
         action.timeout_seconds = action

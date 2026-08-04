@@ -1,0 +1,107 @@
+{
+  "provider_id": "demo.generated_notes_provider",
+  "agent_id": "demo.generated_notes.agent",
+  "display_name": "Generated Notes",
+  "description": "A pure-Java notes app generated with built-in Agent App actions.",
+  "system_prompt": "",
+  "actions": [
+    {
+      "action_id": "note.create",
+      "tool_name": "app_action_note_create",
+      "display_name": "Create note",
+      "localized_display_names": {"zh-CN": "创建笔记", "en": "Create note"},
+      "description": "Create a note in Generated Notes.",
+      "localized_descriptions": {"zh-CN": "在应用中创建一条新笔记。", "en": "Create a note in Generated Notes."},
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "content": {"type": "string"}
+        },
+        "required": ["content"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "low",
+      "confirmation_policy": "none",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    },
+    {
+      "action_id": "note.list",
+      "tool_name": "app_action_note_list",
+      "display_name": "Search notes",
+      "localized_display_names": {"zh-CN": "搜索笔记", "en": "Search notes"},
+      "description": "List or search notes in Generated Notes.",
+      "localized_descriptions": {"zh-CN": "查看全部笔记或按关键词搜索。", "en": "List or search notes in Generated Notes."},
+      "parameters": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}}
+      },
+      "result_schema": {"type": "object"},
+      "risk": "low",
+      "confirmation_policy": "none",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    },
+    {
+      "action_id": "note.get",
+      "tool_name": "app_action_note_get",
+      "display_name": "Read note",
+      "localized_display_names": {"zh-CN": "读取笔记", "en": "Read note"},
+      "description": "Read a note by id from Generated Notes.",
+      "localized_descriptions": {"zh-CN": "读取一条指定笔记的内容。", "en": "Read a note by id from Generated Notes."},
+      "parameters": {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "low",
+      "confirmation_policy": "none",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    },
+    {
+      "action_id": "note.update",
+      "tool_name": "app_action_note_update",
+      "display_name": "Update note",
+      "localized_display_names": {"zh-CN": "更新笔记", "en": "Update note"},
+      "description": "Update an existing note in Generated Notes.",
+      "localized_descriptions": {"zh-CN": "修改已有笔记的标题或内容。", "en": "Update an existing note in Generated Notes."},
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "content": {"type": "string"}
+        },
+        "required": ["id"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "medium",
+      "confirmation_policy": "provider_required",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    },
+    {
+      "action_id": "note.delete",
+      "tool_name": "app_action_note_delete",
+      "display_name": "Delete note",
+      "localized_display_names": {"zh-CN": "删除笔记", "en": "Delete note"},
+      "description": "Delete a note from Generated Notes.",
+      "localized_descriptions": {"zh-CN": "删除一条指定笔记。", "en": "Delete a note from Generated Notes."},
+      "parameters": {
+        "type": "object",
+        "properties": {"id": {"type": "string"}},
+        "required": ["id"]
+      },
+      "result_schema": {"type": "object"},
+      "risk": "high",
+      "confirmation_policy": "provider_required",
+      "execution_modes": ["android_activity_result"],
+      "timeout_seconds": 600
+    }
+  ],
+  "handoff": {"mode": "android_activity_result"},
+  "result": {"mode": "activity_result"}
+}
