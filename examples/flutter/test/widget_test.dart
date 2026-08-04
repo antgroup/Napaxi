@@ -1204,6 +1204,55 @@ void main() {
     expect(find.byKey(const Key('send_message_button')), findsOneWidget);
   });
 
+  testWidgets(
+    'reconciles a completed run after returning from an external activity',
+    (tester) async {
+      final events = StreamController<sdk.ChatEvent>.broadcast();
+      final fakeClient = FakeNapaxiChatClient(eventStream: events.stream);
+      await tester.pumpWidget(
+        _testApp(chatClientFactory: () async => fakeClient),
+      );
+      await configureSingleModel(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Build and install an APK',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('stop_message_button')), findsOneWidget);
+
+      // The system installer temporarily backgrounds Napaxi. The SDK has
+      // already completed the run, but the local event subscription never
+      // delivered its terminal callback.
+      fakeClient.inactiveSessionThreadIds.add('session-1');
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byKey(const Key('stop_message_button')), findsNothing);
+      expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Continue chatting',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pump();
+
+      expect(fakeClient.sentMessages, [
+        'Build and install an APK',
+        'Continue chatting',
+      ]);
+      await events.close();
+    },
+  );
+
   testWidgets('stream reset clears partial assistant response before replay', (
     tester,
   ) async {

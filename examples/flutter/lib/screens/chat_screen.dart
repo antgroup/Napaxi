@@ -909,6 +909,7 @@ class _ChatScreenState extends State<ChatScreen>
   String _activeDeveloperEngineId = _defaultDeveloperEngineId;
   DemoGitSettings _gitSettings = const DemoGitSettings();
   final Set<String> _stoppingSessionIds = {};
+  bool _isReconcilingSessionRuns = false;
   bool _isRetractingPendingInterjections = false;
   int _nextInterjectionId = 1;
   bool _isHandlingNotificationStop = false;
@@ -1325,6 +1326,7 @@ class _ChatScreenState extends State<ChatScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
+      unawaited(_reconcileStaleSessionRuns(source: 'app-resumed'));
       unawaited(_enqueueCodexConfigSync(_config));
       unawaited(_refreshConnectedAppsAfterResume());
       unawaited(_handlePendingAgentTrigger());
@@ -1334,6 +1336,67 @@ class _ChatScreenState extends State<ChatScreen>
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused) {
       unawaited(_ensureConfiguredChannelsConnected());
+    }
+  }
+
+  Future<void> _reconcileStaleSessionRuns({required String source}) async {
+    if (_isReconcilingSessionRuns || !mounted) return;
+    final client = _chatClient;
+    if (client == null) return;
+    final candidates = _sessionRuns.entries
+        .where((entry) => !entry.value.isTerminal)
+        .map((entry) => MapEntry(entry.key, entry.value))
+        .toList(growable: false);
+    if (candidates.isEmpty) return;
+
+    _isReconcilingSessionRuns = true;
+    try {
+      for (final candidate in candidates) {
+        final sessionId = candidate.key;
+        final observed = candidate.value;
+        bool isActive;
+        try {
+          isActive = client.hasActiveSessionRun(
+            observed.sessionKey,
+            agentId: observed.agentId,
+          );
+        } catch (error) {
+          _traceChat(
+            'run reconcile skipped source=$source session=$sessionId '
+            'error="${_tracePreview(_friendlyError(error))}"',
+          );
+          continue;
+        }
+        if (isActive || !mounted) continue;
+
+        final current = _sessionRuns[sessionId];
+        if (current == null ||
+            current.isTerminal ||
+            current.startedAt != observed.startedAt) {
+          continue;
+        }
+        _traceChat(
+          'run reconcile terminal source=$source session=$sessionId '
+          'assistant=${current.assistantMessageId}',
+        );
+        _forceCompleteInflightToolCalls(current.assistantMessageId);
+        _flushPendingAssistantAttachments(
+          sessionId,
+          current.assistantMessageId,
+        );
+        unawaited(current.subscription.cancel());
+        final wasCancelling = current.status == sdk.SessionRunStatus.cancelling;
+        _finishSessionRun(
+          sessionId,
+          current.assistantMessageId,
+          status: wasCancelling
+              ? sdk.SessionRunStatus.cancelled
+              : sdk.SessionRunStatus.completed,
+          activity: wasCancelling ? 'Stopped' : 'Completed',
+        );
+      }
+    } finally {
+      _isReconcilingSessionRuns = false;
     }
   }
 
@@ -5025,6 +5088,7 @@ class _ChatScreenState extends State<ChatScreen>
       return;
     }
     await _ensureA2AConnectionReadyForUserTurn();
+    await _reconcileStaleSessionRuns(source: 'before-send');
 
     // Prepend /skill_name mentions for pinned skills so the engine
     // activates them explicitly on this turn. The display text (shown in

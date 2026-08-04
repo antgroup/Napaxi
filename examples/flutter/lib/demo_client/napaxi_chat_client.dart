@@ -810,6 +810,13 @@ abstract class NapaxiChatClient {
     void Function(String nativeThreadId)? onNativeThreadId,
   });
 
+  /// Whether the SDK still owns a non-terminal run for this session.
+  ///
+  /// The chat UI uses this after returning from external Android surfaces such
+  /// as the package installer so a missed local stream terminal event cannot
+  /// leave the composer stuck in its running state forever.
+  bool hasActiveSessionRun(sdk.SessionKey session, {required String agentId});
+
   Future<bool> cancelSession(sdk.SessionKey session, {required String agentId});
 
   /// Reset CLI engine bridge state for a new conversation.
@@ -3965,6 +3972,14 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       attachments: attachments,
       maxIterations: maxIterations,
     );
+  }
+
+  @override
+  bool hasActiveSessionRun(sdk.SessionKey session, {required String agentId}) {
+    // The legacy CC bridge does not participate in the SDK session-run
+    // registry. Keep its UI run untouched rather than treating it as stale.
+    if (agentId == 'engine.cc') return true;
+    return _requireEngine().hasActiveSessionRun(session, agentId: agentId);
   }
 
   Stream<sdk.ChatEvent> _sendToCliBridge(
