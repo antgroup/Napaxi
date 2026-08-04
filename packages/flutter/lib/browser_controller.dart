@@ -1709,6 +1709,7 @@ const String _browserRuntimeScript = r'''
       name: fingerprint.name,
       label: fingerprint.label,
       text: fingerprint.text,
+      href: fingerprint.tag === 'a' ? (el.href || el.getAttribute('href') || '') : '',
       value_hint: sensitive ? '[redacted sensitive field]' : (('value' in el) ? compact(el.value).slice(0, 120) : ''),
       enabled: !(el.disabled || el.getAttribute('aria-disabled') === 'true'),
       visible: visible(el),

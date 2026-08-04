@@ -1216,6 +1216,7 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         return {
           index, element_id: elementId, role: fingerprint.role, kind, tag: fingerprint.tag,
           type: fingerprint.type, name: fingerprint.name, label: fingerprint.label, text: fingerprint.text,
+          href: fingerprint.tag === 'a' ? (el.href || el.getAttribute('href') || '') : '',
           value_hint: sensitive ? '[redacted sensitive field]' : (('value' in el) ? compact(el.value).slice(0, 120) : ''),
           enabled: !(el.disabled || el.getAttribute('aria-disabled') === 'true'),
           visible: visible(el),

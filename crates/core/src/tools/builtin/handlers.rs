@@ -109,16 +109,20 @@ pub(super) fn file_handler(
 }
 
 pub(super) fn web_search_handler(
+    context: &BuiltinToolContext,
     fallback: Option<InternalToolHandler>,
 ) -> (Vec<ToolDescriptor>, Option<InternalToolHandler>) {
+    let browser_context = browser_search_context(context);
     let handler: InternalToolHandler = Arc::new(move |tool_name, params, _progress| {
         if tool_name != crate::web_search_tool::WEB_SEARCH_TOOL_NAME {
             return fallback
                 .as_ref()
                 .and_then(|fallback| fallback(tool_name, params, None));
         }
+        let browser_context = browser_context.clone();
         Some(Box::pin(async move {
-            let output = crate::web_search_tool::execute(params).await?;
+            let output =
+                crate::web_search_tool::execute_with_browser(params, browser_context).await?;
             Ok(InternalToolResult {
                 output,
                 events: Vec::new(),
@@ -126,6 +130,29 @@ pub(super) fn web_search_handler(
         }))
     });
     (vec![crate::web_search_tool::descriptor()], Some(handler))
+}
+
+fn browser_search_context(
+    context: &BuiltinToolContext,
+) -> Option<crate::web_search_tool::BrowserSearchContext> {
+    // Treat the browser as the preferred implementation detail of `web_search`,
+    // not as a requirement that callers explicitly enable the public browser
+    // tool surface. If the host bridge cannot actually dispatch browser tools,
+    // the browser request will fail and `web_search` will fall back to its HTTP
+    // providers without changing the public tool contract.
+    let Some(bridge) = context.approval_bridge.clone() else {
+        tracing::info!("web_search browser path unavailable: no host tool bridge");
+        return None;
+    };
+    Some(crate::web_search_tool::BrowserSearchContext {
+        bridge,
+        tool_context: ToolExecutionContext {
+            files_dir: context.files_dir.clone(),
+            workspace_files_dir: context.workspace_files_dir.clone(),
+            agent_id: context.agent_id.clone(),
+            session_key_json: None,
+        },
+    })
 }
 
 pub(super) fn web_fetch_handler(

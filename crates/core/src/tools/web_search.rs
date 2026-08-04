@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use std::sync::LazyLock;
 
-use crate::tool_registry::ToolDescriptor;
+use crate::tool_registry::{ToolDescriptor, ToolExecutionContext, ToolRequestBridge};
 
 pub const WEB_SEARCH_TOOL_NAME: &str = "web_search";
 
@@ -15,6 +15,7 @@ const MAX_COUNT: usize = 10;
 const CACHE_TTL: Duration = Duration::from_secs(15 * 60);
 const CACHE_MAX_ENTRIES: usize = 64;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+const BROWSER_SEARCH_TIMEOUT: Duration = Duration::from_secs(45);
 
 #[cfg(target_os = "android")]
 const USER_AGENT: &str = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 \
@@ -52,6 +53,12 @@ struct SearchCache {
 struct CachedEntry {
     body: String,
     inserted: Instant,
+}
+
+#[derive(Clone)]
+pub(crate) struct BrowserSearchContext {
+    pub(crate) bridge: ToolRequestBridge,
+    pub(crate) tool_context: ToolExecutionContext,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,7 +101,10 @@ pub fn descriptor() -> ToolDescriptor {
     }
 }
 
-pub async fn execute(params: serde_json::Value) -> Result<String, String> {
+pub(crate) async fn execute_with_browser(
+    params: serde_json::Value,
+    browser_context: Option<BrowserSearchContext>,
+) -> Result<String, String> {
     let query = params
         .get("query")
         .and_then(serde_json::Value::as_str)
@@ -118,12 +128,43 @@ pub async fn execute(params: serde_json::Value) -> Result<String, String> {
         .map(str::trim)
         .unwrap_or("");
 
-    let key = cache_key(query, count, language, freshness);
+    let cache_mode = if browser_context.is_some() {
+        "browser"
+    } else {
+        "http"
+    };
+    let key = cache_key(query, count, language, freshness, cache_mode);
     if let Some(cached) = cache_get(&key) {
+        tracing::debug!(query, cache_mode, "web_search cache hit");
         return Ok(cached);
     }
 
-    let results = search_with_fallback(query, count, language, freshness).await?;
+    let results = match browser_context {
+        Some(context) => {
+            tracing::info!(query, "web_search using browser-backed search");
+            match search_with_browser(&context, query, count, language, freshness).await {
+                Ok(results) if !results.is_empty() => results,
+                Ok(_) => {
+                    tracing::warn!(
+                        query,
+                        "web_search browser path returned no results; falling back to HTTP search"
+                    );
+                    search_with_fallback(query, count, language, freshness).await?
+                }
+                Err(error) => {
+                    tracing::warn!(query, error = %error, "web_search browser path failed; falling back to HTTP search");
+                    search_with_fallback(query, count, language, freshness).await?
+                }
+            }
+        }
+        None => {
+            tracing::info!(
+                query,
+                "web_search using HTTP fallback because no browser host bridge is available"
+            );
+            search_with_fallback(query, count, language, freshness).await?
+        }
+    };
     let body = format_results(query, &results);
     cache_put(key, body.clone());
     Ok(body)
@@ -144,6 +185,65 @@ async fn search_with_fallback(
         }
     }
     Err(last_error.unwrap_or_else(|| "all search providers returned no results".to_string()))
+}
+
+async fn search_with_browser(
+    context: &BrowserSearchContext,
+    query: &str,
+    count: usize,
+    _language: &str,
+    _freshness: &str,
+) -> Result<Vec<SearchResult>, String> {
+    let url = browser_bing_search_url(query);
+    let open_output = crate::tool_registry::request_host_tool_execution_with_context(
+        context.bridge.clone(),
+        crate::browser_tools::BROWSER_OPEN,
+        serde_json::json!({"url": url}),
+        BROWSER_SEARCH_TIMEOUT,
+        Some(&context.tool_context),
+    )
+    .await?;
+
+    let mut results = parse_browser_search_results(&open_output, count);
+    if results.is_empty() {
+        let snapshot_output = crate::tool_registry::request_host_tool_execution_with_context(
+            context.bridge.clone(),
+            crate::browser_tools::BROWSER_SNAPSHOT,
+            serde_json::json!({"screenshot_mode": "never"}),
+            BROWSER_SEARCH_TIMEOUT,
+            Some(&context.tool_context),
+        )
+        .await?;
+        results = parse_browser_search_results(&snapshot_output, count);
+    }
+    Ok(results)
+}
+
+fn browser_bing_search_url(query: &str) -> String {
+    format!(
+        "https://www.bing.com/search?q={}",
+        openminis_search_query(query)
+    )
+}
+
+fn openminis_search_query(query: &str) -> String {
+    query.split_whitespace().collect::<Vec<_>>().join("+")
+}
+
+fn bing_search_url(query: &str, count: usize, language: &str, freshness: &str) -> String {
+    let encoded_query = encode_search_query(query);
+    let mut url = format!(
+        "https://www.bing.com/search?q={}&pq={}&setlang={}&cc=&count={}",
+        encoded_query,
+        encoded_query,
+        urlencoding::encode(language),
+        count * 2,
+    );
+    if let Some(filter) = freshness_filter(freshness) {
+        url.push_str("&filters=ex1:ez");
+        url.push_str(filter);
+    }
+    url
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -180,25 +280,7 @@ async fn search_bing(
     language: &str,
     freshness: &str,
 ) -> Result<Vec<SearchResult>, String> {
-    let encoded_query = urlencoding::encode(query);
-    let mut url = format!(
-        "https://www.bing.com/search?q={}&pq={}&setlang={}&cc=&count={}",
-        encoded_query.as_ref(),
-        encoded_query.as_ref(),
-        urlencoding::encode(language),
-        count * 2,
-    );
-    if let Some(filter) = match freshness {
-        "day" => Some("1"),
-        "week" => Some("2"),
-        "month" => Some("3"),
-        "" => None,
-        _ => None,
-    } {
-        url.push_str("&filters=ex1:ez");
-        url.push_str(filter);
-    }
-
+    let url = bing_search_url(query, count, language, freshness);
     let html = http_fetch(&url).await?;
     Ok(parse_bing_results(&html, count))
 }
@@ -206,10 +288,24 @@ async fn search_bing(
 async fn search_duckduckgo(query: &str, count: usize) -> Result<Vec<SearchResult>, String> {
     let url = format!(
         "https://html.duckduckgo.com/html/?q={}",
-        urlencoding::encode(query)
+        encode_search_query(query)
     );
     let html = http_fetch(&url).await?;
     Ok(parse_ddg_results(&html, count))
+}
+
+fn freshness_filter(freshness: &str) -> Option<&'static str> {
+    match freshness {
+        "day" => Some("1"),
+        "week" => Some("2"),
+        "month" => Some("3"),
+        "" => None,
+        _ => None,
+    }
+}
+
+fn encode_search_query(query: &str) -> String {
+    urlencoding::encode(query).replace("%20", "+")
 }
 
 async fn http_fetch(url: &str) -> Result<String, String> {
@@ -238,6 +334,191 @@ async fn http_fetch(url: &str) -> Result<String, String> {
     }
 }
 
+fn parse_browser_search_results(output: &str, max: usize) -> Vec<SearchResult> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(output) else {
+        return Vec::new();
+    };
+    if value
+        .get("success")
+        .and_then(serde_json::Value::as_bool)
+        .is_some_and(|success| !success)
+    {
+        return Vec::new();
+    }
+
+    let mut results = Vec::new();
+    let mut seen_urls = std::collections::HashSet::new();
+    collect_browser_elements(&value, &mut |element| {
+        if results.len() >= max {
+            return;
+        }
+        let role = string_field(element, "role").to_ascii_lowercase();
+        let tag = string_field(element, "tag").to_ascii_lowercase();
+        let href = string_field(element, "href");
+        if href.is_empty() || (role != "link" && tag != "a") {
+            return;
+        }
+        let Some(url) = normalize_browser_result_url(&href) else {
+            return;
+        };
+        if !seen_urls.insert(url.clone()) {
+            return;
+        }
+        let title = first_non_empty_field(element, &["text", "label"]);
+        let title = clean_browser_text(&title);
+        if title.is_empty() || looks_like_search_navigation_title(&title) {
+            return;
+        }
+        let snippet = browser_snippet_from_element(element, &title);
+        results.push(SearchResult {
+            title,
+            url,
+            snippet,
+        });
+    });
+    results
+}
+
+fn collect_browser_elements<'a>(
+    value: &'a serde_json::Value,
+    visit: &mut impl FnMut(&'a serde_json::Map<String, serde_json::Value>),
+) {
+    for path in ["elements", "page_state.elements"] {
+        if let Some(elements) = value_at_path(value, path).and_then(serde_json::Value::as_array) {
+            for element in elements {
+                if let Some(object) = element.as_object() {
+                    visit(object);
+                }
+            }
+        }
+    }
+}
+
+fn value_at_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    let mut current = value;
+    for segment in path.split('.') {
+        current = current.get(segment)?;
+    }
+    Some(current)
+}
+
+fn string_field(element: &serde_json::Map<String, serde_json::Value>, field: &str) -> String {
+    element
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+fn first_non_empty_field(
+    element: &serde_json::Map<String, serde_json::Value>,
+    fields: &[&str],
+) -> String {
+    fields
+        .iter()
+        .map(|field| string_field(element, field))
+        .find(|value| !value.is_empty())
+        .unwrap_or_default()
+}
+
+fn browser_snippet_from_element(
+    element: &serde_json::Map<String, serde_json::Value>,
+    title: &str,
+) -> String {
+    let raw = first_non_empty_field(element, &["nearby_text", "parent_text"]);
+    let mut snippet = clean_browser_text(&raw);
+    if snippet == title {
+        return String::new();
+    }
+    if let Some(stripped) = snippet.strip_prefix(title) {
+        snippet = stripped
+            .trim_start_matches(['-', '—', ':', '|', ' '])
+            .to_string();
+    }
+    if snippet.len() > 360 {
+        snippet.truncate(360);
+        snippet = snippet.trim_end().to_string();
+    }
+    snippet
+}
+
+fn clean_browser_text(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn normalize_browser_result_url(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if !(raw.starts_with("http://") || raw.starts_with("https://")) {
+        return None;
+    }
+    let candidate = query_param(raw, "url")
+        .or_else(|| query_param(raw, "u").and_then(|value| decode_bing_u_param(&value)))
+        .filter(|value| value.starts_with("http://") || value.starts_with("https://"))
+        .unwrap_or_else(|| raw.to_string());
+    if is_search_engine_internal_url(&candidate) {
+        return None;
+    }
+    Some(candidate)
+}
+
+fn decode_bing_u_param(value: &str) -> Option<String> {
+    if value.starts_with("http://") || value.starts_with("https://") {
+        return Some(value.to_string());
+    }
+    let encoded = value.strip_prefix("a1").unwrap_or(value);
+    let bytes = {
+        use base64::Engine as _;
+        base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(encoded)
+            .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(encoded))
+            .or_else(|_| base64::engine::general_purpose::STANDARD_NO_PAD.decode(encoded))
+            .or_else(|_| base64::engine::general_purpose::STANDARD.decode(encoded))
+            .ok()?
+    };
+    String::from_utf8(bytes).ok()
+}
+
+fn query_param(url: &str, name: &str) -> Option<String> {
+    let query = url.split_once('?')?.1.split('#').next().unwrap_or_default();
+    for part in query.split('&') {
+        let (key, value) = part.split_once('=').unwrap_or((part, ""));
+        if key == name {
+            return urlencoding::decode(value)
+                .ok()
+                .map(|decoded| decoded.into_owned());
+        }
+    }
+    None
+}
+
+fn is_search_engine_internal_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    let host = lower
+        .split_once("://")
+        .map(|(_, rest)| rest.split('/').next().unwrap_or(rest))
+        .unwrap_or(lower.as_str());
+    host.ends_with("bing.com")
+        || host.ends_with("bing.net")
+        || host.ends_with("microsoft.com")
+        || lower.contains("/search?")
+        || lower.contains("/images/search")
+        || lower.contains("/videos/search")
+        || lower.contains("/maps")
+        || lower.contains("/ck/a")
+        || lower.contains("/aclick")
+}
+
+fn looks_like_search_navigation_title(title: &str) -> bool {
+    let lower = title.to_ascii_lowercase();
+    matches!(
+        lower.as_str(),
+        "images" | "videos" | "maps" | "news" | "shopping" | "search" | "bing"
+    ) || ["图片", "视频", "地图", "新闻", "购物", "搜索"]
+        .iter()
+        .any(|term| title == *term)
+}
+
 fn parse_bing_results(html: &str, max: usize) -> Vec<SearchResult> {
     let mut results = Vec::new();
     for chunk in html.split("class=\"b_algo\"") {
@@ -248,8 +529,7 @@ fn parse_bing_results(html: &str, max: usize) -> Vec<SearchResult> {
             Some(value) if value.starts_with("http") => value,
             _ => continue,
         };
-        let title = extract_between(chunk, "<h2>", "</h2>")
-            .or_else(|| extract_between(chunk, "<h2 ", "</h2>"))
+        let title = extract_element_inner(chunk, "h2")
             .map(|html| strip_tags(&html))
             .unwrap_or_default();
         if title.is_empty() {
@@ -336,8 +616,8 @@ fn format_results(query: &str, results: &[SearchResult]) -> String {
     output
 }
 
-fn cache_key(query: &str, count: usize, language: &str, freshness: &str) -> String {
-    format!("{query}\0{count}\0{language}\0{freshness}")
+fn cache_key(query: &str, count: usize, language: &str, freshness: &str, mode: &str) -> String {
+    format!("{mode}\0{query}\0{count}\0{language}\0{freshness}")
 }
 
 fn cache_get(key: &str) -> Option<String> {
@@ -378,6 +658,15 @@ fn extract_between(text: &str, start_marker: &str, end_marker: &str) -> Option<S
     let remaining = &text[start..];
     let end = remaining.find(end_marker)?;
     Some(remaining[..end].to_string())
+}
+
+fn extract_element_inner(text: &str, tag: &str) -> Option<String> {
+    let open_marker = format!("<{tag}");
+    let close_marker = format!("</{tag}>");
+    let tag_start = text.find(&open_marker)?;
+    let content_start = text[tag_start..].find('>')? + tag_start + 1;
+    let content_end = text[content_start..].find(&close_marker)? + content_start;
+    Some(text[content_start..content_end].to_string())
 }
 
 fn extract_attr(text: &str, tag_start: &str, attr: &str) -> Option<String> {
@@ -432,6 +721,126 @@ mod tests {
                 .iter()
                 .any(|value| value.as_str() == Some("query"))
         );
+    }
+
+    #[test]
+    fn browser_bing_url_matches_openminis_shape() {
+        assert_eq!(
+            browser_bing_search_url("重庆 近期 活动 2026年8月"),
+            "https://www.bing.com/search?q=重庆+近期+活动+2026年8月"
+        );
+    }
+
+    #[test]
+    fn encodes_search_query_spaces_as_plus() {
+        assert_eq!(
+            encode_search_query("napaxi web search"),
+            "napaxi+web+search"
+        );
+        assert_eq!(
+            encode_search_query("中文 query"),
+            "%E4%B8%AD%E6%96%87+query"
+        );
+    }
+
+    #[test]
+    fn parses_browser_snapshot_results() {
+        let output = serde_json::json!({
+            "success": true,
+            "elements": [
+                {
+                    "role": "link",
+                    "tag": "a",
+                    "href": "https://example.com/event",
+                    "text": "重庆活动",
+                    "nearby_text": "重庆活动 近期展览和演出安排"
+                }
+            ]
+        })
+        .to_string();
+
+        let results = parse_browser_search_results(&output, 5);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].title, "重庆活动");
+        assert_eq!(results[0].url, "https://example.com/event");
+        assert_eq!(results[0].snippet, "近期展览和演出安排");
+    }
+
+    #[test]
+    fn parses_browser_snapshot_page_state_results_and_dedupes() {
+        let output = serde_json::json!({
+            "success": true,
+            "page_state": {
+                "elements": [
+                    {
+                        "role": "link",
+                        "tag": "a",
+                        "href": "https://example.com/same",
+                        "text": "First"
+                    },
+                    {
+                        "role": "link",
+                        "tag": "a",
+                        "href": "https://example.com/same",
+                        "text": "Duplicate"
+                    },
+                    {
+                        "role": "link",
+                        "tag": "a",
+                        "href": "https://example.com/other",
+                        "text": "Second"
+                    }
+                ]
+            }
+        })
+        .to_string();
+
+        let results = parse_browser_search_results(&output, 5);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].title, "First");
+        assert_eq!(results[1].title, "Second");
+    }
+
+    #[test]
+    fn normalizes_bing_redirect_links() {
+        let output = serde_json::json!({
+            "success": true,
+            "elements": [
+                {
+                    "role": "link",
+                    "tag": "a",
+                    "href": "https://www.bing.com/ck/a?u=a1aHR0cHM6Ly9leGFtcGxlLmNvbS9iaW5nLXJlc3VsdA",
+                    "text": "Redirected"
+                }
+            ]
+        })
+        .to_string();
+
+        let results = parse_browser_search_results(&output, 5);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].url, "https://example.com/bing-result");
+    }
+
+    #[test]
+    fn filters_browser_search_engine_internal_links() {
+        let output = serde_json::json!({
+            "success": true,
+            "elements": [
+                {"role": "link", "tag": "a", "href": "https://www.bing.com/search?q=x", "text": "Search"},
+                {"role": "link", "tag": "a", "href": "https://example.com/result", "text": "Result"}
+            ]
+        })
+        .to_string();
+
+        let results = parse_browser_search_results(&output, 5);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].url, "https://example.com/result");
+    }
+
+    #[test]
+    fn browser_parser_returns_empty_for_invalid_output() {
+        assert!(parse_browser_search_results("not json", 5).is_empty());
+        assert!(parse_browser_search_results(r#"{"success":false}"#, 5).is_empty());
     }
 
     #[test]
