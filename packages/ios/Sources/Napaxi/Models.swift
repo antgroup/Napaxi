@@ -2596,7 +2596,11 @@ public struct NapaxiSessionKey: Codable, Equatable, Sendable {
     public var accountId: String
     public var threadId: String
 
-    public init(channelType: String = "app", accountId: String = "default", threadId: String) {
+    public init(
+        channelType: String = "app",
+        accountId: String = "default",
+        threadId: String
+    ) {
         self.channelType = channelType
         self.accountId = accountId
         self.threadId = threadId

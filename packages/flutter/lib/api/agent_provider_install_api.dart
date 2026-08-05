@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/agent_app.dart';
 import '../models/agent_provider_install.dart';
@@ -18,6 +19,7 @@ class AgentProviderInstallApi {
 
   static const _channelName = 'com.napaxi.flutter/background';
   static const _installTimeout = Duration(minutes: 10);
+  static const _hostInstanceIdKey = 'napaxi.agent_provider.host_instance_id.v1';
 
   final AgentAppPackage Function(AgentAppPackage package) _registerPackage;
   final MethodChannel _channel;
@@ -62,6 +64,67 @@ class AgentProviderInstallApi {
     AgentProviderDescriptor provider,
   ) async {
     final request = await _createInstallRequest();
+    return _requestInstall(provider, request, registerPackage: true);
+  }
+
+  /// Restores provider-side trusted state using the binding already owned by
+  /// Core. This is intentionally different from a fresh install: identity and
+  /// shared-secret material are preserved so the rejected proposal can be
+  /// retried without changing its signature or idempotency key.
+  Future<AgentAppPackage> restoreBinding(AgentAppPackage installed) async {
+    final binding = installed.installBinding;
+    if (binding == null ||
+        binding.hostInstanceId.isEmpty ||
+        binding.hostSharedSecret.isEmpty) {
+      throw StateError('Agent App has no restorable trusted binding');
+    }
+    final platformId = binding.platform == 'ios'
+        ? binding.iosBundleId
+        : binding.appPackageName;
+    final provider = binding.platform == 'ios'
+        ? AgentProviderDescriptor(
+            platform: 'ios',
+            packageName: '',
+            installActivityName: '',
+            activityName: '',
+            iosBundleId: binding.iosBundleId,
+            iosTeamId: binding.iosTeamId,
+            installUrl: binding.installUrl,
+            actionUrl: binding.actionUrl,
+            universalLinkDomain: binding.universalLinkDomain,
+          )
+        : await discoverProviderForPackage(platformId);
+    if (provider == null) {
+      throw StateError('Installed Agent App provider not found: $platformId');
+    }
+    if (binding.platform != 'ios' &&
+        (provider.signingCertSha256.isEmpty ||
+            provider.signingCertSha256.toLowerCase() !=
+                binding.signingCertSha256.toLowerCase())) {
+      throw StateError(
+        'Provider app signature changed; explicit reconnect is required',
+      );
+    }
+    final request = await _createInstallRequest(existingBinding: binding);
+    final restored = await _requestInstall(
+      provider,
+      request,
+      registerPackage: false,
+    );
+    if (restored.providerId != installed.providerId ||
+        restored.agentId != installed.agentId) {
+      throw StateError(
+        'Restored Agent App identity does not match installation',
+      );
+    }
+    return restored;
+  }
+
+  Future<AgentAppPackage> _requestInstall(
+    AgentProviderDescriptor provider,
+    AgentInstallRequest request, {
+    required bool registerPackage,
+  }) async {
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'requestAgentProviderInstall',
       <String, dynamic>{
@@ -93,7 +156,7 @@ class AgentProviderInstallApi {
       ),
     );
     final package = _withInstallBinding(returnedPackage, binding);
-    return _registerPackage(package);
+    return registerPackage ? _registerPackage(package) : package;
   }
 
   Future<AgentAppPackage?> installFromLaunchIntent() async {
@@ -116,7 +179,9 @@ class AgentProviderInstallApi {
     return installed;
   }
 
-  Future<AgentInstallRequest> _createInstallRequest() async {
+  Future<AgentInstallRequest> _createInstallRequest({
+    AgentAppInstallBinding? existingBinding,
+  }) async {
     final now = DateTime.now().toUtc();
     final hostInfo = Map<String, dynamic>.from(
       await _channel.invokeMethod<Map<dynamic, dynamic>>(
@@ -126,19 +191,39 @@ class AgentProviderInstallApi {
     );
     final requestId = _randomHex(16);
     final callbackScheme = hostInfo['callbackScheme'] as String? ?? '';
+    final currentHostId =
+        (hostInfo['packageName'] as String?) ??
+        (hostInfo['bundleId'] as String?) ??
+        '';
+    final currentHostSigningCert =
+        hostInfo['signingCertSha256'] as String? ?? '';
+    if (existingBinding != null &&
+        ((existingBinding.hostPackageName.isNotEmpty &&
+                existingBinding.hostPackageName != currentHostId) ||
+            (existingBinding.hostSigningCertSha256.isNotEmpty &&
+                existingBinding.hostSigningCertSha256.toLowerCase() !=
+                    currentHostSigningCert.toLowerCase()))) {
+      throw StateError(
+        'Host identity changed; explicit Agent App reconnect is required',
+      );
+    }
+    final hostInstanceId = existingBinding?.hostInstanceId.isNotEmpty == true
+        ? existingBinding!.hostInstanceId
+        : await _stableHostInstanceId();
+    final hostSharedSecret =
+        existingBinding?.hostSharedSecret.isNotEmpty == true
+        ? existingBinding!.hostSharedSecret
+        : _randomHex(32);
     return AgentInstallRequest(
       protocolVersion: 2,
       requestId: requestId,
       nonce: _randomHex(16),
-      hostPackageName:
-          (hostInfo['packageName'] as String?) ??
-          (hostInfo['bundleId'] as String?) ??
-          '',
+      hostPackageName: currentHostId,
       createdAt: now.toIso8601String(),
       expiresAt: now.add(_installTimeout).toIso8601String(),
-      hostSigningCertSha256: hostInfo['signingCertSha256'] as String? ?? '',
-      hostInstanceId: _randomHex(16),
-      hostSharedSecret: _randomHex(32),
+      hostSigningCertSha256: currentHostSigningCert,
+      hostInstanceId: hostInstanceId,
+      hostSharedSecret: hostSharedSecret,
       hostBundleId: hostInfo['bundleId'] as String? ?? '',
       hostTeamId: hostInfo['teamId'] as String? ?? '',
       hostCallbackScheme: callbackScheme,
@@ -150,6 +235,15 @@ class AgentProviderInstallApi {
       hostBackgroundTriggerService:
           hostInfo['backgroundTriggerService'] as String? ?? '',
     );
+  }
+
+  Future<String> _stableHostInstanceId() async {
+    final preferences = await SharedPreferences.getInstance();
+    final existing = preferences.getString(_hostInstanceIdKey)?.trim();
+    if (existing != null && existing.isNotEmpty) return existing;
+    final created = _randomHex(16);
+    await preferences.setString(_hostInstanceIdKey, created);
+    return created;
   }
 
   void _validateInstallResult(
@@ -196,16 +290,44 @@ class AgentProviderInstallApi {
 
 /// Android [AgentAppActionExecutor] that dispatches provider actions over the
 /// background method channel.
+abstract interface class AgentProviderBindingRepair {
+  Future<bool> repair(AgentAppActionRequest request);
+}
+
 class AndroidAgentProviderActionExecutor implements AgentAppActionExecutor {
-  AndroidAgentProviderActionExecutor({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel(_channelName);
+  AndroidAgentProviderActionExecutor({
+    MethodChannel? channel,
+    AgentProviderBindingRepair? repairBinding,
+  }) : _channel = channel ?? const MethodChannel(_channelName),
+       _repairBinding = repairBinding;
 
   static const _channelName = 'com.napaxi.flutter/background';
 
   final MethodChannel _channel;
+  final AgentProviderBindingRepair? _repairBinding;
 
   @override
   Future<AgentAppActionResult> execute(AgentAppActionRequest request) async {
+    final first = await _executeOnce(request);
+    final repairBinding = _repairBinding;
+    if (!first.isHostBindingMissing || repairBinding == null) return first;
+    try {
+      final repaired = await repairBinding.repair(request);
+      if (!repaired) return first;
+    } catch (error) {
+      return AgentAppActionResult(
+        requestId: request.proposal.requestId,
+        status: 'failed',
+        error: 'binding_repair_failed: $error',
+        completedAt: DateTime.now().toUtc().toIso8601String(),
+      );
+    }
+    return _executeOnce(request);
+  }
+
+  Future<AgentAppActionResult> _executeOnce(
+    AgentAppActionRequest request,
+  ) async {
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'executeAgentProviderAction',
       <String, dynamic>{
@@ -228,15 +350,39 @@ class AndroidAgentProviderActionExecutor implements AgentAppActionExecutor {
 /// iOS [AgentAppActionExecutor] that dispatches provider actions over the
 /// background method channel.
 class IosAgentProviderActionExecutor implements AgentAppActionExecutor {
-  IosAgentProviderActionExecutor({MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel(_channelName);
+  IosAgentProviderActionExecutor({
+    MethodChannel? channel,
+    AgentProviderBindingRepair? repairBinding,
+  }) : _channel = channel ?? const MethodChannel(_channelName),
+       _repairBinding = repairBinding;
 
   static const _channelName = 'com.napaxi.flutter/background';
 
   final MethodChannel _channel;
+  final AgentProviderBindingRepair? _repairBinding;
 
   @override
   Future<AgentAppActionResult> execute(AgentAppActionRequest request) async {
+    final first = await _executeOnce(request);
+    final repairBinding = _repairBinding;
+    if (!first.isHostBindingMissing || repairBinding == null) return first;
+    try {
+      final repaired = await repairBinding.repair(request);
+      if (!repaired) return first;
+    } catch (error) {
+      return AgentAppActionResult(
+        requestId: request.proposal.requestId,
+        status: 'failed',
+        error: 'binding_repair_failed: $error',
+        completedAt: DateTime.now().toUtc().toIso8601String(),
+      );
+    }
+    return _executeOnce(request);
+  }
+
+  Future<AgentAppActionResult> _executeOnce(
+    AgentAppActionRequest request,
+  ) async {
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'executeAgentProviderAction',
       <String, dynamic>{

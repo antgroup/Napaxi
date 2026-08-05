@@ -874,7 +874,7 @@ fn cleanup_idle_sessions() {
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::agent_engine::codex::config;
 
     #[test]
     fn codex_config_dir_targets_linux_env_rootfs_home() {

@@ -5,6 +5,120 @@ private func napaxiBridgeJSON(_ value: NapaxiJSONValue) throws -> String {
     return String(data: data, encoding: .utf8) ?? "null"
 }
 
+public func registerProject(
+    handle: Int64,
+    projectId: String,
+    accountId: String,
+    agentId: String,
+    name: String
+) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "project",
+        method: "register",
+        payload: [
+            "project_id": .string(projectId),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+            "name": .string(name),
+        ]
+    ))
+}
+
+public func listProjects(handle: Int64, accountId: String, agentId: String) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "project",
+        method: "list",
+        payload: ["account_id": .string(accountId), "agent_id": .string(agentId)]
+    ))
+}
+
+public func archiveProject(
+    handle: Int64,
+    projectId: String,
+    accountId: String,
+    agentId: String
+) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "project",
+        method: "archive",
+        payload: [
+            "project_id": .string(projectId),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+        ]
+    ))
+}
+
+public func getSessionPlacement(handle: Int64, sessionKeyJson: String) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "project",
+        method: "get_session_placement",
+        payload: ["session_key_json": .string(sessionKeyJson)]
+    ))
+}
+
+public func listSessionPlacements(
+    handle: Int64,
+    accountId: String,
+    agentId: String
+) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "project",
+        method: "list_session_placements",
+        payload: ["account_id": .string(accountId), "agent_id": .string(agentId)]
+    ))
+}
+
+public func moveSessionToProject(
+    handle: Int64,
+    sessionKeyJson: String,
+    projectId: String?,
+    workspacePolicy: String,
+    expectedRevision: Int64?
+) throws -> String {
+    var payload: [String: NapaxiJSONValue] = [
+        "session_key_json": .string(sessionKeyJson),
+        "project_id": projectId.map(NapaxiJSONValue.string) ?? .null,
+        "workspace_policy": .string(workspacePolicy),
+    ]
+    if let expectedRevision {
+        payload["expected_revision"] = .number(Double(expectedRevision))
+    }
+    return try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "project",
+        method: "move_session",
+        payload: payload
+    ))
+}
+
+public func listProjectFiles(
+    handle: Int64,
+    projectId: String,
+    accountId: String,
+    agentId: String,
+    subdir: String?,
+    recursive: Bool
+) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "project",
+        method: "list_files",
+        payload: [
+            "project_id": .string(projectId),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+            "subdir": subdir.map(NapaxiJSONValue.string) ?? .null,
+            "recursive": .bool(recursive),
+        ]
+    ))
+}
+
 public func registerAgentAppPackage(handle: Int64, packageJson: String) throws -> String {
     try napaxiBridgeJSON(NapaxiAgentAppAPI(rawAPI: NapaxiRawAPI(handle: handle)).registerPackageJSON(packageJSON: packageJson))
 }
@@ -144,6 +258,15 @@ public func configureCodexAgentEngineJson(handle: Int64, requestJson: String) th
         handle: handle,
         namespace: "agent_engine",
         method: "configure_codex",
+        payload: ["request_json": .string(requestJson)]
+    ))
+}
+
+public func queryCodexAgentEngineHistoryJson(handle: Int64, requestJson: String) throws -> String {
+    try napaxiBridgeJSON(NapaxiNativeBridge.call(
+        handle: handle,
+        namespace: "agent_engine",
+        method: "query_codex_history",
         payload: ["request_json": .string(requestJson)]
     ))
 }

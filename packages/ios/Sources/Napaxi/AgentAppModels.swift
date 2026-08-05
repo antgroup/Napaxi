@@ -478,11 +478,25 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppActionResultTag {
     }
 
     static func fromMap(_ map: [String: NapaxiJSONValue]) -> Self {
+        let error: String?
+        if let structured = map.object("error") {
+            let code = structured.string("code")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let message = structured.string("message")?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if !code.isEmpty && !message.isEmpty {
+                error = "\(code): \(message)"
+            } else if !code.isEmpty {
+                error = code
+            } else {
+                error = map.displayString("error")
+            }
+        } else {
+            error = map.displayString("error")
+        }
         return Self(
             requestId: map.string("request_id") ?? "",
             status: map.string("status") ?? "",
             result: map.object("result") ?? [:],
-            error: map.displayString("error"),
+            error: error,
             providerTraceId: map.string("provider_trace_id"),
             completedAt: map.string("completed_at") ?? "",
             signature: map.string("signature")
@@ -510,6 +524,20 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppActionResultTag {
     var status: String { string("status") ?? "" }
     var result: [String: NapaxiJSONValue] { raw.object("result") ?? [:] }
     var error: String? { raw.displayString("error") }
+    var errorCode: String? {
+        if let code = raw.object("error")?.string("code"), !code.isEmpty {
+            return code
+        }
+        guard let value = error?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        let candidate = value.split(separator: ":", maxSplits: 1).first.map(String.init) ?? value
+        let normalized = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let allowed = normalized.unicodeScalars.allSatisfy {
+            CharacterSet.lowercaseLetters.union(.decimalDigits).union(CharacterSet(charactersIn: "_")).contains($0)
+        }
+        return allowed && normalized.first?.isLetter == true ? normalized : nil
+    }
+    var isHostBindingMissing: Bool { status == "failed" && errorCode == "host_not_bound" }
     var providerTraceId: String? { string("provider_trace_id") ?? string("providerTraceId") }
     var completedAt: String { string("completed_at") ?? string("completedAt") ?? "" }
     var signature: String? { string("signature") }

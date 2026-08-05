@@ -119,6 +119,11 @@ public data class PendingAgentProviderInstall(
     val requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
 )
 
+/** Host hook that restores provider-side trust for one rejected action. */
+public fun interface AgentProviderBindingRepair {
+    public fun repair(request: AgentAppActionRequest, callback: (Boolean) -> Unit)
+}
+
 public class AgentProviderInstallApi internal constructor(
     private val host: AgentProviderHostApi,
 ) {
@@ -146,6 +151,13 @@ public class AgentProviderInstallApi internal constructor(
         requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
     ): AgentInstallRequest =
         host.requestInstall(activity, provider, request, requestCode)
+
+    /** Restores provider-side trust without rotating the installed binding. */
+    public fun restoreBinding(
+        activity: Activity,
+        installed: AgentAppPackage,
+        requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
+    ): PendingAgentProviderInstall = host.restoreBinding(activity, installed, requestCode)
 
     /** Discovers and starts the trusted enable handshake for an installed app. */
     public fun enableInstalledProvider(
@@ -303,11 +315,76 @@ public class AgentProviderHostApi internal constructor(
             createdAt = Instant.now().toString(),
             expiresAt = expiresAt.toString(),
             hostSigningCertSha256 = signingCertSha256(packageName),
-            hostInstanceId = UUID.randomUUID().toString(),
+            hostInstanceId = stableHostInstanceId(),
             hostSharedSecret = UUID.randomUUID().toString(),
             backgroundTriggerSupported = true,
             hostBackgroundTriggerService = AgentTriggerIngressService::class.java.name,
         )
+    }
+
+    public fun buildRestoreRequest(
+        installed: AgentAppPackage,
+        expiresAt: Instant = Instant.now().plusSeconds(600),
+    ): AgentInstallRequest {
+        val binding = requireNotNull(installed.installBinding) {
+            "Agent App has no trusted install binding"
+        }
+        require(binding.hostInstanceId.isNotBlank() && binding.hostSharedSecret.isNotBlank()) {
+            "Agent App trusted binding is incomplete"
+        }
+        val fresh = buildInstallRequest(expiresAt)
+        if (binding.hostPackageName.isNotBlank()) {
+            require(binding.hostPackageName == fresh.hostPackageName) {
+                "Host package identity changed; explicit reconnect is required"
+            }
+        }
+        if (binding.hostSigningCertSha256.isNotBlank()) {
+            require(binding.hostSigningCertSha256.equals(fresh.hostSigningCertSha256, ignoreCase = true)) {
+                "Host signing identity changed; explicit reconnect is required"
+            }
+        }
+        return fresh.copy(
+            hostInstanceId = binding.hostInstanceId,
+            hostSharedSecret = binding.hostSharedSecret,
+        )
+    }
+
+    public fun restoreBinding(
+        activity: Activity,
+        installed: AgentAppPackage,
+        requestCode: Int = REQUEST_INSTALL_AGENT,
+    ): PendingAgentProviderInstall {
+        val binding = requireNotNull(installed.installBinding) {
+            "Agent App has no trusted install binding"
+        }
+        require(binding.platform == "android" && binding.appPackageName.isNotBlank()) {
+            "Agent App is not installed with an Android binding"
+        }
+        val provider = requireNotNull(
+            discoverProviders().firstOrNull { it.packageName == binding.appPackageName },
+        ) {
+            "Installed Agent App Provider not found: ${binding.appPackageName}"
+        }
+        require(provider.signingCertSha256.equals(binding.signingCertSha256, ignoreCase = true)) {
+            "Provider app signature changed; explicit reconnect is required"
+        }
+        val request = buildRestoreRequest(installed)
+        requestInstall(activity, provider, request, requestCode)
+        return PendingAgentProviderInstall(provider, request, requestCode)
+    }
+
+    private fun stableHostInstanceId(): String {
+        val preferences = context.getSharedPreferences(
+            "napaxi_agent_provider_host",
+            Context.MODE_PRIVATE,
+        )
+        val existing = preferences.getString("host_instance_id_v1", null)?.trim().orEmpty()
+        if (existing.isNotEmpty()) return existing
+        val created = UUID.randomUUID().toString()
+        check(preferences.edit().putString("host_instance_id_v1", created).commit()) {
+            "Unable to persist Agent Provider Host instance id"
+        }
+        return created
     }
 
     public fun requestInstall(activity: Activity, descriptor: AgentProviderDescriptor, request: AgentInstallRequest = buildInstallRequest(), requestCode: Int = REQUEST_INSTALL_AGENT): AgentInstallRequest {
@@ -786,12 +863,24 @@ public class AgentProviderHostApi internal constructor(
 public class AndroidAgentProviderActionExecutor @JvmOverloads constructor(
     private val activity: Activity,
     private val requestCode: Int = AgentProviderHostApi.REQUEST_HANDLE_PROPOSAL,
+    private val repairBinding: AgentProviderBindingRepair? = null,
 ) : AgentAppActionExecutor {
     private var pendingCallback: AgentAppActionCallback? = null
     private var pendingRequestId: String? = null
+    private var pendingRequest: AgentAppActionRequest? = null
+    private var pendingAllowsRepair: Boolean = false
+    private var repairInProgress: Boolean = false
 
     override fun execute(request: AgentAppActionRequest, callback: AgentAppActionCallback) {
-        if (pendingCallback != null) {
+        executeAttempt(request, callback, allowRepair = true)
+    }
+
+    private fun executeAttempt(
+        request: AgentAppActionRequest,
+        callback: AgentAppActionCallback,
+        allowRepair: Boolean,
+    ) {
+        if (pendingCallback != null || repairInProgress) {
             callback.success(failedActionResult(request.requestId, "Agent provider action already in progress"))
             return
         }
@@ -816,11 +905,15 @@ public class AndroidAgentProviderActionExecutor @JvmOverloads constructor(
         }
         pendingCallback = callback
         pendingRequestId = request.requestId
+        pendingRequest = request
+        pendingAllowsRepair = allowRepair
         try {
             activity.startActivityForResult(intent, requestCode)
         } catch (error: Throwable) {
             pendingCallback = null
             pendingRequestId = null
+            pendingRequest = null
+            pendingAllowsRepair = false
             callback.success(failedActionResult(request.requestId, error.message ?: "Provider action handoff failed"))
         }
     }
@@ -829,11 +922,29 @@ public class AndroidAgentProviderActionExecutor @JvmOverloads constructor(
         if (requestCode != this.requestCode) return false
         val callback = pendingCallback ?: return false
         val requestId = pendingRequestId.orEmpty()
+        val request = pendingRequest
+        val allowRepair = pendingAllowsRepair
         pendingCallback = null
         pendingRequestId = null
+        pendingRequest = null
+        pendingAllowsRepair = false
         val resultJson = data?.getStringExtra(AgentProviderContract.EXTRA_RESULT_JSON)
         if (resultCode == Activity.RESULT_OK && !resultJson.isNullOrBlank()) {
-            callback.success(AgentAppActionResult(resultJson))
+            val actionResult = AgentAppActionResult(resultJson)
+            val repair = repairBinding
+            if (allowRepair && actionResult.isHostBindingMissing && request != null && repair != null) {
+                repairInProgress = true
+                repair.repair(request) { repaired ->
+                    repairInProgress = false
+                    if (repaired) {
+                        executeAttempt(request, callback, allowRepair = false)
+                    } else {
+                        callback.success(actionResult)
+                    }
+                }
+                return true
+            }
+            callback.success(actionResult)
         } else {
             callback.success(failedActionResult(requestId, "Provider action was canceled or returned no result"))
         }

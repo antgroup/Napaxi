@@ -97,7 +97,7 @@ pub fn list_workspace_filesystem_json(
     list_workspace_filesystem_json_with_bridge(&bridge, subdir, recursive)
 }
 
-pub(super) fn list_workspace_filesystem_json_with_bridge(
+pub(crate) fn list_workspace_filesystem_json_with_bridge(
     bridge: &FileBridge,
     subdir: Option<&str>,
     recursive: bool,

@@ -75,6 +75,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     this.supportsBackgroundExecution = true,
     this.backgroundPermissionGranted = true,
     this.codexSyncResult,
+    this.answerHumanRequestResult,
     Set<String> inactiveSessionThreadIds = const {},
   }) : connectedApps = List<sdk.AgentAppPackage>.from(connectedApps),
        pendingEvolution = List<Map<String, dynamic>>.from(pendingEvolution),
@@ -120,12 +121,14 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   final bool supportsBackgroundExecution;
   bool backgroundPermissionGranted;
   final sdk.CodexAgentEngineConfigResult? codexSyncResult;
+  final Future<bool>? answerHumanRequestResult;
   final Set<String> inactiveSessionThreadIds;
   LlmModelProfile? configuredProfile;
   String configuredResponseLanguage = 'en';
   sdk.NapaxiCapabilitySelection? configuredCapabilitySelection;
   sdk.NapaxiCapabilitySelection? appliedCapabilitySelection;
   sdk.SessionKey? canceledSession;
+  final List<sdk.SessionKey> sentSessions = [];
   String? canceledAgentId;
   sdk.SessionKey? deletedSession;
   String? deletedAgentId;
@@ -350,6 +353,14 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     final before = connectedApps.length;
     connectedApps.removeWhere((item) => item.providerId == providerId);
     return connectedApps.length != before;
+  }
+
+  @override
+  Future<sdk.AgentAppPackage> repairConnectedApp(String providerId) async {
+    return connectedApps.firstWhere(
+      (package) => package.providerId == providerId,
+      orElse: () => throw StateError('Agent App not found: $providerId'),
+    );
   }
 
   @override
@@ -598,6 +609,56 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   }
 
   @override
+  Future<sdk.NapaxiProject> registerProject({
+    required String projectId,
+    required String agentId,
+    required String name,
+  }) async {
+    final now = DateTime.now();
+    return sdk.NapaxiProject(
+      id: projectId,
+      accountId: 'test_user',
+      agentId: agentId,
+      name: name,
+      defaultWorkspaceId: 'workspace-$projectId',
+      state: 'active',
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  @override
+  Future<bool> archiveProject(
+    String projectId, {
+    required String agentId,
+  }) async => true;
+
+  @override
+  Future<List<sdk.NapaxiSessionPlacement>> listSessionPlacements({
+    required String agentId,
+  }) async => const [];
+
+  @override
+  Future<sdk.NapaxiSessionPlacement> moveSessionToProject(
+    sdk.SessionKey session, {
+    required String? projectId,
+    required sdk.NapaxiWorkspacePolicy workspacePolicy,
+    int? expectedRevision,
+  }) async {
+    return sdk.NapaxiSessionPlacement(
+      threadId: session.threadId,
+      projectId: projectId,
+      runtimeWorkspaceId: projectId == null
+          ? 'workspace-personal'
+          : 'workspace-$projectId',
+      workingDirectory: null,
+      revision: (expectedRevision ?? 0) + 1,
+      projectEnteredAt: projectId == null ? null : DateTime.now(),
+      workspaceUpdatedAt: DateTime.now(),
+    );
+  }
+
+  @override
   Stream<sdk.ChatEvent> sendToSession(
     sdk.SessionKey session,
     String message, {
@@ -607,6 +668,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     void Function(String nativeThreadId)? onNativeThreadId,
   }) {
     lastMaxIterations = maxIterations;
+    sentSessions.add(session);
     sentThreadIds.add(session.threadId);
     sentMessages.add(message);
     final threadStream = eventStreamsByThreadId[session.threadId];
@@ -691,7 +753,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   Future<bool> answerHumanRequest(String requestId, String response) async {
     answeredHumanRequestId = requestId;
     answeredHumanResponse = response;
-    return true;
+    return await (answerHumanRequestResult ?? Future<bool>.value(true));
   }
 
   @override
@@ -892,6 +954,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   @override
   Future<List<sdk.WorkspaceFileInfo>> listSandboxWorkspaceFiles({
     required String agentId,
+    String? projectId,
     String? subdir,
     bool recursive = true,
   }) async {

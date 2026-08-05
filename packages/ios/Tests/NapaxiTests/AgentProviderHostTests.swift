@@ -39,6 +39,23 @@ final class AgentProviderHostTests: XCTestCase {
         XCTAssertNil(host.consumePendingProviderInstall())
     }
 
+    func testInstallRequestsReuseStableHostInstanceId() {
+        let bundleId = "napaxi.host.stable-id-test"
+        let key = "napaxi.agent_provider.host_instance_id.\(bundleId).v1"
+        UserDefaults.standard.removeObject(forKey: key)
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+        let host = NapaxiAgentProviderHost(
+            hostInfo: NapaxiAgentProviderHostInfo(bundleId: bundleId)
+        )
+
+        let first = host.createInstallRequest()
+        let second = host.createInstallRequest()
+
+        XCTAssertFalse(first.hostInstanceId.isEmpty)
+        XCTAssertEqual(first.hostInstanceId, second.hostInstanceId)
+        XCTAssertNotEqual(first.hostSharedSecret, second.hostSharedSecret)
+    }
+
     func testProviderInstallPendingGetAndClearMirrorFlutterChannelLifecycle() {
         let host = NapaxiAgentProviderHost(callbackScheme: "napaxi-test")
         let url = URL(string: "napaxi-test://provider?install_url=https%3A%2F%2Fwallet.example%2Finstall&label=Wallet")!

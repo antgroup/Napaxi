@@ -57,11 +57,13 @@ class TrustedHostStore @JvmOverloads constructor(
 ) {
     private val prefs = context.applicationContext.getSharedPreferences(namespace, Context.MODE_PRIVATE)
 
-    fun saveBinding(binding: TrustedHostBinding) {
-        prefs.edit()
+    fun saveBinding(binding: TrustedHostBinding): Boolean {
+        val saved = prefs.edit()
             .putString("binding_${binding.hostInstanceId}", binding.toJsonObject().toString())
             .putString("latest_host_instance_id", binding.hostInstanceId)
-            .apply()
+            .commit()
+        if (!saved) return false
+        return loadBinding(binding.hostInstanceId) == binding
     }
 
     fun loadBinding(hostInstanceId: String): TrustedHostBinding? {
@@ -153,7 +155,7 @@ object AgentProviderSecurity {
         if (validation != null) {
             return AgentProvider.buildInstallFailureIntent(request, validation.first, validation.second)
         }
-        store.saveBinding(
+        val saved = store.saveBinding(
             TrustedHostBinding(
                 hostPackageName = request.hostPackageName,
                 hostSigningCertSha256 = request.hostSigningCertSha256,
@@ -165,6 +167,13 @@ object AgentProviderSecurity {
                 hostBackgroundTriggerService = request.hostBackgroundTriggerService,
             ),
         )
+        if (!saved) {
+            return AgentProvider.buildInstallFailureIntent(
+                request,
+                "binding_persist_failed",
+                "Unable to persist trusted Host binding.",
+            )
+        }
         return AgentProvider.buildInstallResultIntent(packageDef, request)
     }
 

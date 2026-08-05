@@ -10,7 +10,7 @@ use crate::storage;
 
 use super::store::{
     INVALID_HANDLE_JSON, defaulted, error_json, normalize_agent_id, normalize_stored_agent_id,
-    now_rfc3339, parse_session_key, read_all_records, session_file, write_record,
+    now_rfc3339, parse_session_key, read_all_records, read_record, session_file, write_record,
 };
 use super::types::{SessionInfo, SessionKey, SessionRecord};
 
@@ -34,7 +34,17 @@ pub fn create_session(
     };
 
     let path = session_file(files_dir, &thread_id);
-    if !path.exists() {
+    if path.exists() {
+        let Some(record) = read_record(files_dir, &thread_id) else {
+            return error_json("Existing session record is unreadable");
+        };
+        if record.key.account_id != key.account_id
+            || normalize_stored_agent_id(&record.agent_id) != normalize_agent_id(agent_id)
+        {
+            return error_json("Existing session belongs to a different owner");
+        }
+        return serde_json::to_string(&record.key).unwrap_or_else(|e| error_json(&e.to_string()));
+    } else {
         let now = now_rfc3339();
         let record = SessionRecord {
             key: key.clone(),

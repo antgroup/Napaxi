@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:napaxi_flutter/api/agent_provider_install_api.dart';
 import 'package:napaxi_flutter/models/agent_app.dart';
 import 'package:napaxi_flutter/models/agent_provider_install.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('AgentProviderSelection encodes one-turn canonical marker', () {
@@ -19,6 +20,10 @@ void main() {
   const channel = MethodChannel('com.napaxi.flutter/background');
 
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -252,6 +257,218 @@ void main() {
     expect(installed.installBinding?.hostCallbackScheme, 'agent-host');
     expect(installed.installBinding?.hostSharedSecret.isNotEmpty, isTrue);
   });
+
+  test('requestInstall reuses one stable host instance id', () async {
+    final requests = <Map<String, dynamic>>[];
+    final api = AgentProviderInstallApi(
+      registerPackage: (package) => package,
+      channel: channel,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'getAgentProviderHostInfo') {
+            return {'packageName': 'host.app', 'signingCertSha256': 'host123'};
+          }
+          if (call.method == 'requestAgentProviderInstall') {
+            final args = Map<String, dynamic>.from(call.arguments as Map);
+            final request = Map<String, dynamic>.from(
+              jsonDecode(args['requestJson'] as String) as Map,
+            );
+            requests.add(request);
+            return _installResponse(request);
+          }
+          fail('unexpected method ${call.method}');
+        });
+
+    const provider = AgentProviderDescriptor(
+      packageName: 'trusted.app',
+      installActivityName: 'trusted.InstallActivity',
+      activityName: 'trusted.Activity',
+    );
+    await api.requestInstall(provider);
+    await api.requestInstall(provider);
+
+    expect(requests, hasLength(2));
+    expect(requests[0]['host_instance_id'], requests[1]['host_instance_id']);
+    expect(
+      requests[0]['host_shared_secret'],
+      isNot(requests[1]['host_shared_secret']),
+    );
+  });
+
+  test(
+    'restoreBinding preserves trusted identity and does not reregister',
+    () async {
+      var registrations = 0;
+      Map<String, dynamic>? restoreRequest;
+      final api = AgentProviderInstallApi(
+        registerPackage: (package) {
+          registrations += 1;
+          return package;
+        },
+        channel: channel,
+      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'listAgentProviders') {
+              return <Map<String, String>>[
+                {
+                  'packageName': 'trusted.app',
+                  'installActivityName': 'trusted.InstallActivity',
+                  'activityName': 'trusted.Activity',
+                  'label': 'Provider Agent',
+                  'signingCertSha256': 'provider123',
+                },
+              ];
+            }
+            if (call.method == 'getAgentProviderHostInfo') {
+              return {
+                'packageName': 'host.app',
+                'signingCertSha256': 'host123',
+              };
+            }
+            if (call.method == 'requestAgentProviderInstall') {
+              final args = Map<String, dynamic>.from(call.arguments as Map);
+              restoreRequest = Map<String, dynamic>.from(
+                jsonDecode(args['requestJson'] as String) as Map,
+              );
+              return _installResponse(restoreRequest!);
+            }
+            fail('unexpected method ${call.method}');
+          });
+      const installed = AgentAppPackage(
+        providerId: 'provider',
+        agentId: 'provider.agent',
+        displayName: 'Provider Agent',
+        installBinding: const AgentAppInstallBinding(
+          platform: 'android',
+          appPackageName: 'trusted.app',
+          activityName: 'trusted.Activity',
+          signingCertSha256: 'provider123',
+          installedAt: '2026-05-26T00:00:00Z',
+          installRequestId: 'install-1',
+          protocolVersion: 2,
+          hostPackageName: 'host.app',
+          hostSigningCertSha256: 'host123',
+          hostInstanceId: 'host-instance-existing',
+          hostSharedSecret: 'host-secret-existing',
+        ),
+      );
+
+      await api.restoreBinding(installed);
+
+      expect(restoreRequest?['host_instance_id'], 'host-instance-existing');
+      expect(restoreRequest?['host_shared_secret'], 'host-secret-existing');
+      expect(registrations, 0);
+    },
+  );
+
+  test(
+    'action executor restores host binding and retries exactly once',
+    () async {
+      var actionAttempts = 0;
+      var repairs = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            expect(call.method, 'executeAgentProviderAction');
+            actionAttempts += 1;
+            return {
+              'resultJson': jsonEncode({
+                'request_id': 'request-1',
+                'status': actionAttempts == 1 ? 'failed' : 'succeeded',
+                'result': actionAttempts == 1 ? {} : {'ok': true},
+                if (actionAttempts == 1)
+                  'error': 'host_not_bound: No trusted Host binding exists.',
+                'completed_at': '2026-05-26T00:00:00Z',
+              }),
+            };
+          });
+      final executor = AndroidAgentProviderActionExecutor(
+        channel: channel,
+        repairBinding: _TestBindingRepair((request) async {
+          repairs += 1;
+          expect(request.proposal.requestId, 'request-1');
+          return true;
+        }),
+      );
+
+      final result = await executor.execute(_actionRequest());
+
+      expect(result.status, 'succeeded');
+      expect(actionAttempts, 2);
+      expect(repairs, 1);
+    },
+  );
+
+  test('structured host_not_bound error is normalized for recovery', () {
+    final result = AgentAppActionResult.fromMap({
+      'request_id': 'request-1',
+      'status': 'failed',
+      'result': <String, dynamic>{},
+      'error': {
+        'code': 'host_not_bound',
+        'message': 'No trusted Host binding exists.',
+        'phase': 'pre_execution',
+        'retryable': true,
+      },
+      'completed_at': '2026-05-26T00:00:00Z',
+    });
+
+    expect(result.errorCode, 'host_not_bound');
+    expect(result.isHostBindingMissing, isTrue);
+  });
+}
+
+Map<String, dynamic> _installResponse(Map<String, dynamic> request) => {
+  'installResultJson': jsonEncode({
+    'status': 'succeeded',
+    'request_id': request['request_id'],
+    'nonce': request['nonce'],
+    'package': jsonDecode(_packageJson()),
+    'completed_at': '2026-05-26T00:00:00Z',
+  }),
+  'installBinding': {
+    'platform': 'android',
+    'app_package_name': 'trusted.app',
+    'activity_name': 'trusted.Activity',
+    'signing_cert_sha256': 'provider123',
+    'installed_at': '2026-05-26T00:00:00Z',
+    'install_request_id': request['request_id'],
+    'protocol_version': request['protocol_version'],
+    'host_package_name': request['host_package_name'],
+    'host_signing_cert_sha256': request['host_signing_cert_sha256'],
+    'host_instance_id': request['host_instance_id'],
+    'host_shared_secret': request['host_shared_secret'],
+  },
+};
+
+AgentAppActionRequest _actionRequest() => const AgentAppActionRequest(
+  proposal: const AgentAppActionProposal(
+    requestId: 'request-1',
+    providerId: 'provider',
+    agentId: 'provider.agent',
+    actionId: 'provider.order.create',
+    toolName: 'app_action_order_create',
+    createdAt: '2026-05-26T00:00:00Z',
+    expiresAt: '2030-05-26T00:00:00Z',
+    nonce: 'nonce-1',
+    idempotencyKey: 'request-1',
+  ),
+  action: const AgentAppActionManifest(
+    actionId: 'provider.order.create',
+    toolName: 'app_action_order_create',
+    description: 'Create an order.',
+  ),
+  package: const {'provider_id': 'provider', 'agent_id': 'provider.agent'},
+);
+
+class _TestBindingRepair implements AgentProviderBindingRepair {
+  _TestBindingRepair(this._callback);
+
+  final Future<bool> Function(AgentAppActionRequest request) _callback;
+
+  @override
+  Future<bool> repair(AgentAppActionRequest request) => _callback(request);
 }
 
 String _packageJson({AgentAppInstallBinding? installBinding}) {

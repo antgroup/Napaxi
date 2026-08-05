@@ -228,6 +228,18 @@ final class SessionModelTests: XCTestCase {
         XCTAssertEqual(defaultedFractionalCount.messageCount, 0)
     }
 
+    func testSessionKeyRoundTripsImmutableIdentity() throws {
+        let key = NapaxiSessionKey(
+            channelType: "app",
+            accountId: "user",
+            threadId: "thread"
+        )
+
+        let decoded = try NapaxiSessionKey.fromJson(key.jsonString())
+        XCTAssertEqual(decoded, key)
+        XCTAssertNil(key.toMap()["workspace_scope"])
+    }
+
     func testSessionModelMapHelpersMirrorFlutterFactories() throws {
         let key = try SessionKey.fromJson(#"{"channel_type":"app","thread_id":"thread"}"#)
         XCTAssertEqual(key.channelType, "app")

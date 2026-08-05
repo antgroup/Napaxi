@@ -91,6 +91,32 @@ namespaces:
       context_status:
         params: [thread_id, agent_id]
         return: ContextStatus
+  project:
+    status: experimental
+    adapters: [flutter, ios, android]
+    contract: immutable session identity with independent display-project and runtime-workspace placement
+    methods:
+      register:
+        params: [project_id, account_id, agent_id, name]
+        return: NapaxiProject
+      list:
+        params: [account_id, agent_id]
+        return: List<NapaxiProject>
+      archive:
+        params: [project_id, account_id, agent_id]
+        return: bool
+      get_session_placement:
+        params: [session_key]
+        return: NapaxiSessionPlacement
+      list_session_placements:
+        params: [account_id, agent_id]
+        return: List<NapaxiSessionPlacement>
+      move_session:
+        params: [session_key, project_id, workspace_policy, expected_revision]
+        return: NapaxiSessionPlacement
+      list_files:
+        params: [project_id, account_id, agent_id, subdir, recursive]
+        return: List<WorkspaceFileInfo>
   session_runs:
     status: stable
     adapters: [flutter, ios, android]
@@ -347,6 +373,9 @@ namespaces:
       request_install:
         params: [descriptor, request]
         return: PendingAgentProviderInstall
+      restore_binding:
+        params: [installed_package]
+        return: AgentAppPackage
       consume_pending_trigger:
         params: [intent]
         return: AgentProviderTrigger?

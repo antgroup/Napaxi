@@ -7,6 +7,7 @@
 mod wire;
 
 pub mod agent_engine;
+pub mod project;
 
 pub mod init {
     use crate::frb_generated::StreamSink;
@@ -636,14 +637,14 @@ pub mod session {
         message: String,
         attachments_json: String,
     ) -> bool {
-        napaxi_core::api::engine::inject_message_handle(
+        super::init::runtime().block_on(napaxi_core::api::engine::inject_message_handle(
             handle,
             &config_json,
             &agent_id,
             &session_key_json,
             &message,
             &attachments_json,
-        )
+        ))
     }
     pub fn retract_injected_message(
         handle: i64,

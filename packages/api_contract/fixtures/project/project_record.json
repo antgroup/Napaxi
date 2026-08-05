@@ -1,0 +1,11 @@
+{
+  "id": "project-release",
+  "account_id": "account-a",
+  "agent_id": "agent-a",
+  "name": "Release",
+  "default_workspace_id": "project-23c52e46",
+  "state": "active",
+  "created_at": "2026-08-03T08:00:00.000Z",
+  "updated_at": "2026-08-03T08:05:00.000Z",
+  "future_project_field": "preserved"
+}

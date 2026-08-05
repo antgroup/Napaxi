@@ -593,6 +593,18 @@ class ModelsTest {
     }
 
     @Test
+    fun sessionKeyRoundTripsImmutableIdentity() {
+        val key = SessionKey(
+            channelType = "app",
+            accountId = "user",
+            threadId = "thread",
+        )
+
+        assertEquals(key, SessionKey.fromJson(key.toJson()))
+        assertEquals(false, key.toJsonObject().has("workspace_scope"))
+    }
+
+    @Test
     fun sessionHistoryModelsExposeFlutterStableFields() {
         val message = ChatMessage(
             """
@@ -2181,6 +2193,17 @@ class ModelsTest {
             }
             """.trimIndent(),
         )
+        val bindingFailure = AgentAppActionResult(
+            """
+            {
+              "request_id":"request-binding",
+              "status":"failed",
+              "result":{},
+              "error":{"code":"host_not_bound","message":"Binding missing","phase":"pre_execution"},
+              "completed_at":"2030-01-01T00:01:00Z"
+            }
+            """.trimIndent(),
+        )
         val record = AgentAppActionRecord(
             """
             {
@@ -2237,6 +2260,9 @@ class ModelsTest {
         assertEquals("trace-1", result.providerTraceId)
         assertEquals("result-sig", result.signature)
         assertEquals(result.rawJson, result.toJsonString())
+        assertEquals("host_not_bound", bindingFailure.errorCode)
+        assertEquals("host_not_bound: Binding missing", bindingFailure.error)
+        assertTrue(bindingFailure.isHostBindingMissing)
 
         assertEquals("request-1", record.proposal.requestId)
         assertEquals("succeeded", record.status)

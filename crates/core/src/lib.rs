@@ -82,6 +82,10 @@ mod workspace;
 #[path = "session/mod.rs"]
 mod session;
 
+/// Project display membership and runtime-workspace placement.
+#[path = "project/mod.rs"]
+mod project;
+
 /// Minimal HTTP LLM adapter for the standalone mobile SDK runtime.
 #[path = "llm/mod.rs"]
 mod llm;

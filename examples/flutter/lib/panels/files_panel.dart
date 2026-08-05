@@ -4,12 +4,16 @@ class _FilesPage extends StatefulWidget {
   const _FilesPage({
     required this.clientFuture,
     required this.agentId,
+    this.projectId,
+    this.projectName,
     this.onBack,
     this.onMenu,
   });
 
   final Future<NapaxiChatClient> clientFuture;
   final String agentId;
+  final String? projectId;
+  final String? projectName;
   final Future<bool> Function()? onBack;
   final VoidCallback? onMenu;
 
@@ -121,7 +125,13 @@ class _FilesPageState extends State<_FilesPage> {
               ),
             )
           : Text(
-              strings.filesTitle,
+              widget.projectName == null
+                  ? strings.filesTitle
+                  : _projectCopy(
+                      context,
+                      english: '${widget.projectName} files',
+                      chinese: '${widget.projectName} · 文件',
+                    ),
               key: const ValueKey('files_page_title'),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -193,6 +203,7 @@ class _FilesPageState extends State<_FilesPage> {
           return _FilesBrowser(
             client: snapshot.data!,
             agentId: widget.agentId,
+            projectId: widget.projectId,
             searchQuery: _searchQuery,
             onCloseSearch: _closeSearch,
           );
@@ -206,18 +217,31 @@ class _FilesBrowser extends StatelessWidget {
   const _FilesBrowser({
     required this.client,
     required this.agentId,
+    this.projectId,
     required this.searchQuery,
     required this.onCloseSearch,
   });
 
   final NapaxiChatClient client;
   final String agentId;
+  final String? projectId;
   final String searchQuery;
   final VoidCallback onCloseSearch;
 
   @override
   Widget build(BuildContext context) {
     final strings = AppStrings.of(context);
+
+    if (projectId != null) {
+      return _FileSourceView(
+        client: client,
+        source: _FileSource.workspace,
+        agentId: agentId,
+        projectId: projectId,
+        searchQuery: searchQuery,
+        onCloseSearch: onCloseSearch,
+      );
+    }
 
     return DefaultTabController(
       length: 3,
@@ -313,6 +337,7 @@ class _FileSourceView extends StatefulWidget {
     required this.client,
     required this.source,
     required this.agentId,
+    this.projectId,
     required this.searchQuery,
     required this.onCloseSearch,
   });
@@ -320,6 +345,7 @@ class _FileSourceView extends StatefulWidget {
   final NapaxiChatClient client;
   final _FileSource source;
   final String agentId;
+  final String? projectId;
   final String searchQuery;
   final VoidCallback onCloseSearch;
 
@@ -344,6 +370,12 @@ class _FileSourceViewState extends State<_FileSourceView> {
   @override
   void didUpdateWidget(covariant _FileSourceView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.projectId != widget.projectId) {
+      _selectedItemKeys.clear();
+      _currentDirectory = '';
+      _filesFuture = _loadFiles();
+      return;
+    }
     final searchStarted =
         oldWidget.searchQuery.trim().isEmpty && _hasSearchQuery;
     final searchEnded =
@@ -411,6 +443,7 @@ class _FileSourceViewState extends State<_FileSourceView> {
     final searching = _hasSearchQuery;
     final files = await widget.client.listSandboxWorkspaceFiles(
       agentId: widget.agentId,
+      projectId: widget.projectId,
       subdir: searching || _currentDirectory.isEmpty ? null : _currentDirectory,
       recursive: searching,
     );
@@ -497,6 +530,7 @@ class _FileSourceViewState extends State<_FileSourceView> {
           client: widget.client,
           item: item,
           agentId: widget.agentId,
+          readOnly: widget.projectId != null,
         ),
       ),
     );
@@ -601,6 +635,7 @@ class _FileSourceViewState extends State<_FileSourceView> {
             selectedItems.isNotEmpty &&
             selectedItems.every((item) => !item.isDirectory);
         final canDeleteSelected =
+            widget.projectId == null &&
             selectedItems.isNotEmpty &&
             selectedItems.every((item) => item.canDelete);
         if (allFiles.isEmpty &&

@@ -815,6 +815,28 @@ class ChatSessionRunState {
   bool get needsAttention =>
       unread || needsInput || status == sdk.SessionRunStatus.failed;
 
+  /// Applies metadata from a later update without allowing a finished run to
+  /// become active again. Async UI callbacks may complete after the event
+  /// stream has already closed; the first terminal status is authoritative.
+  ChatSessionRunState preserveTerminalFrom(ChatSessionRunState previous) {
+    if (!previous.isTerminal) return this;
+    return ChatSessionRunState(
+      sessionKey: sessionKey,
+      agentId: agentId,
+      assistantMessageId: assistantMessageId,
+      subscription: subscription,
+      startedAt: startedAt,
+      updatedAt: updatedAt,
+      status: previous.status,
+      activity: previous.activity,
+      pendingHumanRequestId: pendingHumanRequestId,
+      pendingHumanMessageId: pendingHumanMessageId,
+      pendingInterjections: pendingInterjections,
+      unread: unread,
+      error: previous.error,
+    );
+  }
+
   ChatSessionRunState copyWith({
     String? assistantMessageId,
     StreamSubscription<sdk.ChatEvent>? subscription,

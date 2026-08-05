@@ -1304,6 +1304,100 @@ public struct NapaxiAgentDefinitionAPI: NapaxiCoreAPI, Sendable {
     }
 }
 
+public struct NapaxiProjectAPI: NapaxiCoreAPI, Sendable {
+    public let rawAPI: NapaxiRawAPI
+
+    public init(rawAPI: NapaxiRawAPI) {
+        self.rawAPI = rawAPI
+    }
+
+    public func register(
+        projectId: String,
+        name: String,
+        accountId: String = NapaxiEngine.defaultAccountId,
+        agentId: String = NapaxiEngine.defaultAgentId
+    ) throws -> NapaxiProject {
+        try call("project", "register", [
+            "project_id": .string(projectId),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+            "name": .string(name),
+        ]).decodedObject(of: NapaxiProject.self)
+    }
+
+    public func list(
+        accountId: String = NapaxiEngine.defaultAccountId,
+        agentId: String = NapaxiEngine.defaultAgentId
+    ) throws -> [NapaxiProject] {
+        try call("project", "list", [
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+        ]).decodedObjectList(of: NapaxiProject.self)
+    }
+
+    public func archive(
+        _ projectId: String,
+        accountId: String = NapaxiEngine.defaultAccountId,
+        agentId: String = NapaxiEngine.defaultAgentId
+    ) throws -> Bool {
+        try call("project", "archive", [
+            "project_id": .string(projectId),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+        ]).requiredBool()
+    }
+
+    public func placement(_ sessionKey: NapaxiSessionKey) throws -> NapaxiSessionPlacement {
+        try call("project", "get_session_placement", [
+            "session_key_json": .string(sessionKey.jsonString()),
+        ]).decodedObject(of: NapaxiSessionPlacement.self)
+    }
+
+    public func listPlacements(
+        accountId: String = NapaxiEngine.defaultAccountId,
+        agentId: String = NapaxiEngine.defaultAgentId
+    ) throws -> [NapaxiSessionPlacement] {
+        try call("project", "list_session_placements", [
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+        ]).decodedObjectList(of: NapaxiSessionPlacement.self)
+    }
+
+    public func moveSession(
+        _ sessionKey: NapaxiSessionKey,
+        projectId: String?,
+        workspacePolicy: NapaxiWorkspacePolicy,
+        expectedRevision: Int64? = nil
+    ) throws -> NapaxiSessionPlacement {
+        var payload: [String: NapaxiJSONValue] = [
+            "session_key_json": .string(try sessionKey.jsonString()),
+            "project_id": projectId.map(NapaxiJSONValue.string) ?? .null,
+            "workspace_policy": .string(workspacePolicy.rawValue),
+        ]
+        if let expectedRevision {
+            payload["expected_revision"] = .number(Double(expectedRevision))
+        }
+        return try call("project", "move_session", payload)
+            .decodedObject(of: NapaxiSessionPlacement.self)
+    }
+
+    public func listFiles(
+        projectId: String,
+        accountId: String = NapaxiEngine.defaultAccountId,
+        agentId: String = NapaxiEngine.defaultAgentId,
+        subdir: String? = nil,
+        recursive: Bool = true
+    ) throws -> [NapaxiWorkspaceFileInfo] {
+        try call("project", "list_files", [
+            "project_id": .string(projectId),
+            "account_id": .string(accountId),
+            "agent_id": .string(agentId),
+            "subdir": subdir.map(NapaxiJSONValue.string) ?? .null,
+            "recursive": .bool(recursive),
+        ]).decodedObjectList(of: NapaxiWorkspaceFileInfo.self)
+    }
+}
+
 public struct NapaxiSessionAPI: NapaxiCoreAPI, Sendable {
     public static let defaultHistoryPageLimit = 50
 

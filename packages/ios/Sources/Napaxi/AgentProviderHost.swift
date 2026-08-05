@@ -613,7 +613,7 @@ public final class NapaxiAgentProviderHost: @unchecked Sendable {
             hostPackageName: hostInfo.bundleId,
             createdAt: created,
             expiresAt: expires,
-            hostInstanceId: Self.randomHex(byteCount: 16),
+            hostInstanceId: stableHostInstanceId(),
             hostSharedSecret: Self.randomHex(byteCount: 32),
             hostBundleId: hostInfo.bundleId,
             hostTeamId: hostInfo.teamId,
@@ -622,6 +622,16 @@ public final class NapaxiAgentProviderHost: @unchecked Sendable {
             backgroundTriggerSupported: hostInfo.backgroundTriggerSupported,
             hostBackgroundTriggerService: hostInfo.backgroundTriggerService
         )
+    }
+
+    private func stableHostInstanceId() -> String {
+        let key = "napaxi.agent_provider.host_instance_id.\(hostInfo.bundleId).v1"
+        if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+            return existing
+        }
+        let created = Self.randomHex(byteCount: 16)
+        UserDefaults.standard.set(created, forKey: key)
+        return created
     }
 
     public func installURL(
@@ -645,6 +655,20 @@ public final class NapaxiAgentProviderHost: @unchecked Sendable {
         openURL: @escaping URLOpener
     ) async throws -> NapaxiAgentProviderInstallResponse {
         let request = createInstallRequest()
+        return try await requestInstall(
+            provider: provider,
+            request: request,
+            timeoutSeconds: timeoutSeconds,
+            openURL: openURL
+        )
+    }
+
+    public func requestInstall(
+        provider: NapaxiAgentProviderDescriptor,
+        request: NapaxiAgentInstallRequest,
+        timeoutSeconds: UInt64 = NapaxiAgentProviderHost.defaultInstallTimeoutSeconds,
+        openURL: @escaping URLOpener
+    ) async throws -> NapaxiAgentProviderInstallResponse {
         let handoffURL = try installURL(for: provider, request: request)
 
         return try await withTaskCancellationHandler {

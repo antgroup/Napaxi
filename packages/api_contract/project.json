@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "namespace": "project",
+  "status": "experimental",
+  "goal": "Keep SessionKey immutable while project display membership and runtime workspace move independently.",
+  "resultEnvelope": "packages/api_contract/errors.yaml#result_envelope",
+  "invariants": [
+    "one display project per session",
+    "display project and runtime workspace are independent placement fields",
+    "account_id and agent_id authorize project access",
+    "expected_revision is a compare-and-swap guard",
+    "archiving clears display membership without deleting workspace files"
+  ],
+  "workspacePolicies": ["use_project_default", "keep_current", "use_personal_default"],
+  "methods": [
+    {"name":"register","request":{"required":["project_id","account_id","agent_id","name"]},"response":{"model":"NapaxiProject"},"facades":{"flutter":"register","ios":"register","android":"register"}},
+    {"name":"list","request":{"required":["account_id","agent_id"]},"response":{"items":"NapaxiProject"},"facades":{"flutter":"list","ios":"list","android":"list"}},
+    {"name":"archive","request":{"required":["project_id","account_id","agent_id"]},"response":{"type":"boolean"},"facades":{"flutter":"archive","ios":"archive","android":"archive"}},
+    {"name":"get_session_placement","request":{"required":["session_key_json"]},"response":{"model":"NapaxiSessionPlacement"},"facades":{"flutter":"placement","ios":"placement","android":"placement"}},
+    {"name":"list_session_placements","request":{"required":["account_id","agent_id"]},"response":{"items":"NapaxiSessionPlacement"},"facades":{"flutter":"listPlacements","ios":"listPlacements","android":"listPlacements"}},
+    {"name":"move_session","request":{"required":["session_key_json","workspace_policy"],"optional":["project_id","expected_revision"]},"response":{"model":"NapaxiSessionPlacement"},"facades":{"flutter":"moveSession","ios":"moveSession","android":"moveSession"}},
+    {"name":"list_files","request":{"required":["project_id","account_id","agent_id","recursive"],"optional":["subdir"]},"response":{"items":"WorkspaceFileInfo"},"facades":{"flutter":"listFiles","ios":"listFiles","android":"listFiles"}}
+  ],
+  "models": {
+    "NapaxiProject": {
+      "required": ["id","account_id","agent_id","name","default_workspace_id","state","created_at","updated_at"],
+      "fields": {"id":"string","account_id":"string","agent_id":"string","name":"string","default_workspace_id":"string","state":"string","created_at":"datetime","updated_at":"datetime"},
+      "unknownFields": "preserve"
+    },
+    "NapaxiSessionPlacement": {
+      "required": ["thread_id","runtime_workspace_id","revision","workspace_updated_at"],
+      "optional": ["project_id","working_directory","project_entered_at"],
+      "fields": {"thread_id":"string","project_id":"string","runtime_workspace_id":"string","working_directory":"string","revision":"integer","project_entered_at":"datetime","workspace_updated_at":"datetime"},
+      "unknownFields": "preserve"
+    }
+  },
+  "fixtures": [
+    "fixtures/project/project_record.json",
+    "fixtures/project/session_placement.json"
+  ],
+  "fixtureCoverage": [
+    {"path":"fixtures/project/project_record.json","consumers":[
+      {"package":"flutter","test":"packages/flutter/test/project_contract_fixture_test.dart"},
+      {"package":"android","test":"packages/android/src/test/kotlin/com/napaxi/android/ProjectContractTest.kt"},
+      {"package":"ios","test":"packages/ios/Tests/NapaxiTests/ProjectContractTests.swift"}
+    ]},
+    {"path":"fixtures/project/session_placement.json","consumers":[
+      {"package":"flutter","test":"packages/flutter/test/project_contract_fixture_test.dart"},
+      {"package":"android","test":"packages/android/src/test/kotlin/com/napaxi/android/ProjectContractTest.kt"},
+      {"package":"ios","test":"packages/ios/Tests/NapaxiTests/ProjectContractTests.swift"}
+    ]}
+  ]
+}

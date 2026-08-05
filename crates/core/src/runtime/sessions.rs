@@ -28,6 +28,20 @@ pub fn scoped_workspace_files_dir(files_dir: &str, account_id: &str, agent_id: &
     crate::workspace::scoped_files_dir(files_dir, account_id, agent_id)
 }
 
+pub async fn resolve_session_workspace_files_dir(
+    files_dir: &str,
+    _account_id: &str,
+    _agent_id: &str,
+    session_key_json: Option<&str>,
+) -> Result<String, String> {
+    let Some(session_key_json) = session_key_json else {
+        return Ok(default_engine_workspace_files_dir(files_dir));
+    };
+    crate::project::resolve_session_workspace(files_dir, session_key_json)
+        .await
+        .map(|workspace| workspace.physical_root)
+}
+
 pub fn default_engine_workspace_files_dir(files_dir: &str) -> String {
     crate::workspace::default_scoped_files_dir(files_dir, DEFAULT_AGENT_ID)
 }
@@ -78,10 +92,10 @@ pub fn cancel_session_handle_typed(handle: i64, session_key_json: &str) -> CoreR
     Ok(engine.cancel_session_key(session_key_json))
 }
 
-pub fn inject_message_handle(
+pub async fn inject_message_handle(
     handle: i64,
     _config_json: &str,
-    _agent_id: &str,
+    agent_id: &str,
     session_key_json: &str,
     message: &str,
     attachments_json: &str,
@@ -93,7 +107,17 @@ pub fn inject_message_handle(
     let Some(thread_id) = session_thread_id(session_key_json) else {
         return false;
     };
-    let workspace_files_dir = default_engine_workspace_files_dir(engine.files_dir());
+    let account_id = session_account_id(session_key_json);
+    let Ok(workspace_files_dir) = resolve_session_workspace_files_dir(
+        engine.files_dir(),
+        &account_id,
+        agent_id,
+        Some(session_key_json),
+    )
+    .await
+    else {
+        return false;
+    };
     let mut attachments = parse_scene_prompt_attachments(attachments_json);
     persist_attachment_files(
         engine.files_dir(),

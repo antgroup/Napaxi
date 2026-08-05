@@ -257,6 +257,7 @@ class _ChatInputBar extends StatefulWidget {
   final Future<void> Function(
     List<ChatAttachment> attachments, {
     List<String> pinnedSkillNames,
+    sdk.AgentProviderSelection? providerSelection,
   })
   onSend;
   final Future<void> Function() onStop;
@@ -292,6 +293,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   final GlobalKey _attachmentButtonKey = GlobalKey();
 
   bool _hasText = false;
+  sdk.AgentAppPackage? _selectedAgentApp;
 
   bool get _canSend => _hasText || _attachments.isNotEmpty;
 
@@ -341,13 +343,12 @@ class _ChatInputBarState extends State<_ChatInputBar> {
   List<sdk.AgentAppPackage> get _agentAppSuggestions {
     final query = _agentAppQuery;
     if (query == null) return const [];
-    final seenNames = <String>{};
     final matches = widget.agentApps
         .where((package) {
           final name = package.displayName.trim();
           if (name.isEmpty) return false;
           final normalized = name.toLowerCase();
-          return seenNames.add(normalized) && normalized.contains(query);
+          return normalized.contains(query);
         })
         .toList(growable: false);
     matches.sort((left, right) {
@@ -362,11 +363,26 @@ class _ChatInputBarState extends State<_ChatInputBar> {
       if (recentOrder != 0) return recentOrder;
       final countOrder = right.useCount.compareTo(left.useCount);
       if (countOrder != 0) return countOrder;
-      return left.displayName.toLowerCase().compareTo(
+      final nameOrder = left.displayName.toLowerCase().compareTo(
         right.displayName.toLowerCase(),
       );
+      if (nameOrder != 0) return nameOrder;
+      return left.providerId.compareTo(right.providerId);
     });
     return matches.take(5).toList(growable: false);
+  }
+
+  Set<String> get _duplicateAgentAppDisplayNames {
+    final counts = <String, int>{};
+    for (final package in widget.agentApps) {
+      final normalized = package.displayName.trim().toLowerCase();
+      if (normalized.isEmpty) continue;
+      counts.update(normalized, (count) => count + 1, ifAbsent: () => 1);
+    }
+    return {
+      for (final entry in counts.entries)
+        if (entry.value > 1) entry.key,
+    };
   }
 
   int _agentAppMatchRank(String name, String query) {
@@ -414,6 +430,14 @@ class _ChatInputBarState extends State<_ChatInputBar> {
 
   void _handleTextChanged() {
     final hasText = widget.controller.text.trim().isNotEmpty;
+    final selectedAgentApp = _selectedAgentApp;
+    if (selectedAgentApp != null &&
+        !_startsWithAgentAppMention(
+          widget.controller.text.trimLeft(),
+          selectedAgentApp.displayName,
+        )) {
+      _selectedAgentApp = null;
+    }
     _syncAgentAppSuggestionsOverlay();
     if (hasText == _hasText) {
       setState(() {});
@@ -449,6 +473,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
       text: text,
       selection: TextSelection.collapsed(offset: text.length),
     );
+    setState(() => _selectedAgentApp = package);
     widget.focusNode.requestFocus();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -518,15 +543,30 @@ class _ChatInputBarState extends State<_ChatInputBar> {
 
   void _send() {
     if (!_canSend) return;
+    final selectedAgentApp = _selectedAgentApp;
     widget.onSend(
       List<ChatAttachment>.unmodifiable(_attachments),
       pinnedSkillNames: List<String>.unmodifiable(_pinnedSkillNames),
+      providerSelection: selectedAgentApp == null
+          ? null
+          : sdk.AgentProviderSelection(providerId: selectedAgentApp.providerId),
     );
     setState(() {
       _attachments.clear();
       _pinnedSkillNames.clear();
       _hasText = false;
+      _selectedAgentApp = null;
     });
+  }
+
+  bool _startsWithAgentAppMention(String text, String displayName) {
+    final name = displayName.trim();
+    if (name.isEmpty) return false;
+    final prefix = '@$name';
+    if (!text.startsWith(prefix)) return false;
+    if (text.length == prefix.length) return true;
+    final next = text.substring(prefix.length, prefix.length + 1);
+    return RegExp(r'\s').hasMatch(next) || next == ':' || next == '：';
   }
 
   void _openAttachmentMenu() {
@@ -688,6 +728,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                   child: TextFieldTapRegion(
                     child: _AgentAppMentionOverlay(
                       apps: agentAppSuggestions,
+                      duplicateDisplayNames: _duplicateAgentAppDisplayNames,
                       onSelected: _selectAgentApp,
                     ),
                   ),
@@ -981,10 +1022,12 @@ class _SlashCommandSuggestions extends StatelessWidget {
 class _AgentAppMentionSuggestions extends StatelessWidget {
   const _AgentAppMentionSuggestions({
     required this.apps,
+    required this.duplicateDisplayNames,
     required this.onSelected,
   });
 
   final List<sdk.AgentAppPackage> apps;
+  final Set<String> duplicateDisplayNames;
   final ValueChanged<sdk.AgentAppPackage> onSelected;
 
   @override
@@ -1014,7 +1057,7 @@ class _AgentAppMentionSuggestions extends StatelessWidget {
                 child: Center(
                   widthFactor: 1,
                   child: Text(
-                    '@${app.displayName.trim()}',
+                    _labelFor(app),
                     style: const TextStyle(
                       color: Color(0xFF171717),
                       fontSize: 12,
@@ -1029,12 +1072,25 @@ class _AgentAppMentionSuggestions extends StatelessWidget {
       ),
     );
   }
+
+  String _labelFor(sdk.AgentAppPackage app) {
+    final displayName = app.displayName.trim();
+    if (!duplicateDisplayNames.contains(displayName.toLowerCase())) {
+      return '@$displayName';
+    }
+    return '@$displayName · ${app.providerId}';
+  }
 }
 
 class _AgentAppMentionOverlay extends StatelessWidget {
-  const _AgentAppMentionOverlay({required this.apps, required this.onSelected});
+  const _AgentAppMentionOverlay({
+    required this.apps,
+    required this.duplicateDisplayNames,
+    required this.onSelected,
+  });
 
   final List<sdk.AgentAppPackage> apps;
+  final Set<String> duplicateDisplayNames;
   final ValueChanged<sdk.AgentAppPackage> onSelected;
 
   @override
@@ -1050,7 +1106,11 @@ class _AgentAppMentionOverlay extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Padding(
         padding: const EdgeInsets.all(8),
-        child: _AgentAppMentionSuggestions(apps: apps, onSelected: onSelected),
+        child: _AgentAppMentionSuggestions(
+          apps: apps,
+          duplicateDisplayNames: duplicateDisplayNames,
+          onSelected: onSelected,
+        ),
       ),
     );
   }

@@ -515,12 +515,20 @@ async fn list_tools_json_handle_inner(handle: i64, request_json: &str) -> Result
     let account_id = effective_account_id(&request.account_id, request.session_key_json.as_deref());
     let agent_id = effective_agent_id(&request.agent_id);
     let config = engine.config_with_capabilities(engine.config());
-    let tool_context = crate::runtime::prepare_session_tool_context_with_config_and_thread_for_core(
+    let workspace_files_dir = crate::runtime::resolve_session_workspace_files_dir(
+        engine.files_dir(),
+        &account_id,
+        &agent_id,
+        request.session_key_json.as_deref(),
+    )
+    .await?;
+    let tool_context = crate::runtime::prepare_session_tool_context_with_workspace_for_core(
         &engine,
         &account_id,
         &agent_id,
         config.clone(),
         thread_id_from_session_key(request.session_key_json.as_deref()),
+        workspace_files_dir,
     );
     let descriptors = crate::tool_loop::gather_tool_descriptors_for_config(
         &config,
@@ -552,12 +560,20 @@ async fn call_tool_json_handle_inner(handle: i64, request_json: &str) -> Result<
     let agent_id = effective_agent_id(&request.agent_id);
     let config = engine.config_with_capabilities(engine.config());
     let current_thread_id = thread_id_from_session_key(request.session_key_json.as_deref());
-    let tool_context = crate::runtime::prepare_session_tool_context_with_config_and_thread_for_core(
+    let workspace_files_dir = crate::runtime::resolve_session_workspace_files_dir(
+        engine.files_dir(),
+        &account_id,
+        &agent_id,
+        request.session_key_json.as_deref(),
+    )
+    .await?;
+    let tool_context = crate::runtime::prepare_session_tool_context_with_workspace_for_core(
         &engine,
         &account_id,
         &agent_id,
         config.clone(),
         current_thread_id,
+        workspace_files_dir,
     );
     let descriptors = crate::tool_loop::gather_tool_descriptors_for_config(
         &config,

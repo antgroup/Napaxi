@@ -56,7 +56,7 @@ final class AgentProviderTests: XCTestCase {
     func testTrustedValidationAcceptsSignedProposalAndRejectsReplay() {
         let defaults = UserDefaults(suiteName: "AgentProviderTests.\(UUID().uuidString)")!
         let store = TrustedHostStore(defaults: defaults, namespace: "test")
-        store.saveBinding(sampleBinding())
+        XCTAssertTrue(store.saveBinding(sampleBinding()))
         let proposal = signedSampleProposal()
 
         let trusted = AgentProvider.validateTrustedProposal(
@@ -80,7 +80,7 @@ final class AgentProviderTests: XCTestCase {
     func testTrustedValidationRejectsMissingAndInvalidSignature() {
         let defaults = UserDefaults(suiteName: "AgentProviderTests.\(UUID().uuidString)")!
         let store = TrustedHostStore(defaults: defaults, namespace: "test")
-        store.saveBinding(sampleBinding())
+        XCTAssertTrue(store.saveBinding(sampleBinding()))
 
         let missing = AgentProvider.validateTrustedProposal(
             proposal: sampleProposal(signature: nil),

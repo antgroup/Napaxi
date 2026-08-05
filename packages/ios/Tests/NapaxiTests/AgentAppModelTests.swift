@@ -319,11 +319,23 @@ final class AgentAppModelTests: XCTestCase {
             ]),
             "completed_at": .string("done"),
         ])
+        let bindingFailure = NapaxiAgentAppActionResult.fromMap([
+            "request_id": .string("r-binding"),
+            "status": .string("failed"),
+            "error": .object([
+                "code": .string("host_not_bound"),
+                "message": .string("Binding missing"),
+                "phase": .string("pre_execution"),
+            ]),
+            "completed_at": .string("done"),
+        ])
 
         XCTAssertEqual(result.toJson()["provider_trace_id"], .string("trace"))
         XCTAssertEqual(try NapaxiRawJSON(jsonString: result.toJsonString()).value.objectValue?["status"], .string("success"))
         XCTAssertEqual(failedResult.error, "{message: denied, retry: false}")
         XCTAssertEqual(failedResult.toJson()["error"], .string("{message: denied, retry: false}"))
+        XCTAssertEqual(bindingFailure.errorCode, "host_not_bound")
+        XCTAssertTrue(bindingFailure.isHostBindingMissing)
         XCTAssertNil(NapaxiAgentAppActionResult.fromMap([
             "request_id": .string("r3"),
             "status": .string("failed"),

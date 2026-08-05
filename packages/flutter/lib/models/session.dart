@@ -13,10 +13,10 @@ class SessionKey {
   });
 
   String toJson() => jsonEncode({
-        'channel_type': channelType,
-        'account_id': accountId,
-        'thread_id': threadId,
-      });
+    'channel_type': channelType,
+    'account_id': accountId,
+    'thread_id': threadId,
+  });
 
   factory SessionKey.fromJson(String jsonStr) {
     final map = jsonDecode(jsonStr) as Map<String, dynamic>;
@@ -115,8 +115,9 @@ class SessionRunInfo {
       agentId: agentId,
       status: status ?? this.status,
       activity: activity ?? this.activity,
-      humanRequestId:
-          clearHumanRequest ? null : humanRequestId ?? this.humanRequestId,
+      humanRequestId: clearHumanRequest
+          ? null
+          : humanRequestId ?? this.humanRequestId,
       error: clearError ? null : error ?? this.error,
       startedAt: startedAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -303,15 +304,14 @@ class ContextStatus {
     this.preCompactionMemoryFlushEnabled = false,
     this.preCompactionMemoryFlushStatus,
     this.error,
-  })  : displayUsedTokens = displayUsedTokens ?? estimatedTokens,
-        currentWindowTokens =
-            currentWindowTokens ?? displayUsedTokens ?? estimatedTokens,
-        transcriptEstimatedTokens =
-            transcriptEstimatedTokens ?? estimatedTokens,
-        nativeContextWindowTokens =
-            nativeContextWindowTokens ?? contextWindowTokens,
-        effectiveContextWindowTokens =
-            effectiveContextWindowTokens ?? contextWindowTokens;
+  }) : displayUsedTokens = displayUsedTokens ?? estimatedTokens,
+       currentWindowTokens =
+           currentWindowTokens ?? displayUsedTokens ?? estimatedTokens,
+       transcriptEstimatedTokens = transcriptEstimatedTokens ?? estimatedTokens,
+       nativeContextWindowTokens =
+           nativeContextWindowTokens ?? contextWindowTokens,
+       effectiveContextWindowTokens =
+           effectiveContextWindowTokens ?? contextWindowTokens;
 
   /// Whether an error message is present.
   bool get hasError => error != null && error!.isNotEmpty;
@@ -364,28 +364,30 @@ class ContextStatus {
           _optionalIntValue(map['display_used_tokens']) ?? estimatedTokens,
       displaySource: map['display_source'] as String? ?? 'legacy',
       lastPromptTokens: _optionalIntValue(map['last_prompt_tokens']),
-      preflightEstimatedTokens:
-          _optionalIntValue(map['preflight_estimated_tokens']),
+      preflightEstimatedTokens: _optionalIntValue(
+        map['preflight_estimated_tokens'],
+      ),
       cacheReadTokens: _intValue(map['cache_read_tokens']),
       cacheWriteTokens: _intValue(map['cache_write_tokens']),
       contextWindowSource: map['context_window_source'] as String? ?? 'unknown',
       nativeContextWindowTokens:
           _optionalIntValue(map['native_context_window_tokens']) ??
-              _intValue(map['context_window_tokens']),
+          _intValue(map['context_window_tokens']),
       nativeContextWindowSource:
           map['native_context_window_source'] as String? ?? 'unknown',
       effectiveContextWindowTokens:
           _optionalIntValue(map['effective_context_window_tokens']) ??
-              _intValue(map['context_window_tokens']),
+          _intValue(map['context_window_tokens']),
       effectiveContextWindowSource:
           map['effective_context_window_source'] as String? ??
-              (map['context_window_source'] as String? ?? 'unknown'),
+          (map['context_window_source'] as String? ?? 'unknown'),
       providerMetadataFetchedAt: map['provider_metadata_fetched_at'] as String?,
       providerMetadataStale: map['provider_metadata_stale'] as bool? ?? false,
       providerMetadataError: map['provider_metadata_error'] as String?,
       contextGuardStatus: map['context_guard_status'] as String? ?? 'unknown',
       contextGuardReason: map['context_guard_reason'] as String? ?? '',
-      contextRoute: map['context_route'] as String? ??
+      contextRoute:
+          map['context_route'] as String? ??
           (map['context_budget_status'] is Map
               ? (map['context_budget_status'] as Map)['route'] as String?
               : null) ??
@@ -399,12 +401,13 @@ class ContextStatus {
       ),
       updatedAt: map['updated_at'] as String?,
       fresh: map['fresh'] as bool? ?? false,
-      currentWindowTokens: _optionalIntValue(map['current_window_tokens']) ??
+      currentWindowTokens:
+          _optionalIntValue(map['current_window_tokens']) ??
           _optionalIntValue(map['display_used_tokens']) ??
           estimatedTokens,
       transcriptEstimatedTokens:
           _optionalIntValue(map['transcript_estimated_tokens']) ??
-              estimatedTokens,
+          estimatedTokens,
       lastContextDeltaTokens: _intValue(map['last_context_delta_tokens']),
       lastContextDeltaReason:
           map['last_context_delta_reason'] as String? ?? 'stable',
@@ -414,8 +417,9 @@ class ContextStatus {
           map['context_display_label'] as String? ?? 'current_window',
       compactionStrategy:
           map['compaction_strategy'] as String? ?? 'llm_summary',
-      lastCompactionDurationMs:
-          _optionalIntValue(map['last_compaction_duration_ms']),
+      lastCompactionDurationMs: _optionalIntValue(
+        map['last_compaction_duration_ms'],
+      ),
       adaptiveChunkCount: _intValue(map['adaptive_chunk_count']),
       oversizedMessageCount: _intValue(map['oversized_message_count']),
       protectedTailTokens: _intValue(map['protected_tail_tokens']),
@@ -552,12 +556,12 @@ class ContextBudgetStatus {
       contextTokenBudget: _intValue(map['context_token_budget']),
       nativeContextWindowTokens:
           _optionalIntValue(map['native_context_window_tokens']) ??
-              _intValue(map['context_token_budget']),
+          _intValue(map['context_token_budget']),
       nativeContextWindowSource:
           map['native_context_window_source'] as String? ?? 'unknown',
       effectiveContextWindowTokens:
           _optionalIntValue(map['effective_context_window_tokens']) ??
-              _intValue(map['context_token_budget']),
+          _intValue(map['context_token_budget']),
       effectiveContextWindowSource:
           map['effective_context_window_source'] as String? ?? 'unknown',
       responseReserveSource:
@@ -568,8 +572,9 @@ class ContextBudgetStatus {
       promptBudgetBeforeReserve: _intValue(map['prompt_budget_before_reserve']),
       reserveTokens: _intValue(map['reserve_tokens']),
       effectiveReserveTokens: _intValue(map['effective_reserve_tokens']),
-      remainingPromptBudgetTokens:
-          _intValue(map['remaining_prompt_budget_tokens']),
+      remainingPromptBudgetTokens: _intValue(
+        map['remaining_prompt_budget_tokens'],
+      ),
       overflowTokens: _intValue(map['overflow_tokens']),
       toolResultReducibleChars: _intValue(map['tool_result_reducible_chars']),
       toolResultReducibleTokens: _intValue(map['tool_result_reducible_tokens']),
@@ -635,7 +640,8 @@ class ChatAttachment {
 
   factory ChatAttachment.fromMap(Map<String, dynamic> map) {
     final rawPath = map['path'] as String?;
-    final localPath = map['local_path'] as String? ??
+    final localPath =
+        map['local_path'] as String? ??
         map['localPath'] as String? ??
         map['host_path'] as String? ??
         map['hostPath'] as String? ??
@@ -646,7 +652,8 @@ class ChatAttachment {
       kind: map['kind'] as String? ?? '',
       mimeType: map['mime_type'] as String? ?? '',
       filename: map['filename'] as String? ?? map['name'] as String?,
-      sandboxPath: map['sandbox_path'] as String? ??
+      sandboxPath:
+          map['sandbox_path'] as String? ??
           (rawPath != null && _isLegacyPathSandboxPath(rawPath)
               ? rawPath
               : null),
@@ -655,12 +662,12 @@ class ChatAttachment {
   }
 
   Map<String, dynamic> toMap() => {
-        'kind': kind,
-        'mime_type': mimeType,
-        if (filename != null) 'filename': filename,
-        if (sandboxPath != null) 'sandbox_path': sandboxPath,
-        if (localPath != null) 'path': localPath,
-      };
+    'kind': kind,
+    'mime_type': mimeType,
+    if (filename != null) 'filename': filename,
+    if (sandboxPath != null) 'sandbox_path': sandboxPath,
+    if (localPath != null) 'path': localPath,
+  };
 }
 
 bool _isLegacyPathSandboxPath(String path) {
@@ -721,7 +728,8 @@ class ToolCallInfo {
           map['result_truncated'] == true || map['result_preview'] != null,
       errorTruncated:
           map['error_truncated'] == true || map['error_preview'] != null,
-      argumentsTruncated: map['arguments_truncated'] == true ||
+      argumentsTruncated:
+          map['arguments_truncated'] == true ||
           map['parameters_truncated'] == true,
     );
   }
@@ -810,7 +818,8 @@ class ChatMessage {
     return ChatMessage(
       role: role,
       content: map['content'] as String? ?? '',
-      attachments: rawAttachments
+      attachments:
+          rawAttachments
               ?.map((e) => ChatAttachment.fromMap(e as Map<String, dynamic>))
               .toList() ??
           const [],

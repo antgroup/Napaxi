@@ -3,6 +3,16 @@ import 'package:napaxi_flutter/models/session.dart';
 import 'package:napaxi_flutter/models/session_run.dart';
 
 void main() {
+  test('session key round-trips its immutable identity', () {
+    const key = SessionKey(
+      channelType: 'app',
+      accountId: 'user',
+      threadId: 'thread',
+    );
+
+    expect(SessionKey.fromJson(key.toJson()), key);
+  });
+
   test('session run info tracks active and terminal states', () {
     final now = DateTime.utc(2026);
     const key = SessionKey(
@@ -61,7 +71,7 @@ void main() {
           'effect': 'read',
           'isError': false,
           'digest': 'abc',
-        }
+        },
       ],
     });
 

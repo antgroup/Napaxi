@@ -109,6 +109,49 @@ public struct NapaxiAgentProviderAPI: Sendable {
         try await requestInstall(provider, timeoutSeconds: timeoutSeconds)
     }
 
+    /// Restores provider-side trusted state without rotating the binding used
+    /// to sign an already-created action proposal.
+    public func restoreBinding(
+        _ installed: NapaxiAgentAppPackage,
+        timeoutSeconds: UInt64 = NapaxiAgentProviderAPI.defaultInstallTimeoutSeconds
+    ) async throws -> NapaxiAgentAppPackage {
+        guard let binding = installed.installBinding,
+              !binding.hostInstanceId.isEmpty,
+              !binding.hostSharedSecret.isEmpty else {
+            throw NapaxiError.invalidState("Agent App has no restorable trusted binding")
+        }
+        guard binding.platform == "ios", !binding.installUrl.isEmpty else {
+            throw NapaxiError.invalidState("Agent App is not installed with an iOS binding")
+        }
+        if !binding.hostBundleId.isEmpty, binding.hostBundleId != host.hostInfo.bundleId {
+            throw NapaxiError.invalidState("Host identity changed; explicit reconnect is required")
+        }
+        let provider = NapaxiAgentProviderDescriptor(
+            platform: "ios",
+            label: installed.displayName,
+            installUrl: binding.installUrl,
+            actionUrl: binding.actionUrl,
+            universalLinkDomain: binding.universalLinkDomain,
+            iosBundleId: binding.iosBundleId,
+            iosTeamId: binding.iosTeamId
+        )
+        var request = host.createInstallRequest()
+        request.hostInstanceId = binding.hostInstanceId
+        request.hostSharedSecret = binding.hostSharedSecret
+        let response = try await host.requestInstall(
+            provider: provider,
+            request: request,
+            timeoutSeconds: timeoutSeconds,
+            openURL: openURL
+        )
+        let restored = try package(from: response)
+        guard restored.providerId == installed.providerId,
+              restored.agentId == installed.agentId else {
+            throw NapaxiError.invalidState("Restored Agent App identity does not match installation")
+        }
+        return restored
+    }
+
     public func installFromLaunchIntent(
         timeoutSeconds: UInt64 = NapaxiAgentProviderAPI.defaultInstallTimeoutSeconds
     ) async throws -> NapaxiAgentAppPackage? {
@@ -178,12 +221,16 @@ public struct NapaxiAgentProviderAPI: Sendable {
     }
 
     private func registerInstallResponse(_ response: NapaxiAgentProviderInstallResponse) throws -> NapaxiJSONValue {
+        try registerPackage(package(from: response).jsonString())
+    }
+
+    private func package(from response: NapaxiAgentProviderInstallResponse) throws -> NapaxiAgentAppPackage {
         let result = try NapaxiAgentInstallResult(jsonString: response.installResultJSON)
         guard var package = result.packageRaw else {
             throw NapaxiError.invalidState("Provider did not return an Agent package")
         }
         package["install_binding"] = .object(response.installBinding)
-        return try registerPackage(package.jsonString())
+        return NapaxiAgentAppPackage(raw: package)
     }
 
     private func installedPackage(for agentId: String) throws -> [String: NapaxiJSONValue] {
@@ -223,10 +270,12 @@ public struct NapaxiAgentProviderAPI: Sendable {
 
 public typealias AgentProviderInstallApi = NapaxiAgentProviderAPI
 public typealias AgentProviderTriggerApi = NapaxiAgentProviderAPI
+public typealias AgentProviderBindingRepair = @Sendable (NapaxiAgentAppActionRequest) async throws -> Bool
 
 public final class NapaxiAgentProviderActionExecutor: NapaxiAgentAppActionExecutor, AgentAppActionExecutor, @unchecked Sendable {
     private let host: NapaxiAgentProviderHost
     private let openURL: NapaxiAgentProviderHost.URLOpener
+    private let repairBinding: AgentProviderBindingRepair?
 
     public init(
         host: NapaxiAgentProviderHost,
@@ -234,6 +283,17 @@ public final class NapaxiAgentProviderActionExecutor: NapaxiAgentAppActionExecut
     ) {
         self.host = host
         self.openURL = openURL
+        self.repairBinding = nil
+    }
+
+    public init(
+        repairingBindingsFor host: NapaxiAgentProviderHost,
+        repairBinding: @escaping AgentProviderBindingRepair,
+        openURL: @escaping NapaxiAgentProviderHost.URLOpener = NapaxiAgentProviderAPI.defaultOpenURL
+    ) {
+        self.host = host
+        self.openURL = openURL
+        self.repairBinding = repairBinding
     }
 
     public func executeAgentAppAction(requestJSON: String) async -> String {
@@ -241,8 +301,13 @@ public final class NapaxiAgentProviderActionExecutor: NapaxiAgentAppActionExecut
     }
 
     public func execute(_ request: NapaxiAgentAppActionRequest) async throws -> NapaxiAgentAppActionResult {
-        let resultJSON = await executeAgentAppAction(requestJSON: try agentProviderRequestToJson(request))
-        return try NapaxiRawJSON(jsonString: resultJSON).value.decodedObject(of: NapaxiAgentAppActionResult.self)
+        let requestJSON = try agentProviderRequestToJson(request)
+        let resultJSON = await executeAgentAppAction(requestJSON: requestJSON)
+        let first = try NapaxiRawJSON(jsonString: resultJSON).value.decodedObject(of: NapaxiAgentAppActionResult.self)
+        guard first.isHostBindingMissing, let repairBinding else { return first }
+        guard try await repairBinding(request) else { return first }
+        let retriedJSON = await executeAgentAppAction(requestJSON: requestJSON)
+        return try NapaxiRawJSON(jsonString: retriedJSON).value.decodedObject(of: NapaxiAgentAppActionResult.self)
     }
 }
 

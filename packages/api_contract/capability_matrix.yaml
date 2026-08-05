@@ -10,6 +10,11 @@ capabilities:
     flutter: supported
     ios: supported
     android: supported
+  project_session_workspaces:
+    status: experimental
+    flutter: supported
+    ios: supported
+    android: supported
   multi_agent:
     status: stable
     flutter: supported

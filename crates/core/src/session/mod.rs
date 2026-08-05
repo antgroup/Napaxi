@@ -16,6 +16,7 @@ mod types;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use store::session_owner;
 pub use types::{SessionAppendMessage, SessionKey, SessionMessage};
 
 pub use lifecycle::{

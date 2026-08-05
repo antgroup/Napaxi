@@ -563,6 +563,7 @@ mod tests {
         let state = super::state::CodexSessionState {
             native_thread_id: Some("thread".to_string()),
             config_fingerprint: String::new(),
+            dynamic_tools_fingerprint: String::new(),
         };
         let line = super::protocol::turn_start_request(
             &mut rpc,
@@ -589,6 +590,7 @@ mod tests {
         let state = super::state::CodexSessionState {
             native_thread_id: Some("thread".to_string()),
             config_fingerprint: String::new(),
+            dynamic_tools_fingerprint: String::new(),
         };
 
         let web_line = super::protocol::turn_start_request(

@@ -259,6 +259,18 @@ pub fn definitions() -> Vec<CapabilityDefinition> {
             &["capability_resolver", "scenario_pack_registry"],
         ),
         tool_definition(
+            "napaxi.workspace.project",
+            CapabilityKind::Service,
+            CapabilityRisk::Medium,
+            CapabilityActivation::Always,
+            true,
+            &[
+                "libsql_session_placement",
+                "turn_workspace_snapshot",
+                "project_file_listing",
+            ],
+        ),
+        tool_definition(
             "napaxi.service.developer_workbench",
             CapabilityKind::Service,
             CapabilityRisk::High,

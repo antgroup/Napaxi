@@ -83,6 +83,13 @@ Platform tools 是 host-carried capabilities。Core 拥有 tool names、paramete
 - **Channel capabilities**：`napaxi.channel.im` 和 `napaxi.channel.device` 支撑 IM、设备和外设通道。
 - **Agent engines**：core-owned runtime loop capabilities，用于不同 agent loop。
 
+`napaxi.workspace.project` 负责 Core 的 project placement API。`SessionKey` 始终只是
+不可变的会话身份；“在哪个项目展示”和“在哪个 workspace 执行”分别持久化在
+libsql 中。普通移动默认切到目标项目 workspace，`keep_current` 则允许像 Codex
+一样只移动展示位置。每个 turn 开始前固定一次 workspace 快照，运行中不能切换。
+项目文件入口也通过同一条 workspace 记录读取，避免 UI 和工具看到不同目录。
+详见 [项目会话工作区设计](project-session-workspaces.md)。
+
 ## 新增 capability
 
 1. 在 `crates/core/src/capabilities/` 添加 definition 和 mapping。

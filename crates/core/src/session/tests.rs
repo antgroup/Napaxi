@@ -65,6 +65,32 @@ fn session_crud_and_history_work() {
 }
 
 #[test]
+fn existing_thread_keeps_its_original_identity_and_owner() {
+    let files_dir = temp_files_dir("immutable-key");
+    let created_json = create_session(&files_dir, "agent-a", "app", "user-a", None);
+    let created: SessionKey = serde_json::from_str(&created_json).unwrap();
+
+    let reopened_json = create_session(
+        &files_dir,
+        "agent-a",
+        "other-channel",
+        "user-a",
+        Some(&created.thread_id),
+    );
+    let reopened: SessionKey = serde_json::from_str(&reopened_json).unwrap();
+    assert_eq!(reopened, created);
+
+    let wrong_owner = create_session(
+        &files_dir,
+        "agent-b",
+        "app",
+        "user-b",
+        Some(&created.thread_id),
+    );
+    assert!(wrong_owner.contains("different owner"));
+}
+
+#[test]
 fn llm_history_keeps_trailing_user_message_for_current_turn() {
     let files_dir = temp_files_dir("trailing-user");
     let key_json = create_session(&files_dir, "agent-a", "app", "user-a", None);

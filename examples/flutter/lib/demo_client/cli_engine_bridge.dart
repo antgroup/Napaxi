@@ -248,6 +248,7 @@ class _CliEngineBridge {
     String uiThreadId,
     String message, {
     void Function(String nativeThreadId)? onNativeThreadId,
+    String? workingDirectory,
   }) {
     final controller = StreamController<sdk.ChatEvent>();
 
@@ -296,6 +297,8 @@ class _CliEngineBridge {
           _sendJsonEvent({
             'type': 'send',
             'text': message,
+            if (workingDirectory != null && workingDirectory.trim().isNotEmpty)
+              'cwd': workingDirectory.trim(),
             if (remembered != null && remembered.isNotEmpty)
               'resume': remembered,
           });
@@ -2734,15 +2737,16 @@ function emitToolResults(message) {
     }
   }
 }
-async function send(text, resume) {
+async function send(text, resume, cwd) {
   ac = new AbortController();
   let resultError = null;
+  const effectiveCwd = String(cwd || CWD);
   try {
     const msgs = query({
       prompt: text,
       options: {
         abortController: ac,
-        cwd: CWD,
+        cwd: effectiveCwd,
         maxTurns: 30,
         includePartialMessages: true,
         permissionMode: "bypassPermissions",
@@ -2862,7 +2866,7 @@ function sendHistory(sessionId) {
   }
 }
 const rl = createInterface({ input: process.stdin });
-rl.on("line", l => { const t = l.trim(); if (!t.startsWith("{")) return; try { const m = JSON.parse(t); if (m.type === "send") send(m.text ?? "", m.resume); else if (m.type === "history") sendHistory(m.sessionId); else if (m.type === "cancel" && ac) ac.abort(); } catch {} });
+rl.on("line", l => { const t = l.trim(); if (!t.startsWith("{")) return; try { const m = JSON.parse(t); if (m.type === "send") send(m.text ?? "", m.resume, m.cwd); else if (m.type === "history") sendHistory(m.sessionId); else if (m.type === "cancel" && ac) ac.abort(); } catch {} });
 rl.on("close", () => process.exit(0));
 emit({ type: "ready" });
 ''';

@@ -576,6 +576,28 @@ fn stores_and_updates_proposal_result() {
 }
 
 #[test]
+fn action_result_accepts_structured_provider_error() {
+    let result: ActionResult = serde_json::from_value(json!({
+        "request_id": "request-1",
+        "status": "failed",
+        "result": {},
+        "error": {
+            "code": "host_not_bound",
+            "message": "No trusted Host binding exists.",
+            "phase": "pre_execution",
+            "retryable": true
+        },
+        "completed_at": "2026-08-05T00:00:00Z"
+    }))
+    .unwrap();
+
+    assert_eq!(
+        result.error.as_deref(),
+        Some("host_not_bound: No trusted Host binding exists.")
+    );
+}
+
+#[test]
 fn accepts_signed_agent_trigger_and_rejects_replay() {
     let temp = tempfile::tempdir().unwrap();
     let files_dir = temp.path().to_string_lossy();

@@ -5,7 +5,7 @@
 //! internal `*Record` types that the persistence layer round-trips.
 
 use chrono::{SecondsFormat, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -139,13 +139,47 @@ pub struct ActionResult {
     pub status: String,
     #[serde(default)]
     pub result: Value,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_action_error"
+    )]
     pub error: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_trace_id: Option<String>,
     pub completed_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+}
+
+fn deserialize_optional_action_error<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Value>::deserialize(deserializer)?;
+    Ok(match value {
+        None | Some(Value::Null) => None,
+        Some(Value::String(message)) => Some(message),
+        Some(Value::Object(error)) => {
+            let code = error
+                .get("code")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim();
+            let message = error
+                .get("message")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .trim();
+            Some(match (code.is_empty(), message.is_empty()) {
+                (false, false) => format!("{code}: {message}"),
+                (false, true) => code.to_string(),
+                (true, false) => message.to_string(),
+                (true, true) => Value::Object(error).to_string(),
+            })
+        }
+        Some(other) => Some(other.to_string()),
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -391,6 +391,74 @@ public data class SessionInfo(
     }
 }
 
+public enum class NapaxiWorkspacePolicy(public val wireName: String) {
+    UseProjectDefault("use_project_default"),
+    KeepCurrent("keep_current"),
+    UsePersonalDefault("use_personal_default"),
+}
+
+public data class NapaxiProject(
+    val id: String,
+    val accountId: String,
+    val agentId: String,
+    val name: String,
+    val defaultWorkspaceId: String,
+    val state: String,
+    val createdAt: String,
+    val updatedAt: String,
+) {
+    public companion object {
+        @JvmStatic
+        public fun fromJson(rawJson: String): NapaxiProject =
+            fromJsonObject(JSONObject(rawJson.ifBlank { "{}" }))
+
+        public fun fromJsonObject(obj: JSONObject): NapaxiProject = NapaxiProject(
+            id = obj.optString("id"),
+            accountId = obj.optString("account_id"),
+            agentId = obj.optString("agent_id"),
+            name = obj.optString("name"),
+            defaultWorkspaceId = obj.optString("default_workspace_id"),
+            state = obj.optString("state", "active"),
+            createdAt = obj.optString("created_at"),
+            updatedAt = obj.optString("updated_at"),
+        )
+
+        @JvmStatic
+        public fun fromMap(map: Map<String, *>): NapaxiProject =
+            fromJsonObject(JSONObject(map))
+    }
+}
+
+public data class NapaxiSessionPlacement(
+    val threadId: String,
+    val projectId: String?,
+    val runtimeWorkspaceId: String,
+    val workingDirectory: String?,
+    val revision: Long,
+    val projectEnteredAt: String?,
+    val workspaceUpdatedAt: String,
+) {
+    public companion object {
+        @JvmStatic
+        public fun fromJson(rawJson: String): NapaxiSessionPlacement =
+            fromJsonObject(JSONObject(rawJson.ifBlank { "{}" }))
+
+        public fun fromJsonObject(obj: JSONObject): NapaxiSessionPlacement = NapaxiSessionPlacement(
+            threadId = obj.optString("thread_id"),
+            projectId = obj.optString("project_id").takeIf { it.isNotBlank() },
+            runtimeWorkspaceId = obj.optString("runtime_workspace_id"),
+            workingDirectory = obj.optString("working_directory").takeIf { it.isNotBlank() },
+            revision = obj.optLong("revision"),
+            projectEnteredAt = obj.optString("project_entered_at").takeIf { it.isNotBlank() },
+            workspaceUpdatedAt = obj.optString("workspace_updated_at"),
+        )
+
+        @JvmStatic
+        public fun fromMap(map: Map<String, *>): NapaxiSessionPlacement =
+            fromJsonObject(JSONObject(map))
+    }
+}
+
 public data class AgentHandle(
     val agentId: String,
     val rawJson: String,
@@ -5040,7 +5108,31 @@ public class AgentAppActionResult(rawJson: String) : RawJsonModel(rawJson) {
     public val requestId: String get() = obj.optString("request_id")
     public val status: String get() = obj.optString("status")
     public val result: JSONObject get() = obj.optJSONObject("result") ?: JSONObject()
-    public val error: String? get() = obj.optNullableString("error")
+    public val error: String?
+        get() {
+            obj.optNullableString("error")?.let { return it }
+            val structured = obj.optJSONObject("error") ?: return null
+            val code = structured.optString("code").trim()
+            val message = structured.optString("message").trim()
+            return when {
+                code.isNotEmpty() && message.isNotEmpty() -> "$code: $message"
+                code.isNotEmpty() -> code
+                message.isNotEmpty() -> message
+                else -> structured.toString()
+            }
+        }
+    public val errorCode: String?
+        get() {
+            obj.optJSONObject("error")?.optString("code")?.trim()?.takeIf(String::isNotEmpty)?.let {
+                return it
+            }
+            return error
+                ?.substringBefore(':')
+                ?.trim()
+                ?.takeIf { it.matches(Regex("^[a-z][a-z0-9_]*$")) }
+        }
+    public val isHostBindingMissing: Boolean
+        get() = status == "failed" && errorCode == "host_not_bound"
     public val providerTraceId: String? get() = obj.optNullableString("provider_trace_id")
     public val completedAt: String get() = obj.optString("completed_at")
     public val signature: String? get() = obj.optNullableString("signature")

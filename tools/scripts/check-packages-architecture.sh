@@ -30,6 +30,7 @@ for contract_file in \
     packages/api_contract/errors.yaml \
     packages/api_contract/methods.yaml \
     packages/api_contract/capability_matrix.yaml \
+    packages/api_contract/project.json \
     packages/api_contract/workspace.json; do
     [ -f "$contract_file" ] || err "Missing SDK adapter contract file: $contract_file"
 done

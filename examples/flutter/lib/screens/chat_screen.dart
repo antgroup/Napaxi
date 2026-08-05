@@ -421,7 +421,15 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-enum _ChatPrimaryView { chat, files, skills, apps, projects, projectDetail }
+enum _ChatPrimaryView {
+  chat,
+  files,
+  skills,
+  apps,
+  projects,
+  projectDetail,
+  projectFiles,
+}
 
 class _CodexInstallProgress {
   const _CodexInstallProgress({
@@ -897,6 +905,7 @@ class _ChatScreenState extends State<ChatScreen>
       _SkillsInitialTab.installed;
   _ChatPrimaryView _primaryView = _ChatPrimaryView.chat;
   Future<NapaxiChatClient>? _primaryFilesClientFuture;
+  Future<NapaxiChatClient>? _projectFilesClientFuture;
   Future<NapaxiChatClient>? _primarySkillsClientFuture;
   Future<NapaxiChatClient>? _primaryAppsClientFuture;
   final GlobalKey<_AppsPageState> _appsPageKey = GlobalKey<_AppsPageState>();
@@ -938,6 +947,7 @@ class _ChatScreenState extends State<ChatScreen>
   Map<String, String> _renamedSessionTitles = const {};
   List<_ChatProject> _chatProjects = const [];
   Map<String, String> _projectSessionIds = const {};
+  Set<String> _workspaceMismatchSessionKeys = const {};
   Map<String, List<ChatAttachment>> _assistantAttachmentCache = const {};
   Map<String, List<ChatAttachment>> _pendingAssistantAttachments = const {};
   Map<String, Set<String>> _seenAttachmentIds = const {};
@@ -2934,6 +2944,20 @@ class _ChatScreenState extends State<ChatScreen>
       _chatProjects = List.unmodifiable([..._chatProjects, project]);
     });
     unawaited(_persistChatProjects());
+    unawaited(_registerProjectInCore(project));
+  }
+
+  Future<void> _registerProjectInCore(_ChatProject project) async {
+    try {
+      final client = await _getChatClient();
+      await client.registerProject(
+        projectId: project.id,
+        agentId: project.agentId,
+        name: project.name,
+      );
+    } catch (error) {
+      debugPrint('Project core registration deferred: $error');
+    }
   }
 
   void _toggleChatProjectPin(_ChatProject project) {
@@ -2966,6 +2990,8 @@ class _ChatScreenState extends State<ChatScreen>
       ]);
     });
     unawaited(_persistChatProjects());
+    final updated = _chatProjects.firstWhere((item) => item.id == project.id);
+    unawaited(_registerProjectInCore(updated));
   }
 
   void _showProjectsFromMenu() {
@@ -3138,6 +3164,20 @@ class _ChatScreenState extends State<ChatScreen>
     });
   }
 
+  void _openProjectFiles(_ChatProject project) {
+    _dismissKeyboard();
+    setState(() {
+      _selectedChatProjectId = project.id;
+      _primaryView = _ChatPrimaryView.projectFiles;
+      _projectFilesClientFuture = _buildProjectFilesClientFuture(project);
+    });
+  }
+
+  void _returnToProjectDetail() {
+    _dismissKeyboard();
+    setState(() => _primaryView = _ChatPrimaryView.projectDetail);
+  }
+
   String? get _activeSessionProjectId {
     final projectId =
         _projectSessionIds[_sessionCacheKey(_activeAgentId, _activeSessionId)];
@@ -3177,6 +3217,14 @@ class _ChatScreenState extends State<ChatScreen>
       });
     });
     unawaited(_persistChatProjects());
+    unawaited(
+      _movePersistedSession(
+        agentId: _activeAgentId,
+        sessionId: sessionId,
+        projectId: null,
+        workspacePolicy: sdk.NapaxiWorkspacePolicy.usePersonalDefault,
+      ),
+    );
     _showChatSnackBar(
       _projectCopy(
         context,
@@ -3425,6 +3473,12 @@ class _ChatScreenState extends State<ChatScreen>
       }
     });
     await _persistChatProjects();
+    try {
+      final client = await _getChatClient();
+      await client.archiveProject(project.id, agentId: project.agentId);
+    } catch (error) {
+      debugPrint('Project core archive deferred: $error');
+    }
     if (!mounted) return;
     _showChatSnackBar(
       _projectCopy(context, english: 'Project deleted', chinese: '项目已删除'),
@@ -3444,6 +3498,57 @@ class _ChatScreenState extends State<ChatScreen>
       });
     });
     unawaited(_persistChatProjects());
+    unawaited(
+      _movePersistedSession(
+        agentId: agentId,
+        sessionId: sessionId,
+        projectId: projectId,
+        workspacePolicy: sdk.NapaxiWorkspacePolicy.useProjectDefault,
+      ),
+    );
+  }
+
+  Future<void> _movePersistedSession({
+    required String agentId,
+    required String sessionId,
+    required String? projectId,
+    required sdk.NapaxiWorkspacePolicy workspacePolicy,
+  }) async {
+    final session = _sdkSessions[_sessionCacheKey(agentId, sessionId)];
+    if (session == null) return;
+    try {
+      final client = await _getChatClient();
+      sdk.NapaxiProject? targetProject;
+      if (projectId != null) {
+        final project = _chatProjects.firstWhere(
+          (item) => item.id == projectId && item.agentId == agentId,
+        );
+        targetProject = await client.registerProject(
+          projectId: project.id,
+          agentId: project.agentId,
+          name: project.name,
+        );
+      }
+      final placement = await client.moveSessionToProject(
+        session,
+        projectId: projectId,
+        workspacePolicy: workspacePolicy,
+      );
+      if (!mounted) return;
+      final cacheKey = _sessionCacheKey(agentId, sessionId);
+      final mismatched =
+          targetProject != null &&
+          !placement.runtimeMatchesProject(targetProject);
+      setState(() {
+        _workspaceMismatchSessionKeys = {
+          for (final key in _workspaceMismatchSessionKeys)
+            if (key != cacheKey) key,
+          if (mismatched) cacheKey,
+        };
+      });
+    } catch (error) {
+      debugPrint('Project session placement deferred: $error');
+    }
   }
 
   Future<void> _startProjectChat(
@@ -3797,6 +3902,7 @@ class _ChatScreenState extends State<ChatScreen>
         ),
       );
     }
+    await _synchronizeCoreProjectPlacements(client, agentId);
     if (restoredSessions.isEmpty) return;
     setState(() {
       _unsavedSessionIds.clear();
@@ -3810,8 +3916,65 @@ class _ChatScreenState extends State<ChatScreen>
     unawaited(_refreshContextStatusForSession(agentId, _activeSessionId));
   }
 
-  bool _isCliAgent(String agentId) =>
-      agentId == 'engine.cc' || agentId == 'engine.codex';
+  Future<void> _synchronizeCoreProjectPlacements(
+    NapaxiChatClient client,
+    String agentId,
+  ) async {
+    try {
+      final projects = _chatProjects
+          .where((project) => project.agentId == agentId)
+          .toList(growable: false);
+      final coreProjects = <String, sdk.NapaxiProject>{};
+      for (final project in projects) {
+        coreProjects[project.id] = await client.registerProject(
+          projectId: project.id,
+          agentId: project.agentId,
+          name: project.name,
+        );
+      }
+      var placements = await client.listSessionPlacements(agentId: agentId);
+      final coreThreadIds = {for (final item in placements) item.threadId};
+      final cachePrefix = '$_activeAccountId::$agentId::';
+      for (final entry in _projectSessionIds.entries) {
+        if (!entry.key.startsWith(cachePrefix)) continue;
+        final sessionId = entry.key.substring(cachePrefix.length);
+        if (coreThreadIds.contains(sessionId)) continue;
+        final session = _sdkSessions[_sessionCacheKey(agentId, sessionId)];
+        if (session == null) continue;
+        await client.moveSessionToProject(
+          session,
+          projectId: entry.value,
+          workspacePolicy: sdk.NapaxiWorkspacePolicy.useProjectDefault,
+        );
+      }
+      placements = await client.listSessionPlacements(agentId: agentId);
+      if (!mounted) return;
+      setState(() {
+        _projectSessionIds = Map.unmodifiable({
+          for (final entry in _projectSessionIds.entries)
+            if (!entry.key.startsWith(cachePrefix)) entry.key: entry.value,
+          for (final placement in placements)
+            if (placement.projectId != null)
+              _sessionCacheKey(agentId, placement.threadId):
+                  placement.projectId!,
+        });
+        _workspaceMismatchSessionKeys = {
+          for (final placement in placements)
+            if (placement.projectId != null &&
+                coreProjects[placement.projectId] != null &&
+                !placement.runtimeMatchesProject(
+                  coreProjects[placement.projectId]!,
+                ))
+              _sessionCacheKey(agentId, placement.threadId),
+        };
+      });
+      await _persistChatProjects();
+    } catch (error) {
+      debugPrint('Project placement restore deferred: $error');
+    }
+  }
+
+  bool _isCliAgent(String agentId) => agentId == 'engine.cc';
 
   /// Restore CLI engine sessions. CLI engines bypass the Rust session store.
   /// For Codex, conversations are pulled straight from `thread/list` (one UI
@@ -4502,7 +4665,14 @@ class _ChatScreenState extends State<ChatScreen>
     setState(() {
       final run = _sessionRuns[sessionId];
       if (run == null) return;
-      _sessionRuns[sessionId] = update(run);
+      final updated = update(run);
+      if (run.isTerminal && updated.status != run.status) {
+        _traceChat(
+          'run update ignored terminal session=$sessionId '
+          'status=${run.status.name} attempted=${updated.status.name}',
+        );
+      }
+      _sessionRuns[sessionId] = updated.preserveTerminalFrom(run);
     });
   }
 
@@ -4522,19 +4692,21 @@ class _ChatScreenState extends State<ChatScreen>
       final deferredInterjections = run.pendingInterjections
           .where((item) => !item.retractsFromSdk)
           .toList(growable: false);
-      _sessionRuns[sessionId] = run.copyWith(
-        status: status,
-        activity: activity,
-        unread: unread || run.unread,
-        error: error,
-        clearError: error == null,
-        updatedAt: DateTime.now(),
-        clearPendingHumanRequest: true,
-        clearPendingHumanMessage: true,
-        pendingInterjections: clearPendingInterjections
-            ? const []
-            : List.unmodifiable(deferredInterjections),
-      );
+      _sessionRuns[sessionId] = run
+          .copyWith(
+            status: status,
+            activity: activity,
+            unread: unread || run.unread,
+            error: error,
+            clearError: error == null,
+            updatedAt: DateTime.now(),
+            clearPendingHumanRequest: true,
+            clearPendingHumanMessage: true,
+            pendingInterjections: clearPendingInterjections
+                ? const []
+                : List.unmodifiable(deferredInterjections),
+          )
+          .preserveTerminalFrom(run);
     });
     if (messageId != null) {
       _completeAssistantMessage(messageId);
@@ -5099,6 +5271,7 @@ class _ChatScreenState extends State<ChatScreen>
   Future<void> _sendMessage(
     List<ChatAttachment> attachments, {
     List<String> pinnedSkillNames = const [],
+    sdk.AgentProviderSelection? providerSelection,
   }) async {
     final text = _inputController.text.trim();
     if (text.isEmpty && attachments.isEmpty) return;
@@ -5114,9 +5287,15 @@ class _ChatScreenState extends State<ChatScreen>
     // Prepend /skill_name mentions for pinned skills so the engine
     // activates them explicitly on this turn. The display text (shown in
     // the user message bubble) remains the original user input.
-    final effectiveText = pinnedSkillNames.isEmpty
+    final providerMessage = providerSelection == null
         ? text
-        : '${pinnedSkillNames.map((n) => '/$n').join(' ')} $text';
+        : _stripSelectedAgentAppMention(text, providerSelection.providerId);
+    var effectiveText = pinnedSkillNames.isEmpty
+        ? providerMessage
+        : '${pinnedSkillNames.map((n) => '/$n').join(' ')} $providerMessage';
+    if (providerSelection != null) {
+      effectiveText = providerSelection.applyToMessage(effectiveText);
+    }
 
     final activeRun = _activeRun;
     _traceChat(
@@ -5151,6 +5330,27 @@ class _ChatScreenState extends State<ChatScreen>
       displayText: text,
       pinnedSkillNames: pinnedSkillNames,
     );
+  }
+
+  String _stripSelectedAgentAppMention(String text, String providerId) {
+    sdk.AgentAppPackage? selected;
+    for (final package in _connectedAgentApps) {
+      if (package.providerId == providerId) {
+        selected = package;
+        break;
+      }
+    }
+    final displayName = selected?.displayName.trim() ?? '';
+    if (displayName.isEmpty) return text;
+    final prefix = '@$displayName';
+    if (!text.startsWith(prefix)) return text;
+    if (text.length > prefix.length) {
+      final next = text.substring(prefix.length, prefix.length + 1);
+      if (!RegExp(r'\s').hasMatch(next) && next != ':' && next != '：') {
+        return text;
+      }
+    }
+    return text.substring(prefix.length).replaceFirst(RegExp(r'^[\s:：]+'), '');
   }
 
   Future<bool> _handleSlashCommand(
@@ -5564,29 +5764,16 @@ class _ChatScreenState extends State<ChatScreen>
         _listenForBackgroundActions(client);
         await _prepareBackgroundRunFeedback(client);
       }
-      final sdk.SessionKey session;
-      if (agentId == 'engine.cc') {
-        // CC still owns sessions directly through its PTY bridge.
-        // Create a synthetic SessionKey so downstream fields are type-correct.
-        session = sdk.SessionKey(
-          channelType: 'cli',
-          accountId: agentId,
-          threadId: activeSession.id,
-        );
-      } else {
-        // Codex now routes through Rust core's napaxi.agent_engine.codex engine,
-        // so it must use a core-created UUID session. Rust core owns the
-        // Codex native thread mapping instead of letting Flutter bridge state
-        // become the UI/core id.
-        session = await _getSdkSession(client, activeSession.id, agentId);
-        if (!mounted) return;
-        sessionId = _migrateLiveSessionId(
-          agentId: agentId,
-          oldSessionId: sessionId,
-          sessionKey: session,
-        );
-        unawaited(_refreshContextStatusForSession(agentId, sessionId));
-      }
+      // Every engine keeps the same immutable Core session identity. The
+      // engine-specific native thread id remains an implementation detail.
+      final session = await _getSdkSession(client, activeSession.id, agentId);
+      if (!mounted) return;
+      sessionId = _migrateLiveSessionId(
+        agentId: agentId,
+        oldSessionId: sessionId,
+        sessionKey: session,
+      );
+      unawaited(_refreshContextStatusForSession(agentId, sessionId));
       final sdkAttachments = await _toSdkAttachments(attachments);
       if (!mounted) return;
 
@@ -6333,8 +6520,14 @@ class _ChatScreenState extends State<ChatScreen>
 
     if (mounted) {
       setState(() {
+        final current = _sessionRuns[sessionId];
+        if (current == null ||
+            current.isTerminal ||
+            current.startedAt != run.startedAt) {
+          return;
+        }
         _stoppingSessionIds.add(sessionId);
-        _sessionRuns[sessionId] = run.copyWith(
+        _sessionRuns[sessionId] = current.copyWith(
           status: sdk.SessionRunStatus.cancelling,
           activity: 'Stopping',
         );
@@ -7408,6 +7601,15 @@ class _ChatScreenState extends State<ChatScreen>
       agentId: agentId,
     );
     _sdkSessions[cacheKey] = session;
+    final projectId = _projectSessionIds[cacheKey];
+    if (projectId != null) {
+      await _movePersistedSession(
+        agentId: agentId,
+        sessionId: sessionId,
+        projectId: projectId,
+        workspacePolicy: sdk.NapaxiWorkspacePolicy.useProjectDefault,
+      );
+    }
     return session;
   }
 
@@ -8553,6 +8755,21 @@ $candidate
     return _buildContentBrowserClient(
       missingConfigMessage: AppStrings.of(context).configureToViewFiles,
     );
+  }
+
+  Future<NapaxiChatClient> _buildProjectFilesClientFuture(
+    _ChatProject project,
+  ) async {
+    final client = await _getChatClient();
+    await client.configureForManagement(
+      capabilitySelection: _activeScenarioCapabilitySelection,
+    );
+    await client.registerProject(
+      projectId: project.id,
+      agentId: project.agentId,
+      name: project.name,
+    );
+    return client;
   }
 
   Future<NapaxiChatClient> _buildSkillsClientFuture() {
@@ -9773,6 +9990,13 @@ $candidate
         page = _ProjectDetailPage(
           project: project,
           sessions: sessions,
+          workspaceMismatchSessionIds: {
+            for (final session in sessions)
+              if (_workspaceMismatchSessionKeys.contains(
+                _sessionCacheKey(_activeAgentId, session.id),
+              ))
+                session.id,
+          },
           onBack: _returnToProjects,
           onSessionTap: _openProjectSession,
           onSessionPinToggle: _toggleSessionPin,
@@ -9788,6 +10012,7 @@ $candidate
                 attachments,
                 pinnedSkillNames,
               ),
+          onFiles: () => _openProjectFiles(project),
           chatClient: _chatClient,
           agentId: _activeAgentId,
         );
@@ -9845,6 +10070,41 @@ $candidate
     );
   }
 
+  Widget _buildProjectFilesPrimarySurface() {
+    _ChatProject? selectedProject;
+    for (final project in _chatProjects) {
+      if (project.id == _selectedChatProjectId &&
+          project.agentId == _activeAgentId) {
+        selectedProject = project;
+        break;
+      }
+    }
+    if (selectedProject == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _returnToProjects();
+      });
+      return const SizedBox.shrink();
+    }
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handleChatPointerDown,
+      onPointerMove: _handleChatPointerMove,
+      onPointerUp: _handleChatPointerEnd,
+      onPointerCancel: _handleChatPointerEnd,
+      child: _FilesPage(
+        clientFuture: _projectFilesClientFuture ??=
+            _buildProjectFilesClientFuture(selectedProject),
+        agentId: _activeAgentId,
+        projectId: selectedProject.id,
+        projectName: selectedProject.name,
+        onBack: () async {
+          _returnToProjectDetail();
+          return false;
+        },
+      ),
+    );
+  }
+
   Widget _buildSkillsPrimarySurface() {
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -9884,6 +10144,7 @@ $candidate
       _ChatPrimaryView.apps => _buildAppsPrimarySurface(),
       _ChatPrimaryView.projects ||
       _ChatPrimaryView.projectDetail => _buildProjectsPrimarySurface(),
+      _ChatPrimaryView.projectFiles => _buildProjectFilesPrimarySurface(),
       _ChatPrimaryView.chat => const SizedBox.shrink(),
     };
   }

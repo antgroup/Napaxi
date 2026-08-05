@@ -1610,6 +1610,58 @@ void main() {
   );
 
   testWidgets(
+    'keeps a completed run terminal when an earlier human answer finishes late',
+    (tester) async {
+      final events = StreamController<sdk.ChatEvent>();
+      final answerResult = Completer<bool>();
+      final fakeClient = FakeNapaxiChatClient(
+        eventStream: events.stream,
+        answerHumanRequestResult: answerResult.future,
+      );
+      await tester.pumpWidget(
+        _testApp(chatClientFactory: () async => fakeClient),
+      );
+      await configureSingleModel(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Ask before finishing',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pump();
+
+      events.add(
+        const sdk.AskingHumanEvent(
+          requestId: 'human-late-answer',
+          question: 'What should I use?',
+          options: [],
+        ),
+      );
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Use the safe option.',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pump();
+
+      await events.close();
+      await tester.pump();
+      expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+
+      answerResult.complete(true);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(fakeClient.answeredHumanRequestId, 'human-late-answer');
+      expect(find.byKey(const Key('stop_message_button')), findsNothing);
+      expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'renders final response after answering ask human following delta',
     (tester) async {
       final events = StreamController<sdk.ChatEvent>();
@@ -3588,6 +3640,143 @@ void main() {
     expect(input.focusNode?.hasFocus, isTrue);
     expect(tester.testTextInput.isVisible, isTrue);
     expect(tester.getSize(inputContainer).height, inputHeightWithSuggestions);
+  });
+
+  testWidgets(
+    'keeps duplicate Agent app names distinct and routes the selected provider',
+    (tester) async {
+      const snakeGameProvider = sdk.AgentProviderDescriptor(
+        packageName: 'com.napaxi.snakegame',
+        installActivityName: 'ProviderInstallActivity',
+        activityName: 'ProviderActionActivity',
+        label: 'Snake',
+      );
+      const snakeTwoProvider = sdk.AgentProviderDescriptor(
+        packageName: 'com.napaxi.snake2',
+        installActivityName: 'ProviderInstallActivity',
+        activityName: 'ProviderActionActivity',
+        label: 'Snake',
+      );
+      const snakeGame = sdk.AgentAppPackage(
+        providerId: 'com.napaxi.snakegame',
+        agentId: 'com.napaxi.snakegame.agent',
+        displayName: 'Snake',
+        installBinding: sdk.AgentAppInstallBinding(
+          platform: 'android',
+          appPackageName: 'com.napaxi.snakegame',
+          activityName: 'ProviderActionActivity',
+          signingCertSha256: 'AA',
+          installedAt: '2026-08-03T00:00:00Z',
+          installRequestId: 'install-snake-game',
+          protocolVersion: 2,
+        ),
+      );
+      const snakeTwo = sdk.AgentAppPackage(
+        providerId: 'com.napaxi.snake2',
+        agentId: 'com.napaxi.snake2.agent',
+        displayName: 'Snake',
+        installBinding: sdk.AgentAppInstallBinding(
+          platform: 'android',
+          appPackageName: 'com.napaxi.snake2',
+          activityName: 'ProviderActionActivity',
+          signingCertSha256: 'BB',
+          installedAt: '2026-08-03T00:00:00Z',
+          installRequestId: 'install-snake-two',
+          protocolVersion: 2,
+        ),
+      );
+      final fakeClient = FakeNapaxiChatClient(
+        events: const [sdk.ResponseEvent(content: 'done')],
+        discoveredAgentProviders: const [snakeGameProvider, snakeTwoProvider],
+        connectedApps: const [snakeGame, snakeTwo],
+      );
+
+      await tester.pumpWidget(
+        _testApp(
+          configStore: await _storeWithMainModel(),
+          chatClientFactory: () async => fakeClient,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final inputFinder = find.byKey(const Key('chat_input_field'));
+      await tester.showKeyboard(inputFinder);
+      await tester.enterText(inputFinder, '@');
+      await tester.pump();
+
+      expect(
+        find.byKey(const Key('agent_app_mention_com.napaxi.snakegame')),
+        findsOneWidget,
+      );
+      final snakeTwoChip = find.byKey(
+        const Key('agent_app_mention_com.napaxi.snake2'),
+      );
+      expect(snakeTwoChip, findsOneWidget);
+      expect(find.text('@Snake · com.napaxi.snakegame'), findsOneWidget);
+      expect(find.text('@Snake · com.napaxi.snake2'), findsOneWidget);
+
+      await tester.tap(snakeTwoChip);
+      await tester.pump();
+      expect(tester.widget<TextField>(inputFinder).controller?.text, '@Snake ');
+
+      await tester.enterText(inputFinder, '@Snake launch');
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pumpAndSettle();
+
+      expect(fakeClient.sentMessages, ['@{provider:com.napaxi.snake2} launch']);
+      expect(find.text('@Snake launch'), findsOneWidget);
+      expect(find.textContaining('@{provider:'), findsNothing);
+    },
+  );
+
+  testWidgets('adds app identifiers to duplicate names in Apps settings', (
+    tester,
+  ) async {
+    sdk.AgentProviderDescriptor provider(String packageName) =>
+        sdk.AgentProviderDescriptor(
+          packageName: packageName,
+          installActivityName: 'ProviderInstallActivity',
+          activityName: 'ProviderActionActivity',
+          label: 'Snake',
+        );
+
+    sdk.AgentAppPackage package(String packageName) => sdk.AgentAppPackage(
+      providerId: packageName,
+      agentId: '$packageName.agent',
+      displayName: 'Snake',
+      installBinding: sdk.AgentAppInstallBinding(
+        platform: 'android',
+        appPackageName: packageName,
+        activityName: 'ProviderActionActivity',
+        signingCertSha256: 'AA',
+        installedAt: '2026-08-03T00:00:00Z',
+        installRequestId: 'install-$packageName',
+        protocolVersion: 2,
+      ),
+    );
+
+    final fakeClient = FakeNapaxiChatClient(
+      discoveredAgentProviders: [
+        provider('com.napaxi.snakegame'),
+        provider('com.napaxi.snake2'),
+      ],
+      connectedApps: [
+        package('com.napaxi.snakegame'),
+        package('com.napaxi.snake2'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('session_history_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('apps_menu_item')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0 capabilities · com.napaxi.snakegame'), findsOneWidget);
+    expect(find.text('0 capabilities · com.napaxi.snake2'), findsOneWidget);
   });
 
   testWidgets('orders bare @ suggestions by most recent use', (tester) async {
@@ -8027,6 +8216,14 @@ void main() {
     expect(find.byKey(const Key('chat_input_container')), findsOneWidget);
     expect(find.byKey(const Key('add_attachment_button')), findsOneWidget);
     expect(find.byKey(const Key('context_status_button')), findsNothing);
+    expect(find.byKey(const Key('project_files_button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('project_files_button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Launch plan updated files'), findsOneWidget);
+    expect(find.byIcon(Icons.folder_open_rounded), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('project_chat_input')), findsOneWidget);
     expect(
       tester
           .widget<TextField>(find.byKey(const Key('project_chat_input')))
@@ -8049,6 +8246,11 @@ void main() {
         'Fake SDK reply from napaxi-model: Prepare the release checklist',
       ),
       findsOneWidget,
+    );
+    expect(fakeClient.sentSessions, hasLength(2));
+    expect(
+      fakeClient.sentSessions.last.toJson(),
+      isNot(contains('workspace_scope')),
     );
     expect(find.byKey(const Key('project_chat_back_button')), findsOneWidget);
     expect(find.byKey(const Key('session_history_button')), findsNothing);

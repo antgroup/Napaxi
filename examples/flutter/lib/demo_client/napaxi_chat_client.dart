@@ -738,6 +738,8 @@ abstract class NapaxiChatClient {
 
   Future<bool> disableConnectedApp(String providerId);
 
+  Future<sdk.AgentAppPackage> repairConnectedApp(String providerId);
+
   Future<sdk.AgentAppPackage> setConnectedAppAutoInvoke(
     String providerId,
     bool enabled,
@@ -805,6 +807,26 @@ abstract class NapaxiChatClient {
     required String threadId,
     required String agentId,
   });
+
+  Future<sdk.NapaxiProject> registerProject({
+    required String projectId,
+    required String agentId,
+    required String name,
+  }) => throw UnsupportedError('Project placement is unavailable');
+
+  Future<bool> archiveProject(String projectId, {required String agentId}) =>
+      Future.value(false);
+
+  Future<List<sdk.NapaxiSessionPlacement>> listSessionPlacements({
+    required String agentId,
+  }) => Future.value(const []);
+
+  Future<sdk.NapaxiSessionPlacement> moveSessionToProject(
+    sdk.SessionKey session, {
+    required String? projectId,
+    required sdk.NapaxiWorkspacePolicy workspacePolicy,
+    int? expectedRevision,
+  }) => throw UnsupportedError('Project placement is unavailable');
 
   Stream<sdk.ChatEvent> sendToSession(
     sdk.SessionKey session,
@@ -917,6 +939,7 @@ abstract class NapaxiChatClient {
 
   Future<List<sdk.WorkspaceFileInfo>> listSandboxWorkspaceFiles({
     required String agentId,
+    String? projectId,
     String? subdir,
     bool recursive = true,
   });
@@ -1546,10 +1569,18 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
       ),
       agentAppActionExecutor: _DemoAgentAppActionExecutor(
         androidExecutor: Platform.isAndroid
-            ? sdk.AndroidAgentProviderActionExecutor()
+            ? sdk.AndroidAgentProviderActionExecutor(
+                repairBinding: _DemoAgentProviderBindingRepair(
+                  _restoreAgentProviderBinding,
+                ),
+              )
             : null,
         iosExecutor: Platform.isIOS
-            ? sdk.IosAgentProviderActionExecutor()
+            ? sdk.IosAgentProviderActionExecutor(
+                repairBinding: _DemoAgentProviderBindingRepair(
+                  _restoreAgentProviderBinding,
+                ),
+              )
             : null,
       ),
       browserController: browserController,
@@ -1693,6 +1724,17 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   Future<bool> disableConnectedApp(String providerId) async {
     final engine = await _ensureManagementEngine();
     return engine.agentApp.deletePackage(providerId);
+  }
+
+  @override
+  Future<sdk.AgentAppPackage> repairConnectedApp(String providerId) async {
+    final engine = await _ensureManagementEngine();
+    final installed = engine.agentApp.getPackage(providerId);
+    if (installed == null) {
+      throw StateError('Connected Agent App not found: $providerId');
+    }
+    await _agentProviderInstallApi().restoreBinding(installed);
+    return installed;
   }
 
   @override
@@ -3843,6 +3885,18 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     );
   }
 
+  Future<bool> _restoreAgentProviderBinding(
+    sdk.AgentAppActionRequest request,
+  ) async {
+    final engine = _requireEngine();
+    final installed =
+        engine.agentApp.getPackage(request.proposal.providerId) ??
+        engine.agentApp.getPackage(request.proposal.agentId);
+    if (installed == null) return false;
+    await _agentProviderInstallApi().restoreBinding(installed);
+    return true;
+  }
+
   @override
   Future<List<DemoAgent>> listAgents() async {
     final engine = _engine;
@@ -3965,6 +4019,54 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   }
 
   @override
+  Future<sdk.NapaxiProject> registerProject({
+    required String projectId,
+    required String agentId,
+    required String name,
+  }) {
+    return _requireEngine().projects.register(
+      projectId: projectId,
+      accountId: _activeAccountId,
+      agentId: agentId,
+      name: name,
+    );
+  }
+
+  @override
+  Future<bool> archiveProject(String projectId, {required String agentId}) {
+    return _requireEngine().projects.archive(
+      projectId,
+      accountId: _activeAccountId,
+      agentId: agentId,
+    );
+  }
+
+  @override
+  Future<List<sdk.NapaxiSessionPlacement>> listSessionPlacements({
+    required String agentId,
+  }) {
+    return _requireEngine().projects.listPlacements(
+      accountId: _activeAccountId,
+      agentId: agentId,
+    );
+  }
+
+  @override
+  Future<sdk.NapaxiSessionPlacement> moveSessionToProject(
+    sdk.SessionKey session, {
+    required String? projectId,
+    required sdk.NapaxiWorkspacePolicy workspacePolicy,
+    int? expectedRevision,
+  }) {
+    return _requireEngine().projects.moveSession(
+      session,
+      projectId: projectId,
+      workspacePolicy: workspacePolicy,
+      expectedRevision: expectedRevision,
+    );
+  }
+
+  @override
   Stream<sdk.ChatEvent> sendToSession(
     sdk.SessionKey session,
     String message, {
@@ -3974,7 +4076,12 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     void Function(String nativeThreadId)? onNativeThreadId,
   }) {
     if (agentId == 'engine.cc') {
-      return _sendToCliBridge('cc', session.threadId, message);
+      return _sendToCliBridge(
+        'cc',
+        session.threadId,
+        message,
+        session: session,
+      );
     }
     // Codex is routed through the core-owned `napaxi.agent_engine.codex`
     // runner. Flutter no longer hosts the Codex app-server PTY.
@@ -4001,15 +4108,25 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     String threadId,
     String message, {
     void Function(String nativeThreadId)? onNativeThreadId,
+    sdk.SessionKey? session,
   }) {
     final controller = StreamController<sdk.ChatEvent>();
     () async {
       try {
         final bridge = _getOrCreateBridge(engineId);
+        String? workingDirectory;
+        if (engineId == 'cc' && session != null) {
+          final placement = await _requireEngine().projects.placement(session);
+          final workspaceId = placement.runtimeWorkspaceId;
+          workingDirectory = workspaceId.startsWith('project-')
+              ? '/workspace/projects/$workspaceId/linux-env/workspace'
+              : _CliEngineSpec.cc.workspacePath;
+        }
         await for (final event in bridge.send(
           threadId,
           message,
           onNativeThreadId: onNativeThreadId,
+          workingDirectory: workingDirectory,
         )) {
           if (controller.isClosed) break;
           controller.add(event);
@@ -4145,10 +4262,11 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   }
 
   @override
-  Future<bool> answerHumanRequest(String requestId, String response) {
-    final ccBridge = _ccBridge;
-    if (ccBridge != null) {
-      return ccBridge.answerHumanRequest(requestId, response);
+  Future<bool> answerHumanRequest(String requestId, String response) async {
+    final bridge = _ccBridge;
+    if (bridge != null &&
+        await bridge.answerHumanRequest(requestId, response)) {
+      return true;
     }
     return _requireEngine().answerHumanRequest(requestId, response);
   }
@@ -4469,9 +4587,19 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   @override
   Future<List<sdk.WorkspaceFileInfo>> listSandboxWorkspaceFiles({
     required String agentId,
+    String? projectId,
     String? subdir,
     bool recursive = true,
   }) async {
+    if (projectId != null && projectId.trim().isNotEmpty) {
+      return _requireEngine().projects.listFiles(
+        projectId,
+        accountId: _activeAccountId,
+        agentId: agentId,
+        subdir: subdir,
+        recursive: recursive,
+      );
+    }
     if (!sdk.NapaxiFileBridge.isInitialized) {
       throw StateError('napaxi file bridge has not been initialized');
     }
@@ -11314,4 +11442,14 @@ class _DemoAgentAppActionExecutor extends sdk.AgentAppActionExecutor {
       completedAt: DateTime.now().toUtc().toIso8601String(),
     );
   }
+}
+
+class _DemoAgentProviderBindingRepair
+    implements sdk.AgentProviderBindingRepair {
+  _DemoAgentProviderBindingRepair(this._repair);
+
+  final Future<bool> Function(sdk.AgentAppActionRequest request) _repair;
+
+  @override
+  Future<bool> repair(sdk.AgentAppActionRequest request) => _repair(request);
 }

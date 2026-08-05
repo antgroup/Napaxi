@@ -174,6 +174,15 @@ The host ignores any `install_binding` returned by the provider. It reads the
 Android package name, action Activity, and signing certificate digest from the
 system and writes that trusted binding before registering the package.
 
+One host installation reuses a stable `host_instance_id`; each provider still
+receives an independent shared secret. If trusted validation returns
+`host_not_bound` before provider business logic starts, the host may resend an
+explicit `INSTALL_AGENT` request with the existing host instance id and shared
+secret, then retry the unchanged proposal once. Restore is allowed only while
+the provider package/bundle identity and signing identity still match the
+stored install binding. It must not loop after a second failure or silently
+trust a changed provider identity.
+
 Host to provider app:
 
 - Intent action: `agent.provider.action.HANDLE_PROPOSAL`

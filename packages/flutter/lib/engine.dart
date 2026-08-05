@@ -45,6 +45,7 @@ import 'api/automation_api.dart';
 import 'api/evolution_api.dart';
 import 'api/tool_api.dart';
 import 'api/workspace_api.dart';
+import 'api/project_api.dart';
 import 'generated/bridge/agent_engine.dart' as rust_agent_engine;
 import 'generated/bridge/file_bridge.dart' as rust_file_bridge;
 import 'generated/bridge/init.dart' as rust_init;
@@ -165,6 +166,7 @@ class NapaxiEngine {
   late final SessionRunApi sessionRuns;
   late final AgentApi agents;
   late final WorkspaceApi workspace;
+  late final ProjectApi projects;
   late final SkillApi skills;
   late final GroupApi groups;
   late final BackgroundApi background;
@@ -203,6 +205,7 @@ class NapaxiEngine {
     sessionRuns = SessionRunApi(() => _handle);
     agents = AgentApi(() => _handle, config: () => _config);
     workspace = WorkspaceApi(() => _handle, config: () => _config);
+    projects = ProjectApi(() => _handle);
     skills = SkillApi(() => _handle, config: () => _config);
     groups = GroupApi(() => _handle, config: () => _config);
     background = BackgroundApi(_core);

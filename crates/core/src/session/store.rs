@@ -36,6 +36,11 @@ pub(super) fn read_record(files_dir: &str, thread_id: &str) -> Option<SessionRec
     Some(record)
 }
 
+pub(crate) fn session_owner(files_dir: &str, thread_id: &str) -> Option<(String, String)> {
+    let record = read_record(files_dir, thread_id)?;
+    Some((record.key.account_id, record.agent_id))
+}
+
 pub(super) fn write_record(files_dir: &str, record: &SessionRecord) -> bool {
     let dir = session_dir(files_dir);
     if fs::create_dir_all(&dir).is_err() {

@@ -30,6 +30,8 @@ runtime policy. Shared behavior belongs in `napaxi_core::api`.
 - [`workspace.json`](workspace.json): first executable vertical slice covering
   workspace methods, adapter mappings, typed models, fixture bindings, and
   response-shape fixtures.
+- [`project.json`](project.json): project display membership, sticky runtime
+  workspace, owner checks, move policies, and project-file listing contract.
 
 ## Stability Labels
 

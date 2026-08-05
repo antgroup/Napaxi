@@ -698,6 +698,7 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
       onSessionDelete: widget.onSessionDelete,
       onStartChat: (message, attachments, pinnedSkillNames) =>
           widget.onProjectChatStarted(project.id, message),
+      onFiles: () {},
       agentId: widget.activeAgent.id,
     );
   }
@@ -3211,6 +3212,12 @@ class _ConnectedAppsSettingsPageState extends State<_ConnectedAppsSettingsPage>
               discoveredById.containsKey(_connectedAppPlatformId(package)),
         )
         .toList(growable: false);
+    final enabledNameCounts = <String, int>{};
+    for (final package in enabled) {
+      final name = package.displayName.trim().toLowerCase();
+      if (name.isEmpty) continue;
+      enabledNameCounts.update(name, (count) => count + 1, ifAbsent: () => 1);
+    }
     final unavailable = _connected
         .where(
           (package) =>
@@ -3249,9 +3256,15 @@ class _ConnectedAppsSettingsPageState extends State<_ConnectedAppsSettingsPage>
                     title: package.displayName.trim().isEmpty
                         ? package.providerId
                         : package.displayName,
-                    subtitle: _chinese
-                        ? '${package.actions.length} 项能力'
-                        : '${package.actions.length} ${package.actions.length == 1 ? 'capability' : 'capabilities'}',
+                    subtitle: _connectedAppSubtitle(
+                      package,
+                      duplicateName:
+                          (enabledNameCounts[package.displayName
+                                  .trim()
+                                  .toLowerCase()] ??
+                              0) >
+                          1,
+                    ),
                     enabled: true,
                     busy: _busyPlatformId == _connectedAppPlatformId(package),
                     onDetailsTap: () => widget.onOpenDetails(package),
@@ -3345,6 +3358,21 @@ class _ConnectedAppsSettingsPageState extends State<_ConnectedAppsSettingsPage>
         ],
       ),
     );
+  }
+
+  String _connectedAppSubtitle(
+    sdk.AgentAppPackage package, {
+    required bool duplicateName,
+  }) {
+    final capabilityText = _chinese
+        ? '${package.actions.length} 项能力'
+        : '${package.actions.length} ${package.actions.length == 1 ? 'capability' : 'capabilities'}';
+    if (!duplicateName) return capabilityText;
+    final appPackageName = package.installBinding?.appPackageName.trim() ?? '';
+    final identifier = appPackageName.isEmpty
+        ? package.providerId
+        : appPackageName;
+    return '$capabilityText · $identifier';
   }
 }
 
@@ -3560,6 +3588,7 @@ class _ConnectedAppDetailPage extends StatefulWidget {
 class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
   late sdk.AgentAppPackage _package = widget.package;
   bool _savingAutoInvoke = false;
+  bool _repairingBinding = false;
 
   bool get _chinese => widget.language == AppLanguage.chinese;
 
@@ -3595,6 +3624,28 @@ class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
     }
   }
 
+  Future<void> _repairBinding() async {
+    if (_repairingBinding) return;
+    setState(() => _repairingBinding = true);
+    try {
+      final client = await widget.clientFuture;
+      final updated = await client.repairConnectedApp(_package.providerId);
+      if (!mounted) return;
+      setState(() => _package = updated);
+      widget.onChanged(updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_chinese ? '连接已修复' : 'Connection repaired')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyDisplayError(error))));
+    } finally {
+      if (mounted) setState(() => _repairingBinding = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -3616,6 +3667,20 @@ class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
               onChanged: (enabled) => unawaited(_setAutoInvoke(enabled)),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          key: Key('connected_app_repair_${_package.providerId}'),
+          onPressed: _repairingBinding
+              ? null
+              : () => unawaited(_repairBinding()),
+          icon: _repairingBinding
+              ? const SizedBox.square(
+                  dimension: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.sync_rounded),
+          label: Text(_chinese ? '检查并修复连接' : 'Check and repair connection'),
         ),
         const SizedBox(height: 24),
         _SettingsGroupTitle(

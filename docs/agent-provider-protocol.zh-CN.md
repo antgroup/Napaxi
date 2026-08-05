@@ -126,6 +126,8 @@ finish()
 
 Host 不信任 provider 返回的 `install_binding`，而是从 Android 系统读取 package name、action Activity 和 signing certificate digest，并写入 trusted binding。
 
+同一个 Host 安装实例应稳定复用一个 `host_instance_id`，但不同 Provider 仍使用各自独立的 shared secret。若 trusted validation 在业务逻辑执行前返回 `host_not_bound`，Host 可以在 Provider 包/Bundle 身份和签名身份均未变化的前提下，使用原 `host_instance_id` 与原 shared secret 重新发送一次显式 `INSTALL_AGENT`，成功后只重试原 Proposal 一次。第二次失败、Provider 身份变化或用户取消时不得循环恢复，也不得静默信任新的签名身份。
+
 ## Android action handoff
 
 Host 发送：

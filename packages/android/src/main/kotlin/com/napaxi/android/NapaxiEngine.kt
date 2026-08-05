@@ -38,6 +38,7 @@ public class NapaxiEngine private constructor(
     public val sessionRuns: SessionRunApi = SessionRunApi(this)
     public val agents: AgentApi = AgentApi(this)
     public val workspace: WorkspaceApi = WorkspaceApi(this)
+    public val projects: ProjectApi = ProjectApi(this)
     public val skills: SkillApi = SkillApi(this)
     public val evolution: EvolutionApi = EvolutionApi(this)
     public val groups: GroupApi = GroupApi(this)

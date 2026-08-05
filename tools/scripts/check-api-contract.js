@@ -444,10 +444,74 @@ function validateWorkspaceContract() {
   }
 }
 
+function validateProjectContract() {
+  const contractPath = 'packages/api_contract/project.json';
+  if (!exists(contractPath)) fail(`Missing ${contractPath}`);
+  const contract = readJson(contractPath);
+  if (contract.version !== 1 || contract.namespace !== 'project') {
+    fail(`${contractPath} must define version 1 project namespace`);
+  }
+  if (contract.resultEnvelope !== 'packages/api_contract/errors.yaml#result_envelope') {
+    fail(`${contractPath} must point at the standard result envelope`);
+  }
+  requireArray(contract.invariants, `${contractPath}.invariants`);
+  requireArray(contract.workspacePolicies, `${contractPath}.workspacePolicies`);
+  requireArray(contract.methods, `${contractPath}.methods`);
+
+  const requiredMethods = new Set([
+    'register', 'list', 'archive', 'get_session_placement',
+    'list_session_placements', 'move_session', 'list_files',
+  ]);
+  const dispatchText = readText('packages/api_bridge/c_api/project_dispatch.rs');
+  const adapterTexts = {
+    flutter: readText('packages/flutter/lib/api/project_api.dart'),
+    ios: readText('packages/ios/Sources/Napaxi/CoreAPIs.swift'),
+    android: readText('packages/android/src/main/kotlin/com/napaxi/android/Apis.kt'),
+  };
+  for (const method of contract.methods) {
+    if (!requiredMethods.delete(method.name)) {
+      fail(`${contractPath} has unexpected or duplicate method ${method.name}`);
+    }
+    if (!dispatchText.includes(`"${method.name}" =>`)) {
+      fail(`project dispatcher missing ${method.name}`);
+    }
+    for (const adapter of ['flutter', 'ios', 'android']) {
+      const facade = method.facades?.[adapter];
+      if (!facade || !adapterTexts[adapter].includes(`${facade}(`)) {
+        fail(`${adapter} project facade missing ${facade ?? method.name}`);
+      }
+    }
+  }
+  if (requiredMethods.size > 0) {
+    fail(`${contractPath} missing methods: ${[...requiredMethods].join(', ')}`);
+  }
+
+  const models = contract.models ?? {};
+  const fixtureModels = [
+    ['fixtures/project/project_record.json', 'NapaxiProject'],
+    ['fixtures/project/session_placement.json', 'NapaxiSessionPlacement'],
+  ];
+  for (const [fixture, model] of fixtureModels) {
+    if (!models[model]) fail(`${contractPath} missing model ${model}`);
+    validateModelValue(model, readJson(`packages/api_contract/${fixture}`), models, fixture);
+  }
+  validateFixtureCoverage(contract, contractPath);
+
+  requireIncludes('packages/flutter/lib/models/project.dart', 'class NapaxiProject');
+  requireIncludes('packages/flutter/lib/models/project.dart', 'class NapaxiSessionPlacement');
+  requireIncludes('packages/android/src/main/kotlin/com/napaxi/android/Models.kt', 'data class NapaxiProject');
+  requireIncludes('packages/android/src/main/kotlin/com/napaxi/android/Models.kt', 'data class NapaxiSessionPlacement');
+  requireIncludes('packages/ios/Sources/Napaxi/ProjectModels.swift', 'struct NapaxiProject');
+  requireIncludes('packages/ios/Sources/Napaxi/ProjectModels.swift', 'struct NapaxiSessionPlacement');
+}
+
 function validateContractIndex() {
   requireIncludes('packages/api_contract/README.md', 'workspace.json', 'workspace contract entry');
+  requireIncludes('packages/api_contract/README.md', 'project.json', 'project contract entry');
   requireIncludes('packages/api_contract/methods.yaml', 'workspace:', 'workspace namespace');
+  requireIncludes('packages/api_contract/methods.yaml', 'project:', 'project namespace');
   requireIncludes('packages/api_contract/capability_matrix.yaml', 'workspace_memory:', 'workspace capability');
+  requireIncludes('packages/api_contract/capability_matrix.yaml', 'project_session_workspaces:', 'project workspace capability');
   requireIncludes('packages/api_contract/errors.yaml', 'result_envelope:', 'standard result envelope');
   requireRegex('packages/api_contract/errors.yaml', /invalid_argument:/, 'invalid_argument error code');
 }
@@ -455,4 +519,5 @@ function validateContractIndex() {
 info('Checking executable SDK API contract');
 validateContractIndex();
 validateWorkspaceContract();
+validateProjectContract();
 info('SDK API contract checks passed');

@@ -152,6 +152,120 @@ public class SessionApi internal constructor(private val engine: NapaxiEngine) {
     ): Boolean = engine.saveAttachmentMetadata(threadId, userMsgIndex, attachments)
 }
 
+public class ProjectApi internal constructor(private val engine: NapaxiEngine) {
+    public suspend fun register(
+        projectId: String,
+        name: String,
+        accountId: String = NapaxiEngine.DEFAULT_ACCOUNT_ID,
+        agentId: String = NapaxiEngine.DEFAULT_AGENT_ID,
+    ): NapaxiProject = withContext(Dispatchers.IO) {
+        NapaxiProject.fromJsonObject(
+            JSONObject(
+                engine.bridge(
+                    "project.register",
+                    JSONObject()
+                        .put("project_id", projectId)
+                        .put("account_id", accountId)
+                        .put("agent_id", agentId)
+                        .put("name", name),
+                ),
+            ),
+        )
+    }
+
+    public suspend fun list(
+        accountId: String = NapaxiEngine.DEFAULT_ACCOUNT_ID,
+        agentId: String = NapaxiEngine.DEFAULT_AGENT_ID,
+    ): List<NapaxiProject> = withContext(Dispatchers.IO) {
+        val array = JSONArray(
+            engine.bridge(
+                "project.list",
+                JSONObject().put("account_id", accountId).put("agent_id", agentId),
+            ),
+        )
+        (0 until array.length()).map { NapaxiProject.fromJsonObject(array.getJSONObject(it)) }
+    }
+
+    public suspend fun archive(
+        projectId: String,
+        accountId: String = NapaxiEngine.DEFAULT_ACCOUNT_ID,
+        agentId: String = NapaxiEngine.DEFAULT_AGENT_ID,
+    ): Boolean = withContext(Dispatchers.IO) {
+        engine.bridge(
+            "project.archive",
+            JSONObject()
+                .put("project_id", projectId)
+                .put("account_id", accountId)
+                .put("agent_id", agentId),
+        ).toBooleanStrictOrNull() ?: false
+    }
+
+    public suspend fun placement(sessionKey: SessionKey): NapaxiSessionPlacement = withContext(Dispatchers.IO) {
+        NapaxiSessionPlacement.fromJsonObject(
+            JSONObject(
+                engine.bridge(
+                    "project.get_session_placement",
+                    JSONObject().put("session_key_json", sessionKey.toJson()),
+                ),
+            ),
+        )
+    }
+
+    public suspend fun listPlacements(
+        accountId: String = NapaxiEngine.DEFAULT_ACCOUNT_ID,
+        agentId: String = NapaxiEngine.DEFAULT_AGENT_ID,
+    ): List<NapaxiSessionPlacement> = withContext(Dispatchers.IO) {
+        val array = JSONArray(
+            engine.bridge(
+                "project.list_session_placements",
+                JSONObject().put("account_id", accountId).put("agent_id", agentId),
+            ),
+        )
+        (0 until array.length()).map { NapaxiSessionPlacement.fromJsonObject(array.getJSONObject(it)) }
+    }
+
+    public suspend fun moveSession(
+        sessionKey: SessionKey,
+        projectId: String?,
+        workspacePolicy: NapaxiWorkspacePolicy,
+        expectedRevision: Long? = null,
+    ): NapaxiSessionPlacement = withContext(Dispatchers.IO) {
+        NapaxiSessionPlacement.fromJsonObject(
+            JSONObject(
+                engine.bridge(
+                    "project.move_session",
+                    JSONObject()
+                        .put("session_key_json", sessionKey.toJson())
+                        .put("project_id", projectId)
+                        .put("workspace_policy", workspacePolicy.wireName)
+                        .put("expected_revision", expectedRevision),
+                ),
+            ),
+        )
+    }
+
+    public suspend fun listFiles(
+        projectId: String,
+        accountId: String = NapaxiEngine.DEFAULT_ACCOUNT_ID,
+        agentId: String = NapaxiEngine.DEFAULT_AGENT_ID,
+        subdir: String? = null,
+        recursive: Boolean = true,
+    ): List<WorkspaceFileInfo> = withContext(Dispatchers.IO) {
+        val array = JSONArray(
+            engine.bridge(
+                "project.list_files",
+                JSONObject()
+                    .put("project_id", projectId)
+                    .put("account_id", accountId)
+                    .put("agent_id", agentId)
+                    .put("subdir", subdir)
+                    .put("recursive", recursive),
+            ),
+        )
+        (0 until array.length()).map { WorkspaceFileInfo.fromJsonObject(array.getJSONObject(it)) }
+    }
+}
+
 public class SessionRunApi internal constructor(private val engine: NapaxiEngine) {
     public suspend fun list(
         agentId: String? = null,

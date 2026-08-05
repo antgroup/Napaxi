@@ -30,6 +30,7 @@ pub mod git;
 pub mod group;
 pub mod mcp;
 pub mod platform;
+pub mod project;
 pub mod session;
 pub mod session_runs;
 pub mod skill;

@@ -66,6 +66,13 @@ metadata. Automatic invocation defaults off. Flutter, Android, and iOS must not
 let Provider manifest values enable it; Core owns persistence and collision
 validation for automatically exposed action tools.
 
+Flutter, Android, and iOS Agent Provider install APIs also expose trusted
+binding restore. Restore reuses the existing host instance id and shared
+secret, keeps platform package/bundle and signing checks enabled, and never
+registers a changed Provider identity implicitly. Flutter's platform action
+executor may perform this restore automatically only for the standard
+pre-execution `host_not_bound` failure and retries the unchanged request once.
+
 ## Codex Model Configuration
 
 Flutter, Android, and iOS expose matching typed model sync and clear methods.
@@ -79,6 +86,18 @@ The same adapters expose `listCodexAgentEngineThreads`,
 `readCodexAgentEngineThread`, and `bindCodexAgentEngineThread`. Android queries
 the core-owned app-server native thread store; iOS returns the typed
 `unsupported_platform` result.
+
+## Projects and Session Placement
+
+Flutter, Android, and iOS expose the same project operations: register/list/
+archive projects, get/list session placements, move a session with an explicit
+workspace policy, and list project files. `SessionKey` has no project or
+workspace field and therefore remains stable when a session moves.
+
+The wire policies are `use_project_default`, `keep_current`, and
+`use_personal_default`. Placement updates use an optional expected revision for
+compare-and-swap conflict detection. A project is archived independently from
+its workspace; files are retained and session display membership is cleared.
 
 ## Avoid
 

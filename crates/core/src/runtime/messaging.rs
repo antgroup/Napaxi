@@ -7,8 +7,8 @@ use crate::types::{ChatEvent, PlatformLlmConfig};
 
 use super::engine::{DEFAULT_AGENT_ID, Engine};
 use super::handle::{handle_to_arc, parse_config};
-use super::sessions::{default_session, session_account_id};
-use super::tool_context::prepare_session_tool_context_with_config_and_thread;
+use super::sessions::{default_session, resolve_session_workspace_files_dir, session_account_id};
+use super::tool_context::prepare_session_tool_context_with_workspace_and_provider_for_core;
 
 pub use crate::turn::{
     TurnInput as SessionTurnInput, run_turn as run_session_turn, stream_turn as stream_session_turn,
@@ -48,17 +48,28 @@ async fn send_to_session_event_jsons(
     let effective_config_json =
         serde_json::to_string(&llm_config).unwrap_or_else(|_| config_json.to_string());
     let current_thread_id = session_thread_id(session_key_json);
-    let tool_context =
-        super::tool_context::prepare_session_tool_context_with_config_thread_and_provider(
-            &engine,
-            &account_id,
-            agent_id,
-            llm_config,
-            current_thread_id,
-            explicit_provider
-                .as_ref()
-                .map(|selection| selection.provider_id.as_str()),
-        );
+    let workspace_files_dir = match resolve_session_workspace_files_dir(
+        &files_dir,
+        &account_id,
+        agent_id,
+        Some(session_key_json),
+    )
+    .await
+    {
+        Ok(path) => path,
+        Err(error) => return vec![event_json(chat_error(error))],
+    };
+    let tool_context = prepare_session_tool_context_with_workspace_and_provider_for_core(
+        &engine,
+        &account_id,
+        agent_id,
+        llm_config,
+        current_thread_id,
+        explicit_provider
+            .as_ref()
+            .map(|selection| selection.provider_id.as_str()),
+        workspace_files_dir,
+    );
     let turn_runtime = engine.begin_session_turn(session_key_json);
     crate::capabilities::with_admission_sink(
         engine.admission_sink(),
@@ -211,17 +222,31 @@ async fn stream_session_event_jsons<F>(
     let effective_config_json =
         serde_json::to_string(&llm_config).unwrap_or_else(|_| config_json.to_string());
     let current_thread_id = session_thread_id(session_key_json);
-    let tool_context =
-        super::tool_context::prepare_session_tool_context_with_config_thread_and_provider(
-            &engine,
-            &account_id,
-            agent_id,
-            llm_config,
-            current_thread_id,
-            explicit_provider
-                .as_ref()
-                .map(|selection| selection.provider_id.as_str()),
-        );
+    let workspace_files_dir = match resolve_session_workspace_files_dir(
+        &files_dir,
+        &account_id,
+        agent_id,
+        Some(session_key_json),
+    )
+    .await
+    {
+        Ok(path) => path,
+        Err(error) => {
+            emit(event_json(chat_error(error)));
+            return;
+        }
+    };
+    let tool_context = prepare_session_tool_context_with_workspace_and_provider_for_core(
+        &engine,
+        &account_id,
+        agent_id,
+        llm_config,
+        current_thread_id,
+        explicit_provider
+            .as_ref()
+            .map(|selection| selection.provider_id.as_str()),
+        workspace_files_dir,
+    );
     let turn_runtime = engine.begin_session_turn(session_key_json);
     crate::capabilities::with_admission_sink(
         engine.admission_sink(),

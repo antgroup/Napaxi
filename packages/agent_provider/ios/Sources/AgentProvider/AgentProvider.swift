@@ -202,10 +202,12 @@ public final class TrustedHostStore {
         self.namespace = namespace
     }
 
-    public func saveBinding(_ binding: TrustedHostBinding) {
-        guard let json = try? encodeJson(binding) else { return }
+    @discardableResult
+    public func saveBinding(_ binding: TrustedHostBinding) -> Bool {
+        guard let json = try? encodeJson(binding) else { return false }
         defaults.set(json, forKey: key("binding_\(binding.hostInstanceId)"))
         defaults.set(binding.hostInstanceId, forKey: key("latest_host_instance_id"))
+        return loadBinding(hostInstanceId: binding.hostInstanceId) == binding
     }
 
     public func loadBinding(hostInstanceId: String) -> TrustedHostBinding? {

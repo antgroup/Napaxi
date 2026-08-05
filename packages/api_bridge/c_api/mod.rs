@@ -526,10 +526,12 @@ fn android_bridge_alias<'a>(namespace: &'a str, method: &'a str) -> (&'a str, &'
 }
 
 mod a2a_dispatch;
+mod agent_engine_dispatch;
 mod channel_agent_dispatch;
 mod channel_dispatch;
 mod channel_qqbot_dispatch;
 mod dispatch;
+mod project_dispatch;
 mod tools_dispatch;
 use dispatch::dispatch;
 

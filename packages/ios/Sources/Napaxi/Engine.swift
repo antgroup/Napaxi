@@ -265,6 +265,7 @@ public final class NapaxiEngine: @unchecked Sendable {
     public var channelAgents: NapaxiChannelAgentAPI { NapaxiChannelAgentAPI(rawAPI: api) }
     public var qqbotProtocol: NapaxiQqBotProtocolAPI { NapaxiQqBotProtocolAPI(rawAPI: api) }
     public var workspace: NapaxiWorkspaceAPI { NapaxiWorkspaceAPI(rawAPI: api, engine: self) }
+    public var projects: NapaxiProjectAPI { NapaxiProjectAPI(rawAPI: api) }
     public var fileBridge: NapaxiFileBridgeAPI { NapaxiFileBridgeAPI(rawAPI: api, filesDir: filesDir) }
     public var mcp: NapaxiMcpAPI { NapaxiMcpAPI(rawAPI: api, defaultUserId: NapaxiEngine.defaultAccountId) }
     public var background: NapaxiBackgroundAPI { NapaxiBackgroundAPI(controller: backgroundController) }
@@ -643,7 +644,7 @@ public final class NapaxiEngine: @unchecked Sendable {
         _ request: [String: NapaxiJSONValue]
     ) throws -> NapaxiCodexAgentEngineHistoryResult {
         try ensureNotDisposed()
-        let raw = try configureCodexAgentEngineJson(
+        let raw = try queryCodexAgentEngineHistoryJson(
             handle: handle,
             requestJson: request.jsonString()
         )

@@ -29,6 +29,7 @@ pub use attachments::{
 pub(crate) use attachments::{delete_thread_attachments_inner, save_message_attachments_inner};
 pub(crate) use bridge::delete_sandbox_file_with_bridge_inner;
 pub use bridge::{FileBridge, delete_sandbox_file, real_to_sandbox, sandbox_to_real};
+pub(crate) use filesystem::list_workspace_filesystem_json_with_bridge;
 pub use filesystem::{detect_file_references_json, list_workspace_filesystem_json, workspace_size};
 pub use handles::{
     delete_sandbox_file_handle, delete_sandbox_file_scoped_handle,

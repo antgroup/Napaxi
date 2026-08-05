@@ -380,14 +380,32 @@ class AgentAppActionResult {
     this.signature,
   });
 
+  /// Stable provider error code when the result uses either the v3 structured
+  /// error shape or the legacy `code: message` string shape.
+  String? get errorCode {
+    final value = error?.trim();
+    if (value == null || value.isEmpty) return null;
+    final separator = value.indexOf(':');
+    final candidate = (separator < 0 ? value : value.substring(0, separator))
+        .trim();
+    if (candidate.isEmpty ||
+        !RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(candidate)) {
+      return null;
+    }
+    return candidate;
+  }
+
+  /// True only for the trusted-validation failure emitted before provider
+  /// business logic starts, so restoring the binding and retrying is safe.
+  bool get isHostBindingMissing =>
+      status == 'failed' && errorCode == 'host_not_bound';
+
   factory AgentAppActionResult.fromMap(Map<dynamic, dynamic> map) {
     return AgentAppActionResult(
       requestId: map['request_id'] as String? ?? '',
       status: map['status'] as String? ?? '',
       result: _mapValue(map['result']),
-      error: map['error'] is String
-          ? map['error'] as String
-          : map['error']?.toString(),
+      error: _actionErrorString(map['error']),
       providerTraceId: map['provider_trace_id'] as String?,
       completedAt: map['completed_at'] as String? ?? '',
       signature: map['signature'] as String?,
@@ -405,6 +423,19 @@ class AgentAppActionResult {
   };
 
   String toJsonString() => jsonEncode(toJson());
+}
+
+String? _actionErrorString(Object? value) {
+  if (value == null) return null;
+  if (value is String) return value;
+  if (value is Map) {
+    final code = value['code']?.toString().trim() ?? '';
+    final message = value['message']?.toString().trim() ?? '';
+    if (code.isNotEmpty && message.isNotEmpty) return '$code: $message';
+    if (code.isNotEmpty) return code;
+    if (message.isNotEmpty) return message;
+  }
+  return value.toString();
 }
 
 /// A stored ledger entry pairing an [AgentAppActionProposal] with its current

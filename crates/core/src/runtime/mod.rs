@@ -52,8 +52,9 @@ pub use agents::{
 pub use sessions::{
     cancel_session_handle, cancel_session_handle_typed, default_engine_workspace_files_dir,
     default_engine_workspace_files_dir_from_handle, default_session, inject_message_handle,
-    retract_injected_message_handle, retract_injected_message_handle_typed,
-    scoped_workspace_files_dir, scoped_workspace_files_dir_from_handle, session_account_id,
+    resolve_session_workspace_files_dir, retract_injected_message_handle,
+    retract_injected_message_handle_typed, scoped_workspace_files_dir,
+    scoped_workspace_files_dir_from_handle, session_account_id,
 };
 #[cfg(test)]
 pub use sessions::{cancel_session_key, clear_session_cancellation, is_session_cancelled};
@@ -65,8 +66,8 @@ pub use tool_context::{
     update_custom_tools_handle, update_custom_tools_handle_typed,
 };
 pub(crate) use tool_context::{
-    prepare_session_tool_context_with_config_and_thread_for_core,
     prepare_session_tool_context_with_config_for_core,
+    prepare_session_tool_context_with_workspace_for_core,
 };
 
 // Messaging (send + stream).

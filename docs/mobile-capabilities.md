@@ -387,6 +387,16 @@ configuration selections may also persist a selection-level `context_engine`;
 hosts should apply it to the active profile so one global context policy follows
 model switches. Profile-level context settings remain readable for migration.
 
+`napaxi.workspace.project` owns the project placement API. `SessionKey` remains an
+immutable conversation identity; its single display project and runtime
+workspace are stored independently in libsql. A normal move uses the target
+project's default workspace, while `keep_current` supports Codex-style moves
+where the conversation is displayed in project B but keeps running in workspace
+A. The runtime workspace is snapshotted before each turn and cannot change
+during an active turn. Project files are listed through the same core workspace
+record used by tools, so the Files surface cannot accidentally browse another
+project's root. See [Project session workspaces](project-session-workspaces.md).
+
 ## Shell Command Safety
 
 Shell command admission is core-owned and follows a three-step model: the SDK

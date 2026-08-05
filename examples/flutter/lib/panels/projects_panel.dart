@@ -1022,6 +1022,7 @@ class _ProjectDetailPage extends StatefulWidget {
   const _ProjectDetailPage({
     required this.project,
     required this.sessions,
+    this.workspaceMismatchSessionIds = const {},
     required this.onBack,
     required this.onSessionTap,
     required this.onSessionPinToggle,
@@ -1029,12 +1030,14 @@ class _ProjectDetailPage extends StatefulWidget {
     required this.onSessionRemove,
     required this.onSessionDelete,
     required this.onStartChat,
+    required this.onFiles,
     this.chatClient,
     required this.agentId,
   });
 
   final _ChatProject project;
   final List<ChatSession> sessions;
+  final Set<String> workspaceMismatchSessionIds;
   final VoidCallback onBack;
   final ValueChanged<String> onSessionTap;
   final ValueChanged<String> onSessionPinToggle;
@@ -1047,6 +1050,7 @@ class _ProjectDetailPage extends StatefulWidget {
     List<String> pinnedSkillNames,
   )
   onStartChat;
+  final VoidCallback onFiles;
   final NapaxiChatClient? chatClient;
   final String agentId;
 
@@ -1069,6 +1073,7 @@ class _ProjectDetailPageState extends State<_ProjectDetailPage> {
   Future<void> _submit(
     List<ChatAttachment> attachments, {
     List<String> pinnedSkillNames = const [],
+    sdk.AgentProviderSelection? providerSelection,
   }) async {
     final message = _controller.text.trim();
     if ((message.isEmpty && attachments.isEmpty) || _isStarting) return;
@@ -1207,6 +1212,19 @@ class _ProjectDetailPageState extends State<_ProjectDetailPage> {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
+        actions: [
+          IconButton(
+            key: const Key('project_files_button'),
+            tooltip: _projectCopy(
+              context,
+              english: 'Project files',
+              chinese: '项目文件',
+            ),
+            onPressed: widget.onFiles,
+            icon: const Icon(Icons.folder_open_outlined),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: Column(
         children: [
@@ -1267,6 +1285,28 @@ class _ProjectDetailPageState extends State<_ProjectDetailPage> {
                                   ),
                                 ),
                                 const SizedBox(width: 12),
+                                if (widget.workspaceMismatchSessionIds.contains(
+                                  session.id,
+                                ))
+                                  Tooltip(
+                                    message: _projectCopy(
+                                      context,
+                                      english: 'Runs in a different workspace',
+                                      chinese: '当前在其他工作区执行',
+                                    ),
+                                    child: Icon(
+                                      Icons.drive_file_move_outline,
+                                      key: Key(
+                                        'project_session_workspace_mismatch_${session.id}',
+                                      ),
+                                      color: const Color(0xFFD97706),
+                                      size: 18,
+                                    ),
+                                  ),
+                                if (widget.workspaceMismatchSessionIds.contains(
+                                  session.id,
+                                ))
+                                  const SizedBox(width: 8),
                                 if (session.isPinned)
                                   Icon(
                                     Icons.push_pin_outlined,
