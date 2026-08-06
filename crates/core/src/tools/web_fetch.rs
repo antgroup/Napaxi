@@ -1,11 +1,20 @@
 //! Mobile webpage fetch builtin tool.
 
-use crate::tool_registry::ToolDescriptor;
+use std::time::Duration;
+
+use crate::tool_registry::{ToolDescriptor, ToolExecutionContext, ToolRequestBridge};
 
 pub const WEB_FETCH_TOOL_NAME: &str = "web_fetch";
 
 const MAX_FETCH_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_OUTPUT_CHARS: usize = 24_000;
+const BROWSER_FETCH_TIMEOUT: Duration = Duration::from_secs(45);
+
+#[derive(Clone)]
+pub(crate) struct BrowserFetchContext {
+    pub(crate) bridge: ToolRequestBridge,
+    pub(crate) tool_context: ToolExecutionContext,
+}
 
 pub fn descriptor() -> ToolDescriptor {
     ToolDescriptor {
@@ -29,7 +38,33 @@ pub fn descriptor() -> ToolDescriptor {
     }
 }
 
+#[allow(dead_code)]
 pub async fn execute(params: serde_json::Value) -> Result<String, String> {
+    let (url, timeout_secs) = parse_params(&params)?;
+    execute_http(url, timeout_secs).await
+}
+
+pub(crate) async fn execute_with_browser(
+    params: serde_json::Value,
+    browser_context: Option<BrowserFetchContext>,
+) -> Result<String, String> {
+    let (url, timeout_secs) = parse_params(&params)?;
+    if let Some(context) = browser_context {
+        match fetch_with_browser(url, &context).await {
+            Ok(Some(output)) => return Ok(output),
+            Ok(None) => tracing::debug!(
+                url,
+                "web_fetch browser path returned no content; falling back to HTTP"
+            ),
+            Err(error) => {
+                tracing::debug!(url, error = %error, "web_fetch browser path failed; falling back to HTTP")
+            }
+        }
+    }
+    execute_http(url, timeout_secs).await
+}
+
+fn parse_params(params: &serde_json::Value) -> Result<(&str, u64), String> {
     let url = params
         .get("url")
         .and_then(serde_json::Value::as_str)
@@ -40,6 +75,87 @@ pub async fn execute(params: serde_json::Value) -> Result<String, String> {
         .get("timeout_secs")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(crate::http_tool::DEFAULT_TIMEOUT_SECS);
+    Ok((url, timeout_secs))
+}
+
+async fn fetch_with_browser(
+    url: &str,
+    context: &BrowserFetchContext,
+) -> Result<Option<String>, String> {
+    crate::tool_registry::request_host_tool_execution_with_context(
+        context.bridge.clone(),
+        crate::browser_tools::BROWSER_OPEN,
+        serde_json::json!({
+            "url": url,
+            "mode": "mobile",
+            "force_reload": true,
+        }),
+        BROWSER_FETCH_TIMEOUT,
+        Some(&context.tool_context),
+    )
+    .await?;
+    let _ = crate::tool_registry::request_host_tool_execution_with_context(
+        context.bridge.clone(),
+        crate::browser_tools::BROWSER_WAIT,
+        serde_json::json!({
+            "milliseconds": 1500,
+            "screenshot_mode": "never",
+        }),
+        BROWSER_FETCH_TIMEOUT,
+        Some(&context.tool_context),
+    )
+    .await;
+    let output = crate::tool_registry::request_host_tool_execution_with_context(
+        context.bridge.clone(),
+        crate::browser_tools::BROWSER_GET_TEXT,
+        serde_json::json!({}),
+        BROWSER_FETCH_TIMEOUT,
+        Some(&context.tool_context),
+    )
+    .await?;
+    let value: serde_json::Value = serde_json::from_str(&output)
+        .map_err(|error| format!("browser_get_text returned invalid JSON: {error}"))?;
+    if value
+        .get("success")
+        .and_then(serde_json::Value::as_bool)
+        .is_some_and(|success| !success)
+    {
+        return Err(value
+            .get("error")
+            .or_else(|| value.get("blocked_or_approval_reason"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("browser_get_text failed")
+            .to_string());
+    }
+    let text = value
+        .get("text")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if text.trim().is_empty() {
+        return Ok(None);
+    }
+    let (content, truncated) = truncate_text(text, MAX_OUTPUT_CHARS);
+    let observed_url = value
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(url);
+    Ok(Some(
+        serde_json::json!({
+            "status": 200,
+            "success": true,
+            "url": observed_url,
+            "content_type": "browser_text",
+            "content": content,
+            "truncated": truncated,
+            "size_bytes": text.len(),
+            "diagnostics": "source=browser_get_text; fallback=http_available",
+        })
+        .to_string(),
+    ))
+}
+
+async fn execute_http(url: &str, timeout_secs: u64) -> Result<String, String> {
     let (status, headers, bytes) =
         crate::http_tool::get_external_url_bytes(url, timeout_secs, MAX_FETCH_BYTES).await?;
     let content_type = headers

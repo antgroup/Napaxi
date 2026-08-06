@@ -9,32 +9,33 @@ void main() {
     final backend = _FakeBrowserBackend();
     final controller = NapaxiBrowserController(backend: backend);
 
-    final firstOpen = jsonDecode(
-      await controller.executeTool(
-        'browser_open',
-        jsonEncode({'url': 'https://example.test/dashboard'}),
-      ),
-    ) as Map<String, dynamic>;
+    final firstOpen =
+        jsonDecode(
+              await controller.executeTool(
+                'browser_open',
+                jsonEncode({'url': 'https://example.test/dashboard'}),
+              ),
+            )
+            as Map<String, dynamic>;
     expect(firstOpen['success'], true);
     expect(firstOpen['browser_mode'], 'mobile');
     expect(backend.loadCount, 1);
     expect(backend.userAgent, isNull);
 
-    await controller.executeTool(
-      'browser_click',
-      jsonEncode({'index': 0}),
-    );
+    await controller.executeTool('browser_click', jsonEncode({'index': 0}));
     await controller.executeTool(
       'browser_type',
       jsonEncode({'index': 1, 'text': 'hello'}),
     );
 
-    final secondOpen = jsonDecode(
-      await controller.executeTool(
-        'browser_open',
-        jsonEncode({'url': 'https://example.test/dashboard'}),
-      ),
-    ) as Map<String, dynamic>;
+    final secondOpen =
+        jsonDecode(
+              await controller.executeTool(
+                'browser_open',
+                jsonEncode({'url': 'https://example.test/dashboard'}),
+              ),
+            )
+            as Map<String, dynamic>;
 
     expect(secondOpen['success'], true);
     expect(backend.loadCount, 1);
@@ -42,91 +43,103 @@ void main() {
     expect(backend.typedText, 'hello');
   });
 
-  test('browser open defaults to mobile and desktop mode applies desktop UA',
-      () async {
-    final backend = _FakeBrowserBackend();
-    final controller = NapaxiBrowserController(backend: backend);
+  test(
+    'browser open defaults to mobile and desktop mode applies desktop UA',
+    () async {
+      final backend = _FakeBrowserBackend();
+      final controller = NapaxiBrowserController(backend: backend);
 
-    final mobile = jsonDecode(
+      final mobile =
+          jsonDecode(
+                await controller.executeTool(
+                  'browser_open',
+                  jsonEncode({'url': 'https://example.test/product'}),
+                ),
+              )
+              as Map<String, dynamic>;
+
+      expect(mobile['browser_mode'], 'mobile');
+      expect(mobile.containsKey('user_agent'), false);
+      expect(backend.userAgent, isNull);
+      expect(backend.userAgentCalls, [null]);
+
+      final desktop =
+          jsonDecode(
+                await controller.executeTool(
+                  'browser_open',
+                  jsonEncode({
+                    'url': 'https://example.test/product',
+                    'mode': 'desktop',
+                  }),
+                ),
+              )
+              as Map<String, dynamic>;
+
+      expect(desktop['browser_mode'], 'desktop');
+      expect(desktop['user_agent'], napaxiDesktopUserAgent);
+      expect(backend.userAgent, napaxiDesktopUserAgent);
+      expect(backend.userAgentCalls, [null, napaxiDesktopUserAgent]);
+      expect(backend.loadCount, 2);
+    },
+  );
+
+  test(
+    'clear session removes visible state without disposing backend',
+    () async {
+      final backend = _FakeBrowserBackend();
+      final controller = NapaxiBrowserController(backend: backend);
+
       await controller.executeTool(
         'browser_open',
-        jsonEncode({'url': 'https://example.test/product'}),
-      ),
-    ) as Map<String, dynamic>;
+        jsonEncode({'url': 'https://example.test'}),
+      );
+      expect(controller.hasPage, true);
 
-    expect(mobile['browser_mode'], 'mobile');
-    expect(mobile.containsKey('user_agent'), false);
-    expect(backend.userAgent, isNull);
-    expect(backend.userAgentCalls, [null]);
+      await controller.clearSession();
 
-    final desktop = jsonDecode(
-      await controller.executeTool(
-        'browser_open',
-        jsonEncode({
-          'url': 'https://example.test/product',
-          'mode': 'desktop',
-        }),
-      ),
-    ) as Map<String, dynamic>;
+      expect(controller.hasPage, false);
+      expect(backend.clearCacheCount, 1);
+      expect(backend.clearLocalStorageCount, 1);
+      expect(backend.disposed, false);
+    },
+  );
 
-    expect(desktop['browser_mode'], 'desktop');
-    expect(desktop['user_agent'], napaxiDesktopUserAgent);
-    expect(backend.userAgent, napaxiDesktopUserAgent);
-    expect(backend.userAgentCalls, [null, napaxiDesktopUserAgent]);
-    expect(backend.loadCount, 2);
-  });
+  test(
+    'snapshot returns structured page state with stable element ids',
+    () async {
+      final backend = _FakeBrowserBackend();
+      final controller = NapaxiBrowserController(backend: backend);
 
-  test('clear session removes visible state without disposing backend',
-      () async {
-    final backend = _FakeBrowserBackend();
-    final controller = NapaxiBrowserController(backend: backend);
+      final result =
+          jsonDecode(
+                await controller.executeTool(
+                  'browser_open',
+                  jsonEncode({'url': 'https://example.test/product'}),
+                ),
+              )
+              as Map<String, dynamic>;
 
-    await controller.executeTool(
-      'browser_open',
-      jsonEncode({'url': 'https://example.test'}),
-    );
-    expect(controller.hasPage, true);
-
-    await controller.clearSession();
-
-    expect(controller.hasPage, false);
-    expect(backend.clearCacheCount, 1);
-    expect(backend.clearLocalStorageCount, 1);
-    expect(backend.disposed, false);
-  });
-
-  test('snapshot returns structured page state with stable element ids',
-      () async {
-    final backend = _FakeBrowserBackend();
-    final controller = NapaxiBrowserController(backend: backend);
-
-    final result = jsonDecode(
-      await controller.executeTool(
-        'browser_open',
-        jsonEncode({'url': 'https://example.test/product'}),
-      ),
-    ) as Map<String, dynamic>;
-
-    final pageState = result['page_state'] as Map<String, dynamic>;
-    final elements = pageState['elements'] as List<dynamic>;
-    expect(result['browser_mode'], 'mobile');
-    expect(result.containsKey('user_agent'), false);
-    expect(pageState['browser_mode'], 'mobile');
-    expect(pageState['user_agent'], isNull);
-    expect(result['elements'], elements);
-    expect(pageState['viewport'], isA<Map<String, dynamic>>());
-    expect(result['viewport_map'], isA<Map<String, dynamic>>());
-    expect(result['page_change_token'], isA<String>());
-    expect(result['backend_capabilities'], isA<Map<String, dynamic>>());
-    expect(result['screenshot_available'], false);
-    expect(elements.first, containsPair('element_id', 'e_buy'));
-    expect(elements.first, containsPair('risk_hint', 'buy'));
-    expect(elements.first, containsPair('interaction_source', 'js_listener'));
-    expect(elements.first, containsPair('action_hint', '加入购物车'));
-    expect(elements.first['clickable_reason'], contains('js_listener'));
-    expect(elements.first, containsPair('clickable_score', 120));
-    expect(elements.first['clickable_point'], isA<Map<String, dynamic>>());
-  });
+      final pageState = result['page_state'] as Map<String, dynamic>;
+      final elements = pageState['elements'] as List<dynamic>;
+      expect(result['browser_mode'], 'mobile');
+      expect(result.containsKey('user_agent'), false);
+      expect(pageState['browser_mode'], 'mobile');
+      expect(pageState['user_agent'], isNull);
+      expect(result['elements'], elements);
+      expect(pageState['viewport'], isA<Map<String, dynamic>>());
+      expect(result['viewport_map'], isA<Map<String, dynamic>>());
+      expect(result['page_change_token'], isA<String>());
+      expect(result['backend_capabilities'], isA<Map<String, dynamic>>());
+      expect(result['screenshot_available'], false);
+      expect(elements.first, containsPair('element_id', 'e_buy'));
+      expect(elements.first, containsPair('risk_hint', 'buy'));
+      expect(elements.first, containsPair('interaction_source', 'js_listener'));
+      expect(elements.first, containsPair('action_hint', '加入购物车'));
+      expect(elements.first['clickable_reason'], contains('js_listener'));
+      expect(elements.first, containsPair('clickable_score', 120));
+      expect(elements.first['clickable_point'], isA<Map<String, dynamic>>());
+    },
+  );
 
   test('click by element id includes latest element fingerprint', () async {
     final backend = _FakeBrowserBackend();
@@ -154,12 +167,14 @@ void main() {
       'browser_open',
       jsonEncode({'url': 'https://example.test/product'}),
     );
-    final result = jsonDecode(
-      await controller.executeTool(
-        'browser_click',
-        jsonEncode({'element_id': 'e_buy'}),
-      ),
-    ) as Map<String, dynamic>;
+    final result =
+        jsonDecode(
+              await controller.executeTool(
+                'browser_click',
+                jsonEncode({'element_id': 'e_buy'}),
+              ),
+            )
+            as Map<String, dynamic>;
 
     expect(result['success'], false);
     expect(result['failure_code'], 'no_effect_after_click');
@@ -181,17 +196,40 @@ void main() {
       'browser_open',
       jsonEncode({'url': 'https://example.test/product'}),
     );
-    final result = jsonDecode(
-      await controller.executeTool(
-        'browser_snapshot',
-        jsonEncode({'screenshot_mode': 'always'}),
-      ),
-    ) as Map<String, dynamic>;
+    final result =
+        jsonDecode(
+              await controller.executeTool(
+                'browser_snapshot',
+                jsonEncode({'screenshot_mode': 'always'}),
+              ),
+            )
+            as Map<String, dynamic>;
 
     expect(result['screenshot_available'], true);
     expect(result['screenshot'], isA<Map<String, dynamic>>());
     expect(result['screenshot']['sandbox_path'], startsWith('/workspace/'));
     expect(backend.screenshotCaptureCount, 1);
+  });
+
+  test('browser get text returns DOM text', () async {
+    final backend = _FakeBrowserBackend();
+    final controller = NapaxiBrowserController(backend: backend);
+
+    await controller.executeTool(
+      'browser_open',
+      jsonEncode({'url': 'https://example.test/article'}),
+    );
+    final result =
+        jsonDecode(
+              await controller.executeTool('browser_get_text', jsonEncode({})),
+            )
+            as Map<String, dynamic>;
+
+    expect(result['success'], true);
+    expect(result['action'], 'get_text');
+    expect(result['text'], contains('Example readable text'));
+    expect(result['url'], 'https://example.test/article');
+    expect(result['debug'], isA<Map<String, dynamic>>());
   });
 
   test('browser keys and find text dispatch fixed internal scripts', () async {
@@ -202,18 +240,22 @@ void main() {
       'browser_open',
       jsonEncode({'url': 'https://example.test/product'}),
     );
-    final keys = jsonDecode(
-      await controller.executeTool(
-        'browser_keys',
-        jsonEncode({'keys': 'Enter'}),
-      ),
-    ) as Map<String, dynamic>;
-    final find = jsonDecode(
-      await controller.executeTool(
-        'browser_find_text',
-        jsonEncode({'text': '立即购买'}),
-      ),
-    ) as Map<String, dynamic>;
+    final keys =
+        jsonDecode(
+              await controller.executeTool(
+                'browser_keys',
+                jsonEncode({'keys': 'Enter'}),
+              ),
+            )
+            as Map<String, dynamic>;
+    final find =
+        jsonDecode(
+              await controller.executeTool(
+                'browser_find_text',
+                jsonEncode({'text': '立即购买'}),
+              ),
+            )
+            as Map<String, dynamic>;
 
     expect(keys['success'], true);
     expect(find['success'], true);
@@ -221,44 +263,52 @@ void main() {
     expect(backend.findTextCount, 1);
   });
 
-  test('browser open rejects local file targets with structured errors',
-      () async {
-    final controller = NapaxiBrowserController(backend: _FakeBrowserBackend());
-
-    for (final url in [
-      'file:///workspace/a.html',
-      '/workspace/a.html',
-      'workspace/a.html',
-      './a.html',
-      '../a.html',
-      'a.html',
-    ]) {
-      final result = jsonDecode(
-        await controller.executeTool(
-          'browser_open',
-          jsonEncode({'url': url}),
-        ),
-      ) as Map<String, dynamic>;
-
-      expect(result['success'], false, reason: url);
-      expect(result['failure_code'], 'local_file_not_supported', reason: url);
-      expect(
-        result['blocked_or_approval_reason'],
-        contains('file reading tools'),
-        reason: url,
+  test(
+    'browser open rejects local file targets with structured errors',
+    () async {
+      final controller = NapaxiBrowserController(
+        backend: _FakeBrowserBackend(),
       );
-    }
-  });
+
+      for (final url in [
+        'file:///workspace/a.html',
+        '/workspace/a.html',
+        'workspace/a.html',
+        './a.html',
+        '../a.html',
+        'a.html',
+      ]) {
+        final result =
+            jsonDecode(
+                  await controller.executeTool(
+                    'browser_open',
+                    jsonEncode({'url': url}),
+                  ),
+                )
+                as Map<String, dynamic>;
+
+        expect(result['success'], false, reason: url);
+        expect(result['failure_code'], 'local_file_not_supported', reason: url);
+        expect(
+          result['blocked_or_approval_reason'],
+          contains('file reading tools'),
+          reason: url,
+        );
+      }
+    },
+  );
 
   test('browser open reports unsupported schemes separately', () async {
     final controller = NapaxiBrowserController(backend: _FakeBrowserBackend());
 
-    final result = jsonDecode(
-      await controller.executeTool(
-        'browser_open',
-        jsonEncode({'url': 'ftp://example.test/file'}),
-      ),
-    ) as Map<String, dynamic>;
+    final result =
+        jsonDecode(
+              await controller.executeTool(
+                'browser_open',
+                jsonEncode({'url': 'ftp://example.test/file'}),
+              ),
+            )
+            as Map<String, dynamic>;
 
     expect(result['success'], false);
     expect(result['failure_code'], 'unsupported_scheme');
@@ -349,6 +399,16 @@ class _FakeBrowserBackend implements NapaxiBrowserBackend {
   @override
   Future<Object?> runJavaScriptReturningResult(String javaScript) async {
     lastJavaScript = javaScript;
+    if (javaScript.contains('__napaxiGetText')) {
+      return jsonEncode({
+        'success': true,
+        'text': 'Example readable text from body',
+        'length': 31,
+        'url': url,
+        'title': 'Article',
+        'debug': {'readyState': 'complete'},
+      });
+    }
     if (javaScript.contains('document.readyState')) {
       return jsonEncode({
         'ready': 'complete',
@@ -374,15 +434,16 @@ class _FakeBrowserBackend implements NapaxiBrowserBackend {
       keysCount += 1;
       return jsonEncode({
         'success': true,
-        'keys': ['Enter']
+        'keys': ['Enter'],
       });
     }
     if (javaScript.contains('window.__napaxiBrowser.findText(text)')) {
       findTextCount += 1;
       return jsonEncode({'success': true, 'text': '立即购买'});
     }
-    final clickedSuffix =
-        clickCount > 0 && !simulateNoClickEffect ? ' 已加入购物车' : '';
+    final clickedSuffix = clickCount > 0 && !simulateNoClickEffect
+        ? ' 已加入购物车'
+        : '';
     final pageToken = simulateNoClickEffect
         ? 'token_static'
         : 'token_$clickCount$clickedSuffix';
@@ -443,7 +504,7 @@ class _FakeBrowserBackend implements NapaxiBrowserBackend {
               'bbox': {'x': 80, 'y': 620, 'width': 120, 'height': 40},
               'center': {'x': 140, 'y': 640},
               'near_action': '加入购物车',
-            }
+            },
           ],
           'visible_clickable_elements': [
             {
@@ -451,7 +512,7 @@ class _FakeBrowserBackend implements NapaxiBrowserBackend {
               'text': '立即购买',
               'center': {'x': 120, 'y': 640},
               'action_hint': '加入购物车',
-            }
+            },
           ],
           'overlays': [],
           'diagnostics': [],

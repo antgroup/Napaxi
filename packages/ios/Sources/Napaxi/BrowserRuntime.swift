@@ -95,6 +95,8 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
                     result = try await open(params)
                 case "browser_snapshot":
                     result = try await snapshotResult(action: "snapshot", params: params)
+                case "browser_get_text":
+                    result = try await getText(params)
                 case "browser_click":
                     result = try await click(params)
                 case "browser_type":
@@ -324,6 +326,29 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
             }
         }
         return try await snapshotResult(action: "wait")
+    }
+
+    private func getText(_ params: [String: NapaxiJSONValue]) async throws -> [String: NapaxiJSONValue] {
+        guard currentHasPage else {
+            return error(action: "get_text", message: "browser session is not open")
+        }
+        let selector = params["selector"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var result = jsonObject(fromJavaScriptResult: try await safeJavaScript(Self.getTextScript(selector: selector)))
+        if result["success"]?.boolValue == false {
+            return mergeResult(action: "get_text", result: result)
+        }
+        let backendURL = try await backend.currentURL()
+        let backendTitle = try await backend.title()
+        currentURL = result["url"]?.stringValue ?? backendURL ?? currentURL
+        currentTitle = result["title"]?.stringValue ?? backendTitle ?? currentTitle
+        result["success"] = .bool(true)
+        result["action"] = .string("get_text")
+        result["browser_mode"] = .string(currentBrowserMode.rawValue)
+        if let userAgent = Self.userAgent(for: currentBrowserMode) {
+            result["user_agent"] = .string(userAgent)
+        }
+        result["loading"] = .bool(currentLoading)
+        return result
     }
 
     private func findText(_ params: [String: NapaxiJSONValue]) async throws -> [String: NapaxiJSONValue] {
@@ -850,6 +875,65 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         """
     }
 
+    private static func getTextScript(selector: String?) -> String {
+        """
+        (function() {
+          const __napaxiGetText = true;
+          const selector = \(selector.map { javascriptLiteral(.string($0)) } ?? "null");
+          try {
+            let target = document.body;
+            if (selector && String(selector).trim()) {
+              target = document.querySelector(selector);
+              if (!target) {
+                return JSON.stringify({success:false,error:'Element not found: ' + selector,failure_code:'element_not_found',url:location.href,title:document.title});
+              }
+            }
+            const inner = target ? (target.innerText || '') : '';
+            const textContent = target ? (target.textContent || '') : '';
+            const text = inner || textContent || '';
+            const body = document.body || document.documentElement;
+            const allEls = body ? body.querySelectorAll('*') : [];
+            let visibleSample = 0;
+            let hiddenSample = 0;
+            for (let i = 0; i < Math.min(allEls.length, 500); i++) {
+              const style = window.getComputedStyle(allEls[i]);
+              if (style.display === 'none' || style.visibility === 'hidden') hiddenSample++;
+              else visibleSample++;
+            }
+            const max = 10000;
+            return JSON.stringify({
+              success: true,
+              text: text.substring(0, max),
+              length: text.length,
+              truncated: text.length > max,
+              url: location.href,
+              title: document.title,
+              debug: {
+                selector: selector || null,
+                tag: target ? target.tagName : null,
+                id: target ? (target.id || null) : null,
+                className: target && target.className ? String(target.className).split(' ').slice(0, 3).join(' ') : null,
+                readyState: document.readyState,
+                innerTextLength: inner.length,
+                textContentLength: textContent.length,
+                innerTextPreview: inner.substring(0, 200),
+                textContentPreview: textContent.replace(/\\s+/g, ' ').trim().substring(0, 200),
+                bodyInnerTextLength: (document.body && document.body.innerText || '').length,
+                bodyTextContentLength: (document.body && document.body.textContent || '').length,
+                scrollHeight: document.documentElement ? document.documentElement.scrollHeight : (document.body ? document.body.scrollHeight : 0),
+                viewportHeight: window.innerHeight,
+                domElementCount: allEls.length,
+                visibleSample: visibleSample,
+                hiddenSample: hiddenSample
+              }
+            });
+          } catch (error) {
+            return JSON.stringify({success:false,error:String(error),failure_code:'javascript_error',url:location.href,title:document.title});
+          }
+        })()
+        """
+    }
+
     private static func snapshotScript(mode: NapaxiBrowserViewportMode) -> String {
         """
         (function() {
@@ -1317,26 +1401,16 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         function searchResultRecords() {
           const results = [];
           const seenUrls = new Set();
-          const seenRoots = new Set();
-          function nearestResultContainer(anchor) {
-            const selectors = [
-              'li.b_algo',
-              '.b_algo',
-              'li[class*="b_algo"]',
-              '[data-bm]',
-              'article',
-              'li',
-              'section',
-              'div'
-            ];
-            for (const selector of selectors) {
-              try {
-                const found = anchor.closest(selector);
-                if (found && found !== document.body && found !== document.documentElement) return found;
-              } catch (_) {}
+          function isBingSearchPage() {
+            try {
+              const url = new URL(location.href);
+              const host = url.host.toLowerCase();
+              return (host === 'bing.com' || host.endsWith('.bing.com') || host === 'bing.net' || host.endsWith('.bing.net')) && url.pathname.toLowerCase().startsWith('/search');
+            } catch (_) {
+              return false;
             }
-            return anchor.parentElement || anchor;
           }
+          if (!isBingSearchPage()) return results;
           function urlParts(href) {
             try {
               const url = new URL(href, location.href);
@@ -1351,8 +1425,10 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
               const host = url.host.toLowerCase();
               const path = url.pathname.toLowerCase();
               const value = url.href.toLowerCase();
-              return host.endsWith('bing.com') ||
-                host.endsWith('bing.net') ||
+              return host === 'bing.com' ||
+                host.endsWith('.bing.com') ||
+                host === 'bing.net' ||
+                host.endsWith('.bing.net') ||
                 host.endsWith('microsoft.com') ||
                 value.includes('/search?') ||
                 path.includes('/images/search') ||
@@ -1379,21 +1455,33 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
             }
             return labels.filter(Boolean);
           }
+          function rawTextLines(text) {
+            return String(text || '')
+              .split(/[\n\r]+|\s{2,}/)
+              .map(compact)
+              .filter(Boolean);
+          }
+          function firstHttpUrl(text) {
+            const match = String(text || '').match(/https?:\/\/[^\s›>，,；;。]+/i);
+            return match ? match[0].replace(/\/$/, '') : '';
+          }
+          function looksLikeDomain(value) {
+            const token = compact(value).replace(/\/$/, '').toLowerCase();
+            return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(token) && !token.includes('/');
+          }
+          function visibleTextResultUrl(text) {
+            const direct = firstHttpUrl(text);
+            if (direct) return direct;
+            const token = compact(text).split(/\s+/)[0] || '';
+            if (looksLikeDomain(token)) return `https://${token.replace(/\/$/, '')}`;
+            return '';
+          }
           function isRepeatedGenericLabel(text) {
             const parts = compact(text).split(/\s+/).filter(Boolean);
             if (parts.length === 2 && parts[0] === parts[1]) return true;
             if (parts.length > 2 && parts.length % 2 === 0) {
               const half = parts.length / 2;
               if (parts.slice(0, half).join(' ') === parts.slice(half).join(' ')) return true;
-            }
-            return false;
-          }
-          function isRepeatedDomainLabel(text, href) {
-            const value = compact(text).toLowerCase();
-            if (!value) return false;
-            for (const label of hostLabels(href)) {
-              const duplicate = `${label} ${label}`;
-              if (value === label || value === duplicate || value.startsWith(`${duplicate} `)) return true;
             }
             return false;
           }
@@ -1404,85 +1492,20 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
             const parts = urlParts(href);
             const host = parts.host.toLowerCase();
             if (lower.startsWith('http://') || lower.startsWith('https://')) return true;
-            if (isRepeatedGenericLabel(value) || isRepeatedDomainLabel(value, href)) return true;
+            if (visibleTextResultUrl(value)) return true;
+            if (isRepeatedGenericLabel(value)) return true;
             if (host && lower === host) return true;
             if (host && lower.includes(host) && (lower.includes('›') || lower.includes('>'))) return true;
-            if (/^(网页|图片|视频|资讯|地图|Web)$/i.test(value)) return true;
+            if (/^(网页|图片|视频|资讯|地图|Web|国内版|国际版)$/i.test(value)) return true;
             return false;
           }
-          function rawTextLines(text) {
-            return String(text || '')
-              .split(/[\n\r]+|\s{2,}/)
-              .map(compact)
-              .filter(Boolean);
-          }
           function cleanResultTitle(text, href) {
-            const whole = compact(text);
-            const lines = rawTextLines(text).filter((line) => line !== whole);
-            const candidates = whole ? [whole, ...lines] : lines;
-            for (let candidate of candidates) {
-              candidate = candidate.replace(/^(网页|Web)\s+/i, '').trim();
-              candidate = candidate.replace(/\s+https?:\/\/.*$/i, '').trim();
-              candidate = candidate.replace(/\s+[\w.-]+\.[a-z]{2,}\s*[›>].*$/i, '').trim();
-              if (candidate.length >= 2 && !isBreadcrumbText(candidate, href)) return candidate;
-            }
+            let candidate = compact(text);
+            candidate = candidate.replace(/^(网页|Web)\s+/i, '').trim();
+            candidate = candidate.replace(/\s+https?:\/\/.*$/i, '').trim();
+            candidate = candidate.replace(/\s+[\w.-]+\.[a-z]{2,}\s*[›>].*$/i, '').trim();
+            if (candidate.length >= 2 && !isBreadcrumbText(candidate, href)) return candidate;
             return '';
-          }
-          function titleCandidatesFromRoot(root, href) {
-            const candidates = [];
-            if (!root) return candidates;
-            const selector = [
-              'h1', 'h2', 'h3', 'h4', '[role="heading"]',
-              'a h1', 'a h2', 'a h3', 'a h4',
-              '.b_algoSlug', '.b_title', '.tilk', '.news-title',
-              'a', 'span', 'div'
-            ].join(',');
-            function pushCandidate(text) {
-              const whole = compact(text);
-              if (whole) candidates.push(whole);
-              for (const line of rawTextLines(text)) {
-                if (line !== whole) candidates.push(line);
-              }
-            }
-            try {
-              for (const node of Array.from(root.querySelectorAll(selector)).slice(0, 80)) {
-                pushCandidate(node.innerText || node.textContent || '');
-              }
-            } catch (_) {}
-            pushCandidate(root.innerText || root.textContent || '');
-            return candidates;
-          }
-          function titleForAnchor(anchor, root, href) {
-            try {
-              const heading = anchor.closest('h1,h2,h3,h4,[role="heading"]') || (root && root.querySelector('h1,h2,h3,h4,[role="heading"]'));
-              const text = heading ? cleanResultTitle(heading.innerText || heading.textContent || '', href) : '';
-              if (text) return text;
-            } catch (_) {}
-            const direct = cleanResultTitle(anchor.innerText || anchor.textContent || explicitLabel(anchor), href);
-            if (direct) return direct;
-            const labelled = cleanResultTitle(anchor.getAttribute('aria-label') || anchor.getAttribute('title') || '', href);
-            if (labelled) return labelled;
-            for (const candidate of titleCandidatesFromRoot(root, href)) {
-              const cleaned = cleanResultTitle(candidate, href);
-              if (cleaned) return cleaned;
-            }
-            return '';
-          }
-          function snippetFor(root, title, href) {
-            if (!root) return '';
-            const lines = rawTextLines(root.innerText || root.textContent || '')
-              .map((line) => {
-                const parts = urlParts(href);
-                return compact(line.replace(parts.href, ' ').replace(parts.host, ' '));
-              })
-              .filter((line) =>
-                line &&
-                line !== title &&
-                !(title && title.includes(line)) &&
-                !isBreadcrumbText(line, href)
-              );
-            const snippet = lines.find((line) => line.length >= 12 && line !== title) || '';
-            return snippet.length > 420 ? snippet.slice(0, 420).trim() : snippet;
           }
           function candidateAnchors(root) {
             const anchors = [];
@@ -1504,12 +1527,45 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
             } catch (_) {}
             return anchors;
           }
-          function pushRecord(anchor, root, source) {
-            if (root && (root.closest('header,nav,footer') || !visible(root))) return false;
-            const href = anchor.href || anchor.getAttribute('href') || '';
-            if (!/^https?:\/\//i.test(href) || isSearchInternalUrl(href) || seenUrls.has(href)) return false;
-            const title = titleForAnchor(anchor, root, href);
-            const snippet = snippetFor(root, title, href);
+          function resultHref(root) {
+            for (const anchor of candidateAnchors(root)) {
+              const href = anchor.href || anchor.getAttribute('href') || '';
+              if (/^https?:\/\//i.test(href) && !isSearchInternalUrl(href)) return href;
+            }
+            return '';
+          }
+          function visibleTitleFor(root, href) {
+            const lines = rawTextLines(root.innerText || root.textContent || '');
+            const urlLineIndex = lines.findIndex((line) => visibleTextResultUrl(line));
+            const start = urlLineIndex >= 0 ? urlLineIndex + 1 : 0;
+            for (let i = start; i < Math.min(lines.length, start + 8); i++) {
+              const cleaned = cleanResultTitle(lines[i], href);
+              if (cleaned) return cleaned;
+            }
+            try {
+              const heading = root.querySelector('h1,h2,h3,h4,[role="heading"]');
+              const cleaned = heading ? cleanResultTitle(heading.innerText || heading.textContent || '', href) : '';
+              if (cleaned) return cleaned;
+            } catch (_) {}
+            return '';
+          }
+          function visibleSnippetFor(root, title, href) {
+            const lines = rawTextLines(root.innerText || root.textContent || '');
+            const titleIndex = lines.findIndex((line) => compact(line) === compact(title));
+            const start = titleIndex >= 0 ? titleIndex + 1 : 0;
+            for (let i = start; i < Math.min(lines.length, start + 6); i++) {
+              const line = lines[i];
+              if (!line || line === title || isBreadcrumbText(line, href)) continue;
+              if (line.length >= 8) return line.length > 420 ? line.slice(0, 420).trim() : line;
+            }
+            return '';
+          }
+          function pushRoot(root) {
+            if (!root || root.closest('header,nav,footer') || !visible(root)) return false;
+            const href = resultHref(root);
+            if (!href || seenUrls.has(href)) return false;
+            const title = visibleTitleFor(root, href);
+            const snippet = visibleSnippetFor(root, title, href);
             if (!title && !snippet) return false;
             seenUrls.add(href);
             results.push({
@@ -1517,28 +1573,16 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
               title: title.slice(0, 240),
               url: href,
               snippet,
-              source,
-              container_tag: root && root.tagName ? root.tagName.toLowerCase() : ''
+              source: 'bing_visible_result_text',
+              container_tag: root.tagName ? root.tagName.toLowerCase() : ''
             });
             return true;
           }
-          const resultRoots = Array.from(document.querySelectorAll('li.b_algo,.b_algo,li[class*="b_algo"],[data-bm]'));
+          const scope = document.querySelector('#b_results') || document.querySelector('main') || document.body;
+          const resultRoots = Array.from(scope.querySelectorAll('li.b_algo,.b_algo,li[class*="b_algo"]'));
           for (const root of resultRoots) {
-            if (seenRoots.has(root)) continue;
-            seenRoots.add(root);
-            for (const anchor of candidateAnchors(root)) {
-              if (pushRecord(anchor, root, 'dom_result_container')) break;
-            }
+            pushRoot(root);
             if (results.length >= 80) break;
-          }
-          if (results.length < 80) {
-            for (const anchor of allElements()) {
-              if (!anchor.tagName || anchor.tagName.toLowerCase() !== 'a') continue;
-              const root = nearestResultContainer(anchor);
-              if (seenRoots.has(root)) continue;
-              pushRecord(anchor, root, 'dom_anchor');
-              if (results.length >= 80) break;
-            }
           }
           return results;
         }
@@ -1644,6 +1688,16 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
       function editableForTyping(el) {
         return !!el && (('value' in el) || el.isContentEditable);
       }
+      function editableDescendantForTyping(el) {
+        if (!el) return null;
+        if (editableForTyping(el)) return el;
+        try {
+          return Array.from(el.querySelectorAll('input,textarea,[contenteditable=""],[contenteditable="true"]'))
+            .find((item) => editableForTyping(item) && (visible(item) || item.offsetParent !== null)) || null;
+        } catch (_) {
+          return null;
+        }
+      }
       function findTarget(params, action) {
         let el = null;
         if (params.click_point) {
@@ -1661,15 +1715,20 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         }
         if (params.selector) {
           try { el = queryFirst(params.selector); } catch (_) {}
-          if (el && (visible(el) || (action === 'type' && editableForTyping(el)))) {
-            return {el, method: visible(el) ? 'selector' : 'selector_hidden_editable'};
+          if (el) {
+            if (action === 'type') {
+              const editable = editableDescendantForTyping(el);
+              if (editable) return {el: editable, method: editable === el ? (visible(el) ? 'selector' : 'selector_hidden_editable') : 'selector_editable_descendant'};
+            } else if (visible(el)) {
+              return {el, method: 'selector'};
+            }
           }
         }
         const candidates = interactiveElements();
         if (Number.isInteger(params.index) && candidates[params.index]) {
           return {el: candidates[params.index], method: 'index'};
         }
-        if (params.text) {
+        if (action !== 'type' && params.text) {
           const wanted = norm(params.text);
           el = candidates.find((item) => norm(item.innerText || item.textContent || item.value).includes(wanted));
           if (el) return {el, method: 'text'};
@@ -1684,7 +1743,7 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
           el = allElements().find((item) => editableForTyping(item) && norm(explicitLabel(item)).includes(wantedLabel));
           if (el) return {el, method: visible(el) ? 'label' : 'label_hidden_editable'};
         }
-        if (params.label) {
+        if (action !== 'type' && params.label) {
           const wanted = norm(params.label);
           el = candidates.find((item) => norm(explicitLabel(item)).includes(wanted));
           if (el) return {el, method: 'label'};

@@ -49,6 +49,20 @@
     }
   },
   {
+    "description": "Read text from the current visible browser page using the page DOM. Without selector, returns document.body.innerText up to the host limit with url, title, length, and debug metadata. With selector, returns text for the first matching element. Use this after browser_open/browser_wait to read web pages and search result pages when browser_snapshot text is incomplete.",
+    "effect": "read",
+    "name": "browser_get_text",
+    "parameters": {
+      "properties": {
+        "selector": {
+          "description": "Optional CSS selector. When omitted, reads document.body.innerText.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
     "description": "Click an element in the current browser page. Prefer element_id from the latest browser_snapshot page_state. Legacy index, CSS selector, visible text, and accessibility label are still accepted; text/label clicks may use a visible text ancestor fallback for dynamic JavaScript components. For high-confidence viewport_map targets, click_point may be used as a coordinate fallback. The host verifies the click effect and may perform one safe recovery retry; failures include structured failure_code values such as no_effect_after_click, obscured, site_restricted, login_required, and target_unstable.",
     "effect": "external",
     "name": "browser_click",

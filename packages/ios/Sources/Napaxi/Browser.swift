@@ -390,6 +390,7 @@ public enum NapaxiBrowserToolProvider {
     public static let toolNames: Set<String> = [
         "browser_open",
         "browser_snapshot",
+        "browser_get_text",
         "browser_click",
         "browser_type",
         "browser_scroll",
@@ -433,6 +434,18 @@ public enum NapaxiBrowserToolProvider {
                         "type": .string("string"),
                         "enum": .array([.string("auto"), .string("never"), .string("always")]),
                     ]),
+                ]),
+            ],
+            effect: "read"
+        ),
+
+        NapaxiCustomToolDefinition(
+            name: "browser_get_text",
+            description: "Read text from the current browser page.",
+            parameters: [
+                "type": .string("object"),
+                "properties": .object([
+                    "selector": .object(["type": .string("string")]),
                 ]),
             ],
             effect: "read"

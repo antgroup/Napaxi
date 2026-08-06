@@ -108,6 +108,23 @@ class BrowserToolProvider {
         },
       },
     ),
+
+    CustomToolDef(
+      name: 'browser_get_text',
+      description:
+          'Read text from the current visible browser page using the page DOM. Without selector, returns document.body.innerText up to the host limit with url, title, length, and debug metadata. With selector, returns text for the first matching element. Use this after browser_open/browser_wait to read web pages and search result pages when browser_snapshot text is incomplete.',
+      effect: 'read',
+      parameters: {
+        'type': 'object',
+        'properties': {
+          'selector': {
+            'type': 'string',
+            'description':
+                'Optional CSS selector. When omitted, reads document.body.innerText.',
+          },
+        },
+      },
+    ),
     CustomToolDef(
       name: 'browser_click',
       description:
@@ -160,10 +177,7 @@ class BrowserToolProvider {
       parameters: {
         'type': 'object',
         'properties': {
-          'text': {
-            'type': 'string',
-            'description': 'Text to enter.',
-          },
+          'text': {'type': 'string', 'description': 'Text to enter.'},
           'index': {
             'type': 'integer',
             'description':

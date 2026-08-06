@@ -132,19 +132,51 @@ async fn search_with_browser(
     query: &str,
     count: usize,
     language: &str,
-    _freshness: &str,
+    freshness: &str,
 ) -> Result<Vec<SearchResult>, String> {
+    let direct_url = browser_bing_search_url(query, language, freshness);
+    let direct_opened = match crate::tool_registry::request_host_tool_execution_with_context(
+        context.bridge.clone(),
+        crate::browser_tools::BROWSER_OPEN,
+        serde_json::json!({
+            "url": direct_url,
+            "mode": "mobile",
+            "force_reload": true,
+        }),
+        BROWSER_SEARCH_TIMEOUT,
+        Some(&context.tool_context),
+    )
+    .await
+    {
+        Ok(_) => true,
+        Err(error) => {
+            tracing::debug!(query, error = %error, "web_search direct Bing URL failed; falling back to homepage flow");
+            false
+        }
+    };
+
+    if direct_opened {
+        for milliseconds in [1200_u64, 2200, 3500] {
+            if let Some(results) =
+                get_text_browser_search_results(context, query, count, milliseconds).await?
+            {
+                return Ok(results);
+            }
+            if let Some(results) = snapshot_browser_search_results(context, query, count).await? {
+                return Ok(results);
+            }
+        }
+    }
+
+    // Fallback to the visible homepage flow that has proven useful on Android
+    // WebView when direct /search?q=... navigation is intercepted or returns a
+    // partially rendered page.
     let url = browser_bing_home_url(language);
     crate::tool_registry::request_host_tool_execution_with_context(
         context.bridge.clone(),
         crate::browser_tools::BROWSER_OPEN,
         serde_json::json!({
             "url": url,
-            // Match the path users reported works in Android WebView: load Bing
-            // first, then submit the visible search field in the mobile WebView.
-            // Directly opening a /search?q=... URL can produce lower-quality or
-            // generic result sets, and desktop mode may not expose the same
-            // visible field quickly enough on Android.
             "mode": "mobile",
             "force_reload": true,
         }),
@@ -153,10 +185,7 @@ async fn search_with_browser(
     )
     .await?;
 
-    // Android WebView can report an empty/partial snapshot immediately after
-    // navigation. Give the homepage a short visible-browser settle step before
-    // resolving the search field, otherwise browser_type may see no candidates.
-    crate::tool_registry::request_host_tool_execution_with_context(
+    let initial_observation = crate::tool_registry::request_host_tool_execution_with_context(
         context.bridge.clone(),
         crate::browser_tools::BROWSER_WAIT,
         serde_json::json!({
@@ -167,20 +196,55 @@ async fn search_with_browser(
         Some(&context.tool_context),
     )
     .await?;
+    let initial_results = parse_browser_search_results(&initial_observation, count);
+    if !initial_results.is_empty() {
+        tracing::debug!(
+            query,
+            result_count = initial_results.len(),
+            "web_search parsed initial browser_wait output"
+        );
+        return Ok(initial_results);
+    }
 
     let mut last_type_error = None;
     for params in browser_search_type_attempts(query) {
-        let type_output = crate::tool_registry::request_host_tool_execution_with_context(
+        let type_output = match crate::tool_registry::request_host_tool_execution_with_context(
             context.bridge.clone(),
             crate::browser_tools::BROWSER_TYPE,
             params,
             BROWSER_SEARCH_TIMEOUT,
             Some(&context.tool_context),
         )
-        .await?;
+        .await
+        {
+            Ok(output) => output,
+            Err(error) => {
+                tracing::debug!(query, error = %error, "web_search browser_type bridge error");
+                last_type_error = Some(error);
+                if let Some(results) =
+                    get_text_browser_search_results(context, query, count, 800).await?
+                {
+                    return Ok(results);
+                }
+                if let Some(results) =
+                    snapshot_browser_search_results(context, query, count).await?
+                {
+                    return Ok(results);
+                }
+                continue;
+            }
+        };
         if let Some(error) = host_tool_error(&type_output) {
             tracing::debug!(query, error = %error, "web_search browser_type attempt failed");
             last_type_error = Some(error);
+            if let Some(results) =
+                get_text_browser_search_results(context, query, count, 800).await?
+            {
+                return Ok(results);
+            }
+            if let Some(results) = snapshot_browser_search_results(context, query, count).await? {
+                return Ok(results);
+            }
             continue;
         }
 
@@ -214,6 +278,13 @@ async fn search_with_browser(
             .await?;
             last_observation = wait_output;
             results = parse_browser_search_results(&last_observation, count);
+            if results.is_empty() {
+                if let Some(text_results) =
+                    get_text_browser_search_results(context, query, count, 0).await?
+                {
+                    results = text_results;
+                }
+            }
             tracing::debug!(
                 query,
                 milliseconds,
@@ -251,6 +322,92 @@ async fn search_with_browser(
     }
 
     Err(last_type_error.unwrap_or_else(|| "browser search field was not found".to_string()))
+}
+
+async fn get_text_browser_search_results(
+    context: &BrowserSearchContext,
+    query: &str,
+    count: usize,
+    wait_milliseconds: u64,
+) -> Result<Option<Vec<SearchResult>>, String> {
+    if wait_milliseconds > 0 {
+        let _ = crate::tool_registry::request_host_tool_execution_with_context(
+            context.bridge.clone(),
+            crate::browser_tools::BROWSER_WAIT,
+            serde_json::json!({
+                "milliseconds": wait_milliseconds,
+                "screenshot_mode": "never",
+            }),
+            BROWSER_SEARCH_TIMEOUT,
+            Some(&context.tool_context),
+        )
+        .await;
+    }
+    let output = match crate::tool_registry::request_host_tool_execution_with_context(
+        context.bridge.clone(),
+        crate::browser_tools::BROWSER_GET_TEXT,
+        serde_json::json!({}),
+        BROWSER_SEARCH_TIMEOUT,
+        Some(&context.tool_context),
+    )
+    .await
+    {
+        Ok(output) => output,
+        Err(error) => {
+            tracing::debug!(
+                query,
+                error = %error,
+                "web_search browser_get_text unavailable or failed"
+            );
+            return Ok(None);
+        }
+    };
+    let results = parse_browser_search_results(&output, count);
+    tracing::debug!(
+        query,
+        result_count = results.len(),
+        diagnostics = %browser_observation_diagnostics(&output),
+        "web_search parsed browser_get_text output"
+    );
+    Ok((!results.is_empty()).then_some(results))
+}
+
+async fn snapshot_browser_search_results(
+    context: &BrowserSearchContext,
+    query: &str,
+    count: usize,
+) -> Result<Option<Vec<SearchResult>>, String> {
+    let snapshot_output = crate::tool_registry::request_host_tool_execution_with_context(
+        context.bridge.clone(),
+        crate::browser_tools::BROWSER_SNAPSHOT,
+        serde_json::json!({"screenshot_mode": "never"}),
+        BROWSER_SEARCH_TIMEOUT,
+        Some(&context.tool_context),
+    )
+    .await?;
+    let results = parse_browser_search_results(&snapshot_output, count);
+    tracing::debug!(
+        query,
+        result_count = results.len(),
+        diagnostics = %browser_observation_diagnostics(&snapshot_output),
+        "web_search parsed recovery browser_snapshot output"
+    );
+    Ok((!results.is_empty()).then_some(results))
+}
+
+fn browser_bing_search_url(query: &str, language: &str, freshness: &str) -> String {
+    let mut url = format!(
+        "https://www.bing.com/search?q={}&setlang={}",
+        urlencoding::encode(query),
+        urlencoding::encode(language)
+    );
+    match freshness {
+        "day" => url.push_str("&filters=ex1%3A%22ez1%22"),
+        "week" => url.push_str("&filters=ex1%3A%22ez2%22"),
+        "month" => url.push_str("&filters=ex1%3A%22ez3%22"),
+        _ => {}
+    }
+    url
 }
 
 fn browser_bing_home_url(language: &str) -> String {
@@ -366,52 +523,56 @@ fn parse_browser_search_results(output: &str, max: usize) -> Vec<SearchResult> {
         return Vec::new();
     }
 
+    if !is_bing_search_observation(&value) {
+        return Vec::new();
+    }
+
     let mut results = Vec::new();
     let mut seen_urls = std::collections::HashSet::new();
 
-    // Prefer structured DOM search records emitted by the browser runtime.
-    // They keep title/url/snippet tied to the same anchor/container, avoiding
-    // the mobile-Bing text-block pairing errors that made the displayed result
-    // content drift from what the browser page showed.
+    // Prefer structured records emitted from Bing result containers. Do not
+    // fall back to the page-wide anchor list: after a result click or redirect,
+    // generic links can be footer/legal links from a target site rather than
+    // search results.
     collect_browser_structured_results(&value, &mut results, &mut seen_urls, max);
 
     if results.len() < max {
-        // Text blocks are useful as a mobile fallback when the runtime cannot
-        // emit structured result records. They still tend to match the visible
-        // result order better than the full-page anchor list.
+        collect_browser_text_results(&value, &mut results, &mut seen_urls, max);
+    }
+
+    if results.len() < max {
+        // Text blocks mirror OpenMinis' effective get_text approach: trust the
+        // visible Bing result text before any DOM-wide link inventory.
         collect_browser_viewport_results(&value, &mut results, &mut seen_urls, max);
     }
 
-    collect_browser_elements(&value, &mut |element| {
-        if results.len() >= max {
-            return;
-        }
-        let role = string_field(element, "role").to_ascii_lowercase();
-        let tag = string_field(element, "tag").to_ascii_lowercase();
-        let href = string_field(element, "href");
-        if href.is_empty() || (role != "link" && tag != "a") {
-            return;
-        }
-        let Some(url) = normalize_browser_result_url(&href) else {
-            return;
-        };
-        if !seen_urls.insert(url.clone()) {
-            return;
-        }
-        let title = first_non_empty_field(element, &["text", "label"]);
-        let title = clean_search_result_title(&title, &url);
-        if title.is_empty() || looks_like_search_navigation_title(&title) {
-            return;
-        }
-        let snippet = browser_snippet_from_element(element, &title);
-        results.push(SearchResult {
-            title,
-            url,
-            snippet,
-        });
-    });
-
     results
+}
+
+fn is_bing_search_observation(value: &serde_json::Value) -> bool {
+    let url = value
+        .get("url")
+        .or_else(|| value_at_path(value, "page_state.url"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if url.is_empty() {
+        return false;
+    }
+    let host_path = url
+        .split_once("://")
+        .map(|(_, rest)| rest)
+        .unwrap_or(url.as_str());
+    let host = host_path.split('/').next().unwrap_or_default();
+    let path = host_path
+        .split_once('/')
+        .map(|(_, rest)| format!("/{rest}"))
+        .unwrap_or_default();
+    (host == "bing.com"
+        || host.ends_with(".bing.com")
+        || host == "bing.net"
+        || host.ends_with(".bing.net"))
+        && path.starts_with("/search")
 }
 
 fn collect_browser_structured_results(
@@ -451,6 +612,8 @@ fn collect_browser_structured_results(
             ));
             if snippet == title {
                 snippet.clear();
+            } else if let Some(rest) = snippet.strip_prefix(&title) {
+                snippet = rest.trim_start().to_string();
             }
             if snippet.len() > 360 {
                 snippet.truncate(360);
@@ -468,24 +631,26 @@ fn collect_browser_structured_results(
     }
 }
 
-fn collect_browser_elements<'a>(
-    value: &'a serde_json::Value,
-    visit: &mut impl FnMut(&'a serde_json::Map<String, serde_json::Value>),
+fn collect_browser_text_results(
+    value: &serde_json::Value,
+    results: &mut Vec<SearchResult>,
+    seen_urls: &mut std::collections::HashSet<String>,
+    max: usize,
 ) {
-    for path in [
-        "links",
-        "page_state.links",
-        "elements",
-        "page_state.elements",
-    ] {
-        if let Some(elements) = value_at_path(value, path).and_then(serde_json::Value::as_array) {
-            for element in elements {
-                if let Some(object) = element.as_object() {
-                    visit(object);
-                }
-            }
-        }
+    let text = value
+        .get("text")
+        .or_else(|| value_at_path(value, "page_state.text"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    if text.trim().is_empty() {
+        return;
     }
+    let lines = text
+        .lines()
+        .map(clean_browser_text)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>();
+    collect_visible_text_sequence_results(&lines, results, seen_urls, max);
 }
 
 fn collect_browser_viewport_results(
@@ -495,14 +660,23 @@ fn collect_browser_viewport_results(
     max: usize,
 ) {
     let text_blocks = browser_visible_text_blocks(value);
-    for index in 0..text_blocks.len() {
+    collect_visible_text_sequence_results(&text_blocks, results, seen_urls, max);
+}
+
+fn collect_visible_text_sequence_results(
+    texts: &[String],
+    results: &mut Vec<SearchResult>,
+    seen_urls: &mut std::collections::HashSet<String>,
+    max: usize,
+) {
+    for index in 0..texts.len() {
         if results.len() >= max {
             break;
         }
-        let current = text_blocks[index].as_str();
+        let current = texts[index].as_str();
         if visible_text_has_search_url(current)
-            && index + 1 < text_blocks.len()
-            && visible_text_has_search_url(&text_blocks[index + 1])
+            && index + 1 < texts.len()
+            && visible_text_has_search_url(&texts[index + 1])
         {
             continue;
         }
@@ -512,14 +686,17 @@ fn collect_browser_viewport_results(
         let Some(url) = normalize_browser_result_url(&url) else {
             continue;
         };
+        let Some(title_index) = find_next_result_title(texts, index + 1) else {
+            continue;
+        };
+        let title = clean_search_result_title(&texts[title_index], &url);
+        if title.is_empty() || looks_like_search_navigation_title(&title) {
+            continue;
+        }
         if !seen_urls.insert(url.clone()) {
             continue;
         }
-        let Some(title_index) = find_next_result_title(&text_blocks, index + 1) else {
-            continue;
-        };
-        let title = text_blocks[title_index].clone();
-        let snippet = find_next_result_snippet(&text_blocks, title_index + 1);
+        let snippet = find_next_result_snippet(texts, title_index + 1);
         results.push(SearchResult {
             title,
             url,
@@ -739,27 +916,6 @@ fn first_non_empty_field(
         .unwrap_or_default()
 }
 
-fn browser_snippet_from_element(
-    element: &serde_json::Map<String, serde_json::Value>,
-    title: &str,
-) -> String {
-    let raw = first_non_empty_field(element, &["nearby_text", "parent_text"]);
-    let mut snippet = clean_browser_text(&raw);
-    if snippet == title {
-        return String::new();
-    }
-    if let Some(stripped) = snippet.strip_prefix(title) {
-        snippet = stripped
-            .trim_start_matches(['-', '—', ':', '|', ' '])
-            .to_string();
-    }
-    if snippet.len() > 360 {
-        snippet.truncate(360);
-        snippet = snippet.trim_end().to_string();
-    }
-    snippet
-}
-
 fn clean_browser_text(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -928,7 +1084,19 @@ mod tests {
     }
 
     #[test]
-    fn browser_bing_home_url_avoids_direct_query_search() {
+    fn browser_bing_search_url_uses_real_search_url() {
+        assert_eq!(
+            browser_bing_search_url("test query", "zh-Hans", ""),
+            "https://www.bing.com/search?q=test%20query&setlang=zh-Hans"
+        );
+        assert_eq!(
+            browser_bing_search_url("test query", "en-US", "day"),
+            "https://www.bing.com/search?q=test%20query&setlang=en-US&filters=ex1%3A%22ez1%22"
+        );
+    }
+
+    #[test]
+    fn browser_bing_home_url_supports_visible_field_fallback() {
         assert_eq!(
             browser_bing_home_url("zh-Hans"),
             "https://cn.bing.com/?setlang=zh-Hans&cc="
@@ -959,7 +1127,8 @@ mod tests {
     fn parses_browser_snapshot_results() {
         let output = serde_json::json!({
             "success": true,
-            "elements": [
+            "url": "https://cn.bing.com/search?q=test",
+            "search_results": [
                 {
                     "role": "link",
                     "tag": "a",
@@ -983,7 +1152,8 @@ mod tests {
         let output = serde_json::json!({
             "success": true,
             "page_state": {
-                "elements": [
+                "url": "https://cn.bing.com/search?q=test",
+                "search_results": [
                     {
                         "role": "link",
                         "tag": "a",
@@ -1017,6 +1187,7 @@ mod tests {
     fn parses_mobile_bing_viewport_text_results_before_element_links() {
         let output = serde_json::json!({
             "success": true,
+            "url": "https://cn.bing.com/search?q=test",
             "viewport_map": {
                 "visible_text_blocks": [
                     {"text": "网页"},
@@ -1037,7 +1208,7 @@ mod tests {
         .to_string();
 
         let results = parse_browser_search_results(&output, 5);
-        assert_eq!(results.len(), 3);
+        assert_eq!(results.len(), 2);
         assert_eq!(results[0].url, "https://www.goodexpos.com");
         assert_eq!(
             results[0].title,
@@ -1045,14 +1216,14 @@ mod tests {
         );
         assert_eq!(results[1].url, "https://www.zhanxun.cn");
         assert_eq!(results[1].title, "2026年7月北京展会一览表-展讯网会展平台");
-        assert_eq!(results[2].url, "https://baike.baidu.com/item/beijing");
     }
 
     #[test]
     fn normalizes_bing_redirect_links() {
         let output = serde_json::json!({
             "success": true,
-            "elements": [
+            "url": "https://cn.bing.com/search?q=test",
+            "search_results": [
                 {
                     "role": "link",
                     "tag": "a",
@@ -1072,7 +1243,8 @@ mod tests {
     fn filters_browser_search_engine_internal_links() {
         let output = serde_json::json!({
             "success": true,
-            "elements": [
+            "url": "https://cn.bing.com/search?q=test",
+            "search_results": [
                 {"role": "link", "tag": "a", "href": "https://www.bing.com/search?q=x", "text": "Search"},
                 {"role": "link", "tag": "a", "href": "https://example.com/result", "text": "Result"}
             ]
@@ -1094,6 +1266,7 @@ mod tests {
     fn cleans_structured_mobile_bing_titles() {
         let output = serde_json::json!({
             "success": true,
+            "url": "https://cn.bing.com/search?q=test",
             "search_results": [
                 {
                     "title": "杭州7月活动汇总（持续更新） 杭州本地宝 https://hz.bendibao.com › xiuxian › date.php",
@@ -1113,13 +1286,53 @@ mod tests {
         .to_string();
 
         let results = parse_browser_search_results(&output, 5);
-        assert_eq!(results.len(), 2);
+        assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "杭州7月活动汇总（持续更新） 杭州本地宝");
         assert_eq!(
             results[0].url,
             "https://hz.bendibao.com/xiuxian/date.php?type=4&y=2026&m=07&f=0"
         );
-        assert_eq!(results[1].title, "杭州市_百度百科");
+    }
+
+    #[test]
+    fn does_not_parse_target_site_footer_links_as_search_results() {
+        let output = serde_json::json!({
+            "success": true,
+            "url": "https://www.ososhow.com/month/concert-7.html",
+            "title": "7月音乐会",
+            "search_results": [
+                {
+                    "title": "ososhow.com",
+                    "url": "https://www.ososhow.com/month/concert-7.html",
+                    "snippet": "https://www.ososhow.com › month"
+                },
+                {"title": "京ICP备10036305号-7", "url": "https://beian.miit.gov.cn/"},
+                {"title": "京公网安备11010802047360号", "url": "https://beian.mps.gov.cn/#/query/webSearch?code=11010802047360"}
+            ],
+            "links": [
+                {"role":"link","tag":"a","href":"https://beian.miit.gov.cn/","text":"京ICP备10036305号-7"}
+            ]
+        })
+        .to_string();
+
+        assert!(parse_browser_search_results(&output, 5).is_empty());
+    }
+
+    #[test]
+    fn parses_browser_get_text_lines() {
+        let output = serde_json::json!({
+            "success": true,
+            "url": "https://www.bing.com/search?q=test",
+            "title": "test - Search",
+            "text": "网页\nexample.com\nhttps://example.com › article\nExample title\nExample snippet about the result\nsecond.test\nhttps://second.test/path\nSecond title\nSecond useful snippet"
+        })
+        .to_string();
+
+        let results = parse_browser_search_results(&output, 5);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].url, "https://example.com");
+        assert_eq!(results[0].title, "Example title");
+        assert_eq!(results[1].url, "https://second.test/path");
     }
 
     #[test]

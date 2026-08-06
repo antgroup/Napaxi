@@ -147,6 +147,8 @@ class ToolingTest {
         assertTrue(BrowserToolProvider.isBrowserTool("browser_open"))
         assertTrue(names.contains("browser_open"))
         assertTrue(names.contains("browser_snapshot"))
+        assertTrue(names.contains("browser_get_text"))
+        assertEquals("read", definitions.first { it.name == "browser_get_text" }.effect)
         assertTrue(names.contains("browser_click"))
     }
 

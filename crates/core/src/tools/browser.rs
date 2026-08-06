@@ -11,6 +11,7 @@ pub const BROWSER_CAPABILITY_ID: &str = "napaxi.tool.browser";
 
 pub const BROWSER_OPEN: &str = "browser_open";
 pub const BROWSER_SNAPSHOT: &str = "browser_snapshot";
+pub const BROWSER_GET_TEXT: &str = "browser_get_text";
 pub const BROWSER_CLICK: &str = "browser_click";
 pub const BROWSER_TYPE: &str = "browser_type";
 pub const BROWSER_SCROLL: &str = "browser_scroll";
@@ -23,6 +24,7 @@ pub const BROWSER_CLOSE: &str = "browser_close";
 const TOOL_NAMES: &[&str] = &[
     BROWSER_OPEN,
     BROWSER_SNAPSHOT,
+    BROWSER_GET_TEXT,
     BROWSER_CLICK,
     BROWSER_TYPE,
     BROWSER_SCROLL,
@@ -75,6 +77,20 @@ pub fn browser_tool_descriptors() -> Vec<ToolDescriptor> {
                         "type": "string",
                         "enum": ["auto", "never", "always"],
                         "description": "Optional screenshot capture preference. Defaults to auto. Screenshots are an optional visual aid; the JSON viewport_map is the non-visual fallback."
+                    }
+                }
+            }),
+        ),
+        descriptor(
+            BROWSER_GET_TEXT,
+            "Read text from the current visible browser page using the page DOM. Without selector, returns document.body.innerText up to the host limit with url, title, length, and debug metadata. With selector, returns text for the first matching element. Use this after browser_open/browser_wait to read web pages and search result pages when browser_snapshot text is incomplete.",
+            crate::tool_registry::ToolEffect::Read,
+            json!({
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "Optional CSS selector. When omitted, reads document.body.innerText."
                     }
                 }
             }),
@@ -292,6 +308,7 @@ mod tests {
 
         assert_eq!(names, TOOL_NAMES);
         assert!(is_browser_tool(BROWSER_OPEN));
+        assert!(is_browser_tool(BROWSER_GET_TEXT));
         assert!(!is_browser_tool("web_fetch"));
     }
 
@@ -348,6 +365,16 @@ mod tests {
             by_name[BROWSER_SNAPSHOT]
                 .description
                 .contains("viewport_map")
+        );
+        assert_eq!(
+            by_name[BROWSER_GET_TEXT].effect,
+            crate::tool_registry::ToolEffect::Read
+        );
+        assert!(
+            by_name[BROWSER_GET_TEXT].parameters["properties"]
+                .as_object()
+                .unwrap()
+                .contains_key("selector")
         );
         assert!(
             by_name[BROWSER_CLICK]

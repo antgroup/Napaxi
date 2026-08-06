@@ -40,6 +40,7 @@ public object BrowserToolProvider {
     private val fallbackToolNames: Set<String> = setOf(
         "browser_open",
         "browser_snapshot",
+        "browser_get_text",
         "browser_click",
         "browser_type",
         "browser_scroll",
@@ -95,6 +96,7 @@ public object BrowserToolProvider {
                 description = when (name) {
                     "browser_open" -> "Open an absolute http:// or https:// URL in the visible in-app browser session."
                     "browser_snapshot" -> "Read the current browser page state."
+                    "browser_get_text" -> "Read text from the current browser page."
                     "browser_click" -> "Click an element in the current browser page."
                     "browser_type" -> "Type text into the current browser page."
                     "browser_scroll" -> "Scroll the current browser page."
@@ -105,7 +107,7 @@ public object BrowserToolProvider {
                     "browser_close" -> "Close or clear the persistent browser session."
                     else -> "Browser tool."
                 },
-                effect = if (name in setOf("browser_snapshot", "browser_wait", "browser_find_text")) "read" else "external",
+                effect = if (name in setOf("browser_snapshot", "browser_get_text", "browser_wait", "browser_find_text")) "read" else "external",
             )
         }
 }

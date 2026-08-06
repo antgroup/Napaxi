@@ -155,17 +155,39 @@ fn browser_search_context(
     })
 }
 
+fn browser_fetch_context(
+    context: &BuiltinToolContext,
+) -> Option<crate::web_fetch_tool::BrowserFetchContext> {
+    let Some(bridge) = context.approval_bridge.clone() else {
+        tracing::info!("web_fetch browser path unavailable: no host tool bridge");
+        return None;
+    };
+    Some(crate::web_fetch_tool::BrowserFetchContext {
+        bridge,
+        tool_context: ToolExecutionContext {
+            files_dir: context.files_dir.clone(),
+            workspace_files_dir: context.workspace_files_dir.clone(),
+            agent_id: context.agent_id.clone(),
+            session_key_json: None,
+        },
+    })
+}
+
 pub(super) fn web_fetch_handler(
+    context: &BuiltinToolContext,
     fallback: Option<InternalToolHandler>,
 ) -> (Vec<ToolDescriptor>, Option<InternalToolHandler>) {
+    let browser_context = browser_fetch_context(context);
     let handler: InternalToolHandler = Arc::new(move |tool_name, params, _progress| {
         if tool_name != crate::web_fetch_tool::WEB_FETCH_TOOL_NAME {
             return fallback
                 .as_ref()
                 .and_then(|fallback| fallback(tool_name, params, None));
         }
+        let browser_context = browser_context.clone();
         Some(Box::pin(async move {
-            let output = crate::web_fetch_tool::execute(params).await?;
+            let output =
+                crate::web_fetch_tool::execute_with_browser(params, browser_context).await?;
             Ok(InternalToolResult {
                 output,
                 events: Vec::new(),

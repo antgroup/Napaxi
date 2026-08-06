@@ -582,6 +582,7 @@ final class BrowserTests: XCTestCase {
         let definitions = BrowserToolProvider.getToolDefinitions()
         XCTAssertEqual(Set(definitions.map(\.name)), NapaxiBrowserToolProvider.toolNames)
         XCTAssertEqual(definitions.first(where: { $0.name == "browser_snapshot" })?.effect, "read")
+        XCTAssertEqual(definitions.first(where: { $0.name == "browser_get_text" })?.effect, "read")
     }
 }
 

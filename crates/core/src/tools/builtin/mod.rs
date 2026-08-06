@@ -56,7 +56,7 @@ pub fn builtin_tools_and_handler(
     let (mut memory_tools, memory_handler) = handlers::memory_handler(&context, skill_handler);
     let (mut file_tools, file_handler) = handlers::file_handler(&context, memory_handler);
     let (mut web_tools, web_handler) = handlers::web_search_handler(&context, file_handler);
-    let (mut fetch_tools, fetch_handler) = handlers::web_fetch_handler(web_handler);
+    let (mut fetch_tools, fetch_handler) = handlers::web_fetch_handler(&context, web_handler);
     let (mut http_tools, http_handler) = handlers::http_handler(&context, fetch_handler);
     let (mut media_tools, media_handler) = handlers::media_handler(&context, http_handler);
     let (mut platform_tools, platform_handler) =
