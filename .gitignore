@@ -92,3 +92,6 @@ libnapaxi_api_bridge.so
 packages/flutter/ios/Frameworks/
 packages/ios/Frameworks/
 packages/flutter/android/jniLibs/*/libnapaxi_api_bridge.so
+
+# Local Xcode derived data
+examples/flutter/ios/DerivedDataDevice/
