@@ -794,7 +794,7 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
           const submit = \(javascriptLiteral(.bool(submit)));
           const clearFirst = \(javascriptLiteral(.bool(clearFirst)));
           \(browserRuntimeScript)
-          return JSON.stringify(window.__napaxiBrowser.runTarget(params, action, {text, submit, clearFirst}));
+          return JSON.stringify(window.__napaxiBrowser.runTarget(params, action, {text, submit, clearFirst, submitSelector: params.submit_selector || ''}));
         })()
         """
     }
@@ -1314,9 +1314,241 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         if (overlays.length) diagnostics.push('overlay_or_fixed_layer_present');
         return diagnostics;
       }
-      function snapshot() {
+        function searchResultRecords() {
+          const results = [];
+          const seenUrls = new Set();
+          const seenRoots = new Set();
+          function nearestResultContainer(anchor) {
+            const selectors = [
+              'li.b_algo',
+              '.b_algo',
+              'li[class*="b_algo"]',
+              '[data-bm]',
+              'article',
+              'li',
+              'section',
+              'div'
+            ];
+            for (const selector of selectors) {
+              try {
+                const found = anchor.closest(selector);
+                if (found && found !== document.body && found !== document.documentElement) return found;
+              } catch (_) {}
+            }
+            return anchor.parentElement || anchor;
+          }
+          function urlParts(href) {
+            try {
+              const url = new URL(href, location.href);
+              return {href: url.href, host: url.host.replace(/^www\./, ''), path: url.pathname};
+            } catch (_) {
+              return {href, host: '', path: ''};
+            }
+          }
+          function isSearchInternalUrl(href) {
+            try {
+              const url = new URL(href, location.href);
+              const host = url.host.toLowerCase();
+              const path = url.pathname.toLowerCase();
+              const value = url.href.toLowerCase();
+              return host.endsWith('bing.com') ||
+                host.endsWith('bing.net') ||
+                host.endsWith('microsoft.com') ||
+                value.includes('/search?') ||
+                path.includes('/images/search') ||
+                path.includes('/videos/search') ||
+                path.includes('/maps') ||
+                path.includes('/ck/a');
+            } catch (_) {
+              return false;
+            }
+          }
+          function hostLabels(href) {
+            const parts = urlParts(href);
+            const labels = [];
+            if (parts.host) {
+              const host = parts.host.toLowerCase();
+              labels.push(host);
+              labels.push(host.replace(/\.[^.]+$/, '').toLowerCase());
+              const segments = host.split('.').filter(Boolean);
+              if (segments.length > 2) {
+                const rootDomain = segments.slice(-2).join('.');
+                labels.push(rootDomain);
+                labels.push(rootDomain.replace(/\.[^.]+$/, '').toLowerCase());
+              }
+            }
+            return labels.filter(Boolean);
+          }
+          function isRepeatedGenericLabel(text) {
+            const parts = compact(text).split(/\s+/).filter(Boolean);
+            if (parts.length === 2 && parts[0] === parts[1]) return true;
+            if (parts.length > 2 && parts.length % 2 === 0) {
+              const half = parts.length / 2;
+              if (parts.slice(0, half).join(' ') === parts.slice(half).join(' ')) return true;
+            }
+            return false;
+          }
+          function isRepeatedDomainLabel(text, href) {
+            const value = compact(text).toLowerCase();
+            if (!value) return false;
+            for (const label of hostLabels(href)) {
+              const duplicate = `${label} ${label}`;
+              if (value === label || value === duplicate || value.startsWith(`${duplicate} `)) return true;
+            }
+            return false;
+          }
+          function isBreadcrumbText(text, href) {
+            const value = compact(text);
+            if (!value) return true;
+            const lower = value.toLowerCase();
+            const parts = urlParts(href);
+            const host = parts.host.toLowerCase();
+            if (lower.startsWith('http://') || lower.startsWith('https://')) return true;
+            if (isRepeatedGenericLabel(value) || isRepeatedDomainLabel(value, href)) return true;
+            if (host && lower === host) return true;
+            if (host && lower.includes(host) && (lower.includes('›') || lower.includes('>'))) return true;
+            if (/^(网页|图片|视频|资讯|地图|Web)$/i.test(value)) return true;
+            return false;
+          }
+          function rawTextLines(text) {
+            return String(text || '')
+              .split(/[\n\r]+|\s{2,}/)
+              .map(compact)
+              .filter(Boolean);
+          }
+          function cleanResultTitle(text, href) {
+            const whole = compact(text);
+            const lines = rawTextLines(text).filter((line) => line !== whole);
+            const candidates = whole ? [whole, ...lines] : lines;
+            for (let candidate of candidates) {
+              candidate = candidate.replace(/^(网页|Web)\s+/i, '').trim();
+              candidate = candidate.replace(/\s+https?:\/\/.*$/i, '').trim();
+              candidate = candidate.replace(/\s+[\w.-]+\.[a-z]{2,}\s*[›>].*$/i, '').trim();
+              if (candidate.length >= 2 && !isBreadcrumbText(candidate, href)) return candidate;
+            }
+            return '';
+          }
+          function titleCandidatesFromRoot(root, href) {
+            const candidates = [];
+            if (!root) return candidates;
+            const selector = [
+              'h1', 'h2', 'h3', 'h4', '[role="heading"]',
+              'a h1', 'a h2', 'a h3', 'a h4',
+              '.b_algoSlug', '.b_title', '.tilk', '.news-title',
+              'a', 'span', 'div'
+            ].join(',');
+            function pushCandidate(text) {
+              const whole = compact(text);
+              if (whole) candidates.push(whole);
+              for (const line of rawTextLines(text)) {
+                if (line !== whole) candidates.push(line);
+              }
+            }
+            try {
+              for (const node of Array.from(root.querySelectorAll(selector)).slice(0, 80)) {
+                pushCandidate(node.innerText || node.textContent || '');
+              }
+            } catch (_) {}
+            pushCandidate(root.innerText || root.textContent || '');
+            return candidates;
+          }
+          function titleForAnchor(anchor, root, href) {
+            try {
+              const heading = anchor.closest('h1,h2,h3,h4,[role="heading"]') || (root && root.querySelector('h1,h2,h3,h4,[role="heading"]'));
+              const text = heading ? cleanResultTitle(heading.innerText || heading.textContent || '', href) : '';
+              if (text) return text;
+            } catch (_) {}
+            const direct = cleanResultTitle(anchor.innerText || anchor.textContent || explicitLabel(anchor), href);
+            if (direct) return direct;
+            const labelled = cleanResultTitle(anchor.getAttribute('aria-label') || anchor.getAttribute('title') || '', href);
+            if (labelled) return labelled;
+            for (const candidate of titleCandidatesFromRoot(root, href)) {
+              const cleaned = cleanResultTitle(candidate, href);
+              if (cleaned) return cleaned;
+            }
+            return '';
+          }
+          function snippetFor(root, title, href) {
+            if (!root) return '';
+            const lines = rawTextLines(root.innerText || root.textContent || '')
+              .map((line) => {
+                const parts = urlParts(href);
+                return compact(line.replace(parts.href, ' ').replace(parts.host, ' '));
+              })
+              .filter((line) =>
+                line &&
+                line !== title &&
+                !(title && title.includes(line)) &&
+                !isBreadcrumbText(line, href)
+              );
+            const snippet = lines.find((line) => line.length >= 12 && line !== title) || '';
+            return snippet.length > 420 ? snippet.slice(0, 420).trim() : snippet;
+          }
+          function candidateAnchors(root) {
+            const anchors = [];
+            const preferred = [
+              'h1 a[href]', 'h2 a[href]', 'h3 a[href]', 'h4 a[href]',
+              '[role="heading"] a[href]',
+              'a[href] h1', 'a[href] h2', 'a[href] h3', 'a[href] h4'
+            ].join(',');
+            try {
+              for (const node of Array.from(root.querySelectorAll(preferred))) {
+                const anchor = node.tagName && node.tagName.toLowerCase() === 'a' ? node : node.closest('a[href]');
+                if (anchor && !anchors.includes(anchor)) anchors.push(anchor);
+              }
+            } catch (_) {}
+            try {
+              for (const anchor of Array.from(root.querySelectorAll('a[href]'))) {
+                if (!anchors.includes(anchor)) anchors.push(anchor);
+              }
+            } catch (_) {}
+            return anchors;
+          }
+          function pushRecord(anchor, root, source) {
+            if (root && (root.closest('header,nav,footer') || !visible(root))) return false;
+            const href = anchor.href || anchor.getAttribute('href') || '';
+            if (!/^https?:\/\//i.test(href) || isSearchInternalUrl(href) || seenUrls.has(href)) return false;
+            const title = titleForAnchor(anchor, root, href);
+            const snippet = snippetFor(root, title, href);
+            if (!title && !snippet) return false;
+            seenUrls.add(href);
+            results.push({
+              index: results.length,
+              title: title.slice(0, 240),
+              url: href,
+              snippet,
+              source,
+              container_tag: root && root.tagName ? root.tagName.toLowerCase() : ''
+            });
+            return true;
+          }
+          const resultRoots = Array.from(document.querySelectorAll('li.b_algo,.b_algo,li[class*="b_algo"],[data-bm]'));
+          for (const root of resultRoots) {
+            if (seenRoots.has(root)) continue;
+            seenRoots.add(root);
+            for (const anchor of candidateAnchors(root)) {
+              if (pushRecord(anchor, root, 'dom_result_container')) break;
+            }
+            if (results.length >= 80) break;
+          }
+          if (results.length < 80) {
+            for (const anchor of allElements()) {
+              if (!anchor.tagName || anchor.tagName.toLowerCase() !== 'a') continue;
+              const root = nearestResultContainer(anchor);
+              if (seenRoots.has(root)) continue;
+              pushRecord(anchor, root, 'dom_anchor');
+              if (results.length >= 80) break;
+            }
+          }
+          return results;
+        }
         const elements = interactiveElements().map(elementRecord);
+        const links = allElements()
+          .filter((el) => el.tagName && el.tagName.toLowerCase() === 'a' && (el.href || el.getAttribute('href')))
+          .slice(0, 240)
+          .map((el, index) => elementRecord(el, index));
         const pageText = compact(document.body ? document.body.innerText : '').slice(0, 10000);
+        const searchResults = searchResultRecords();
         const viewportMap = viewportObservation(elements);
         const pageChangeToken = hash(JSON.stringify({
           url: location.href,
@@ -1332,10 +1564,12 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
           scroll: {x: Math.round(window.scrollX || 0), y: Math.round(window.scrollY || 0), max_y: Math.max(document.body ? document.body.scrollHeight : 0, document.documentElement ? document.documentElement.scrollHeight : 0)},
           text: pageText,
           elements,
+          links,
+          search_results: searchResults,
           viewport_map: viewportMap,
           page_change_token: pageChangeToken
         };
-        return {url: pageState.url, title: pageState.title, text: pageText, elements, viewport_map: viewportMap, page_change_token: pageChangeToken, page_state: pageState};
+        return {url: pageState.url, title: pageState.title, text: pageText, elements, links, search_results: searchResults, viewport_map: viewportMap, page_change_token: pageChangeToken, page_state: pageState};
       }
       function scoreElement(el, target) {
         const fp = target || {};
@@ -1407,7 +1641,10 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         }
         return fallback;
       }
-      function findTarget(params) {
+      function editableForTyping(el) {
+        return !!el && (('value' in el) || el.isContentEditable);
+      }
+      function findTarget(params, action) {
         let el = null;
         if (params.click_point) {
           const point = params.click_point;
@@ -1424,7 +1661,9 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         }
         if (params.selector) {
           try { el = queryFirst(params.selector); } catch (_) {}
-          if (el && visible(el)) return {el, method: 'selector'};
+          if (el && (visible(el) || (action === 'type' && editableForTyping(el)))) {
+            return {el, method: visible(el) ? 'selector' : 'selector_hidden_editable'};
+          }
         }
         const candidates = interactiveElements();
         if (Number.isInteger(params.index) && candidates[params.index]) {
@@ -1439,6 +1678,11 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
             try { el = queryFirst('[' + dataAttr + '="' + CSS.escape(textAncestor.element_id) + '"]'); } catch (_) {}
             if (el && visible(el)) return {el, method: 'text_ancestor'};
           }
+        }
+        if (action === 'type' && params.label) {
+          const wantedLabel = norm(params.label);
+          el = allElements().find((item) => editableForTyping(item) && norm(explicitLabel(item)).includes(wantedLabel));
+          if (el) return {el, method: visible(el) ? 'label' : 'label_hidden_editable'};
         }
         if (params.label) {
           const wanted = norm(params.label);
@@ -1525,11 +1769,65 @@ public final class NapaxiBrowserRuntimeController: @unchecked Sendable, NapaxiBr
         } else {
           return {success: false, failure_code: 'not_editable', error: 'target element is not editable'};
         }
-        if (options.submit) sendKeys('Enter');
+        if (options.submit) {
+          submitEditable(el, options);
+        }
         return {success: true};
       }
+      function submitEditable(el, options) {
+        const before = location.href;
+        sendKeys('Enter');
+        const explicitSelector = options.submitSelector || '';
+        let form = null;
+        let submitter = null;
+        if (explicitSelector) {
+          try {
+            const explicit = queryFirst(explicitSelector);
+            if (explicit && explicit.tagName && explicit.tagName.toLowerCase() === 'form') {
+              form = explicit;
+            } else if (explicit && typeof explicit.click === 'function') {
+              explicit.click();
+              return;
+            }
+          } catch (_) {}
+        }
+        form = form || el.form || (el.closest ? el.closest('form') : null);
+        if (form) {
+          try {
+            submitter = form.querySelector('input[type="submit"],button[type="submit"],button:not([type]),label[for="sb_form_go"],#search_icon');
+            if (submitter && typeof submitter.click === 'function') {
+              submitter.click();
+            }
+          } catch (_) {}
+          try {
+            if (typeof form.requestSubmit === 'function') {
+              form.requestSubmit(submitter && submitter.tagName && submitter.tagName.toLowerCase() !== 'label' ? submitter : undefined);
+            }
+          } catch (_) {}
+          try {
+            if (typeof form.submit === 'function') {
+              HTMLFormElement.prototype.submit.call(form);
+            }
+          } catch (_) {}
+          setTimeout(() => {
+            try {
+              if (location.href !== before) return;
+              const method = (form.getAttribute('method') || 'get').toLowerCase();
+              const action = form.getAttribute('action') || location.href;
+              if (method !== 'get') return;
+              const target = new URL(action, location.href);
+              const data = new FormData(form);
+              if (el.name && ('value' in el)) data.set(el.name, el.value);
+              for (const [key, value] of data.entries()) {
+                if (typeof value === 'string') target.searchParams.set(key, value);
+              }
+              location.assign(target.toString());
+            } catch (_) {}
+          }, 250);
+        }
+      }
       function runTarget(params, action, options) {
-        const found = findTarget(params || {});
+        const found = findTarget(params || {}, action);
         if (!found.el) {
           const textCandidates = textActionCandidates((params && (params.text || params.label)) || '');
           return {

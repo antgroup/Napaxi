@@ -872,7 +872,8 @@ class _PlanToolView extends StatelessWidget {
   Widget build(BuildContext context) {
     final args = _decodeJsonMap(toolCall.arguments);
     final explanation = _stringField(args, ['explanation']).trim();
-    final steps = (args['steps'] as List?)
+    final steps =
+        (args['steps'] as List?)
             ?.whereType<Map>()
             .map((step) => Map<String, dynamic>.from(step))
             .toList(growable: false) ??
@@ -912,18 +913,12 @@ class _PlanStepRow extends StatelessWidget {
     final status = step['status']?.toString().trim().toLowerCase() ?? '';
     final text = step['step']?.toString().trim() ?? '';
     final (icon, color) = switch (status) {
-      'completed' => (
-        Icons.check_circle_rounded,
-        const Color(0xFF059669),
-      ),
+      'completed' => (Icons.check_circle_rounded, const Color(0xFF059669)),
       'inprogress' => (
         Icons.radio_button_checked_rounded,
         const Color(0xFF2563EB),
       ),
-      _ => (
-        Icons.radio_button_unchecked_rounded,
-        const Color(0xFF9CA3AF),
-      ),
+      _ => (Icons.radio_button_unchecked_rounded, const Color(0xFF9CA3AF)),
     };
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
@@ -1144,6 +1139,9 @@ class _WebToolViewState extends State<_WebToolView> {
     final searchResults = name == 'web_search'
         ? _parseWebSearchResults(output)
         : const <_WebSearchResult>[];
+    final searchDeclaredCount = name == 'web_search'
+        ? _parseWebSearchDeclaredCount(output)
+        : null;
     final rows = _toolInfoRows(toolCall, widget.spec.kind);
 
     return Column(
@@ -1154,7 +1152,10 @@ class _WebToolViewState extends State<_WebToolView> {
           const SizedBox(height: 8),
         ],
         if (searchResults.isNotEmpty)
-          _WebSearchResultsView(results: searchResults)
+          _WebSearchResultsView(
+            results: searchResults,
+            declaredCount: searchDeclaredCount,
+          )
         else
           _WebContentPreview(
             toolName: name,
@@ -1232,9 +1233,10 @@ class _WebSearchResult {
 }
 
 class _WebSearchResultsView extends StatelessWidget {
-  const _WebSearchResultsView({required this.results});
+  const _WebSearchResultsView({required this.results, this.declaredCount});
 
   final List<_WebSearchResult> results;
+  final int? declaredCount;
 
   @override
   Widget build(BuildContext context) {
@@ -1249,6 +1251,18 @@ class _WebSearchResultsView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            declaredCount == null || declaredCount == results.length
+                ? 'Results (${results.length})'
+                : 'Results (${results.length} shown / $declaredCount reported)',
+            style: const TextStyle(
+              color: Color(0xFF374151),
+              fontSize: 12,
+              height: 1.35,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
           for (var i = 0; i < results.length; i++) ...[
             _WebSearchResultCard(index: i + 1, result: results[i]),
             if (i != results.length - 1)
@@ -3746,6 +3760,30 @@ List<String> _memoryTreeLines(Object? value, [int depth = 0]) {
   return ['$prefix$value'];
 }
 
+String _parseWebSearchDiagnostics(String output) {
+  final decoded = _decodeJsonMap(output);
+  final diagnostics = _stringField(decoded, ['diagnostics']);
+  if (diagnostics.isNotEmpty) return diagnostics;
+  for (final rawLine in output.split('\n')) {
+    final line = rawLine.trim();
+    const prefix = 'Search diagnostics:';
+    if (line.startsWith(prefix)) {
+      return line.substring(prefix.length).trim();
+    }
+  }
+  return '';
+}
+
+int? _parseWebSearchDeclaredCount(String output) {
+  final decoded = _decodeJsonMap(output);
+  final value = decoded['result_count'];
+  if (value is int && value >= 0) return value;
+  if (value is num && value >= 0) return value.toInt();
+  final results = decoded['results'];
+  if (results is List) return results.length;
+  return null;
+}
+
 List<_WebSearchResult> _parseWebSearchResults(String output) {
   final jsonResults = _parseJsonSearchResults(output);
   if (jsonResults.isNotEmpty) return jsonResults;
@@ -3774,7 +3812,11 @@ List<_WebSearchResult> _parseWebSearchResults(String output) {
   final itemPattern = RegExp(r'^\s*\d+\.\s+(.*)$');
   for (final rawLine in lines) {
     final line = rawLine.trim();
-    if (line.isEmpty || line.startsWith('Search results for:')) continue;
+    if (line.isEmpty ||
+        line.startsWith('Search results for:') ||
+        line.startsWith('Search diagnostics:')) {
+      continue;
+    }
     final itemMatch = itemPattern.firstMatch(line);
     if (itemMatch != null) {
       flush();
@@ -3871,6 +3913,9 @@ List<({String label, String value})> _toolInfoRows(
         ]),
       );
       add('status', _stringField(result, ['status', 'status_code']));
+      if (_canonicalToolName(toolCall.name) == 'web_search') {
+        add('diagnostics', _parseWebSearchDiagnostics(toolCall.output ?? ''));
+      }
       break;
     case _ToolDisplayKind.browser:
       add('action', _browserDisplayTitle(_canonicalToolName(toolCall.name)));
