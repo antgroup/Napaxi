@@ -41,7 +41,7 @@ Reusable SDK logic should not be placed inside demo apps. If a demo needs reusab
 - Do not call `napaxi_core::mobile_*` implementation modules directly from adapter code.
 - Do not call top-level core implementation modules such as
   `napaxi_core::android_assets`, `napaxi_core::android_linux_env`, or
-  `napaxi_core::ios_ish_env` from packages; expose required hooks through
+  iOS sandbox implementation modules from packages; expose required hooks through
   `napaxi_core::api`.
 - Treat `mobile_*` module names as legacy implementation names. Do not add new
   `mobile_*` modules or crate-internal `crate::mobile_*` references.

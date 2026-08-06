@@ -39,7 +39,7 @@ Android proot runtime assets 和 helper libraries 是 SDK source assets，需要
 - [`../THIRD-PARTY-LICENSES.zh-CN.md`](../THIRD-PARTY-LICENSES.zh-CN.md)
 - [`../packages/flutter/android/jniLibs/THIRD-PARTY.md`](../packages/flutter/android/jniLibs/THIRD-PARTY.md)
 
-iOS Swift Package (`packages/ios`) 拥有自己的 iSH bridge source、vendored iSH headers/libraries 和 rootfs resource。打开 Xcode 或运行 SwiftPM iOS build 前，需要先生成 `packages/ios/Frameworks/napaxi_api_bridge.xcframework`。
+iOS Swift Package (`packages/ios`) 现在接入 iOS QEMU 沙箱 backend：iOS 复用 Android baked Alpine rootfs 的文件名 `alpine-rootfs.bin`，只把外层 runner 从 Android PRoot 替换为 Napaxi vendored 的底层 QEMU C bridge 和静态库。QEMU runtime 已链接、rootfs 资源已打包且 host 开启对应能力时，iOS shell/Codex 沙箱能力才会可用；否则稳定的 `napaxi_api_ios_qemu_*` bridge 入口返回 not-ready/disabled。打开 Xcode 或运行 SwiftPM iOS build 前，仍需要先生成 `packages/ios/Frameworks/napaxi_api_bridge.xcframework`。
 
 ## 验证
 
@@ -74,11 +74,9 @@ cd examples/flutter && flutter analyze --no-fatal-infos && flutter test
 
 ## 已知权衡
 
-### iOS shell runtime via iSH
+### iOS QEMU sandbox
 
-Native iOS SDK 通过 stable C ABI 调用与 Flutter 相同的 `napaxi_core::api`。Shell-like platform execution 当前仍使用 iSH Alpine emulation environment。这是为了在 iOS 上复用 Linux-shaped command execution，同时保持 SDK 其它部分为 native Swift Package。
-
-长期目标是减少 iSH-specific 假设，但现阶段 iSH 仍是 iOS 原生能力的一部分。
+Native iOS SDK 通过 stable C ABI 调用与 Flutter 相同的 `napaxi_core::api`。Shell-like platform execution 已切到 Napaxi iOS QEMU backend。当前仓库保留稳定 API、Swift wiring、与 Android 对齐的 `alpine-rootfs.bin` 资源约定，并通过 vendored 底层 QEMU C bridge/静态库提供实际 runner；没有接入隔壁 adjacent sandbox SDK wrapper。
 
 ### Vendored `libsql`
 

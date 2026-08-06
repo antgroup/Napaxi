@@ -291,4 +291,4 @@ Napaxi SDK `1.0.0` 是首个公开 SDK release。`crates/core/src/api/` 下的 C
 
 Napaxi 源码采用 GNU General Public License v3.0 or later（`GPL-3.0-or-later`）。见 [`LICENSE`](LICENSE) 和 [`NOTICE`](NOTICE)。
 
-分发的移动 SDK 还包含第三方原生运行时组件，它们有各自的许可证，包括 sandbox 相关资产的 GPL/LGPL 义务。再分发构建产物前，请阅读 [`THIRD-PARTY-LICENSES.zh-CN.md`](THIRD-PARTY-LICENSES.zh-CN.md)、[`packages/flutter/android/jniLibs/THIRD-PARTY.md`](packages/flutter/android/jniLibs/THIRD-PARTY.md) 和 [`packages/ios/Vendor/iSHCore/THIRD-PARTY.md`](packages/ios/Vendor/iSHCore/THIRD-PARTY.md)。
+分发的移动 SDK 还包含第三方原生运行时组件，它们有各自的许可证，包括 sandbox 相关资产的 GPL/LGPL 义务。再分发构建产物前，请阅读 [`THIRD-PARTY-LICENSES.zh-CN.md`](THIRD-PARTY-LICENSES.zh-CN.md)和 [`packages/flutter/android/jniLibs/THIRD-PARTY.md`](packages/flutter/android/jniLibs/THIRD-PARTY.md)。iOS QEMU runtime 产物尚未入仓；落地后需要同步更新第三方组件清单。

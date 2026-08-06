@@ -48,7 +48,7 @@ the native library loads and the engine starts on real devices.
 - `integration/android/` — Android Instrumentation test that loads
   `libnapaxi_api_bridge.so`, creates an engine, and verifies workspace I/O.
 - `integration/ios/` — iOS app that links the Swift Package, creates an
-  engine, and verifies the iSH rootfs is available.
+  engine, and verifies the iOS QEMU/rootfs sandbox state.
 
 These are functional smoke tests, not pedagogical examples. They are run by:
 

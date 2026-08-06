@@ -175,7 +175,7 @@ fn execute_ios_shell(
     {
         return Err("Shell command cancelled before execution".to_string());
     }
-    let result = crate::ios_ish_env::execute_in_workspace(
+    let result = crate::ios_qemu_env::execute_in_workspace(
         files_dir,
         workspace_files_dir,
         command,

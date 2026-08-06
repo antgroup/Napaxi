@@ -1,30 +1,38 @@
-#![cfg_attr(not(any(target_os = "android", test)), allow(dead_code))]
+#![cfg_attr(
+    not(any(target_os = "android", target_os = "ios", test)),
+    allow(dead_code)
+)]
 
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-const HISTORY_OPERATION_PREFIX: &str = "history_";
 #[cfg(target_os = "android")]
+use crate::android_linux_env as linux_env;
+#[cfg(target_os = "ios")]
+use crate::ios_qemu_env as linux_env;
+
+const HISTORY_OPERATION_PREFIX: &str = "history_";
+#[cfg(any(target_os = "android", target_os = "ios"))]
 const CODEX_WORKSPACE: &str = "/workspace";
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use std::time::{Duration, Instant};
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::config;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::protocol::{
     JsonRpcClient, initialize_request, initialized_notification, parse_json_lines, response_error,
     response_id, thread_delete_request, thread_history_resume_request, thread_list_request,
     thread_read_request,
 };
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::state::{
     bind_native_thread, clear_state, current_config_fingerprint, load_state,
     native_library_dir_for, remove_active_session, session_key_parts,
 };
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 #[derive(Debug, Default, Deserialize)]
 struct CodexHistoryRequest {
     #[serde(default)]
@@ -60,7 +68,7 @@ pub(crate) fn handle_request_json(handle: i64, raw: &str) -> String {
     handle_request(handle, request)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn handle_request(_handle: i64, _request: CodexHistoryRequest) -> String {
     history_error(
         false,
@@ -69,7 +77,7 @@ fn handle_request(_handle: i64, _request: CodexHistoryRequest) -> String {
     )
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn handle_request(handle: i64, request: CodexHistoryRequest) -> String {
     let Some(files_dir) = crate::runtime::files_dir_from_handle(handle) else {
         return history_error(false, "unsupported_platform", "invalid engine handle");
@@ -87,7 +95,7 @@ fn handle_request(handle: i64, request: CodexHistoryRequest) -> String {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn list_threads(handle: i64, files_dir: &str, request: &CodexHistoryRequest) -> String {
     let mut rpc = match HistoryRpc::open(handle, files_dir, request) {
         Ok(rpc) => rpc,
@@ -110,7 +118,7 @@ fn list_threads(handle: i64, files_dir: &str, request: &CodexHistoryRequest) -> 
     history_success(json!({"threads": threads}))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn read_thread(handle: i64, files_dir: &str, request: &CodexHistoryRequest) -> String {
     let thread_id = request.thread_id.trim();
     if thread_id.is_empty() {
@@ -140,11 +148,11 @@ fn read_thread(handle: i64, files_dir: &str, request: &CodexHistoryRequest) -> S
     history_success(json!({"nativeThreadId": thread_id, "messages": messages}))
 }
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 #[path = "history_rollout.rs"]
 mod history_rollout;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn delete_thread(handle: i64, files_dir: &str, request: &CodexHistoryRequest) -> String {
     let requested_thread_id = request.thread_id.trim();
     let session_key = (!request.session_key_json.trim().is_empty()).then(|| {
@@ -174,13 +182,13 @@ fn delete_thread(handle: i64, files_dir: &str, request: &CodexHistoryRequest) ->
     if let Some(key) = session_key {
         clear_state(files_dir, &key);
         if let Some(active) = remove_active_session(&key) {
-            let _ = crate::android_linux_env::pty::close_pty_session_nonblocking(active.pty);
+            let _ = linux_env::pty::close_pty_session_nonblocking(active.pty);
         }
     }
     history_success(json!({"nativeThreadId": thread_id}))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn bind_thread(files_dir: &str, request: &CodexHistoryRequest) -> String {
     let thread_id = request.thread_id.trim();
     if thread_id.is_empty() || request.session_key_json.trim().is_empty() {
@@ -208,14 +216,14 @@ fn bind_thread(files_dir: &str, request: &CodexHistoryRequest) -> String {
     history_success(json!({"nativeThreadId": thread_id}))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 struct HistoryRpc {
     pty: u64,
     rpc: JsonRpcClient,
     buffer: String,
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn ensure_codex_cli_available(files_dir: &str) -> anyhow::Result<()> {
     let rootfs_dir = std::path::Path::new(files_dir).join("linux-env/rootfs");
     let candidates = [
@@ -227,20 +235,24 @@ fn ensure_codex_cli_available(files_dir: &str) -> anyhow::Result<()> {
         return Ok(());
     }
     anyhow::bail!(
-        "Codex CLI is missing from the Android Linux rootfs; rebuild the bundled rootfs with tools/scripts/bake_android_rootfs.sh so `codex app-server` is available"
+        "Codex CLI is missing from the bundled Linux rootfs; rebuild the bundled rootfs with tools/scripts/bake_android_rootfs.sh so `codex app-server` is available"
     )
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 impl HistoryRpc {
     fn open(handle: i64, files_dir: &str, _request: &CodexHistoryRequest) -> anyhow::Result<Self> {
         let config_dir = config::config_dir(files_dir);
         if !config_dir.join("config.toml").is_file() || !config_dir.join("auth.json").is_file() {
             anyhow::bail!("Codex sandbox configuration is missing");
         }
-        let native_library_dir = native_library_dir_for(files_dir).ok_or_else(|| {
+        let native_library_dir = native_library_dir_for(files_dir);
+        #[cfg(target_os = "android")]
+        let native_library_dir = native_library_dir.ok_or_else(|| {
             anyhow::anyhow!("missing native_library_dir for Android Codex history")
         })?;
+        #[cfg(target_os = "ios")]
+        let native_library_dir = native_library_dir.unwrap_or_default();
         let workspace_files_dir =
             crate::runtime::default_engine_workspace_files_dir_from_handle(handle)
                 .unwrap_or_else(|| files_dir.to_string());
@@ -257,7 +269,7 @@ impl HistoryRpc {
             "-lc".to_string(),
             "mkdir -p /workspace /root/.codex && stty raw -echo -icanon -ixon -ixoff 2>/dev/null; export HOME=/root CODEX_HOME=/root/.codex PATH=\"/root/.local/bin:$PATH\"; exec codex app-server 2>&1".to_string(),
         ];
-        let pty = crate::android_linux_env::pty::open_pty_session(
+        let pty = linux_env::pty::open_pty_session(
             files_dir,
             &native_library_dir,
             &workspace_dir,
@@ -275,7 +287,7 @@ impl HistoryRpc {
         };
         history_rpc.call(initialize_id, &initialize, Duration::from_secs(15))?;
         let initialized = initialized_notification(&history_rpc.rpc);
-        crate::android_linux_env::pty::write_pty_session(pty, &(initialized + "\n"))?;
+        linux_env::pty::write_pty_session(pty, &(initialized + "\n"))?;
         Ok(history_rpc)
     }
 
@@ -305,12 +317,12 @@ impl HistoryRpc {
     }
 
     fn call(&mut self, id: u64, line: &str, timeout: Duration) -> anyhow::Result<Value> {
-        crate::android_linux_env::pty::write_pty_session(self.pty, &(line.to_string() + "\n"))?;
+        linux_env::pty::write_pty_session(self.pty, &(line.to_string() + "\n"))?;
         let started = Instant::now();
         while started.elapsed() < timeout {
-            for event in crate::android_linux_env::pty::drain_pty_events(self.pty)? {
+            for event in linux_env::pty::drain_pty_events(self.pty)? {
                 match event.kind {
-                    crate::android_linux_env::pty::PtyEventKind::Output => {
+                    linux_env::pty::PtyEventKind::Output => {
                         for message in parse_json_lines(&mut self.buffer, &event.data) {
                             if response_id(&message) != Some(id) {
                                 continue;
@@ -321,11 +333,10 @@ impl HistoryRpc {
                             return Ok(message.get("result").cloned().unwrap_or(Value::Null));
                         }
                     }
-                    crate::android_linux_env::pty::PtyEventKind::Exit
-                    | crate::android_linux_env::pty::PtyEventKind::Closed => {
+                    linux_env::pty::PtyEventKind::Exit | linux_env::pty::PtyEventKind::Closed => {
                         anyhow::bail!("Codex app-server exited while reading history");
                     }
-                    crate::android_linux_env::pty::PtyEventKind::Log => {}
+                    linux_env::pty::PtyEventKind::Log => {}
                 }
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -334,14 +345,14 @@ impl HistoryRpc {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 impl Drop for HistoryRpc {
     fn drop(&mut self) {
-        let _ = crate::android_linux_env::pty::close_pty_session_nonblocking(self.pty);
+        let _ = linux_env::pty::close_pty_session_nonblocking(self.pty);
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn normalized_account_id(value: &str) -> &str {
     if value.trim().is_empty() {
         "default"
@@ -350,7 +361,7 @@ fn normalized_account_id(value: &str) -> &str {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn normalized_agent_id(value: &str) -> &str {
     if value.trim().is_empty() {
         "engine.codex"
@@ -361,10 +372,10 @@ fn normalized_agent_id(value: &str) -> &str {
 
 #[path = "history_mapping.rs"]
 mod history_mapping;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use history_mapping::{extract_thread_items, map_history_items, map_thread_summary};
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn history_success(extra: Value) -> String {
     let mut result = json!({
         "success": true,

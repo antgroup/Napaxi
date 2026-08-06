@@ -17,16 +17,16 @@ distribution, and should have the combination reviewed by counsel.
 | PRoot 5.1.0 | `packages/flutter/android/jniLibs/arm64-v8a/libproot.so` | GPL-2.0-only | separate executable, invoked via process | upstream, below |
 | Samba talloc | `packages/flutter/android/assets/libtalloc.so.2` | LGPL-3.0-or-later | dynamic library | upstream, below |
 | musl libc loader | `packages/flutter/android/jniLibs/arm64-v8a/libldmusl.so` | MIT | dynamic loader | upstream, below |
-| Alpine minirootfs | `packages/flutter/android/assets/alpine-rootfs.bin`, `packages/ios/Sources/Napaxi/Resources/alpine-rootfs.tar.gz` | mixed (per-package) | data image | upstream, below |
+| Alpine minirootfs | `packages/flutter/android/assets/alpine-rootfs.bin`, `packages/ios/Sources/Napaxi/Resources/alpine-rootfs.bin` | mixed (per-package) | data image | upstream, below |
 | OpenAI Codex CLI 0.144.6 | inside `packages/flutter/android/assets/alpine-rootfs.bin` | Apache-2.0 | separate CLI executable launched in sandbox | npm package, below |
 | `libloader.so` | `packages/flutter/android/jniLibs/arm64-v8a/libloader.so` | GPL-3.0-or-later | Napaxi sandbox loader shim | Napaxi project |
-| iSHCore 0.3.0 | `packages/ios/Vendor/iSHCore`, iOS CocoaPods dependency | GPL-3.0; upstream GPLv2 additional licensing notes and `LICENSE.IOS` also apply | static libraries | <https://github.com/ish-app/ish> |
 
-Third-party Android and iOS runtime binaries are **unmodified upstream
-releases**. `libloader.so` is a first-party Napaxi runtime shim covered by the
-project license. Integrity hashes and per-file detail are in
-`packages/flutter/android/jniLibs/THIRD-PARTY.md` and
-`packages/ios/Vendor/iSHCore/THIRD-PARTY.md`.
+Third-party Android runtime binaries are **unmodified upstream releases**.
+`libloader.so` is a first-party Napaxi runtime shim covered by the project
+license. Integrity hashes and per-file detail are in
+`packages/flutter/android/jniLibs/THIRD-PARTY.md`. The iOS QEMU runtime is not
+bundled yet; add its provenance, hashes, and license terms here when the
+compiled artifacts land.
 
 ## Copyleft obligations and written offer
 
@@ -38,8 +38,6 @@ exact released versions:
 - **PRoot 5.1.0** (GPL-2.0-only): <https://github.com/proot-me/proot/releases/tag/v5.1.0>
 - **Samba talloc** (LGPL-3.0-or-later): <https://www.samba.org/ftp/talloc/>
 - **musl libc** (MIT): <https://musl.libc.org/releases.html>
-- **iSHCore / iSH** (GPL-3.0; upstream GPLv2 additional licensing notes and
-  `LICENSE.IOS` also apply): <https://github.com/ish-app/ish>
 - **Alpine Linux** packages: <https://alpinelinux.org/> (per-package sources via APKBUILD)
 - **OpenAI Codex CLI 0.144.6** (Apache-2.0): <https://www.npmjs.com/package/@openai/codex>
 
@@ -47,12 +45,6 @@ If you received a binary distribution of an app built with the Napaxi SDK and
 want the corresponding source for any GPL/LGPL component, the upstream links
 above provide the exact versions redistributed here. Maintainers should keep
 these links pinned to the versions actually shipped.
-
-The upstream iSH repository states that iSH is licensed under GPLv3, with
-additional GPLv2 licensing notes for certain contributions, and that `LICENSE.IOS`
-applies to App Store distribution. Napaxi records the vendored iSHCore runtime
-as GPLv3-governed unless a downstream distributor independently confirms a
-different permitted licensing path for the exact shipped artifacts.
 
 ## Public release status
 

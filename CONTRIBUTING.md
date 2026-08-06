@@ -71,7 +71,7 @@ or `rg`-level check. The most important:
 
 1. Adapters enter Rust through `napaxi_core::api::*`. Do not import
    `napaxi_core::mobile_*`, `napaxi_core::android_assets`,
-   `napaxi_core::android_linux_env`, or `napaxi_core::ios_ish_env` from
+   `napaxi_core::android_linux_env`, or `napaxi_core::ios_qemu_env` from
    `packages/`.
 2. Packages must not depend on feature crates directly. Feature behavior
    reaches adapters through `napaxi_core::api`.

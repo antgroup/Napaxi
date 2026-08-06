@@ -325,10 +325,15 @@ class NapaxiEngine {
     final platformToolsEnabled =
         enablePlatformTools ?? PlatformToolProvider.isSupported;
     final automationEnabled = enableAutomation ?? backgroundConfig != null;
+    final hostPlatform = platformContextMap['platform'] as String?;
+    final iosQemuSandboxReady =
+        platformContextMap['ios_qemu_sandbox_ready'] == true ||
+        platformContextMap['iosQemuSandboxReady'] == true;
     final effectiveCapabilityProfile =
         capabilityProfile ??
         _buildHostCapabilityProfile(
-          platform: platformContextMap['platform'] as String?,
+          platform: hostPlatform,
+          iosQemuSandboxReady: iosQemuSandboxReady,
           hasCustomToolExecutor: toolExecutor != null,
           hasAgentEngineExecutor: agentEngineExecutor != null,
           hasAgentAppActionExecutor: agentAppActionExecutor != null,
@@ -348,6 +353,8 @@ class NapaxiEngine {
         _buildHostCapabilitySelection(
           hasCustomToolExecutor: toolExecutor != null,
           hasAgentEngineExecutor: agentEngineExecutor != null,
+          platform: hostPlatform,
+          iosQemuSandboxReady: iosQemuSandboxReady,
           hasAgentAppActionExecutor: agentAppActionExecutor != null,
           hasBrowserController: browserController != null,
           enableAutomation: automationEnabled,
@@ -403,6 +410,7 @@ class NapaxiEngine {
 
   static NapaxiCapabilityProfile _buildHostCapabilityProfile({
     required String? platform,
+    required bool iosQemuSandboxReady,
     required bool hasCustomToolExecutor,
     required bool hasAgentEngineExecutor,
     required bool hasAgentAppActionExecutor,
@@ -410,39 +418,63 @@ class NapaxiEngine {
     required bool enablePlatformTools,
     required bool enableAutomation,
   }) {
+    final iosQemuSandboxAvailable = platform == 'ios' && iosQemuSandboxReady;
+    final sandboxedCodexAvailable =
+        platform == 'android' || iosQemuSandboxAvailable;
     return NapaxiCapabilityProfile(
       platform: platform,
       supportedCapabilities: [
         NapaxiChannelCapability.im,
         NapaxiChannelCapability.device,
         if (hasCustomToolExecutor) 'napaxi.tool.custom_host',
-        'napaxi.agent_engine.codex',
+        if (sandboxedCodexAvailable) 'napaxi.agent_engine.codex',
+        if (iosQemuSandboxAvailable) 'napaxi.platform.ios_qemu',
         if (hasAgentEngineExecutor) 'napaxi.agent_engine.external_host',
         if (hasAgentAppActionExecutor) 'napaxi.tool.agent_app_action',
         if (enablePlatformTools) 'napaxi.platform_tool.*',
         if (hasBrowserController) BrowserToolProvider.capabilityId,
         if (enableAutomation) 'napaxi.service.automation',
       ],
+      disabledCapabilities: [
+        if (platform == 'ios' && !iosQemuSandboxReady) 'napaxi.tool.shell',
+        if (platform == 'ios' && !iosQemuSandboxReady)
+          'napaxi.agent_engine.codex',
+        if (platform == 'ios' && !iosQemuSandboxReady)
+          'napaxi.platform.ios_qemu',
+      ],
     );
   }
 
   static NapaxiCapabilitySelection _buildHostCapabilitySelection({
+    required String? platform,
+    required bool iosQemuSandboxReady,
     required bool hasCustomToolExecutor,
     required bool hasAgentEngineExecutor,
     required bool hasAgentAppActionExecutor,
     required bool hasBrowserController,
     required bool enableAutomation,
   }) {
+    final iosQemuSandboxAvailable = platform == 'ios' && iosQemuSandboxReady;
+    final sandboxedCodexAvailable =
+        platform == 'android' || iosQemuSandboxAvailable;
     return NapaxiCapabilitySelection(
       enabledCapabilities: [
         NapaxiChannelCapability.im,
         NapaxiChannelCapability.device,
         if (hasCustomToolExecutor) 'napaxi.tool.custom_host',
-        'napaxi.agent_engine.codex',
+        if (sandboxedCodexAvailable) 'napaxi.agent_engine.codex',
+        if (iosQemuSandboxAvailable) 'napaxi.platform.ios_qemu',
         if (hasAgentEngineExecutor) 'napaxi.agent_engine.external_host',
         if (hasAgentAppActionExecutor) 'napaxi.tool.agent_app_action',
         if (hasBrowserController) BrowserToolProvider.capabilityId,
         if (enableAutomation) 'napaxi.service.automation',
+      ],
+      disabledCapabilities: [
+        if (platform == 'ios' && !iosQemuSandboxReady) 'napaxi.tool.shell',
+        if (platform == 'ios' && !iosQemuSandboxReady)
+          'napaxi.agent_engine.codex',
+        if (platform == 'ios' && !iosQemuSandboxReady)
+          'napaxi.platform.ios_qemu',
       ],
     );
   }

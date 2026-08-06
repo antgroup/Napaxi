@@ -1,14 +1,19 @@
 use std::collections::HashMap;
 use std::fs;
 use std::sync::{Mutex, OnceLock};
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::protocol::JsonRpcClient;
 use crate::agent_engine::AgentEngineTurnRequest;
+
+#[cfg(target_os = "android")]
+use crate::android_linux_env as linux_env;
+#[cfg(target_os = "ios")]
+use crate::ios_qemu_env as linux_env;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct CodexSessionState {
@@ -19,7 +24,7 @@ pub(crate) struct CodexSessionState {
     pub(crate) dynamic_tools_fingerprint: String,
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) struct ActiveCodexSession {
     pub(crate) pty: u64,
     pub(crate) rpc: JsonRpcClient,
@@ -33,11 +38,11 @@ pub(crate) struct ActiveCodexSession {
     pub(crate) close_after_turn: bool,
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 static ACTIVE_CODEX_SESSIONS: OnceLock<Mutex<HashMap<String, ActiveCodexSession>>> =
     OnceLock::new();
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[derive(Debug, Clone)]
 pub(crate) struct PendingCodexHumanRequest {
     pub(crate) session_key: String,
@@ -45,22 +50,22 @@ pub(crate) struct PendingCodexHumanRequest {
     pub(crate) question_id: String,
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 static PENDING_CODEX_HUMAN_REQUESTS: OnceLock<Mutex<HashMap<String, PendingCodexHumanRequest>>> =
     OnceLock::new();
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn pending_human_requests() -> &'static Mutex<HashMap<String, PendingCodexHumanRequest>>
 {
     PENDING_CODEX_HUMAN_REQUESTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn active_sessions() -> &'static Mutex<HashMap<String, ActiveCodexSession>> {
     ACTIVE_CODEX_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn remove_active_session(key: &str) -> Option<ActiveCodexSession> {
     let active = active_sessions().lock().ok()?.remove(key);
     if active.is_some() {
@@ -69,14 +74,14 @@ pub(crate) fn remove_active_session(key: &str) -> Option<ActiveCodexSession> {
     active
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn remove_pending_human_requests_for_session(key: &str) {
     if let Ok(mut guard) = pending_human_requests().lock() {
         guard.retain(|_, pending| pending.session_key != key);
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn invalidate_sessions_for_config(files_dir: &str, fingerprint: Option<&str>) {
     clear_stale_native_thread_mappings(files_dir, fingerprint);
     let (stale, running_marked) = {
@@ -119,7 +124,7 @@ pub(crate) fn invalidate_sessions_for_config(files_dir: &str, fingerprint: Optio
         // synchronous FFI call. Do not wait for proot/app-server teardown here:
         // an uncooperative child can otherwise block the UI thread long enough
         // to look like a settings-save freeze or trigger an Android ANR.
-        let _ = crate::android_linux_env::pty::close_pty_session_nonblocking(active.pty);
+        let _ = linux_env::pty::close_pty_session_nonblocking(active.pty);
     }
 }
 
@@ -221,12 +226,12 @@ pub(crate) fn save_state(files_dir: &str, key: &str, state: &CodexSessionState) 
     }
 }
 
-#[cfg(any(target_os = "android", test))]
+#[cfg(any(target_os = "android", target_os = "ios", test))]
 pub(crate) fn clear_state(files_dir: &str, key: &str) {
     let _ = fs::remove_file(state_path(files_dir, key));
 }
 
-#[cfg(any(target_os = "android", test))]
+#[cfg(any(target_os = "android", target_os = "ios", test))]
 fn clear_stale_native_thread_mappings(files_dir: &str, fingerprint: Option<&str>) {
     let Ok(entries) = fs::read_dir(state_dir(files_dir)) else {
         return;

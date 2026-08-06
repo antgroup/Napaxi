@@ -71,13 +71,8 @@ char *napaxi_api_call_json(
     const char *payload_json
 );
 
-void napaxi_api_ios_ish_register_rootfs_archive_path(const char *path);
-bool napaxi_api_ios_ish_is_ready(const char *files_dir);
-
-/* Legacy aliases — prefer the napaxi_api_-prefixed versions above.
- * These are retained for backward compatibility with earlier integrations
- * and will be removed in a future major version. */
-void napaxi_ios_ish_register_rootfs_archive_path(const char *path);
+void napaxi_api_ios_qemu_register_rootfs_archive_path(const char *path);
+bool napaxi_api_ios_qemu_is_ready(const char *files_dir);
 char *napaxi_version(void);
 void napaxi_string_free(char *value);
 

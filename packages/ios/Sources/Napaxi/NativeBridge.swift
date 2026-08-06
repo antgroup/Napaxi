@@ -236,17 +236,20 @@ enum NapaxiNativeBridge {
         #endif
     }
 
-    static func registerIshRootfsArchive(path: String) {
-        #if os(iOS)
-        path.withCString { napaxi_api_ios_ish_register_rootfs_archive_path($0) }
+    static func registerIosQemuRootfsArchive(path: String) {
+        #if os(iOS) && NAPAXI_IOS_QEMU
+        path.withCString { napaxi_api_ios_qemu_register_rootfs_archive_path($0) }
+        #else
+        _ = path
         #endif
     }
 
-    static func isIshReady(filesDir: String) -> Bool {
-        #if os(iOS)
-        filesDir.withCString { napaxi_api_ios_ish_is_ready($0) }
+    static func isIosQemuReady(filesDir: String) -> Bool {
+        #if os(iOS) && NAPAXI_IOS_QEMU
+        filesDir.withCString { napaxi_api_ios_qemu_is_ready($0) }
         #else
-        false
+        _ = filesDir
+        return false
         #endif
     }
 

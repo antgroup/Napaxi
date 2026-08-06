@@ -418,7 +418,11 @@ public final class NapaxiEngine: @unchecked Sendable {
         enableAgentProviderActions: Bool = false,
         openAgentProviderURL: NapaxiAgentProviderHost.URLOpener? = nil
     ) throws -> NapaxiEngine {
-        let ishRootfsAvailable = NapaxiIshSupport.registerBundledRootfsArchive()
+        let iosQemuRootfsAvailable = NapaxiIosQemuSandboxSupport.isBundledRootfsAvailable
+        let iosQemuRuntimeLinked = NapaxiIosQemuSandboxSupport.isRuntimeLinked
+        if iosQemuRootfsAvailable && iosQemuRuntimeLinked {
+            NapaxiIosQemuSandboxSupport.registerBundledRootfsArchive()
+        }
         let automationEnabled = resolveAutomationEnabled(
             enableAutomation: enableAutomation,
             backgroundConfig: backgroundConfig
@@ -453,18 +457,24 @@ public final class NapaxiEngine: @unchecked Sendable {
             hasBrowserController: resolvedBrowserController != nil,
             enablePlatformTools: enablePlatformTools,
             enableAutomation: automationEnabled,
-            ishRootfsAvailable: ishRootfsAvailable
+            iosQemuRootfsAvailable: iosQemuRootfsAvailable,
+            iosQemuRuntimeLinked: iosQemuRuntimeLinked
         )
         let selection = capabilitySelection ?? NapaxiCapabilitySelection(
             enabledCapabilities: [
                 NapaxiChannelCapability.im,
                 NapaxiChannelCapability.device,
                 resolvedToolExecutor == nil ? nil : "napaxi.tool.custom_host",
-                "napaxi.agent_engine.codex",
+                iosQemuRootfsAvailable && iosQemuRuntimeLinked ? "napaxi.agent_engine.codex" : nil,
+                iosQemuRootfsAvailable && iosQemuRuntimeLinked ? NapaxiIosQemuSandboxSupport.sandboxCapabilityId : nil,
                 resolvedAgentAppActionExecutor == nil ? nil : "napaxi.tool.agent_app_action",
                 resolvedBrowserController == nil ? nil : NapaxiBrowserToolProvider.capabilityId,
                 automationEnabled ? "napaxi.service.automation" : nil,
-            ].compactMap { $0 }
+            ].compactMap { $0 },
+            disabledCapabilities: NapaxiIosQemuSandboxSupport.disabledCapabilities(
+                rootfsAvailable: iosQemuRootfsAvailable,
+                runtimeLinked: iosQemuRuntimeLinked
+            )
         )
         let platformContext = try NapaxiPlatformContextResolver.resolve(
             filesDir: resolvedFilesDir,
@@ -1553,7 +1563,8 @@ public final class NapaxiEngine: @unchecked Sendable {
         hasBrowserController: Bool,
         enablePlatformTools: Bool,
         enableAutomation: Bool,
-        ishRootfsAvailable: Bool
+        iosQemuRootfsAvailable: Bool,
+        iosQemuRuntimeLinked: Bool
     ) -> NapaxiCapabilityProfile {
         NapaxiCapabilityProfile(
             platform: "ios",
@@ -1561,13 +1572,17 @@ public final class NapaxiEngine: @unchecked Sendable {
                 NapaxiChannelCapability.im,
                 NapaxiChannelCapability.device,
                 hasCustomToolExecutor ? "napaxi.tool.custom_host" : nil,
-                "napaxi.agent_engine.codex",
+                iosQemuRootfsAvailable && iosQemuRuntimeLinked ? "napaxi.agent_engine.codex" : nil,
+                iosQemuRootfsAvailable && iosQemuRuntimeLinked ? NapaxiIosQemuSandboxSupport.sandboxCapabilityId : nil,
                 hasAgentAppActionExecutor ? "napaxi.tool.agent_app_action" : nil,
                 enablePlatformTools ? "napaxi.platform_tool.*" : nil,
                 hasBrowserController ? "napaxi.tool.browser" : nil,
                 enableAutomation ? "napaxi.service.automation" : nil,
             ].compactMap { $0 },
-            disabledCapabilities: NapaxiIshSupport.disabledCapabilities(rootfsAvailable: ishRootfsAvailable)
+            disabledCapabilities: NapaxiIosQemuSandboxSupport.disabledCapabilities(
+                rootfsAvailable: iosQemuRootfsAvailable,
+                runtimeLinked: iosQemuRuntimeLinked
+            )
         )
     }
 

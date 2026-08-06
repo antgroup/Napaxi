@@ -9,23 +9,18 @@ Napaxi 源码采用 GPL-3.0-or-later，详见 [`LICENSE`](LICENSE)。但分发�
 | PRoot 5.1.0 | `packages/flutter/android/jniLibs/arm64-v8a/libproot.so` | GPL-2.0-only | Android sandbox 相关执行组件。 |
 | Samba talloc | `packages/flutter/android/assets/libtalloc.so.2` | LGPL-3.0-or-later | 动态库。 |
 | musl libc loader | `packages/flutter/android/jniLibs/arm64-v8a/libldmusl.so` | MIT | 动态 loader。 |
-| Alpine minirootfs | Android/iOS rootfs assets | mixed | rootfs 内各包按各自许可证。 |
+| Alpine minirootfs | `packages/flutter/android/assets/alpine-rootfs.bin`、`packages/ios/Sources/Napaxi/Resources/alpine-rootfs.bin` | mixed | rootfs 内各包按各自许可证。 |
 | `libloader.so` | `packages/flutter/android/jniLibs/arm64-v8a/libloader.so` | GPL-3.0-or-later | Napaxi 第一方 sandbox loader shim。 |
-| iSHCore 0.3.0 | `packages/ios/Vendor/iSHCore` 和 CocoaPods dependency | GPL-3.0；上游 GPLv2 额外授权说明和 `LICENSE.IOS` 同时适用 | iOS user-mode Linux emulator。 |
 
-Android 和 iOS runtime binary 的来源、hash 与完整说明见：
+Android runtime binary 的来源、hash 与完整说明见：
 
 - [`packages/flutter/android/jniLibs/THIRD-PARTY.md`](packages/flutter/android/jniLibs/THIRD-PARTY.md)
-- [`packages/ios/Vendor/iSHCore/THIRD-PARTY.md`](packages/ios/Vendor/iSHCore/THIRD-PARTY.md)
+
+iOS QEMU runtime 产物尚未入仓；落地后需要在这里补充来源、hash 和许可证。
 
 ## Copyleft 义务
 
-PRoot、talloc、iSHCore 等 GPL/LGPL 组件要求分发方提供对应源码或源码获取方式。Napaxi 记录了这些组件的上游来源；下游 App 在分发包含 Napaxi SDK 的产物时，也需要满足自身分发场景下的许可证义务。
-
-iSH 上游仓库说明 iSH 采用 GPLv3，并记录了部分贡献的 GPLv2 额外授权说明，同时
-`LICENSE.IOS` 适用于 App Store 分发。除非下游分发方针对实际发布产物独立确认
-其它可用授权路径，Napaxi 将 vendored iSHCore runtime 记录为 GPLv3-governed
-第三方组件。
+PRoot、talloc 等 GPL/LGPL 组件要求分发方提供对应源码或源码获取方式。Napaxi 记录了这些组件的上游来源；下游 App 在分发包含 Napaxi SDK 的产物时，也需要满足自身分发场景下的许可证义务。
 
 这份说明不是法律意见。商业或公开分发前，请结合目标应用、链接方式、应用商店要求和公司合规流程进行法律审查。
 

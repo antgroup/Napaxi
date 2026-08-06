@@ -83,7 +83,7 @@ loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the rebase cadence (next rebase scheduled 2026-09-01), and the exit
   criteria for deleting the vendor directory.
 - `docs/sdk-integration.md` — new "Current Limitations & Long-Term Plan"
-  section recording the iSH-based iOS path and the vendored libsql as
+  section recording the iOS QEMU placeholder path and the vendored libsql as
   intentional, time-bound trade-offs rather than the final shape.
 - `crates/core/benches/core_hot_path.rs` — criterion bench scaffold with
   a first SSE-parse baseline; wired through `[dev-dependencies] criterion`
@@ -187,7 +187,7 @@ loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- Gated the `ios_ish_readiness_is_false_without_ios_runtime` test in
+- Gated the iOS sandbox readiness-without-runtime test in
   `packages/api_bridge/c_api.rs` with `#[cfg(target_os = "ios")]` (it called
   iOS-only FFI entrypoints), so `cargo test` no longer needs to exclude the
   whole `napaxi_api_bridge` crate. The bridge crate's host-runnable tests run

@@ -52,6 +52,8 @@ class NapaxiPlatformContextResolver {
         if (map['userTimezone'] != null) 'user_timezone': map['userTimezone'],
         if (map['nativeLibraryDir'] != null)
           'native_library_dir': map['nativeLibraryDir'],
+        if (map['iosQemuSandboxReady'] != null)
+          'ios_qemu_sandbox_ready': map['iosQemuSandboxReady'],
       };
       return NapaxiPlatformContext(
         filesDir: filesDir,

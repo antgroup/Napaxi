@@ -291,17 +291,17 @@ pub extern "C" fn napaxi_api_clear_tool_request_callback() {
 
 #[unsafe(no_mangle)]
 #[cfg(target_os = "ios")]
-pub extern "C" fn napaxi_api_ios_ish_register_rootfs_archive_path(path: *const c_char) {
+pub extern "C" fn napaxi_api_ios_qemu_register_rootfs_archive_path(path: *const c_char) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
-        napaxi_core::api::platform::register_ios_ish_rootfs_archive_path(&cstr(path));
+        napaxi_core::api::platform::register_ios_qemu_rootfs_archive_path(&cstr(path));
     }));
 }
 
 #[unsafe(no_mangle)]
 #[cfg(target_os = "ios")]
-pub extern "C" fn napaxi_api_ios_ish_is_ready(files_dir: *const c_char) -> bool {
+pub extern "C" fn napaxi_api_ios_qemu_is_ready(files_dir: *const c_char) -> bool {
     catch_unwind(AssertUnwindSafe(|| {
-        napaxi_core::api::platform::ios_ish_is_ready(&cstr(files_dir))
+        napaxi_core::api::platform::ios_qemu_is_ready(&cstr(files_dir))
     }))
     .unwrap_or(false)
 }
@@ -770,13 +770,13 @@ mod tests {
         ));
     }
 
-    // The `napaxi_api_ios_ish_*` FFI entrypoints are `#[cfg(target_os = "ios")]`
+    // The `napaxi_api_ios_qemu_*` FFI entrypoints are `#[cfg(target_os = "ios")]`
     // only, so this test can only compile and run on an iOS target.
     #[test]
     #[cfg(target_os = "ios")]
-    fn ios_ish_readiness_is_false_without_ios_runtime() {
-        napaxi_api_ios_ish_register_rootfs_archive_path(std::ptr::null());
-        assert!(!napaxi_api_ios_ish_is_ready(std::ptr::null()));
+    fn ios_qemu_readiness_is_false_without_registered_rootfs() {
+        napaxi_api_ios_qemu_register_rootfs_archive_path(std::ptr::null());
+        assert!(!napaxi_api_ios_qemu_is_ready(std::ptr::null()));
     }
 
     // ------------------------------------------------------------------

@@ -33,7 +33,7 @@ This file provides project instructions for AI coding agents working on Napaxi.
 - Feature crates must not depend on `crates/core`.
 - Do not place third-party patched/vendor crates under `crates/core/` or `crates/features/`; use `vendor/`.
 - SDK adapters must enter Rust core through `napaxi_core::api`; do not call `mobile_*` implementation modules directly from adapter code.
-- Packages must not call top-level core internals such as `napaxi_core::android_assets`, `napaxi_core::android_linux_env`, or `napaxi_core::ios_ish_env`; expose adapter-needed hooks through `napaxi_core::api`.
+- Packages must not call top-level core internals such as `napaxi_core::android_assets`, `napaxi_core::android_linux_env`, or `napaxi_core::ios_qemu_env`; expose adapter-needed hooks through `napaxi_core::api`.
 - `mobile_*` module names are legacy implementation names, not public API. Do not add new `mobile_*` modules or crate-internal `crate::mobile_*` references. New runtime behavior should be typed/internal first, then explicitly exported through `api`.
 - Do not add broad `pub use crate::mobile_*::*` exports in `crates/core/src/api`; keep API exports as small whitelists.
 - Cross-cutting extension points belong in the core capability registry under

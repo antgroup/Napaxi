@@ -240,11 +240,17 @@ Agent engines are core-owned runtime loop capabilities. The default
 enabled when no Agent definition selects another engine.
 
 `napaxi.agent_engine.codex` is the core-owned Codex app-server engine. The
-capability and adapter API are visible across Flutter, Android, and iOS. The
-first runtime implementation is Android-only: core starts `codex app-server`
-inside the Android Linux sandbox PTY, owns the app-server JSON-RPC session,
-maps Codex events to Napaxi `ChatEvent`s, and persists the Napaxi session to
-Codex native thread mapping. iOS and other platforms return the explicit error
+capability and adapter API are visible across Flutter, Android, and iOS. Mobile
+runtime implementations start `codex app-server` inside a bundled Linux sandbox
+PTY: Android uses the PRoot backend, while iOS uses the
+`napaxi.platform.ios_qemu` backend backed by Napaxi-owned rootfs preparation and
+vendored lower-level QEMU C/static libraries. Both backends share the baked
+Alpine rootfs artifact name (`alpine-rootfs.bin`), the app-server JSON-RPC
+session owner, Codex event mapping to Napaxi `ChatEvent`s, and persisted Napaxi
+session to Codex native thread mapping. On iOS the capability is available only
+when the QEMU runtime is linked, the rootfs resource is packaged, and the host
+enables the required capabilities; otherwise core/adapters report the explicit
+not-ready or disabled state. Other platforms return
 `napaxi.agent_engine.codex is unsupported on this platform` until they provide a
 compatible sandbox runner.
 
@@ -355,10 +361,10 @@ host executor chooses to read them from the turn request.
 
 Flutter v1 can register a host-carried `AgentEngineExecutor` for true external
 engines such as demo CLI integrations. Android and iOS v1 expose the stable wire
-models and explicit unsupported placeholders for host executors. Selecting
+models and explicit unsupported state for host executors. Selecting
 `external_host` or `codex` without the declared and enabled capability is
-rejected by core capability admission; selecting `codex` on a non-Android
-runtime returns the platform unsupported error above.
+rejected by core capability admission; selecting `codex` on a platform without a
+compatible bundled sandbox runner returns the platform unsupported error above.
 
 ## LLM And Media Capabilities
 

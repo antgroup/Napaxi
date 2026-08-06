@@ -471,7 +471,7 @@ Agent 文件，否则会落到全局 app workspace，而不是当前 Agent scope
 - `/skills/...` -> app filesDir 下的 `prompt_skills`
 - `/tmp`、`/root`、`/home`、`/var`、`/usr`、`/opt`、`/etc`、`/srv`、`/run` -> rootfs
 - Android rootfs 默认在 `filesDir/linux-env/rootfs`
-- iOS rootfs 默认在 `Documents/ish-rootfs`
+- iOS rootfs 复用打包的 `alpine-rootfs.bin`；QEMU 后端未链接前不会展开/启用 shell
 
 ### Sandbox
 

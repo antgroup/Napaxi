@@ -93,14 +93,15 @@ setting; configuring that setting requires the same signed Host binding.
 Flutter, Android, and iOS expose matching typed model sync and clear methods.
 The result contract contains `success`, `providerAvailable`, `modelUsable`,
 `errorCode`, `error`, `model`, and `configChanged`. Android materializes the
-selected main model into its Linux sandbox; iOS and other platforms return
-`unsupported_platform`. The raw TOML method remains deprecated compatibility
-surface and is not a second configuration source.
+selected main model into its Linux sandbox; iOS exposes the same API but keeps
+Codex disabled until the `napaxi.platform.ios_qemu` sandbox backend is linked.
+Other platforms return `unsupported_platform`. The raw TOML method remains
+deprecated compatibility surface and is not a second configuration source.
 
 The same adapters expose `listCodexAgentEngineThreads`,
 `readCodexAgentEngineThread`, and `bindCodexAgentEngineThread`. Android queries
 the core-owned app-server native thread store; iOS returns the typed
-`unsupported_platform` result.
+unsupported/not-ready result until the QEMU sandbox runner lands.
 
 ## Projects and Session Placement
 

@@ -23,7 +23,7 @@ is refreshed against upstream. The upstream project's own documentation
 ## Why we patch
 
 Mobile builds (`aarch64-linux-android`, `aarch64-apple-ios`, Android proot
-runtime, iOS iSH environment) exercise libsql build flags and feature
+runtime, iOS QEMU sandbox placeholder) exercise libsql build flags and feature
 combinations that upstream does not currently smoke-test. The patches here
 exist to keep Napaxi building on the mobile targets supported by
 `./tools/scripts/build.sh release {android,ios}`.

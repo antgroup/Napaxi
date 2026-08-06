@@ -28,15 +28,18 @@ final class MainViewController: UIViewController {
         do {
             let token = Self.smokeToken()
             let filesDir = Self.makeFilesDir()
-            let profile = Self.makeCapabilityProfile()
-            let selection = Self.makeCapabilitySelection()
+            let rootfsRegistered = NapaxiIosQemuSandboxSupport.registerBundledRootfsArchive()
+            let qemuReady = NapaxiIosQemuSandboxSupport.isReady(filesDir: filesDir)
+            let profile = Self.makeCapabilityProfile(qemuReady: qemuReady)
+            let selection = Self.makeCapabilitySelection(qemuReady: qemuReady)
             let context = try NapaxiPlatformContextResolver.resolve(
                 filesDir: filesDir,
                 platform: "ios",
                 capabilityProfile: profile,
                 capabilitySelection: selection
             )
-            let engine = try Self.makeEngineForSmoke(filesDir: filesDir)
+            let engine = try Self.makeEngineForSmoke(filesDir: filesDir, qemuReady: qemuReady)
+            let shellSmoke = qemuReady ? try Self.runQemuShellSmoke(engine: engine) : "skipped: qemuReady=false"
 
             return [
                 "Napaxi native iOS app smoke is ready.",
@@ -44,7 +47,11 @@ final class MainViewController: UIViewController {
                 "engineHandle=\(engine.handle)",
                 "filesDir=\(context.filesDir)",
                 "enabled=\(selection.enabledCapabilities.joined(separator: ","))",
-                "rootfs=\(NapaxiIshSupport.isBundledRootfsAvailable)",
+                "rootfs=\(NapaxiIosQemuSandboxSupport.isBundledRootfsAvailable)",
+                "rootfsRegistered=\(rootfsRegistered)",
+                "qemuRuntime=\(NapaxiIosQemuSandboxSupport.isRuntimeLinked)",
+                "qemuReady=\(qemuReady)",
+                "qemuShell=\(shellSmoke)",
             ].joined(separator: "\n")
         } catch {
             return "Napaxi native iOS app smoke failed: \(error)"
@@ -68,42 +75,79 @@ final class MainViewController: UIViewController {
             .path
     }
 
-    static func makeCapabilityProfile() -> NapaxiCapabilityProfile {
+    static func makeCapabilityProfile(qemuReady: Bool = NapaxiIosQemuSandboxSupport.isBundledSandboxAvailable) -> NapaxiCapabilityProfile {
         NapaxiCapabilityProfile(
             platform: "ios",
             supportedCapabilities: [
                 "napaxi.tool.custom_host",
+                "napaxi.agent_engine.codex",
+                NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
                 "napaxi.platform_tool.*",
             ],
-            disabledCapabilities: NapaxiIshSupport.disabledCapabilities()
-        )
-    }
-
-    static func makeCapabilitySelection() -> NapaxiCapabilitySelection {
-        NapaxiCapabilitySelection(
-            enabledCapabilities: [
-                "napaxi.tool.custom_host",
-                "napaxi.platform_tool.open_url",
+            disabledCapabilities: qemuReady ? [] : [
+                NapaxiIosQemuSandboxSupport.shellCapabilityId,
+                NapaxiIosQemuSandboxSupport.codexCapabilityId,
+                NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
             ]
         )
     }
 
-    static func makeEngineForSmoke(filesDir: String) throws -> NapaxiEngine {
+    static func makeCapabilitySelection(qemuReady: Bool = NapaxiIosQemuSandboxSupport.isBundledSandboxAvailable) -> NapaxiCapabilitySelection {
+        NapaxiCapabilitySelection(
+            enabledCapabilities: [
+                "napaxi.tool.custom_host",
+                qemuReady ? NapaxiIosQemuSandboxSupport.shellCapabilityId : nil,
+                qemuReady ? NapaxiIosQemuSandboxSupport.codexCapabilityId : nil,
+                qemuReady ? NapaxiIosQemuSandboxSupport.sandboxCapabilityId : nil,
+                "napaxi.platform_tool.open_url",
+            ].compactMap { $0 },
+            disabledCapabilities: qemuReady ? [] : [
+                NapaxiIosQemuSandboxSupport.shellCapabilityId,
+                NapaxiIosQemuSandboxSupport.codexCapabilityId,
+                NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
+            ]
+        )
+    }
+
+    static func makeEngineForSmoke(filesDir: String, qemuReady: Bool = NapaxiIosQemuSandboxSupport.isBundledSandboxAvailable) throws -> NapaxiEngine {
         try NapaxiEngine.create(
             config: NapaxiConfig(
                 provider: "openai",
                 apiKey: "sk-integration-placeholder",
                 model: "gpt-4o-mini",
-                maxToolIterations: 4
+                maxToolIterations: 4,
+                shellSecurity: NapaxiShellSecurityConfig(approvalMode: .trustedAllow)
             ),
             filesDir: filesDir,
             toolExecutor: AppToolExecutor(),
             enablePlatformTools: true,
-            capabilityProfile: makeCapabilityProfile(),
-            capabilitySelection: makeCapabilitySelection(),
+            capabilityProfile: makeCapabilityProfile(qemuReady: qemuReady),
+            capabilitySelection: makeCapabilitySelection(qemuReady: qemuReady),
             platformToolExecutor: AppPlatformToolExecutor(),
             structuredToolApprovalHandler: AppApprovalHandler()
         )
+    }
+
+
+    static func runQemuShellSmoke(engine: NapaxiEngine) throws -> String {
+        let arguments: [String: NapaxiJSONValue] = [
+            "command": .string("echo napaxi-ios-qemu-smoke && pwd && uname -m"),
+            "timeout": .number(20),
+        ]
+        let request = try NapaxiRawJSON(.object([
+            "call_id": .string("ios-qemu-smoke-shell"),
+            "name": .string("shell"),
+            "arguments": .object(arguments),
+        ])).jsonString()
+        let result = try engine.api.call(
+            namespace: "tools",
+            method: "tool_broker_call_tool",
+            payload: ["request_json": .string(request)]
+        )
+        let object = result.objectValue ?? [:]
+        let output = object["output"]?.stringValue ?? ""
+        let isError = object["is_error"]?.boolValue ?? true
+        return "isError=\(isError); output=\(output.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
 
     private static func writeSmokeReport(_ summary: String) {

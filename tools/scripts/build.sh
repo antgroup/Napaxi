@@ -109,18 +109,62 @@ check_android_runtime_assets() {
 
 check_ios_native_assets() {
     local ios_dir="$ROOT_DIR/packages/ios"
-    local vendor_dir="$ios_dir/Vendor/iSHCore"
+    local flutter_ios_dir="$SDK_DIR/ios"
     local resource_dir="$ios_dir/Sources/Napaxi/Resources"
+    local flutter_resource_dir="$flutter_ios_dir/Resources"
+    local qemu_dir="$ios_dir/Vendor/IosQemu"
+    local flutter_qemu_dir="$flutter_ios_dir/Vendor/IosQemu"
+    local qemu_source_dir="$qemu_dir/Sources/QEMU"
+    local flutter_qemu_source_dir="$flutter_qemu_dir/Sources/QEMU"
+    local qemu_lib_dir="$qemu_dir/Vendor/QEMU/lib/iphoneos"
+    local flutter_qemu_lib_dir="$flutter_qemu_dir/Vendor/QEMU/lib/iphoneos"
 
     [ -f "$ios_dir/Package.swift" ] || err "Missing native iOS Swift package: $ios_dir/Package.swift"
-    [ -f "$ios_dir/Sources/NapaxiIsh/ish_bridge.c" ] || err "Missing native iOS iSH bridge source: $ios_dir/Sources/NapaxiIsh/ish_bridge.c"
-    [ -f "$ios_dir/Sources/NapaxiIsh/include/ish_bridge.h" ] || err "Missing native iOS iSH bridge header: $ios_dir/Sources/NapaxiIsh/include/ish_bridge.h"
-    [ -f "$resource_dir/alpine-rootfs.tar.gz" ] || err "Missing native iOS iSH rootfs: $resource_dir/alpine-rootfs.tar.gz. Run: ./tools/scripts/prepare_ios_ish_spm.sh"
-    [ -d "$vendor_dir/include" ] || err "Missing native iOS iSH headers: $vendor_dir/include. Run: ./tools/scripts/prepare_ios_ish_spm.sh"
+    [ -f "$ios_dir/Sources/Napaxi/NapaxiIosQemuSandboxSupport.swift" ] || err "Missing native iOS QEMU sandbox support: $ios_dir/Sources/Napaxi/NapaxiIosQemuSandboxSupport.swift"
+    [ -f "$resource_dir/alpine-rootfs.bin" ] || err "Missing native iOS QEMU rootfs asset: $resource_dir/alpine-rootfs.bin"
+    [ -f "$flutter_resource_dir/alpine-rootfs.bin" ] || err "Missing Flutter iOS QEMU rootfs asset: $flutter_resource_dir/alpine-rootfs.bin"
+    [ ! -L "$resource_dir/alpine-rootfs.bin" ] || err "Native iOS rootfs asset must be a packaged file, not a symlink: $resource_dir/alpine-rootfs.bin"
+    [ ! -L "$flutter_resource_dir/alpine-rootfs.bin" ] || err "Flutter iOS rootfs asset must be a packaged file, not a symlink: $flutter_resource_dir/alpine-rootfs.bin"
 
-    for runtime_lib in libish.a libish_emu.a libfakefs.a libfakefsify.a libarchive.a; do
-        [ -f "$vendor_dir/lib/$runtime_lib" ] || err "Missing native iOS iSH runtime: $vendor_dir/lib/$runtime_lib. Run: ./tools/scripts/prepare_ios_ish_spm.sh"
+    for bridge_source in qemu_bridge.c qemu_bridge.h qemu_runner.c qemu_runner.h; do
+        [ -f "$qemu_source_dir/$bridge_source" ] || err "Missing native iOS QEMU bridge source: $qemu_source_dir/$bridge_source"
+        [ -f "$flutter_qemu_source_dir/$bridge_source" ] || err "Missing Flutter iOS QEMU bridge source: $flutter_qemu_source_dir/$bridge_source"
     done
+
+    for qemu_lib in \
+        libqemu-aarch64-linux-user.a \
+        libqemuutil.a \
+        libhwcore.a \
+        libqom.a \
+        libevent-loop-base.a \
+        libglib-2.0.a \
+        libpcre2-8.a \
+        libintl.a \
+        libffi.a; do
+        [ -f "$qemu_lib_dir/$qemu_lib" ] || err "Missing native iOS QEMU static library: $qemu_lib_dir/$qemu_lib"
+        [ -f "$flutter_qemu_lib_dir/$qemu_lib" ] || err "Missing Flutter iOS QEMU static library: $flutter_qemu_lib_dir/$qemu_lib"
+    done
+}
+
+check_ios_app_qemu_artifacts() {
+    local app_path="$1"
+    local rootfs_path="$app_path/Napaxi_Napaxi.bundle/Resources/alpine-rootfs.bin"
+    local binary_path="$app_path/NapaxiIOSIntegrationApp.debug.dylib"
+    local android_rootfs="$SDK_DIR/android/assets/alpine-rootfs.bin"
+
+    [ -f "$rootfs_path" ] || err "iOS app is missing packaged QEMU rootfs: $rootfs_path"
+    [ ! -L "$rootfs_path" ] || err "iOS app QEMU rootfs must be copied into the app bundle, not packaged as a symlink: $rootfs_path"
+
+    local app_rootfs_size android_rootfs_size
+    app_rootfs_size="$(stat -f '%z' "$rootfs_path")"
+    android_rootfs_size="$(stat -f '%z' "$android_rootfs")"
+    [ "$app_rootfs_size" = "$android_rootfs_size" ] || \
+        err "iOS app QEMU rootfs size ($app_rootfs_size) does not match Android Alpine rootfs size ($android_rootfs_size)."
+
+    [ -f "$binary_path" ] || err "iOS app is missing debug dylib for QEMU symbol verification: $binary_path"
+    if ! nm -gU "$binary_path" | grep -E '(_qemu_sandbox_init|_napaxi_api_ios_qemu_is_ready)' >/dev/null; then
+        err "iOS app binary does not contain the required Napaxi iOS QEMU symbols."
+    fi
 }
 
 ensure_ios_artifacts() {
@@ -589,6 +633,7 @@ check_ios_app_integration() {
     ensure_ios_artifacts
     require_command xcodebuild
     require_command grep
+    require_command nm
     check_ios_app_smoke_report_validator
 
     cd "$ROOT_DIR/examples/integration/ios/app"
@@ -603,6 +648,8 @@ check_ios_app_integration() {
         ARCHS=arm64 \
         ONLY_ACTIVE_ARCH=YES \
         build
+
+    check_ios_app_qemu_artifacts "$ROOT_DIR/examples/integration/ios/app/DerivedData/Build/Products/Debug-iphoneos/NapaxiIOSIntegrationApp.app"
 }
 
 ios_device_id() {
@@ -754,6 +801,22 @@ check_ios_app_smoke_report() {
         sed 's/^/[SMOKE] /' "$report_path" >&2
         err "iOS integration app did not report bundled rootfs availability."
     fi
+    if ! grep -q '^rootfsRegistered=true$' "$report_path"; then
+        sed 's/^/[SMOKE] /' "$report_path" >&2
+        err "iOS integration app did not register the bundled rootfs with the QEMU backend."
+    fi
+    if ! grep -q '^qemuRuntime=true$' "$report_path"; then
+        sed 's/^/[SMOKE] /' "$report_path" >&2
+        err "iOS integration app did not report the QEMU runtime as linked."
+    fi
+    if ! grep -q '^qemuReady=true$' "$report_path"; then
+        sed 's/^/[SMOKE] /' "$report_path" >&2
+        err "iOS integration app did not initialize the QEMU sandbox."
+    fi
+    if ! grep -q '^qemuShell=isError=false; output=napaxi-ios-qemu-smoke' "$report_path"; then
+        sed 's/^/[SMOKE] /' "$report_path" >&2
+        err "iOS integration app did not execute the shell tool through the QEMU sandbox."
+    fi
 }
 
 check_ios_app_smoke_report_validator() {
@@ -769,8 +832,12 @@ check_ios_app_smoke_report_validator() {
         "token=$token" \
         "engineHandle=42" \
         "filesDir=/tmp/napaxi-ios-app-integration" \
-        "enabled=napaxi.tool.custom_host,napaxi.platform_tool.open_url" \
-        "rootfs=true" > "$good_report"
+        "enabled=napaxi.tool.custom_host,napaxi.tool.shell,napaxi.agent_engine.codex,napaxi.platform.ios_qemu,napaxi.platform_tool.open_url" \
+        "rootfs=true" \
+        "rootfsRegistered=true" \
+        "qemuRuntime=true" \
+        "qemuReady=true" \
+        "qemuShell=isError=false; output=napaxi-ios-qemu-smoke" > "$good_report"
     check_ios_app_smoke_report "$good_report" "$token"
 
     printf '%s\n' \
@@ -811,13 +878,14 @@ check_ios_app_device_smoke() {
     require_command xcodebuild
     require_command xcrun
     require_command grep
+    require_command nm
 
-    local bundle_id="dev.napaxi.integration.iosapp"
+    local bundle_id="${IOS_BUNDLE_IDENTIFIER:-dev.napaxi.integration.iosapp}"
     local device_id
     device_id="$(ios_device_id)"
 
-    if [ -z "${IOS_DEVELOPMENT_TEAM:-}" ]; then
-        err "IOS_DEVELOPMENT_TEAM is required for the signed iOS app device smoke. Set IOS_DEVELOPMENT_TEAM, and set IOS_ALLOW_PROVISIONING_UPDATES=1 if Xcode should create/update profiles."
+    if [ -z "${IOS_DEVELOPMENT_TEAM:-}" ] && [ -z "${IOS_PROVISIONING_PROFILE_SPECIFIER:-}" ] && [ -z "${IOS_PROVISIONING_PROFILE_UUID:-}" ]; then
+        err "Signed iOS app device smoke requires signing inputs. Set IOS_DEVELOPMENT_TEAM for automatic signing, or set IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID for an existing development profile."
     fi
 
     check_ios_device_signing_ready
@@ -839,9 +907,23 @@ check_ios_app_device_smoke() {
         CODE_SIGNING_REQUIRED=YES
         ARCHS=arm64
         ONLY_ACTIVE_ARCH=YES
+        PRODUCT_BUNDLE_IDENTIFIER="$bundle_id"
     )
 
-    signing_args+=(DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM")
+    if [ -n "${IOS_DEVELOPMENT_TEAM:-}" ]; then
+        signing_args+=(DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM")
+    fi
+    if [ -n "${IOS_PROVISIONING_PROFILE_SPECIFIER:-}" ]; then
+        signing_args+=(CODE_SIGN_STYLE=Manual)
+        signing_args+=(PROVISIONING_PROFILE_SPECIFIER="$IOS_PROVISIONING_PROFILE_SPECIFIER")
+    fi
+    if [ -n "${IOS_PROVISIONING_PROFILE_UUID:-}" ]; then
+        signing_args+=(CODE_SIGN_STYLE=Manual)
+        signing_args+=(PROVISIONING_PROFILE="$IOS_PROVISIONING_PROFILE_UUID")
+    fi
+    if [ -n "${IOS_CODE_SIGN_IDENTITY:-}" ]; then
+        signing_args+=(CODE_SIGN_IDENTITY="$IOS_CODE_SIGN_IDENTITY")
+    fi
 
     if [ "${IOS_ALLOW_PROVISIONING_UPDATES:-0}" = "1" ]; then
         xcodebuild_args+=(-allowProvisioningUpdates)
@@ -852,10 +934,11 @@ check_ios_app_device_smoke() {
         "${xcodebuild_args[@]}" \
         "${signing_args[@]}" \
         build; then
-        err "Signed iOS app build failed. Set IOS_DEVELOPMENT_TEAM, and IOS_ALLOW_PROVISIONING_UPDATES=1 if Xcode should create/update profiles."
+        err "Signed iOS app build failed. Set IOS_DEVELOPMENT_TEAM for automatic signing, or IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID plus optional IOS_CODE_SIGN_IDENTITY for manual signing. Optionally set IOS_BUNDLE_IDENTIFIER, and IOS_ALLOW_PROVISIONING_UPDATES=1 if Xcode should create/update profiles."
     fi
 
     [ -d "$app_path" ] || err "Signed iOS app build did not produce $app_path"
+    check_ios_app_qemu_artifacts "$app_path"
 
     local smoke_dir token install_json launch_json copy_json report_path
     mkdir -p "$ROOT_DIR/target"
@@ -925,7 +1008,7 @@ check_core_api_boundary() {
     require_command rg
     cd "$ROOT_DIR"
 
-    if rg -n "napaxi_core::(mobile_|android_assets|android_linux_env|ios_ish_env)" packages \
+    if rg -n "napaxi_core::(mobile_|android_assets|android_linux_env|ios_qemu_env)" packages \
         --glob '!packages/flutter/lib/generated/**' \
         --glob '!packages/api_bridge/generated/frb_generated.rs' \
         --glob '!**/build/**' \
@@ -1055,6 +1138,7 @@ check_source_file_size() {
     local offenders=""
     local file lines
     while IFS= read -r file; do
+        [ -f "$file" ] || continue
         lines=$(wc -l < "$file" | tr -d ' ')
         if [ "$lines" -gt "$max_lines" ]; then
             offenders="${offenders}  ${lines}\t${file}\n"
@@ -1074,6 +1158,7 @@ check_source_file_size() {
     info "Checking non-Rust SDK source file size advisory"
     local non_rs_offenders=""
     while IFS= read -r file; do
+        [ -f "$file" ] || continue
         lines=$(wc -l < "$file" | tr -d ' ')
         if [ "$lines" -gt "$max_lines" ]; then
             non_rs_offenders="${non_rs_offenders}  ${lines}\t${file}\n"

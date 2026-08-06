@@ -77,6 +77,16 @@ mod registry {
                 .iter()
                 .any(|definition| definition.id == "napaxi.service.scenario_registry")
         );
+
+        let ios_qemu = definitions
+            .iter()
+            .find(|definition| definition.id == "napaxi.platform.ios_qemu")
+            .expect("iOS QEMU sandbox capability should be registered");
+        assert_eq!(ios_qemu.kind, CapabilityKind::Service);
+        assert_eq!(ios_qemu.risk, CapabilityRisk::Critical);
+        assert_eq!(ios_qemu.activation, CapabilityActivation::Host);
+        assert_eq!(ios_qemu.platforms, vec!["ios".to_string()]);
+        assert!(!ios_qemu.default_enabled);
     }
 
     #[test]

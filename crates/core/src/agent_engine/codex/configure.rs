@@ -3,14 +3,14 @@ use serde_json::json;
 
 #[cfg(test)]
 use super::config;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::config::{self, CodexConfigError, PreparedCodexConfig};
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const CODEX_UNSUPPORTED: &str = "napaxi.agent_engine.codex is unsupported on this platform";
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::state::{invalidate_sessions_for_config, set_current_config_fingerprint};
 
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 #[derive(Debug, Deserialize)]
 struct ConfigureCodexRequest {
     #[serde(default)]
@@ -61,7 +61,7 @@ pub(crate) fn configure_codex_agent_engine_json(_handle: i64, request_json: &str
     configure_codex_agent_engine(request)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
     let model = model_from_config_json(&request.llm_config_json);
     json!({
@@ -76,7 +76,7 @@ fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
     .to_string()
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
     if request.clear {
         return match config::clear(&request.files_dir) {
@@ -109,7 +109,7 @@ fn configure_codex_agent_engine(request: ConfigureCodexRequest) -> String {
     configure_legacy_raw(&request)
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn configure_legacy_raw(request: &ConfigureCodexRequest) -> String {
     let codex_dir = config::config_dir(&request.files_dir);
     let before_config = std::fs::read_to_string(codex_dir.join("config.toml")).ok();
@@ -148,7 +148,7 @@ fn configure_legacy_raw(request: &ConfigureCodexRequest) -> String {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(super) fn sync_prepared_config(
     files_dir: &str,
     prepared: &PreparedCodexConfig,
@@ -159,7 +159,7 @@ pub(super) fn sync_prepared_config(
     Ok(result.changed)
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(super) fn clear_config_and_sessions(files_dir: &str) -> Result<bool, CodexConfigError> {
     let result = config::clear(files_dir)?;
     set_current_config_fingerprint(files_dir, None);
@@ -167,7 +167,7 @@ pub(super) fn clear_config_and_sessions(files_dir: &str) -> Result<bool, CodexCo
     Ok(result.changed)
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn config_error_json(error: CodexConfigError, provider_available: bool) -> String {
     config_result_json(
         false,

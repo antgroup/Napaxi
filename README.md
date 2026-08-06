@@ -341,7 +341,6 @@ later (`GPL-3.0-or-later`). See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
 The distributed mobile SDK also includes third-party native runtime components
 with their own licenses, including GPL/LGPL obligations for sandbox-related
 assets. Review [`THIRD-PARTY-LICENSES.md`](THIRD-PARTY-LICENSES.md),
-[`packages/flutter/android/jniLibs/THIRD-PARTY.md`](packages/flutter/android/jniLibs/THIRD-PARTY.md),
-and
-[`packages/ios/Vendor/iSHCore/THIRD-PARTY.md`](packages/ios/Vendor/iSHCore/THIRD-PARTY.md)
-before redistributing built artifacts.
+[`packages/flutter/android/jniLibs/THIRD-PARTY.md`](packages/flutter/android/jniLibs/THIRD-PARTY.md)
+before redistributing built artifacts. iOS QEMU runtime artifacts are not bundled yet;
+update the inventory when they land.

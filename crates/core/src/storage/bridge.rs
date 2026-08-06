@@ -27,14 +27,7 @@ impl FileBridge {
     pub fn new_with_workspace_files_dir(files_dir: &str, workspace_files_dir: &str) -> Self {
         let files = PathBuf::from(files_dir);
         let workspace_files = PathBuf::from(workspace_files_dir);
-        let rootfs_dir = if cfg!(target_os = "ios") {
-            files
-                .parent()
-                .map(|parent| parent.join("ish-rootfs"))
-                .unwrap_or_else(|| files.join("ish-rootfs"))
-        } else {
-            files.join("linux-env").join("rootfs")
-        };
+        let rootfs_dir = files.join("linux-env").join("rootfs");
 
         Self {
             workspace_dir: workspace_files.join("linux-env").join("workspace"),

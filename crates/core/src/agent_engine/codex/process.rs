@@ -1,45 +1,50 @@
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use std::time::{Duration, Instant};
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use serde_json::json;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::agent_engine::AgentEngineTurnRequest;
+
 use crate::agent_engine::CodexTurnPlan;
+#[cfg(target_os = "android")]
+use crate::android_linux_env as linux_env;
+#[cfg(target_os = "ios")]
+use crate::ios_qemu_env as linux_env;
 use crate::types::ChatEvent;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::config;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::configure::{clear_config_and_sessions, sync_prepared_config};
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::dynamic_tools::handle_server_tool_call;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::events::map_app_server_message;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::protocol::{
     JsonRpcClient, app_server_request_auto_response, dynamic_tools_fingerprint, extract_thread_id,
     initialize_request, initialized_notification, parse_json_lines, response_error, response_id,
     server_request_id, skill_roots_then_turn_lines, skills_extra_roots_set_request,
     skills_list_request, thread_open_request, thread_start_request,
 };
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::state::{
     PendingCodexHumanRequest, active_sessions, clear_state, load_state, native_library_dir_for,
     pending_human_requests, save_state, session_key,
 };
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 const CODEX_UNSUPPORTED: &str = "napaxi.agent_engine.codex is unsupported on this platform";
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 const CODEX_STARTUP_TIMEOUT: Duration = Duration::from_secs(5);
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 const CODEX_TURN_TIMEOUT: Duration = Duration::from_secs(60 * 60);
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 const CODEX_IDLE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) async fn run_codex_turn<F, C>(
     plan: CodexTurnPlan,
     mut emit: F,
@@ -57,7 +62,7 @@ where
     vec![event]
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) async fn run_codex_turn<F, C>(
     plan: CodexTurnPlan,
     mut emit: F,
@@ -114,6 +119,7 @@ where
         .and_then(serde_json::Value::as_str)
         .map(str::to_string)
         .or_else(|| native_library_dir_for(&request.files_dir));
+    #[cfg(target_os = "android")]
     let Some(native_library_dir) = native_library_dir else {
         let event = ChatEvent::Error {
             message: "missing native_library_dir for Android Codex agent engine".to_string(),
@@ -121,6 +127,8 @@ where
         emit(event.clone());
         return vec![event];
     };
+    #[cfg(target_os = "ios")]
+    let native_library_dir = native_library_dir.unwrap_or_default();
 
     let key = session_key(&request);
     let mut state = load_state(&request.files_dir, &key);
@@ -240,11 +248,11 @@ where
             emit(event.clone());
             events.push(event);
         }
-        match crate::android_linux_env::pty::drain_pty_events(pty) {
+        match linux_env::pty::drain_pty_events(pty) {
             Ok(drained) => {
                 for event in drained {
                     match event.kind {
-                        crate::android_linux_env::pty::PtyEventKind::Output => {
+                        linux_env::pty::PtyEventKind::Output => {
                             let messages = {
                                 let sessions = active_sessions();
                                 let mut guard = sessions.lock().map_err(|e| e.to_string()).ok();
@@ -414,7 +422,7 @@ where
                                     }
                                 }
                                 let mapped = map_app_server_message(&message);
-                                #[cfg(target_os = "android")]
+                                #[cfg(any(target_os = "android", target_os = "ios"))]
                                 if let Some(human_request) = mapped.human_request.as_ref() {
                                     register_human_request(
                                         &key,
@@ -440,8 +448,8 @@ where
                                 }
                             }
                         }
-                        crate::android_linux_env::pty::PtyEventKind::Exit
-                        | crate::android_linux_env::pty::PtyEventKind::Closed => {
+                        linux_env::pty::PtyEventKind::Exit
+                        | linux_env::pty::PtyEventKind::Closed => {
                             if !saw_completion {
                                 let event = ChatEvent::Error {
                                     message: "Codex app-server exited before the turn completed"
@@ -453,7 +461,7 @@ where
                             saw_completion = true;
                             should_close = true;
                         }
-                        crate::android_linux_env::pty::PtyEventKind::Log => {}
+                        linux_env::pty::PtyEventKind::Log => {}
                     }
                 }
             }
@@ -492,7 +500,7 @@ where
     events
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 enum StartAction {
     InitializeThenOpen {
         initialize_id: u64,
@@ -512,7 +520,7 @@ enum StartAction {
     },
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 struct InitializePendingOpen {
     initialize_id: u64,
     initialized_line: String,
@@ -521,7 +529,7 @@ struct InitializePendingOpen {
     is_resume: bool,
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn acquire_session_process(
     request: &AgentEngineTurnRequest,
     native_library_dir: &str,
@@ -549,7 +557,7 @@ fn acquire_session_process(
             drop(guard);
             if let Some(stale) = stale {
                 remove_pending_human_requests_for_session(key);
-                let _ = crate::android_linux_env::pty::close_pty_session(stale.pty);
+                let _ = linux_env::pty::close_pty_session(stale.pty);
             }
             return acquire_session_process(
                 request,
@@ -599,7 +607,7 @@ fn acquire_session_process(
     .workspace_dir()
     .display()
     .to_string();
-    let pty = crate::android_linux_env::pty::open_pty_session(
+    let pty = linux_env::pty::open_pty_session(
         &request.files_dir,
         native_library_dir,
         &workspace_dir,
@@ -641,7 +649,7 @@ fn acquire_session_process(
     Ok((pty, action))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn ensure_codex_cli_available(files_dir: &str) -> anyhow::Result<()> {
     let rootfs_dir = std::path::Path::new(files_dir).join("linux-env/rootfs");
     let candidates = [
@@ -653,16 +661,16 @@ fn ensure_codex_cli_available(files_dir: &str) -> anyhow::Result<()> {
         return Ok(());
     }
     anyhow::bail!(
-        "Codex CLI is missing from the Android Linux rootfs; rebuild the bundled rootfs with tools/scripts/bake_android_rootfs.sh so `codex app-server` is available"
+        "Codex CLI is missing from the bundled Linux rootfs; rebuild the bundled rootfs with tools/scripts/bake_android_rootfs.sh so `codex app-server` is available"
     )
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn write_line(pty: u64, line: &str) -> anyhow::Result<()> {
-    crate::android_linux_env::pty::write_pty_session(pty, &(line.to_string() + "\n"))
+    linux_env::pty::write_pty_session(pty, &(line.to_string() + "\n"))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn write_lines(pty: u64, lines: &[String]) -> anyhow::Result<()> {
     for line in lines {
         write_line(pty, line)?;
@@ -670,7 +678,7 @@ fn write_lines(pty: u64, lines: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn with_active_rpc<T>(key: &str, build: impl FnOnce(&mut JsonRpcClient) -> T) -> Option<T> {
     let sessions = active_sessions();
     let mut guard = sessions.lock().ok()?;
@@ -679,7 +687,7 @@ fn with_active_rpc<T>(key: &str, build: impl FnOnce(&mut JsonRpcClient) -> T) ->
     Some(build(&mut active.rpc))
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn write_turn_after_thread_open(
     pty: u64,
     key: &str,
@@ -695,13 +703,13 @@ fn write_turn_after_thread_open(
     })
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn is_rpc_response(message: &serde_json::Value) -> bool {
     response_id(message).is_some()
         && (message.get("result").is_some() || message.get("error").is_some())
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn log_codex_runtime_message(message: &serde_json::Value) {
     if let Some(codex_home) = message
         .pointer("/result/codexHome")
@@ -725,7 +733,7 @@ fn log_codex_runtime_message(message: &serde_json::Value) {
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn release_session_process(key: &str, close: bool) {
     let sessions = active_sessions();
     let (active, did_close, clear_mapping) = {
@@ -750,11 +758,11 @@ fn release_session_process(key: &str, close: bool) {
         if clear_mapping {
             clear_state(&active.files_dir, key);
         }
-        let _ = crate::android_linux_env::pty::close_pty_session(active.pty);
+        let _ = linux_env::pty::close_pty_session(active.pty);
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn register_human_request(key: &str, request_id: &str, rpc_id: &str, question_id: &str) {
     if let Ok(mut guard) = pending_human_requests().lock() {
         guard.insert(
@@ -768,7 +776,7 @@ fn register_human_request(key: &str, request_id: &str, rpc_id: &str, question_id
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn drain_human_responses(key: &str) -> Vec<(String, String)> {
     active_sessions()
         .lock()
@@ -782,14 +790,14 @@ fn drain_human_responses(key: &str) -> Vec<(String, String)> {
         .unwrap_or_default()
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn remove_pending_human_requests_for_session(key: &str) {
     if let Ok(mut guard) = pending_human_requests().lock() {
         guard.retain(|_, pending| pending.session_key != key);
     }
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(crate) fn answer_human_request(request_id: &str, response: &str) -> bool {
     let pending = {
         let Ok(mut guard) = pending_human_requests().lock() else {
@@ -816,7 +824,7 @@ pub(crate) fn answer_human_request(request_id: &str, response: &str) -> bool {
         .ok()
         .and_then(|mut guard| {
             let active = guard.get_mut(&pending.session_key)?;
-            match crate::android_linux_env::pty::write_pty_session(active.pty, &(payload + "\n")) {
+            match linux_env::pty::write_pty_session(active.pty, &(payload + "\n")) {
                 Ok(()) => {
                     active
                         .human_responses
@@ -836,19 +844,19 @@ pub(crate) fn answer_human_request(request_id: &str, response: &str) -> bool {
     true
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn rpc_id_json_value(raw: &str) -> serde_json::Value {
     raw.parse::<u64>()
         .map(serde_json::Value::from)
         .unwrap_or_else(|_| serde_json::Value::String(raw.to_string()))
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(crate) fn answer_human_request(_request_id: &str, _response: &str) -> bool {
     false
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn cleanup_idle_sessions() {
     let expired = {
         let sessions = active_sessions();
@@ -869,7 +877,7 @@ fn cleanup_idle_sessions() {
             .collect::<Vec<_>>()
     };
     for active in expired {
-        let _ = crate::android_linux_env::pty::close_pty_session(active.pty);
+        let _ = linux_env::pty::close_pty_session(active.pty);
     }
 }
 #[cfg(test)]

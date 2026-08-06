@@ -9,7 +9,7 @@ Mobile App
   -> Napaxi Core API (`crates/core/src/api`)
   -> Runtime core (`crates/core`)
   -> Feature domain crates (`crates/features/*`)
-  -> Android proot / iOS iSH platform environments where enabled
+  -> Android PRoot / iOS QEMU platform environments where enabled
 ```
 
 Demo apps consume SDK adapters through public integration surfaces only.
@@ -163,7 +163,7 @@ fails if a duplicate gate appears somewhere unexpected.
 
 `napaxi-core` exposes SDK-facing runtime behavior through `napaxi_core::api`.
 Adapter packages must not import implementation modules such as `mobile_*`,
-`android_assets`, `android_linux_env`, or `ios_ish_env` directly.
+`android_assets`, `android_linux_env`, or iOS sandbox implementation modules directly.
 
 `mobile_*` module names are legacy implementation names and should not be
 reintroduced. New adapter-facing behavior must first be implemented as

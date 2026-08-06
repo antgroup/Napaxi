@@ -3,8 +3,10 @@ import Foundation
 import Photos
 import UIKit
 
-@_silgen_name("napaxi_ios_ish_register_rootfs_archive_path")
-private func napaxi_ios_ish_register_rootfs_archive_path(_ path: UnsafePointer<CChar>?)
+@_silgen_name("napaxi_api_ios_qemu_register_rootfs_archive_path")
+private func napaxi_api_ios_qemu_register_rootfs_archive_path(_ path: UnsafePointer<CChar>?)
+@_silgen_name("napaxi_api_ios_qemu_is_ready")
+private func napaxi_api_ios_qemu_is_ready(_ filesDir: UnsafePointer<CChar>?) -> Bool
 @_silgen_name("napaxi_force_link")
 private func napaxi_force_link()
 
@@ -39,6 +41,7 @@ public class NapaxiFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler 
                     "platform": "ios",
                     "filesDir": filesDir(),
                     "userTimezone": TimeZone.current.identifier,
+                    "iosQemuSandboxReady": iosQemuSandboxReady(),
                 ])
             default:
                 result(FlutterMethodNotImplemented)
@@ -894,24 +897,24 @@ public class NapaxiFlutterPlugin: NSObject, FlutterPlugin, FlutterStreamHandler 
         didRegisterSandboxResources = true
 
         guard let rootfsArchive = bundledRootfsArchive() else {
-            NSLog("NapaxiFlutterPlugin: alpine-rootfs.tar.gz not found")
+            NSLog("NapaxiFlutterPlugin: alpine-rootfs.bin not found")
             return
         }
 
         rootfsArchive.path.withCString { path in
-            napaxi_ios_ish_register_rootfs_archive_path(path)
+            napaxi_api_ios_qemu_register_rootfs_archive_path(path)
         }
-        NSLog("NapaxiFlutterPlugin: registered iSH rootfs archive at %@", rootfsArchive.path)
+        NSLog("NapaxiFlutterPlugin: registered iOS QEMU rootfs archive at %@", rootfsArchive.path)
     }
 
     private static func bundledRootfsArchive() -> URL? {
-        if let bundleURL = Bundle.main.url(forResource: "iSHCore", withExtension: "bundle"),
-           let bundle = Bundle(url: bundleURL),
-           let tarURL = bundle.url(forResource: "alpine-rootfs.tar", withExtension: "gz") {
-            return tarURL
-        }
+        Bundle.main.url(forResource: "alpine-rootfs", withExtension: "bin")
+    }
 
-        return Bundle.main.url(forResource: "alpine-rootfs.tar", withExtension: "gz")
+    private static func iosQemuSandboxReady() -> Bool {
+        filesDir().withCString { path in
+            napaxi_api_ios_qemu_is_ready(path)
+        }
     }
 }
 

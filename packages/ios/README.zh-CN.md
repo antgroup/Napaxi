@@ -2,7 +2,7 @@
 
 `packages/ios` 是 host-side iOS integration 的 native Swift Package。它通过 `packages/api_bridge/include/napaxi_api_bridge.h` 中的 stable C ABI 使用与 Flutter 相同的 Rust core API。
 
-当前 package 声明 iOS 16 为最低部署版本，因为 vendored iSHCore runtime assets 是基于该部署下限的 device slices。
+当前 package 声明 iOS 16 为最低部署版本，后续 iOS QEMU runtime 编译产物也按该部署下限接入。
 
 ## 构建
 
@@ -18,7 +18,7 @@
 packages/ios/Frameworks/napaxi_api_bridge.xcframework
 ```
 
-并对 Swift SDK、C iSH target 和 Rust bridge 做 iPhoneOS SwiftPM build。
+并对 Swift SDK、iOS QEMU bridge 占位接口和 Rust bridge 做 iPhoneOS SwiftPM build。
 
 只需要重新生成 Flutter 和 native iOS xcframework 时，可运行：
 
@@ -61,12 +61,11 @@ iOS SDK 暴露与 Flutter 兼容的 typed models 和 facade names，用于：
 
 具体方法列表以英文 README 和 Swift source 为准。
 
-## iSH runtime
+## iOS QEMU sandbox
 
-iOS shell-like platform execution 仍依赖 vendored iSHCore runtime。Swift Package 包含 iSH headers/libraries 和 rootfs resource。分发前请阅读：
+iOS shell-like platform execution 已切到 Napaxi iOS QEMU backend。当前仓库保留 `napaxi_api_ios_qemu_*` 稳定 bridge、Swift wiring、与 Android 对齐的 `alpine-rootfs.bin` 资源约定，并通过 vendored 底层 QEMU C bridge/静态库提供实际 runner；没有接入隔壁 adjacent sandbox SDK wrapper。
 
-- [`../../THIRD-PARTY-LICENSES.zh-CN.md`](../../THIRD-PARTY-LICENSES.zh-CN.md)
-- [`Vendor/iSHCore/THIRD-PARTY.md`](Vendor/iSHCore/THIRD-PARTY.md)
+`Sources/Napaxi/Resources/alpine-rootfs.bin` 复用 Android baked Alpine rootfs artifact，不再维护单独的 iOS rootfs。
 
 ## 验证
 

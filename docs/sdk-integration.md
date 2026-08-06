@@ -31,16 +31,18 @@ Generated bridge outputs are intentionally ignored by git:
 - `packages/ios/Frameworks/napaxi_api_bridge.xcframework`
 
 Android proot runtime assets under `packages/flutter/android/assets` and the checked-in proot helper libraries are source assets for the SDK and should remain available. These prebuilt third-party binaries are stored via Git LFS; their provenance and integrity hashes are documented in `packages/flutter/android/jniLibs/THIRD-PARTY.md`, and their licenses (including GPL/LGPL) in `THIRD-PARTY-LICENSES.md`. A working `git lfs` install is required to check them out.
-The native Swift Package in `packages/ios` owns its own C iSH bridge source,
-vendored iSH headers/libraries, and bundled rootfs resource. It expects the
+The native Swift Package in `packages/ios` is wired for the iOS QEMU sandbox
+backend. iOS uses the same baked Alpine rootfs artifact name as Android
+(`alpine-rootfs.bin`) and swaps the outer runner from Android PRoot to
+Napaxi's vendored lower-level QEMU C/static-library backend. The iOS shell and
+Codex sandbox capabilities become available when the QEMU artifacts are linked,
+the rootfs resource is packaged, and the host enables the capabilities. The
 generated `packages/ios/Frameworks/napaxi_api_bridge.xcframework` binary target
-with headers/modulemap to exist locally before opening the package in Xcode or
-running SwiftPM iOS builds.
-Because the current vendored iSHCore assets are iOS 16 device slices, the
-native Swift Package and native integration checks declare iOS 16 as their
-minimum iOS deployment target. The Rust bridge build defaults
-`NAPAXI_IOS_DEPLOYMENT_TARGET` to `16.0` so generated xcframework object files
-match that minimum deployment target.
+with headers/modulemap must still exist locally before opening the package in
+Xcode or running SwiftPM iOS builds.
+The native Swift Package declares iOS 16 as its minimum iOS deployment target.
+The Rust bridge build defaults `NAPAXI_IOS_DEPLOYMENT_TARGET` to `16.0` so
+generated xcframework object files match that minimum deployment target.
 
 ## Verification
 
@@ -90,25 +92,23 @@ A few pieces of the integration story are intentional trade-offs rather than
 the final shape. They are recorded here so integrators do not have to
 reverse-engineer them.
 
-### iOS shell runtime via iSH
+### iOS QEMU sandbox
 
 The native iOS SDK in `packages/ios` calls the same `napaxi_core::api` boundary
 as the Flutter adapter through the stable C ABI. Shell-like platform execution
-still uses the iSH Alpine emulation environment. This is a pragmatic bridge
-that lets us reuse Linux-shaped command execution on iOS while the rest of the
-SDK remains a native Swift Package.
+is routed through Napaxi's iOS QEMU backend. The contract matches Android:
+reuse the baked Alpine aarch64 rootfs as `alpine-rootfs.bin`, while the
+platform-specific runner is the vendored lower-level QEMU C bridge and static
+libraries.
 
 - Native Swift hosts should consume `packages/ios`; Flutter continues to
   consume `packages/flutter`. Both adapters share `packages/api_bridge` and
   `napaxi_core::api`.
-- Do not depend on iSH-specific filesystem layout or shell semantics from
+- Do not depend on sandbox-specific filesystem layout or shell semantics from
   adapter code; route everything through `napaxi_core::api::platform`.
-- The long-term target is still to reduce iSH-specific assumptions in platform
-  tools and background work, but iSH is no longer a reason to treat
-  `packages/ios` as future-only.
-- The current vendored iSHCore libraries are device slices. The native app
-  compile gate therefore builds a generic arm64 iOS device target instead of
-  an iOS Simulator target.
+- If the iOS QEMU runtime is not linked or the rootfs is not packaged, the
+  shell/Codex sandbox capability is disabled and the
+  `napaxi_api_ios_qemu_*` readiness entrypoints return false.
 - The native device gate requires a connected physical iOS device. It signs the
   integration app, installs it with `devicectl`, launches it, then copies back
   the app-written smoke report and checks the launch token plus native engine

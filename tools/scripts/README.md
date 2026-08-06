@@ -49,7 +49,7 @@ Build and compile-check the native iOS Swift Package:
 ```
 
 This regenerates the Flutter and native Swift Package xcframeworks, then runs a
-SwiftPM iPhoneOS build with tests of `packages/ios` so the C iSH target, binary
+SwiftPM iPhoneOS build with tests of `packages/ios` so the iOS QEMU bridge placeholders, binary
 bridge, Swift SDK target, and XCTest compile surface are checked together.
 The Rust iOS bridge build defaults `NAPAXI_IOS_DEPLOYMENT_TARGET` to `16.0`;
 set that environment variable when intentionally changing the package minimum.

@@ -934,28 +934,46 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(activated.activatedSkills.first?.reason, "matched")
     }
 
-    func testIshSupportDisablesShellWhenRootfsIsMissing() {
+    func testIosQemuSupportDisablesShellAndCodexUntilRootfsAndRuntimeAreAvailable() {
+        let unavailable = [
+            NapaxiIosQemuSandboxSupport.shellCapabilityId,
+            NapaxiIosQemuSandboxSupport.codexCapabilityId,
+            NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
+        ]
         XCTAssertEqual(
-            NapaxiIshSupport.disabledCapabilities(rootfsAvailable: false),
-            [NapaxiIshSupport.shellCapabilityId]
+            NapaxiIosQemuSandboxSupport.disabledCapabilities(rootfsAvailable: false, runtimeLinked: false),
+            unavailable
         )
-        XCTAssertEqual(NapaxiIshSupport.disabledCapabilities(rootfsAvailable: true), [])
+        XCTAssertEqual(
+            NapaxiIosQemuSandboxSupport.disabledCapabilities(rootfsAvailable: true, runtimeLinked: false),
+            unavailable
+        )
+        XCTAssertEqual(
+            NapaxiIosQemuSandboxSupport.disabledCapabilities(rootfsAvailable: false, runtimeLinked: true),
+            unavailable
+        )
+        XCTAssertEqual(
+            NapaxiIosQemuSandboxSupport.disabledCapabilities(rootfsAvailable: true, runtimeLinked: true),
+            []
+        )
     }
 
-    func testIshSupportFindsBundledRootfsResource() throws {
-        let rootfs = try XCTUnwrap(NapaxiIshSupport.bundledRootfsArchiveURL())
-
-        XCTAssertEqual(rootfs.lastPathComponent, "alpine-rootfs.tar.gz")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: rootfs.path))
-        XCTAssertTrue(NapaxiIshSupport.isBundledRootfsAvailable)
-        XCTAssertTrue(NapaxiIshSupport.registerBundledRootfsArchive())
+    func testIosQemuSupportPrefersAndroidRootfsArtifactName() {
+        XCTAssertEqual(NapaxiIosQemuSandboxSupport.bundledRootfsCandidates.first?.name, "alpine-rootfs")
+        XCTAssertEqual(NapaxiIosQemuSandboxSupport.bundledRootfsCandidates.first?.extension, "bin")
     }
 
-    func testCapabilityProfileCanCarryDisabledShellCapability() {
+    func testIosQemuSupportIsDisabledUntilRuntimeIsLinked() {
+        XCTAssertFalse(NapaxiIosQemuSandboxSupport.isRuntimeLinked)
+        XCTAssertFalse(NapaxiIosQemuSandboxSupport.isBundledSandboxAvailable)
+        XCTAssertFalse(NapaxiIosQemuSandboxSupport.registerBundledRootfsArchive())
+    }
+
+    func testCapabilityProfileCanCarryDisabledSandboxCapabilities() {
         let profile = NapaxiCapabilityProfile(
             platform: "ios",
             supportedCapabilities: ["napaxi.platform_tool.*"],
-            disabledCapabilities: NapaxiIshSupport.disabledCapabilities(rootfsAvailable: false)
+            disabledCapabilities: NapaxiIosQemuSandboxSupport.disabledCapabilities(rootfsAvailable: false, runtimeLinked: false)
         )
 
         let value = profile.jsonValue()
@@ -963,7 +981,11 @@ final class ModelTests: XCTestCase {
             return XCTFail("profile should encode as object")
         }
         XCTAssertEqual(object["platform"], .string("ios"))
-        XCTAssertEqual(object["disabled_capabilities"], .array([.string("napaxi.tool.shell")]))
+        XCTAssertEqual(object["disabled_capabilities"], .array([
+            .string("napaxi.tool.shell"),
+            .string("napaxi.agent_engine.codex"),
+            .string("napaxi.platform.ios_qemu"),
+        ]))
     }
 
     func testMcpAPINormalizesDefaultAccount() {

@@ -1,3 +1,5 @@
+#include <stdbool.h>
+
 // Keep Rust/FRB symbols reachable when libnapaxi_api_bridge.a is linked statically.
 // Dart FFI resolves them with dlsym at runtime, so the host app has no direct
 // references unless this file creates them.
@@ -15,7 +17,8 @@ extern void frb_pde_ffi_dispatcher_sync(void);
 extern void frb_rust_vec_u8_free(void);
 extern void frb_rust_vec_u8_new(void);
 extern void frb_rust_vec_u8_resize(void);
-extern void napaxi_ios_ish_register_rootfs_archive_path(void);
+extern void napaxi_api_ios_qemu_register_rootfs_archive_path(const char *path);
+extern bool napaxi_api_ios_qemu_is_ready(const char *files_dir);
 extern void napaxi_string_free(void);
 extern void napaxi_version(void);
 extern void store_dart_post_cobject(void);
@@ -35,7 +38,8 @@ __attribute__((used)) static void *napaxi_force_link_symbols[] = {
     (void *)&frb_rust_vec_u8_free,
     (void *)&frb_rust_vec_u8_new,
     (void *)&frb_rust_vec_u8_resize,
-    (void *)&napaxi_ios_ish_register_rootfs_archive_path,
+    (void *)&napaxi_api_ios_qemu_register_rootfs_archive_path,
+    (void *)&napaxi_api_ios_qemu_is_ready,
     (void *)&napaxi_string_free,
     (void *)&napaxi_version,
     (void *)&store_dart_post_cobject,

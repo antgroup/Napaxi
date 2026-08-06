@@ -1,11 +1,11 @@
 use serde_json::Value;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::config;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 use super::map_history_items;
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub(super) fn read_persisted_rollout_messages(
     files_dir: &str,
     thread_id: &str,
@@ -21,7 +21,7 @@ pub(super) fn read_persisted_rollout_messages(
     (!messages.is_empty()).then_some(messages)
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[cfg_attr(test, allow(dead_code))]
 pub(super) fn read_persisted_rollout_messages(
     _files_dir: &str,
@@ -30,7 +30,7 @@ pub(super) fn read_persisted_rollout_messages(
     None
 }
 
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 fn find_rollout_file(
     dir: &std::path::Path,
     thread_id: &str,

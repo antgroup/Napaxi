@@ -3,9 +3,7 @@
 `packages/ios` is the native Swift Package for host-side iOS integration. It
 uses the same Rust core API as `packages/flutter` through the stable C ABI in
 `packages/api_bridge/include/napaxi_api_bridge.h`.
-The package currently declares iOS 16 as its minimum iOS deployment target
-because the vendored iSHCore runtime assets are device slices built for that
-deployment floor.
+The package currently declares iOS 16 as its minimum iOS deployment target; the pending iOS QEMU runtime artifacts should be built against the same floor.
 
 Before opening the package in Xcode, build and compile-check the native iOS
 package:
@@ -16,7 +14,7 @@ package:
 
 That command prepares the local SwiftPM binary target at
 `packages/ios/Frameworks/napaxi_api_bridge.xcframework` and runs an iPhoneOS
-SwiftPM build of the Swift SDK, C iSH target, and Rust bridge together. Use
+SwiftPM build of the Swift SDK and Rust bridge together. Use
 `./tools/scripts/build.sh fast ios-all` when you only need to regenerate the
 Flutter and native iOS xcframeworks without the SwiftPM compile check.
 The Swift SDK exposes typed engine lifecycle helpers plus a raw JSON API escape
@@ -374,15 +372,12 @@ iOS install binding fields expected by core (`ios_bundle_id`, `ios_team_id`,
 acceptance validates protocol v2, expiry, replay, installed package/provider
 matching, host binding, and `hmac-sha256-v1` signatures.
 
-If shell support is needed, prepare the local iSH assets before building:
-
-```sh
-./tools/scripts/prepare_ios_ish_spm.sh
-```
-
-The native package expects `Sources/Napaxi/Resources/alpine-rootfs.tar.gz` plus
-the vendored iSH headers and static libraries under `Vendor/iSHCore`. The
-`check-ios-native` gate validates those assets before compiling the package.
+iOS shell/Codex sandbox support is routed through Napaxi's iOS QEMU backend.
+The resource contract intentionally matches Android: package
+`Sources/Napaxi/Resources/alpine-rootfs.bin` from the same baked Alpine rootfs
+used by Android. The package links the vendored lower-level QEMU C bridge and
+static libraries through `NapaxiIosQemu`; if those artifacts or the rootfs are
+missing, `NapaxiIosQemuSandboxSupport` reports the sandbox as unavailable.
 
 Default iOS platform tools cover URL, phone/SMS handoff, clipboard, device
 info, location, notifications, contacts, calendar events, camera capture,

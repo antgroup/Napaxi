@@ -29,27 +29,44 @@ public enum NapaxiIOSIntegrationSmoke {
             apiKey: apiKey,
             model: "gpt-4o-mini",
             systemPrompt: "You are running inside the Napaxi iOS integration smoke package.",
-            maxToolIterations: 4
+            maxToolIterations: 4,
+            shellSecurity: NapaxiShellSecurityConfig(approvalMode: .trustedAllow)
         )
     }
 
-    public static func makeCapabilityProfile(rootfsAvailable: Bool = NapaxiIshSupport.isBundledRootfsAvailable) -> NapaxiCapabilityProfile {
-        NapaxiCapabilityProfile(
+    public static func makeCapabilityProfile(rootfsAvailable: Bool = NapaxiIosQemuSandboxSupport.isBundledRootfsAvailable, runtimeLinked: Bool = NapaxiIosQemuSandboxSupport.isRuntimeLinked) -> NapaxiCapabilityProfile {
+        let qemuAvailable = rootfsAvailable && runtimeLinked
+        return NapaxiCapabilityProfile(
             platform: "ios",
             supportedCapabilities: [
                 "napaxi.tool.custom_host",
+                "napaxi.agent_engine.codex",
+                NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
                 "napaxi.platform_tool.*",
                 "napaxi.tool.browser",
             ],
-            disabledCapabilities: NapaxiIshSupport.disabledCapabilities(rootfsAvailable: rootfsAvailable)
+            disabledCapabilities: qemuAvailable ? [] : [
+                NapaxiIosQemuSandboxSupport.shellCapabilityId,
+                NapaxiIosQemuSandboxSupport.codexCapabilityId,
+                NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
+            ]
         )
     }
 
-    public static func makeCapabilitySelection() -> NapaxiCapabilitySelection {
-        NapaxiCapabilitySelection(
+    public static func makeCapabilitySelection(rootfsAvailable: Bool = NapaxiIosQemuSandboxSupport.isBundledRootfsAvailable, runtimeLinked: Bool = NapaxiIosQemuSandboxSupport.isRuntimeLinked) -> NapaxiCapabilitySelection {
+        let qemuAvailable = rootfsAvailable && runtimeLinked
+        return NapaxiCapabilitySelection(
             enabledCapabilities: [
                 "napaxi.tool.custom_host",
+                qemuAvailable ? NapaxiIosQemuSandboxSupport.shellCapabilityId : nil,
+                qemuAvailable ? NapaxiIosQemuSandboxSupport.codexCapabilityId : nil,
+                qemuAvailable ? NapaxiIosQemuSandboxSupport.sandboxCapabilityId : nil,
                 "napaxi.platform_tool.open_url",
+            ].compactMap { $0 },
+            disabledCapabilities: qemuAvailable ? [] : [
+                NapaxiIosQemuSandboxSupport.shellCapabilityId,
+                NapaxiIosQemuSandboxSupport.codexCapabilityId,
+                NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
             ]
         )
     }

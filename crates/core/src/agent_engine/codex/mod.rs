@@ -1,23 +1,24 @@
 //! Core-owned Codex app-server agent engine.
 //!
 //! The public engine id is `napaxi.agent_engine.codex`; Android runs it inside
-//! the Napaxi Linux sandbox PTY. Other platforms keep the same API surface and
-//! return an explicit unsupported error.
+//! the Napaxi Linux sandbox PTY and iOS runs it through the vendored QEMU PTY
+//! backend. Other platforms keep the same API surface and return an explicit
+//! unsupported error.
 
-#[cfg(any(target_os = "android", test))]
+#[cfg(any(target_os = "android", target_os = "ios", test))]
 mod config;
 mod configure;
-#[cfg(any(target_os = "android", test))]
+#[cfg(any(target_os = "android", target_os = "ios", test))]
 mod dynamic_tools;
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 mod env;
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 mod events;
 mod history;
 mod process;
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 mod protocol;
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 mod state;
 
 pub(crate) use configure::configure_codex_agent_engine_json;
