@@ -8854,7 +8854,16 @@ $candidate
       return client;
     }
 
-    throw Exception(missingConfigMessage);
+    // File and skill browsers are local management surfaces. They should stay
+    // usable even before the user configures an LLM profile; otherwise a
+    // restored Files/Skills primary view can create an unhandled startup future
+    // error and terminate the iOS debug app. Chat requests still enforce model
+    // configuration at send time.
+    final client = await _getChatClient();
+    await client.configureForManagement(
+      capabilitySelection: _activeScenarioCapabilitySelection,
+    );
+    return client;
   }
 
   Future<bool> _hasConfiguredCliEngineCredential(String agentId) async {
