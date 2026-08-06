@@ -962,6 +962,7 @@ check_ios_app_device_smoke() {
         --terminate-existing \
         --timeout 60 \
         --json-output "$launch_json" \
+        --environment-variables "{\"NAPAXI_SMOKE_TOKEN\":\"$token\"}" \
         "$bundle_id" \
         --napaxi-smoke-token "$token"
 
@@ -976,7 +977,9 @@ check_ios_app_device_smoke() {
             --timeout 30 \
             --json-output "$copy_json" \
             --quiet; then
-            [ -f "$report_path" ] && break
+            if [ -f "$report_path" ] && grep -q "^token=$token$" "$report_path"; then
+                break
+            fi
         fi
         sleep 1
     done

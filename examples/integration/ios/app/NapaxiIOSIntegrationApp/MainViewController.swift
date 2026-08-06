@@ -66,6 +66,12 @@ final class MainViewController: UIViewController {
                 return arguments[tokenIndex]
             }
         }
+
+        if let environmentToken = ProcessInfo.processInfo.environment["NAPAXI_SMOKE_TOKEN"],
+           !environmentToken.isEmpty {
+            return environmentToken
+        }
+
         return "manual"
     }
 
