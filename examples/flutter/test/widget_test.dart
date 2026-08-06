@@ -1265,6 +1265,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'reconciles a completed SDK run while the app stays in foreground',
+    (tester) async {
+      final events = StreamController<sdk.ChatEvent>.broadcast();
+      final fakeClient = FakeNapaxiChatClient(eventStream: events.stream);
+      await tester.pumpWidget(
+        _testApp(chatClientFactory: () async => fakeClient),
+      );
+      await configureSingleModel(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Finish without closing the public stream',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pump();
+
+      expect(find.byKey(const Key('stop_message_button')), findsOneWidget);
+
+      // Simulate the core completing while a provider adapter forgets to close
+      // the public event stream. No lifecycle transition should be required.
+      fakeClient.inactiveSessionThreadIds.add('session-1');
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+
+      expect(find.byKey(const Key('stop_message_button')), findsNothing);
+      expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+
+      await events.close();
+    },
+  );
+
   testWidgets('stream reset clears partial assistant response before replay', (
     tester,
   ) async {
@@ -5774,6 +5807,48 @@ void main() {
       lessThan(tester.getTopLeft(secondAnswer).dy),
     );
   });
+
+  testWidgets(
+    'keeps the final response when reasoning resumes after a response delta',
+    (tester) async {
+      final fakeClient = FakeNapaxiChatClient(
+        events: const [
+          sdk.ResponseDeltaEvent(content: 'Early partial answer.'),
+          sdk.ReasoningDeltaEvent(content: 'Verifying the final result.'),
+          sdk.ResponseEvent(content: 'Complete final answer.'),
+        ],
+      );
+      await tester.pumpWidget(
+        _testApp(chatClientFactory: () async => fakeClient),
+      );
+      await configureSingleModel(tester);
+
+      await tester.enterText(
+        find.byKey(const Key('chat_input_field')),
+        'Finish after more reasoning',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('send_message_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Early partial answer.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Complete final answer.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('stop_message_button')), findsNothing);
+      expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+
+      // Completed reasoning is collapsed, but remains available on demand.
+      expect(find.text('Verifying the final result.'), findsNothing);
+      await tester.tap(find.text('Thought through').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Verifying the final result.'), findsOneWidget);
+    },
+  );
 
   testWidgets('renders tool call and completed tool result', (tester) async {
     final fakeClient = FakeNapaxiChatClient(

@@ -813,6 +813,7 @@ class _ChatScreenState extends State<ChatScreen>
   static const int _initialHistoryPageLimit = 30;
   static const int _olderHistoryPageLimit = 24;
   static const Duration _contextStatusRefreshTimeout = Duration(seconds: 8);
+  static const Duration _sessionRunReconcileInterval = Duration(seconds: 2);
   static const List<_SlashCommandSpec> _slashCommands = [
     _SlashCommandSpec(
       name: '/help',
@@ -919,6 +920,7 @@ class _ChatScreenState extends State<ChatScreen>
   DemoGitSettings _gitSettings = const DemoGitSettings();
   final Set<String> _stoppingSessionIds = {};
   bool _isReconcilingSessionRuns = false;
+  Timer? _sessionRunReconcileTimer;
   bool _isRetractingPendingInterjections = false;
   int _nextInterjectionId = 1;
   bool _isHandlingNotificationStop = false;
@@ -1303,6 +1305,7 @@ class _ChatScreenState extends State<ChatScreen>
     for (final timer in _contextCompactionHideTimers.values) {
       timer.cancel();
     }
+    _sessionRunReconcileTimer?.cancel();
     _backgroundActionSubscription?.cancel();
     _channelBridgeSubscription?.cancel();
     _chatClient?.dispose();
@@ -1407,7 +1410,28 @@ class _ChatScreenState extends State<ChatScreen>
       }
     } finally {
       _isReconcilingSessionRuns = false;
+      _stopSessionRunReconcileTimerIfIdle();
     }
+  }
+
+  void _ensureSessionRunReconcileTimer() {
+    if (_sessionRunReconcileTimer?.isActive ?? false) return;
+    _sessionRunReconcileTimer = Timer.periodic(_sessionRunReconcileInterval, (
+      _,
+    ) {
+      if (!mounted || !_sessionRuns.values.any((run) => !run.isTerminal)) {
+        _sessionRunReconcileTimer?.cancel();
+        _sessionRunReconcileTimer = null;
+        return;
+      }
+      unawaited(_reconcileStaleSessionRuns(source: 'foreground-watchdog'));
+    });
+  }
+
+  void _stopSessionRunReconcileTimerIfIdle() {
+    if (_sessionRuns.values.any((run) => !run.isTerminal)) return;
+    _sessionRunReconcileTimer?.cancel();
+    _sessionRunReconcileTimer = null;
   }
 
   void _handleChatScroll() {
@@ -4685,6 +4709,7 @@ class _ChatScreenState extends State<ChatScreen>
     bool clearPendingInterjections = false,
   }) {
     if (!mounted) return;
+    final completedAt = DateTime.now();
     setState(() {
       final run = _sessionRuns[sessionId];
       if (run == null) return;
@@ -4699,7 +4724,7 @@ class _ChatScreenState extends State<ChatScreen>
             unread: unread || run.unread,
             error: error,
             clearError: error == null,
-            updatedAt: DateTime.now(),
+            updatedAt: completedAt,
             clearPendingHumanRequest: true,
             clearPendingHumanMessage: true,
             pendingInterjections: clearPendingInterjections
@@ -4707,10 +4732,32 @@ class _ChatScreenState extends State<ChatScreen>
                 : List.unmodifiable(deferredInterjections),
           )
           .preserveTerminalFrom(run);
+      _sessions = _sessions
+          .map((session) {
+            if (session.id != sessionId) return session;
+            var didUpdate = false;
+            final messages = session.messages
+                .map((message) {
+                  final shouldComplete =
+                      message.role == ChatRole.assistant &&
+                      (message.isStreaming || message.id == messageId);
+                  if (!shouldComplete) return message;
+                  didUpdate = true;
+                  return message.copyWith(
+                    isStreaming: false,
+                    completedAt: message.completedAt ?? completedAt,
+                  );
+                })
+                .toList(growable: false);
+            if (!didUpdate) return session;
+            return session.copyWith(
+              updatedAt: completedAt,
+              messages: List.unmodifiable(messages),
+            );
+          })
+          .toList(growable: false);
     });
-    if (messageId != null) {
-      _completeAssistantMessage(messageId);
-    }
+    _stopSessionRunReconcileTimerIfIdle();
   }
 
   String _migrateLiveSessionId({
@@ -5782,7 +5829,7 @@ class _ChatScreenState extends State<ChatScreen>
       void Function(String)? onNativeThreadId;
 
       var currentAssistantMessageId = assistantMessageId;
-      var sawResponseDelta = false;
+      String? responseDeltaMessageId;
       late final StreamSubscription<sdk.ChatEvent> subscription;
       subscription = client
           .sendToSession(
@@ -5831,7 +5878,7 @@ class _ChatScreenState extends State<ChatScreen>
                     'content="${_tracePreview(content)}"',
                   );
                   markRun(activity: 'Writing response');
-                  if (!sawResponseDelta) {
+                  if (responseDeltaMessageId != currentAssistantMessageId) {
                     _updateAssistantMessage(
                       currentAssistantMessageId,
                       (message) =>
@@ -5839,7 +5886,7 @@ class _ChatScreenState extends State<ChatScreen>
                     );
                   }
                 case sdk.ResponseDeltaEvent(:final content):
-                  if (!sawResponseDelta) {
+                  if (responseDeltaMessageId != currentAssistantMessageId) {
                     _traceChat(
                       'event=response-delta-first session=$sessionId '
                       'assistant=$currentAssistantMessageId '
@@ -5847,7 +5894,7 @@ class _ChatScreenState extends State<ChatScreen>
                     );
                   }
                   markRun(activity: 'Writing response');
-                  sawResponseDelta = true;
+                  responseDeltaMessageId = currentAssistantMessageId;
                   _updateAssistantMessage(
                     currentAssistantMessageId,
                     (message) => message.copyWith(
@@ -5861,7 +5908,7 @@ class _ChatScreenState extends State<ChatScreen>
                     'assistant=$currentAssistantMessageId',
                   );
                   markRun(activity: 'Reconnecting');
-                  sawResponseDelta = false;
+                  responseDeltaMessageId = null;
                   _updateAssistantMessage(
                     currentAssistantMessageId,
                     (message) =>
@@ -6104,7 +6151,7 @@ class _ChatScreenState extends State<ChatScreen>
                   }
                   _markHumanRequestAnswered(sessionId, requestId);
                   currentAssistantMessageId = 'assistant-${_nextMessageId++}';
-                  sawResponseDelta = false;
+                  responseDeltaMessageId = null;
                   markRun(activity: 'Continuing');
                   _appendAssistantShell(sessionId, currentAssistantMessageId);
                 case sdk.MessageInjectedEvent(:final content):
@@ -6116,7 +6163,7 @@ class _ChatScreenState extends State<ChatScreen>
                   _ackPendingInterjection(sessionId, content);
                   if (!_isLastMessage(sessionId, currentAssistantMessageId)) {
                     currentAssistantMessageId = 'assistant-${_nextMessageId++}';
-                    sawResponseDelta = false;
+                    responseDeltaMessageId = null;
                     _appendAssistantShell(sessionId, currentAssistantMessageId);
                   }
                   markRun(activity: 'Continuing');
@@ -6284,15 +6331,8 @@ class _ChatScreenState extends State<ChatScreen>
               _traceChat(
                 'stream-done session=$sessionId assistant=$currentAssistantMessageId',
               );
-              unawaited(
-                _appendFinalResponseAttachments(
-                  sessionId,
-                  currentAssistantMessageId,
-                  agentId: agentId,
-                  producedSince: _sessionRuns[sessionId]?.startedAt,
-                ),
-              );
               final run = _sessionRuns[sessionId];
+              final producedSince = run?.startedAt;
               if (run == null || !run.isTerminal) {
                 final wasStopping =
                     run?.status == sdk.SessionRunStatus.cancelling ||
@@ -6306,6 +6346,17 @@ class _ChatScreenState extends State<ChatScreen>
                   activity: wasStopping ? 'Stopped' : 'Completed',
                 );
               }
+              // Publish the terminal UI state before scanning the workspace
+              // for generated artifacts. Attachment discovery may traverse a
+              // large project and must never hold the Stop state open.
+              unawaited(
+                _appendFinalResponseAttachments(
+                  sessionId,
+                  currentAssistantMessageId,
+                  agentId: agentId,
+                  producedSince: producedSince,
+                ),
+              );
               unawaited(_refreshContextStatusForSession(agentId, sessionId));
               unawaited(_refreshConnectedAgentAppUsage());
               _scrollToBottom();
@@ -6322,6 +6373,7 @@ class _ChatScreenState extends State<ChatScreen>
           activity: 'Starting',
         );
       });
+      _ensureSessionRunReconcileTimer();
       _traceChat(
         'run registered session=$sessionId assistant=$assistantMessageId',
       );
@@ -8759,14 +8811,6 @@ $candidate
       return step.copyWith(toolCalls: List.unmodifiable(calls));
     }).toList();
     return didUpdate ? List.unmodifiable(steps) : traceSteps;
-  }
-
-  void _completeAssistantMessage(String messageId) {
-    _updateAssistantMessage(
-      messageId,
-      (message) =>
-          message.copyWith(isStreaming: false, completedAt: DateTime.now()),
-    );
   }
 
   String _friendlyError(Object error) {

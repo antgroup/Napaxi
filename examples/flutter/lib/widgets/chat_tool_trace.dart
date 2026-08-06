@@ -4,6 +4,7 @@ const _toolFailureColor = Color(0xFF6B7280);
 const _toolFailureSurface = Color(0xFFF9FAFB);
 const _toolFailureBorder = Color(0xFFE5E7EB);
 const _toolFailureTerminalColor = Color(0xFF9CA3AF);
+const _liveReasoningMaxCharacters = 8000;
 
 class _AgentTraceSection extends StatefulWidget {
   const _AgentTraceSection({
@@ -47,7 +48,10 @@ class _AgentTraceSectionState extends State<_AgentTraceSection>
     } else if (!widget.message.isStreaming && _pulseController.isAnimating) {
       _pulseController.stop();
       _pulseController.value = 0;
-      if (widget.message.content.isNotEmpty) _expanded = false;
+      // A terminal trace must stop participating in every subsequent frame.
+      // In particular, a reasoning-only segment can be very large and used to
+      // strand the final UI frame while it remained expanded.
+      _expanded = false;
     }
   }
 
@@ -152,6 +156,7 @@ class _AgentTraceSectionState extends State<_AgentTraceSection>
           for (final step in traceSteps)
             _AgentTraceStepView(
               step: step,
+              limitReasoning: message.isStreaming,
               onLoadFullToolCall: widget.onLoadFullToolCall,
             ),
         ],
@@ -330,10 +335,12 @@ String _skillReasonLabel(AppStrings strings, String reason) {
 class _AgentTraceStepView extends StatelessWidget {
   const _AgentTraceStepView({
     required this.step,
+    required this.limitReasoning,
     required this.onLoadFullToolCall,
   });
 
   final AgentTraceStep step;
+  final bool limitReasoning;
   final Future<AgentToolCall?> Function(AgentToolCall toolCall)
   onLoadFullToolCall;
 
@@ -345,7 +352,12 @@ class _AgentTraceStepView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (step.reasoning.trim().isNotEmpty)
-          _ReasoningBlock(text: step.reasoning.trim()),
+          _ReasoningBlock(
+            text: _reasoningForLiveDisplay(
+              step.reasoning.trim(),
+              limit: limitReasoning,
+            ),
+          ),
         ...toolWidgets,
       ],
     );
@@ -388,6 +400,18 @@ class _AgentTraceStepView extends StatelessWidget {
     }
     return widgets;
   }
+}
+
+String _reasoningForLiveDisplay(String text, {required bool limit}) {
+  if (!limit || text.length <= _liveReasoningMaxCharacters) return text;
+  var start = text.length - _liveReasoningMaxCharacters;
+  // Do not split a UTF-16 surrogate pair when taking the live tail.
+  if (start > 0) {
+    final codeUnit = text.codeUnitAt(start);
+    if (codeUnit >= 0xDC00 && codeUnit <= 0xDFFF) start -= 1;
+  }
+  return '… Earlier reasoning is hidden while this response is running.\n\n'
+      '${text.substring(start)}';
 }
 
 class _TraceCountChip extends StatelessWidget {
@@ -457,23 +481,18 @@ class _ReasoningBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(width: 2, color: const Color(0xFFE5E7EB)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: Color(0xFF6B7280),
-                  fontSize: 13,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ],
+      child: Container(
+        decoration: const BoxDecoration(
+          border: Border(left: BorderSide(color: Color(0xFFE5E7EB), width: 2)),
+        ),
+        padding: const EdgeInsets.only(left: 10),
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Color(0xFF6B7280),
+            fontSize: 13,
+            height: 1.4,
+          ),
         ),
       ),
     );
