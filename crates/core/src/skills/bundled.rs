@@ -247,6 +247,7 @@ mod tests {
         std::fs::write(
             source.join("AndroidManifest.xml"),
             r#"<manifest><application>
+              <meta-data android:name="agent.provider.TRUSTED_REFRESH_SUPPORTED" android:value="true" />
               <activity><intent-filter><action android:name="agent.provider.action.INSTALL_AGENT" /></intent-filter></activity>
               <activity><intent-filter><action android:name="agent.provider.action.HANDLE_PROPOSAL" /></intent-filter></activity>
             </application></manifest>"#,

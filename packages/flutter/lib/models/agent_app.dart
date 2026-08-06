@@ -172,6 +172,9 @@ class AgentAppInstallBinding {
   final String appPackageName;
   final String activityName;
   final String signingCertSha256;
+  final int appVersionCode;
+  final int appLastUpdateTimeMs;
+  final bool trustedRefreshSupported;
   final String installedAt;
   final String installRequestId;
   final int protocolVersion;
@@ -195,6 +198,9 @@ class AgentAppInstallBinding {
     required this.appPackageName,
     required this.activityName,
     required this.signingCertSha256,
+    this.appVersionCode = 0,
+    this.appLastUpdateTimeMs = 0,
+    this.trustedRefreshSupported = false,
     required this.installedAt,
     required this.installRequestId,
     required this.protocolVersion,
@@ -220,6 +226,9 @@ class AgentAppInstallBinding {
       appPackageName: map['app_package_name'] as String? ?? '',
       activityName: map['activity_name'] as String? ?? '',
       signingCertSha256: map['signing_cert_sha256'] as String? ?? '',
+      appVersionCode: _agentAppInt(map['app_version_code']),
+      appLastUpdateTimeMs: _agentAppInt(map['app_last_update_time_ms']),
+      trustedRefreshSupported: _agentAppBool(map['trusted_refresh_supported']),
       installedAt: map['installed_at'] as String? ?? '',
       installRequestId: map['install_request_id'] as String? ?? '',
       protocolVersion: (map['protocol_version'] as num?)?.toInt() ?? 1,
@@ -247,6 +256,10 @@ class AgentAppInstallBinding {
     'app_package_name': appPackageName,
     'activity_name': activityName,
     'signing_cert_sha256': signingCertSha256,
+    if (appVersionCode > 0) 'app_version_code': appVersionCode,
+    if (appLastUpdateTimeMs > 0) 'app_last_update_time_ms': appLastUpdateTimeMs,
+    if (trustedRefreshSupported)
+      'trusted_refresh_supported': trustedRefreshSupported,
     'installed_at': installedAt,
     'install_request_id': installRequestId,
     'protocol_version': protocolVersion,
@@ -270,6 +283,16 @@ class AgentAppInstallBinding {
     if (hostBackgroundTriggerService.isNotEmpty)
       'host_background_trigger_service': hostBackgroundTriggerService,
   };
+}
+
+int _agentAppInt(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+bool _agentAppBool(Object? value) {
+  if (value is bool) return value;
+  return value?.toString().toLowerCase() == 'true';
 }
 
 /// A pending proposal to run a provider action, awaiting host approval.

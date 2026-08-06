@@ -22,6 +22,15 @@ use super::sse::{
 use super::tool_schema::anthropic_tool_schema;
 use super::{LlmStreamEvent, LlmToolCall, LlmTurn};
 
+fn validate_stop_reason(value: &Value) -> Result<()> {
+    match value.get("stop_reason").and_then(Value::as_str) {
+        Some("max_tokens") => anyhow::bail!(
+            "Anthropic response was truncated because the model reached the output token limit"
+        ),
+        _ => Ok(()),
+    }
+}
+
 /// Build the Anthropic `system` field as a single text block carrying a
 /// `cache_control` breakpoint. Anthropic prompt caching is opt-in: a plain
 /// string system prompt is never cached. Marking the block caches the entire
@@ -77,6 +86,7 @@ pub(super) async fn complete(
     if !status.is_success() {
         anyhow::bail!("{}", provider_error_message(&value, status.as_u16()));
     }
+    validate_stop_reason(&value)?;
     value
         .get("content")
         .and_then(Value::as_array)
@@ -222,6 +232,7 @@ where
 }
 
 pub(super) fn parse_turn(value: &Value) -> Result<LlmTurn> {
+    validate_stop_reason(value)?;
     let content_items = value
         .get("content")
         .and_then(Value::as_array)

@@ -51,4 +51,44 @@ void main() {
       await events.close();
     },
   );
+
+  test('a cancelling chat run only advances to cancelled', () async {
+    final events = StreamController<sdk.ChatEvent>();
+    final subscription = events.stream.listen((_) {});
+    final startedAt = DateTime(2026, 8, 6, 10, 6);
+    final running = ChatSessionRunState(
+      sessionKey: const sdk.SessionKey(
+        channelType: 'app',
+        accountId: 'test',
+        threadId: 'session-1',
+      ),
+      agentId: sdk.NapaxiEngine.defaultAgentId,
+      assistantMessageId: 'assistant-1',
+      subscription: subscription,
+      startedAt: startedAt,
+      updatedAt: startedAt,
+    );
+    final cancelling = running.copyWith(
+      status: sdk.SessionRunStatus.cancelling,
+      activity: 'Stopping',
+    );
+
+    final lateRunning = running
+        .copyWith(activity: 'Reconnecting')
+        .preserveTerminalFrom(cancelling);
+    final lateCompleted = running
+        .copyWith(status: sdk.SessionRunStatus.completed, activity: 'Completed')
+        .preserveTerminalFrom(cancelling);
+    final cancelled = running
+        .copyWith(status: sdk.SessionRunStatus.cancelled, activity: 'Stopped')
+        .preserveTerminalFrom(cancelling);
+
+    expect(lateRunning.status, sdk.SessionRunStatus.cancelling);
+    expect(lateRunning.activity, 'Stopping');
+    expect(lateCompleted.status, sdk.SessionRunStatus.cancelling);
+    expect(cancelled.status, sdk.SessionRunStatus.cancelled);
+
+    await subscription.cancel();
+    await events.close();
+  });
 }

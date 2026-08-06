@@ -38,6 +38,17 @@ pub(super) fn openai_messages_from_raw(messages: &[Value]) -> Vec<Value> {
                     mapped.insert("content".to_string(), content);
                 }
 
+                if let Some(reasoning_content) = message
+                    .get("reasoning_content")
+                    .and_then(Value::as_str)
+                    .filter(|text| !text.is_empty())
+                {
+                    mapped.insert(
+                        "reasoning_content".to_string(),
+                        Value::String(reasoning_content.to_string()),
+                    );
+                }
+
                 if let Some(tool_calls) = message.get("tool_calls").and_then(Value::as_array) {
                     let mapped_tool_calls: Vec<Value> = tool_calls
                         .iter()
@@ -143,6 +154,10 @@ fn openai_messages_from_tool_trace(content: &str, interrupted: bool) -> Vec<Valu
     let Some(calls) = value.get("calls").and_then(Value::as_array) else {
         return Vec::new();
     };
+    let reasoning_content = value
+        .get("reasoning_content")
+        .and_then(Value::as_str)
+        .filter(|text| !text.is_empty());
 
     let mut out = Vec::new();
     let mut pending_tool_calls = Vec::new();
@@ -158,7 +173,12 @@ fn openai_messages_from_tool_trace(content: &str, interrupted: bool) -> Vec<Valu
             continue;
         }
         if call_id.is_empty() || name.is_empty() || !is_context_tool_name(&name) {
-            flush_tool_context_messages(&mut out, &mut pending_tool_calls, &mut pending_results);
+            flush_tool_context_messages(
+                &mut out,
+                &mut pending_tool_calls,
+                &mut pending_results,
+                reasoning_content,
+            );
             if let Some(observation) = text_observation_from_trace_call(call, interrupted) {
                 out.push(serde_json::json!({
                     "role": "assistant",
@@ -186,7 +206,12 @@ fn openai_messages_from_tool_trace(content: &str, interrupted: bool) -> Vec<Valu
             "content": trace_call_result_content(call, interrupted),
         }));
     }
-    flush_tool_context_messages(&mut out, &mut pending_tool_calls, &mut pending_results);
+    flush_tool_context_messages(
+        &mut out,
+        &mut pending_tool_calls,
+        &mut pending_results,
+        reasoning_content,
+    );
     out
 }
 
@@ -194,15 +219,20 @@ fn flush_tool_context_messages(
     out: &mut Vec<Value>,
     pending_tool_calls: &mut Vec<Value>,
     pending_results: &mut Vec<Value>,
+    reasoning_content: Option<&str>,
 ) {
     if pending_tool_calls.is_empty() {
         return;
     }
-    out.push(serde_json::json!({
+    let mut assistant = serde_json::json!({
         "role": "assistant",
         "content": Value::Null,
         "tool_calls": std::mem::take(pending_tool_calls),
-    }));
+    });
+    if let Some(reasoning_content) = reasoning_content {
+        assistant["reasoning_content"] = Value::String(reasoning_content.to_string());
+    }
+    out.push(assistant);
     out.append(pending_results);
 }
 

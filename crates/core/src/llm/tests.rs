@@ -12,7 +12,7 @@ use super::gemini::{
 use super::http::{chat_completions_url, extra_headers};
 use super::messages::{
     anthropic_messages_from_history, anthropic_messages_from_raw, gemini_contents_from_history,
-    gemini_contents_from_raw, openai_messages_from_history,
+    gemini_contents_from_raw, openai_messages_from_history, openai_messages_from_raw,
 };
 use super::openai_compatible::parse_turn as parse_openai_turn;
 use super::sse::{
@@ -37,6 +37,22 @@ fn llm_error_from_anyhow_classifies_cancelled() {
 fn llm_error_from_anyhow_classifies_stream_truncated() {
     let err = LlmError::from_anyhow(anyhow::anyhow!(
         "Gemini stream ended before the completion marker"
+    ));
+    assert_eq!(err.code(), "llm_stream_truncated");
+}
+
+#[test]
+fn llm_error_from_anyhow_classifies_output_limit_as_stream_truncated() {
+    let err = LlmError::from_anyhow(anyhow::anyhow!(
+        "OpenAI-compatible stream was truncated because the model reached the output token limit"
+    ));
+    assert_eq!(err.code(), "llm_stream_truncated");
+}
+
+#[test]
+fn llm_error_from_anyhow_classifies_unverified_completion_as_stream_truncated() {
+    let err = LlmError::from_anyhow(anyhow::anyhow!(
+        "OpenAI-compatible stream ended with [DONE] without a finish reason; completion cannot be verified"
     ));
     assert_eq!(err.code(), "llm_stream_truncated");
 }
@@ -385,6 +401,43 @@ fn parses_openai_tool_calls() {
 }
 
 #[test]
+fn openai_raw_mapping_preserves_reasoning_for_tool_call_replay() {
+    let messages = vec![serde_json::json!({
+        "role": "assistant",
+        "content": null,
+        "reasoning_content": "I should inspect the workspace.",
+        "tool_calls": [{
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "lookup",
+                "arguments": "{}"
+            }
+        }]
+    })];
+
+    let mapped = openai_messages_from_raw(&messages);
+    assert_eq!(
+        mapped[0]["reasoning_content"],
+        "I should inspect the workspace."
+    );
+    assert_eq!(mapped[0]["tool_calls"][0]["id"], "call_1");
+}
+
+#[test]
+fn openai_non_streaming_length_finish_reason_rejects_partial_content() {
+    let error = parse_openai_turn(&serde_json::json!({
+        "choices": [{
+            "finish_reason": "length",
+            "message": { "role": "assistant", "content": "Partial" }
+        }]
+    }))
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("output token limit"));
+}
+
+#[test]
 fn parses_openai_streaming_tool_call_deltas() {
     let mut accumulator = OpenAiStreamTurnAccumulator::default();
     let mut events = Vec::new();
@@ -402,6 +455,12 @@ fn parses_openai_streaming_tool_call_deltas() {
     )
     .unwrap();
     assert!(!done);
+    handle_openai_stream_turn_line(
+        r#"data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#,
+        &mut accumulator,
+        &mut |event| events.push(event),
+    )
+    .unwrap();
     let done = handle_openai_stream_turn_line("data: [DONE]", &mut accumulator, &mut |event| {
         events.push(event)
     })
@@ -469,7 +528,7 @@ fn openai_streaming_empty_length_finish_reason_is_error() {
 }
 
 #[test]
-fn openai_streaming_length_finish_reason_preserves_partial_content() {
+fn openai_streaming_length_finish_reason_rejects_partial_content() {
     let mut accumulator = OpenAiStreamTurnAccumulator::default();
     handle_openai_stream_turn_line(
         r#"data: {"choices":[{"delta":{"content":"Partial"},"finish_reason":"length"}]}"#,
@@ -478,12 +537,12 @@ fn openai_streaming_length_finish_reason_preserves_partial_content() {
     )
     .unwrap();
 
-    let turn = accumulator.finish().unwrap();
-    assert_eq!(turn.content, "Partial");
+    let error = accumulator.finish().unwrap_err().to_string();
+    assert!(error.contains("output token limit"));
 }
 
 #[test]
-fn openai_streaming_length_finish_reason_preserves_tool_calls() {
+fn openai_streaming_length_finish_reason_rejects_tool_calls() {
     let mut accumulator = OpenAiStreamTurnAccumulator::default();
     handle_openai_stream_turn_line(
         r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"read","arguments":"{\"path\":\"a\"}"}}]},"finish_reason":"length"}]}"#,
@@ -492,9 +551,24 @@ fn openai_streaming_length_finish_reason_preserves_tool_calls() {
     )
     .unwrap();
 
-    let turn = accumulator.finish().unwrap();
-    assert_eq!(turn.tool_calls.len(), 1);
-    assert_eq!(turn.tool_calls[0].name, "read");
+    let error = accumulator.finish().unwrap_err().to_string();
+    assert!(error.contains("output token limit"));
+}
+
+#[test]
+fn openai_streaming_done_without_finish_reason_is_error() {
+    let mut accumulator = OpenAiStreamTurnAccumulator::default();
+    handle_openai_stream_turn_line(
+        r#"data: {"choices":[{"delta":{"content":"Partial"}}]}"#,
+        &mut accumulator,
+        &mut |_| {},
+    )
+    .unwrap();
+
+    let error = handle_openai_stream_turn_line("data: [DONE]", &mut accumulator, &mut |_| {})
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("without a finish reason"));
 }
 
 #[test]
@@ -553,6 +627,13 @@ fn parses_anthropic_streaming_tool_call_deltas() {
     assert!(!done);
     let done = handle_anthropic_stream_turn_line(
         r#"data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":":\"napaxi\"}"}}"#,
+        &mut accumulator,
+        &mut |event| events.push(event),
+    )
+    .unwrap();
+    assert!(!done);
+    let done = handle_anthropic_stream_turn_line(
+        r#"data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}"#,
         &mut accumulator,
         &mut |event| events.push(event),
     )
@@ -633,7 +714,7 @@ fn anthropic_streaming_empty_max_tokens_stop_reason_is_error() {
 }
 
 #[test]
-fn anthropic_streaming_max_tokens_stop_reason_preserves_partial_content() {
+fn anthropic_streaming_max_tokens_stop_reason_rejects_partial_content() {
     let mut accumulator = AnthropicStreamTurnAccumulator::default();
     handle_anthropic_stream_turn_line(
         r#"data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Partial"}}"#,
@@ -648,8 +729,21 @@ fn anthropic_streaming_max_tokens_stop_reason_preserves_partial_content() {
     )
     .unwrap();
 
-    let turn = accumulator.finish().unwrap();
-    assert_eq!(turn.content, "Partial");
+    let error = accumulator.finish().unwrap_err().to_string();
+    assert!(error.contains("output token limit"));
+}
+
+#[test]
+fn anthropic_streaming_message_stop_without_stop_reason_is_error() {
+    let mut accumulator = AnthropicStreamTurnAccumulator::default();
+    let error = handle_anthropic_stream_turn_line(
+        r#"data: {"type":"message_stop"}"#,
+        &mut accumulator,
+        &mut |_| {},
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("without a stop reason"));
 }
 
 #[test]
@@ -678,7 +772,7 @@ fn parses_gemini_streaming_tool_calls() {
     let mut accumulator = GeminiStreamTurnAccumulator::default();
     let mut events = Vec::new();
     let done = handle_gemini_stream_turn_line(
-        r#"data: {"candidates":[{"content":{"parts":[{"text":"Checking."},{"functionCall":{"name":"lookup","args":{"q":"napaxi"}}}]}}]}"#,
+        r#"data: {"candidates":[{"content":{"parts":[{"text":"Checking."},{"functionCall":{"name":"lookup","args":{"q":"napaxi"}}}]},"finishReason":"STOP"}]}"#,
         &mut accumulator,
         &mut |event| events.push(event),
     )
@@ -724,7 +818,7 @@ fn gemini_streaming_empty_max_tokens_finish_reason_is_error() {
 }
 
 #[test]
-fn gemini_streaming_max_tokens_finish_reason_preserves_partial_content() {
+fn gemini_streaming_max_tokens_finish_reason_rejects_partial_content() {
     let mut accumulator = GeminiStreamTurnAccumulator::default();
     handle_gemini_stream_turn_line(
         r#"data: {"candidates":[{"finishReason":"MAX_TOKENS","content":{"parts":[{"text":"Partial"}]}}]}"#,
@@ -733,8 +827,17 @@ fn gemini_streaming_max_tokens_finish_reason_preserves_partial_content() {
     )
     .unwrap();
 
-    let turn = accumulator.finish().unwrap();
-    assert_eq!(turn.content, "Partial");
+    let error = accumulator.finish().unwrap_err().to_string();
+    assert!(error.contains("output token limit"));
+}
+
+#[test]
+fn gemini_streaming_done_without_finish_reason_is_error() {
+    let mut accumulator = GeminiStreamTurnAccumulator::default();
+    let error = handle_gemini_stream_turn_line("data: [DONE]", &mut accumulator, &mut |_| {})
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("without a finish reason"));
 }
 
 #[test]
@@ -801,6 +904,17 @@ fn parses_anthropic_tool_calls() {
 }
 
 #[test]
+fn anthropic_non_streaming_max_tokens_rejects_partial_content() {
+    let error = parse_anthropic_turn(&serde_json::json!({
+        "stop_reason": "max_tokens",
+        "content": [{ "type": "text", "text": "Partial" }]
+    }))
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("output token limit"));
+}
+
+#[test]
 fn parses_gemini_tool_calls() {
     let turn = parse_gemini_turn(&serde_json::json!({
         "candidates": [{
@@ -820,6 +934,19 @@ fn parses_gemini_tool_calls() {
     assert_eq!(turn.tool_calls[0].id, "lookup");
     assert_eq!(turn.tool_calls[0].name, "lookup");
     assert_eq!(turn.tool_calls[0].arguments, "{\"q\":\"napaxi\"}");
+}
+
+#[test]
+fn gemini_non_streaming_max_tokens_rejects_partial_content() {
+    let error = parse_gemini_turn(&serde_json::json!({
+        "candidates": [{
+            "finishReason": "MAX_TOKENS",
+            "content": { "parts": [{ "text": "Partial" }] }
+        }]
+    }))
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("output token limit"));
 }
 
 fn tool_loop_messages() -> Vec<Value> {

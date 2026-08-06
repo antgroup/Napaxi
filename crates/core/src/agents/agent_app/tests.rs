@@ -292,6 +292,44 @@ fn explicitly_selected_provider_exposes_actions_to_default_agent() {
 }
 
 #[test]
+fn trusted_manifest_refresh_preserves_host_owned_auto_invoke_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let _: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+    let _: AgentAppPackage =
+        serde_json::from_str(&set_auto_invoke(&files_dir, "provider", true)).unwrap();
+
+    let mut refreshed: Value = serde_json::from_str(&package_json()).unwrap();
+    refreshed["actions"].as_array_mut().unwrap().push(json!({
+        "action_id": "order.cancel",
+        "tool_name": "app_action_order_cancel",
+        "description": "Cancel an order."
+    }));
+    refreshed["install_binding"] = json!({
+        "platform": "android",
+        "app_package_name": "com.provider.app",
+        "activity_name": "com.provider.app.AgentActionActivity",
+        "signing_cert_sha256": "provider123",
+        "app_version_code": 2,
+        "app_last_update_time_ms": 123456,
+        "trusted_refresh_supported": true,
+        "installed_at": "2026-08-05T00:00:00Z",
+        "install_request_id": "refresh-2",
+        "protocol_version": 2
+    });
+
+    let registered: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &refreshed.to_string())).unwrap();
+
+    assert!(registered.auto_invoke_enabled);
+    assert_eq!(registered.actions.len(), 2);
+    let binding = registered.install_binding.unwrap();
+    assert_eq!(binding.app_version_code, 2);
+    assert!(binding.trusted_refresh_supported);
+}
+
+#[test]
 fn automatic_invocation_rejects_cross_provider_tool_name_collisions() {
     let temp = tempfile::tempdir().unwrap();
     let files_dir = temp.path().to_string_lossy();
@@ -475,6 +513,9 @@ fn signed_proposal_uses_trusted_install_binding() {
         app_package_name: "com.provider.app".to_string(),
         activity_name: "com.provider.app.AgentActionActivity".to_string(),
         signing_cert_sha256: "provider123".to_string(),
+        app_version_code: 1,
+        app_last_update_time_ms: 0,
+        trusted_refresh_supported: true,
         installed_at: "2026-05-26T00:00:00Z".to_string(),
         install_request_id: "install-1".to_string(),
         protocol_version: 2,
@@ -512,6 +553,9 @@ fn public_dispatch_payload_strips_trust_secret_for_ios_binding() {
         app_package_name: String::new(),
         activity_name: String::new(),
         signing_cert_sha256: String::new(),
+        app_version_code: 0,
+        app_last_update_time_ms: 0,
+        trusted_refresh_supported: false,
         installed_at: "2026-05-26T00:00:00Z".to_string(),
         install_request_id: "install-ios-1".to_string(),
         protocol_version: 2,

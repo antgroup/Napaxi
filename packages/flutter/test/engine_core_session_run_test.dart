@@ -19,7 +19,10 @@ void main() {
     final now = DateTime.utc(2026);
     return SessionRunInfo(
       key: const SessionKey(
-          channelType: 'app', accountId: 'acct', threadId: 'thr'),
+        channelType: 'app',
+        accountId: 'acct',
+        threadId: 'thr',
+      ),
       agentId: 'napaxi',
       status: SessionRunStatus.running,
       activity: 'Working',
@@ -28,8 +31,11 @@ void main() {
     );
   }
 
-  Future<List<SessionRunInfo>> drain(EngineCore core, Stream<ChatEvent> raw,
-      {SessionRunInfo? runInfo}) async {
+  Future<List<SessionRunInfo>> drain(
+    EngineCore core,
+    Stream<ChatEvent> raw, {
+    SessionRunInfo? runInfo,
+  }) async {
     final updates = <SessionRunInfo>[];
     final sub = core.sessionRunUpdates.listen(updates.add);
     await core
@@ -73,6 +79,32 @@ void main() {
     expect(core.activeSessionRuns, isEmpty);
   });
 
+  test(
+    'interrupted event terminates run even when raw stream stays open',
+    () async {
+      final bg = _FakeBackgroundController();
+      final core = EngineCore.forTest(backgroundController: bg);
+      final controller = StreamController<ChatEvent>();
+      final updates = <SessionRunInfo>[];
+      final updateSubscription = core.sessionRunUpdates.listen(updates.add);
+
+      final eventsFuture = core
+          .wrapWithBackgroundForTest(controller.stream, runInfo: runningRun())
+          .toList();
+      await Future<void>.delayed(Duration.zero);
+      controller.add(const InterruptedEvent());
+
+      final events = await eventsFuture.timeout(const Duration(seconds: 1));
+      expect(events, contains(isA<InterruptedEvent>()));
+      expect(updates.last.status, SessionRunStatus.cancelled);
+      expect(core.activeSessionRuns, isEmpty);
+      expect(bg.isRunning, isFalse);
+
+      await updateSubscription.cancel();
+      await controller.close();
+    },
+  );
+
   test('asking-human event drives waitingForInput then completion', () async {
     final bg = _FakeBackgroundController();
     final core = EngineCore.forTest(backgroundController: bg);
@@ -93,28 +125,33 @@ void main() {
     expect(updates.last.status, SessionRunStatus.completed);
   });
 
-  test('foreground service starts BEFORE the first event (ordering invariant)',
-      () async {
-    final bg = _FakeBackgroundController();
-    final core = EngineCore.forTest(backgroundController: bg);
+  test(
+    'foreground service starts BEFORE the first event (ordering invariant)',
+    () async {
+      final bg = _FakeBackgroundController();
+      final core = EngineCore.forTest(backgroundController: bg);
 
-    final order = <String>[];
-    bg.onStart = () => order.add('start');
+      final order = <String>[];
+      bg.onStart = () => order.add('start');
 
-    final raw = Stream<ChatEvent>.fromIterable(const [ResponseEvent(content: 'x')])
-        .map((e) {
-      order.add('event');
-      return e;
-    });
+      final raw =
+          Stream<ChatEvent>.fromIterable(const [
+            ResponseEvent(content: 'x'),
+          ]).map((e) {
+            order.add('event');
+            return e;
+          });
 
-    await core
-        .wrapWithBackgroundForTest(raw, runInfo: runningRun())
-        .toList();
+      await core.wrapWithBackgroundForTest(raw, runInfo: runningRun()).toList();
 
-    expect(order.isNotEmpty, isTrue);
-    expect(order.first, 'start',
-        reason: 'service must start before any stream event is processed');
-  });
+      expect(order.isNotEmpty, isTrue);
+      expect(
+        order.first,
+        'start',
+        reason: 'service must start before any stream event is processed',
+      );
+    },
+  );
 
   test('no background controller: state machine still tracks runs', () async {
     final core = EngineCore.forTest();
@@ -131,8 +168,7 @@ void main() {
 /// Records start/stop without touching the platform MethodChannel, and reports
 /// running so the notification-update path is exercised.
 class _FakeBackgroundController extends NapaxiBackgroundController {
-  _FakeBackgroundController()
-      : super(const BackgroundConfig(enabled: true));
+  _FakeBackgroundController() : super(const BackgroundConfig(enabled: true));
 
   bool _running = false;
   void Function()? onStart;

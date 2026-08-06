@@ -72,6 +72,23 @@ class AgentProviderInstallApi {
   /// shared-secret material are preserved so the rejected proposal can be
   /// retried without changing its signature or idempotency key.
   Future<AgentAppPackage> restoreBinding(AgentAppPackage installed) async {
+    return _restoreBinding(installed, registerPackage: false);
+  }
+
+  /// Refreshes a previously trusted Provider after an in-place app update.
+  ///
+  /// The OS package/bundle identity, signing identity, provider id, agent id,
+  /// Host id, and shared secret must all remain stable. The returned manifest
+  /// is registered in Core so newly added or removed actions take effect while
+  /// Core preserves host-owned state such as the auto-invoke preference.
+  Future<AgentAppPackage> refreshBinding(AgentAppPackage installed) async {
+    return _restoreBinding(installed, registerPackage: true);
+  }
+
+  Future<AgentAppPackage> _restoreBinding(
+    AgentAppPackage installed, {
+    required bool registerPackage,
+  }) async {
     final binding = installed.installBinding;
     if (binding == null ||
         binding.hostInstanceId.isEmpty ||
@@ -117,7 +134,7 @@ class AgentProviderInstallApi {
         'Restored Agent App identity does not match installation',
       );
     }
-    return restored;
+    return registerPackage ? _registerPackage(restored) : restored;
   }
 
   Future<AgentAppPackage> _requestInstall(

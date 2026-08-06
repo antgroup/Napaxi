@@ -179,6 +179,9 @@ final class AgentAppModelTests: XCTestCase {
             appPackageName: "",
             activityName: "",
             signingCertSha256: "",
+            appVersionCode: 7,
+            appLastUpdateTimeMs: 123456,
+            trustedRefreshSupported: true,
             installedAt: "now",
             installRequestId: "req",
             protocolVersion: 2,
@@ -213,6 +216,9 @@ final class AgentAppModelTests: XCTestCase {
             XCTAssertEqual(encodedBinding["protocol_version"], .number(2))
             XCTAssertEqual(encodedBinding["ios_bundle_id"], .string("com.example.provider"))
             XCTAssertEqual(encodedBinding["host_bundle_id"], .string("com.example.host"))
+            XCTAssertEqual(encodedBinding["app_version_code"], .number(7))
+            XCTAssertEqual(encodedBinding["app_last_update_time_ms"], .number(123456))
+            XCTAssertEqual(encodedBinding["trusted_refresh_supported"], .bool(true))
         } else {
             XCTFail("install binding should encode as object")
         }

@@ -152,6 +152,19 @@ public struct NapaxiAgentProviderAPI: Sendable {
         return restored
     }
 
+    /// Refreshes Core's manifest after a trusted in-place Provider update.
+    public func refreshBinding(
+        _ installed: NapaxiAgentAppPackage,
+        timeoutSeconds: UInt64 = NapaxiAgentProviderAPI.defaultInstallTimeoutSeconds
+    ) async throws -> NapaxiAgentAppPackage {
+        let restored = try await restoreBinding(
+            installed,
+            timeoutSeconds: timeoutSeconds
+        )
+        return try registerPackage(restored.jsonString())
+            .decodedObject(of: NapaxiAgentAppPackage.self)
+    }
+
     public func installFromLaunchIntent(
         timeoutSeconds: UInt64 = NapaxiAgentProviderAPI.defaultInstallTimeoutSeconds
     ) async throws -> NapaxiAgentAppPackage? {

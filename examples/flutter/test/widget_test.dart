@@ -1189,11 +1189,23 @@ void main() {
 
     await tester.tap(find.byKey(const Key('stop_message_button')));
     await tester.pump();
-    // The stop flow waits up to 4s for the event stream to drain (the fake's
-    // stream never closes, so it relies on that grace window). Pump past the
-    // grace window to let the subscription cancel and the run finish, instead
-    // of blocking on a future that needs the UI to advance first.
-    await tester.pump(const Duration(seconds: 5));
+
+    // The UI converges immediately after the cancellation signal; it must not
+    // wait for a provider stream that forgets to close.
+    expect(find.byKey(const Key('stop_message_button')), findsNothing);
+    expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+    expect(find.text('Stopped.'), findsOneWidget);
+
+    // Already queued events cannot reopen a run once stopping has begun.
+    events.add(const sdk.StreamResetEvent(reason: 'late reconnect'));
+    await tester.pump();
+    events.add(const sdk.InterruptedEvent());
+    await tester.pump();
+    expect(find.byKey(const Key('stop_message_button')), findsNothing);
+
+    // The raw stream intentionally stays open. Its subscription is disposed
+    // after a bounded grace period for any final terminal/tool events.
+    await tester.pump(const Duration(seconds: 4));
     await cancelCompleter.future.timeout(const Duration(seconds: 1));
     await _pumpUntilBackgroundStopped(tester, fakeClient);
 
@@ -1437,10 +1449,10 @@ void main() {
       const sdk.BackgroundActionEvent(action: sdk.BackgroundAction.stop),
     );
     await tester.pump();
-    // Pump past the stop flow's 4s stream-drain grace window so the run
-    // finishes; the fake's event stream never closes, so without advancing
-    // the clock the cancel completer never fires and the await would hang.
-    await tester.pump(const Duration(seconds: 5));
+    expect(find.byKey(const Key('stop_message_button')), findsNothing);
+    expect(find.byKey(const Key('send_message_button')), findsOneWidget);
+    // The fake stream remains open; only subscription cleanup waits for grace.
+    await tester.pump(const Duration(seconds: 4));
     await cancelCompleter.future.timeout(const Duration(seconds: 1));
     await tester.pump();
 

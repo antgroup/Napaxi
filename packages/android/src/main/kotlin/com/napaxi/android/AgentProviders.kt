@@ -21,6 +21,9 @@ import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+private const val META_TRUSTED_REFRESH_SUPPORTED =
+    "agent.provider.TRUSTED_REFRESH_SUPPORTED"
+
 /** A one-turn explicit selection of an installed Agent App Provider. */
 public data class AgentProviderSelection(
     val providerId: String,
@@ -40,6 +43,9 @@ public data class AgentProviderDescriptor(
     val installActivityName: String = activityName,
     val platform: String = "android",
     val signingCertSha256: String = "",
+    val packageVersionCode: Long = 0,
+    val packageLastUpdateTimeMs: Long = 0,
+    val trustedRefreshSupported: Boolean = false,
     val installUrl: String = "",
     val actionUrl: String = "",
     val universalLinkDomain: String = "",
@@ -63,6 +69,9 @@ public data class AgentProviderDescriptor(
                 put("install_activity_name", installActivityName)
                 put("signing_cert_sha256", signingCertSha256)
             }
+            if (packageVersionCode > 0) put("packageVersionCode", packageVersionCode)
+            if (packageLastUpdateTimeMs > 0) put("packageLastUpdateTimeMs", packageLastUpdateTimeMs)
+            if (trustedRefreshSupported) put("trustedRefreshSupported", true)
             if (installUrl.isNotBlank()) put("installUrl", installUrl)
             if (actionUrl.isNotBlank()) put("actionUrl", actionUrl)
             if (universalLinkDomain.isNotBlank()) put("universalLinkDomain", universalLinkDomain)
@@ -99,6 +108,15 @@ public data class AgentProviderDescriptor(
                 activityName = activityName,
                 displayName = displayName,
                 signingCertSha256 = obj.optString("signingCertSha256", obj.optString("signing_cert_sha256")),
+                packageVersionCode = obj.optLong("packageVersionCode", obj.optLong("package_version_code")),
+                packageLastUpdateTimeMs = obj.optLong(
+                    "packageLastUpdateTimeMs",
+                    obj.optLong("package_last_update_time_ms"),
+                ),
+                trustedRefreshSupported = obj.optBoolean(
+                    "trustedRefreshSupported",
+                    obj.optBoolean("trusted_refresh_supported", false),
+                ),
                 installUrl = obj.optString("installUrl", obj.optString("install_url")),
                 actionUrl = obj.optString("actionUrl", obj.optString("action_url")),
                 universalLinkDomain = obj.optString("universalLinkDomain", obj.optString("universal_link_domain")),
@@ -117,6 +135,8 @@ public data class PendingAgentProviderInstall(
     val descriptor: AgentProviderDescriptor,
     val request: AgentInstallRequest,
     val requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
+    val expectedProviderId: String = "",
+    val expectedAgentId: String = "",
 )
 
 /** Host hook that restores provider-side trust for one rejected action. */
@@ -154,6 +174,13 @@ public class AgentProviderInstallApi internal constructor(
 
     /** Restores provider-side trust without rotating the installed binding. */
     public fun restoreBinding(
+        activity: Activity,
+        installed: AgentAppPackage,
+        requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
+    ): PendingAgentProviderInstall = host.restoreBinding(activity, installed, requestCode)
+
+    /** Refreshes the manifest after a trusted in-place provider update. */
+    public fun refreshBinding(
         activity: Activity,
         installed: AgentAppPackage,
         requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
@@ -287,17 +314,47 @@ public class AgentProviderHostApi internal constructor(
 ) {
     public fun discoverProviders(): List<AgentProviderDescriptor> {
         val intent = Intent(AgentProviderContract.ACTION_INSTALL_AGENT).addCategory(Intent.CATEGORY_DEFAULT)
-        val infos = context.packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        val infos = context.packageManager.queryIntentActivities(
+            intent,
+            PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_META_DATA,
+        )
         return infos
             .mapNotNull { info ->
                 val packageName = info.activityInfo?.packageName ?: return@mapNotNull null
                 val installActivityName = info.activityInfo?.name ?: return@mapNotNull null
+                val packageInfo = runCatching {
+                    context.packageManager.getPackageInfo(packageName, 0)
+                }.getOrNull()
+                val applicationInfo = runCatching {
+                    context.packageManager.getApplicationInfo(
+                        packageName,
+                        PackageManager.GET_META_DATA,
+                    )
+                }.getOrNull()
+                val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    packageInfo?.longVersionCode ?: 0L
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo?.versionCode?.toLong() ?: 0L
+                }
+                val trustedRefreshSupported =
+                    info.activityInfo?.metaData?.getBoolean(
+                        META_TRUSTED_REFRESH_SUPPORTED,
+                        false,
+                    ) == true ||
+                        applicationInfo?.metaData?.getBoolean(
+                            META_TRUSTED_REFRESH_SUPPORTED,
+                            false,
+                        ) == true
                 AgentProviderDescriptor(
                     packageName = packageName,
                     activityName = findActionActivity(packageName) ?: installActivityName,
                     displayName = info.loadLabel(context.packageManager)?.toString() ?: packageName,
                     installActivityName = installActivityName,
                     signingCertSha256 = runCatching { signingCertSha256(packageName) }.getOrDefault(""),
+                    packageVersionCode = versionCode,
+                    packageLastUpdateTimeMs = packageInfo?.lastUpdateTime ?: 0L,
+                    trustedRefreshSupported = trustedRefreshSupported,
                 )
             }
             .distinctBy { "${it.packageName}/${it.installActivityName}" }
@@ -370,7 +427,13 @@ public class AgentProviderHostApi internal constructor(
         }
         val request = buildRestoreRequest(installed)
         requestInstall(activity, provider, request, requestCode)
-        return PendingAgentProviderInstall(provider, request, requestCode)
+        return PendingAgentProviderInstall(
+            provider,
+            request,
+            requestCode,
+            expectedProviderId = installed.providerId,
+            expectedAgentId = installed.agentId,
+        )
     }
 
     private fun stableHostInstanceId(): String {
@@ -423,11 +486,22 @@ public class AgentProviderHostApi internal constructor(
         request: AgentInstallRequest,
         descriptor: AgentProviderDescriptor,
         now: Instant = Instant.now(),
+        expectedProviderId: String = "",
+        expectedAgentId: String = "",
     ): AgentAppPackage {
         validateInstallResult(result, request, now)
         val packageJson = result.packageJson ?: error("Provider did not return an Agent package")
+        val returnedPackage = JSONObject(packageJson)
+        if (expectedProviderId.isNotBlank() || expectedAgentId.isNotBlank()) {
+            require(
+                returnedPackage.optString("provider_id") == expectedProviderId &&
+                    returnedPackage.optString("agent_id") == expectedAgentId,
+            ) {
+                "Restored Agent App identity does not match installation"
+            }
+        }
         val binding = buildInstallBinding(descriptor, request, result)
-        val packageWithBinding = JSONObject(packageJson)
+        val packageWithBinding = returnedPackage
             .put("install_binding", binding.toJsonObject())
             .toString()
         return engine.agentApp.registerPackage(packageWithBinding)
@@ -439,8 +513,19 @@ public class AgentProviderHostApi internal constructor(
         data: Intent?,
         pending: PendingAgentProviderInstall,
         now: Instant = Instant.now(),
-    ): AgentAppPackage? =
-        handleInstallActivityResult(requestCode, resultCode, data, pending.descriptor, pending.request, pending.requestCode, now)
+    ): AgentAppPackage? {
+        if (requestCode != pending.requestCode) return null
+        check(resultCode == Activity.RESULT_OK) { "Provider install was canceled" }
+        val result = parseInstallResult(data) ?: error("Install result missing")
+        return registerInstallResult(
+            result,
+            pending.request,
+            pending.descriptor,
+            now,
+            expectedProviderId = pending.expectedProviderId,
+            expectedAgentId = pending.expectedAgentId,
+        )
+    }
 
     public suspend fun handleInstallActivityResult(
         requestCode: Int,
@@ -469,12 +554,39 @@ public class AgentProviderHostApi internal constructor(
         descriptor: AgentProviderDescriptor,
         request: AgentInstallRequest,
         result: AgentInstallResult,
-    ): AgentAppInstallBinding =
-        AgentAppInstallBinding(
+    ): AgentAppInstallBinding {
+        val packageInfo = runCatching {
+            context.packageManager.getPackageInfo(descriptor.packageName, 0)
+        }.getOrNull()
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo?.longVersionCode ?: 0L
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo?.versionCode?.toLong() ?: 0L
+        }
+        val activityInfo = runCatching {
+            context.packageManager.getActivityInfo(
+                ComponentName(descriptor.packageName, descriptor.installActivityName),
+                PackageManager.GET_META_DATA,
+            )
+        }.getOrNull()
+        val applicationInfo = runCatching {
+            context.packageManager.getApplicationInfo(
+                descriptor.packageName,
+                PackageManager.GET_META_DATA,
+            )
+        }.getOrNull()
+        val trustedRefreshSupported =
+            activityInfo?.metaData?.getBoolean(META_TRUSTED_REFRESH_SUPPORTED, false) == true ||
+                applicationInfo?.metaData?.getBoolean(META_TRUSTED_REFRESH_SUPPORTED, false) == true
+        return AgentAppInstallBinding(
             platform = "android",
             appPackageName = descriptor.packageName,
             activityName = descriptor.activityName,
             signingCertSha256 = signingCertSha256(descriptor.packageName),
+            appVersionCode = versionCode,
+            appLastUpdateTimeMs = packageInfo?.lastUpdateTime ?: 0L,
+            trustedRefreshSupported = trustedRefreshSupported,
             installedAt = result.completedAt,
             installRequestId = request.requestId,
             protocolVersion = request.protocolVersion,
@@ -485,6 +597,7 @@ public class AgentProviderHostApi internal constructor(
             backgroundTriggerSupported = request.backgroundTriggerSupported,
             hostBackgroundTriggerService = request.hostBackgroundTriggerService,
         )
+    }
 
     public fun parseInstallResult(data: Intent?): AgentInstallResult? =
         data?.getStringExtra(AgentProviderContract.EXTRA_INSTALL_RESULT_JSON)
@@ -680,7 +793,7 @@ public class AgentProviderHostApi internal constructor(
                 "Provider action binding is incomplete"
             }
             require(currentSigningCertSha256.equals(binding.signingCertSha256, ignoreCase = true)) {
-                "Provider app signature changed; reinstall this Agent"
+                "Provider app signature changed; explicit reconnect is required"
             }
             val action = packageDef.actions.firstOrNull {
                 it.actionId == proposal.actionId && it.toolName == proposal.toolName

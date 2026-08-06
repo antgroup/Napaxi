@@ -20,6 +20,21 @@ fn max_tokens_body(model: &str, max_tokens: i32) -> (&'static str, Value) {
         ("max_tokens", value)
     }
 }
+
+fn validate_finish_reason(value: &Value) -> Result<()> {
+    match value
+        .pointer("/choices/0/finish_reason")
+        .and_then(Value::as_str)
+    {
+        Some("length") => anyhow::bail!(
+            "OpenAI-compatible response was truncated because the model reached the output token limit"
+        ),
+        Some("content_filter") => {
+            anyhow::bail!("OpenAI-compatible response was stopped by the provider content filter")
+        }
+        _ => Ok(()),
+    }
+}
 use super::messages::{openai_messages_from_history, openai_messages_from_raw};
 use super::output_cap::parse_available_output_tokens;
 use super::sse::{
@@ -111,6 +126,7 @@ pub(super) async fn complete(
                     provider_error_message(&retry_value, retry_status.as_u16())
                 );
             }
+            validate_finish_reason(&retry_value)?;
             return retry_value
                 .pointer("/choices/0/message/content")
                 .and_then(Value::as_str)
@@ -122,6 +138,7 @@ pub(super) async fn complete(
         }
         anyhow::bail!("{}", error_msg);
     }
+    validate_finish_reason(&value)?;
     value
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
@@ -363,6 +380,7 @@ where
 }
 
 pub(super) fn parse_turn(value: &Value) -> Result<LlmTurn> {
+    validate_finish_reason(value)?;
     let message = value
         .pointer("/choices/0/message")
         .ok_or_else(|| anyhow!("OpenAI-compatible response did not contain a message"))?;

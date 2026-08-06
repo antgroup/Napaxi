@@ -94,6 +94,7 @@ class EngineCore {
       if (active == null || active.startedAt == info.startedAt) {
         _activeSessionRuns.remove(info.id);
       }
+      _locallyCancelledSessionRuns.remove(info.id);
     } else {
       _activeSessionRuns[info.id] = info;
     }
@@ -217,6 +218,12 @@ class EngineCore {
             endedWithError = true;
           }
           sink.add(event);
+          // Interrupted is a terminal protocol event. Do not keep the public
+          // stream (and its UI subscription) alive just because a native or
+          // provider stream forgot to close after emitting it.
+          if (event is InterruptedEvent) {
+            sink.close();
+          }
         },
         handleError: (error, stackTrace, sink) {
           endedWithError = true;
@@ -362,6 +369,12 @@ class EngineCore {
         clearHumanRequest: true,
         clearError: true,
       ),
+      InterruptedEvent() => _updateSessionRun(
+        run,
+        status: SessionRunStatus.cancelled,
+        activity: 'Cancelled',
+        clearHumanRequest: true,
+      ),
       ErrorEvent(:final message) => _updateSessionRun(
         run,
         status: SessionRunStatus.failed,
@@ -450,6 +463,9 @@ class EngineCore {
               message: message,
             )
             .catchError((_) {});
+        bg.stop().catchError((_) {});
+        return true;
+      case InterruptedEvent():
         bg.stop().catchError((_) {});
         return true;
       case SkillActivatedEvent(:final skills):

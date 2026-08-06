@@ -34,12 +34,15 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
           if (call.method == 'listAgentProviders') {
-            return <Map<String, String>>[
+            return <Map<String, Object>>[
               {
                 'packageName': 'demo.generated.notes',
                 'installActivityName': 'InstallActivity',
                 'activityName': 'ActionActivity',
                 'label': 'Generated Notes',
+                'packageVersionCode': 7,
+                'packageLastUpdateTimeMs': 123456,
+                'trustedRefreshSupported': true,
               },
             ];
           }
@@ -52,6 +55,9 @@ void main() {
     );
 
     expect(provider?.label, 'Generated Notes');
+    expect(provider?.packageVersionCode, 7);
+    expect(provider?.packageLastUpdateTimeMs, 123456);
+    expect(provider?.trustedRefreshSupported, isTrue);
   });
 
   test('requestInstall overrides provider supplied binding', () async {
@@ -364,6 +370,80 @@ void main() {
   );
 
   test(
+    'refreshBinding preserves identity and registers latest manifest',
+    () async {
+      AgentAppPackage? registered;
+      final api = AgentProviderInstallApi(
+        registerPackage: (package) {
+          registered = package;
+          return package;
+        },
+        channel: channel,
+      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'listAgentProviders') {
+              return <Map<String, Object>>[
+                {
+                  'packageName': 'trusted.app',
+                  'installActivityName': 'trusted.InstallActivity',
+                  'activityName': 'trusted.Activity',
+                  'signingCertSha256': 'provider123',
+                  'packageVersionCode': 2,
+                  'packageLastUpdateTimeMs': 2000,
+                  'trustedRefreshSupported': true,
+                },
+              ];
+            }
+            if (call.method == 'getAgentProviderHostInfo') {
+              return {
+                'packageName': 'host.app',
+                'signingCertSha256': 'host123',
+              };
+            }
+            if (call.method == 'requestAgentProviderInstall') {
+              final args = Map<String, dynamic>.from(call.arguments as Map);
+              final request = Map<String, dynamic>.from(
+                jsonDecode(args['requestJson'] as String) as Map,
+              );
+              return _installResponse(
+                request,
+                appVersionCode: 2,
+                appLastUpdateTimeMs: 2000,
+                trustedRefreshSupported: true,
+              );
+            }
+            fail('unexpected method ${call.method}');
+          });
+      const installed = AgentAppPackage(
+        providerId: 'provider',
+        agentId: 'provider.agent',
+        displayName: 'Provider Agent',
+        installBinding: const AgentAppInstallBinding(
+          platform: 'android',
+          appPackageName: 'trusted.app',
+          activityName: 'trusted.Activity',
+          signingCertSha256: 'provider123',
+          installedAt: '2026-05-26T00:00:00Z',
+          installRequestId: 'install-1',
+          protocolVersion: 2,
+          hostPackageName: 'host.app',
+          hostSigningCertSha256: 'host123',
+          hostInstanceId: 'host-instance-existing',
+          hostSharedSecret: 'host-secret-existing',
+        ),
+      );
+
+      final refreshed = await api.refreshBinding(installed);
+
+      expect(registered, same(refreshed));
+      expect(refreshed.installBinding?.appVersionCode, 2);
+      expect(refreshed.installBinding?.appLastUpdateTimeMs, 2000);
+      expect(refreshed.installBinding?.trustedRefreshSupported, isTrue);
+    },
+  );
+
+  test(
     'action executor restores host binding and retries exactly once',
     () async {
       var actionAttempts = 0;
@@ -419,7 +499,12 @@ void main() {
   });
 }
 
-Map<String, dynamic> _installResponse(Map<String, dynamic> request) => {
+Map<String, dynamic> _installResponse(
+  Map<String, dynamic> request, {
+  int appVersionCode = 0,
+  int appLastUpdateTimeMs = 0,
+  bool trustedRefreshSupported = false,
+}) => {
   'installResultJson': jsonEncode({
     'status': 'succeeded',
     'request_id': request['request_id'],
@@ -432,6 +517,10 @@ Map<String, dynamic> _installResponse(Map<String, dynamic> request) => {
     'app_package_name': 'trusted.app',
     'activity_name': 'trusted.Activity',
     'signing_cert_sha256': 'provider123',
+    if (appVersionCode > 0) 'app_version_code': appVersionCode,
+    if (appLastUpdateTimeMs > 0) 'app_last_update_time_ms': appLastUpdateTimeMs,
+    if (trustedRefreshSupported)
+      'trusted_refresh_supported': trustedRefreshSupported,
     'installed_at': '2026-05-26T00:00:00Z',
     'install_request_id': request['request_id'],
     'protocol_version': request['protocol_version'],

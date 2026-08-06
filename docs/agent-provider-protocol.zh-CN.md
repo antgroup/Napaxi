@@ -128,6 +128,8 @@ Host 不信任 provider 返回的 `install_binding`，而是从 Android 系统�
 
 同一个 Host 安装实例应稳定复用一个 `host_instance_id`，但不同 Provider 仍使用各自独立的 shared secret。若 trusted validation 在业务逻辑执行前返回 `host_not_bound`，Host 可以在 Provider 包/Bundle 身份和签名身份均未变化的前提下，使用原 `host_instance_id` 与原 shared secret 重新发送一次显式 `INSTALL_AGENT`，成功后只重试原 Proposal 一次。第二次失败、Provider 身份变化或用户取消时不得循环恢复，也不得静默信任新的签名身份。
 
+生成的 Android Provider 通过 application metadata `agent.provider.TRUSTED_REFRESH_SUPPORTED=true` 明确允许可信的原地刷新。覆盖安装后，只有系统包名和签名证书仍与 trusted binding 一致、Provider 返回的 `provider_id` 与 `agent_id` 也均未变化时，Host 才能复用原 `host_instance_id`/shared secret 重新握手并把最新 manifest 注册回 Core。Core 持有的自动调用开关和使用记录会保留。versionCode 和 lastUpdateTime 只用于发现更新，不是信任依据；应用缺失或签名/Provider/Agent 身份变化时必须停止展示，并要求显式重新连接。
+
 ## Android action handoff
 
 Host 发送：

@@ -4771,6 +4771,9 @@ public data class AgentAppInstallBinding(
     val appPackageName: String,
     val activityName: String,
     val signingCertSha256: String,
+    val appVersionCode: Long = 0,
+    val appLastUpdateTimeMs: Long = 0,
+    val trustedRefreshSupported: Boolean = false,
     val installedAt: String,
     val installRequestId: String,
     val protocolVersion: Int = 2,
@@ -4799,6 +4802,9 @@ public data class AgentAppInstallBinding(
         .put("protocol_version", protocolVersion)
         .apply {
             if (hostPackageName.isNotBlank()) put("host_package_name", hostPackageName)
+            if (appVersionCode > 0) put("app_version_code", appVersionCode)
+            if (appLastUpdateTimeMs > 0) put("app_last_update_time_ms", appLastUpdateTimeMs)
+            if (trustedRefreshSupported) put("trusted_refresh_supported", true)
             if (hostSigningCertSha256.isNotBlank()) put("host_signing_cert_sha256", hostSigningCertSha256)
             if (hostInstanceId.isNotBlank()) put("host_instance_id", hostInstanceId)
             if (hostSharedSecret.isNotBlank()) put("host_shared_secret", hostSharedSecret)
@@ -4829,6 +4835,9 @@ public data class AgentAppInstallBinding(
                 appPackageName = obj.optString("app_package_name"),
                 activityName = obj.optString("activity_name"),
                 signingCertSha256 = obj.optString("signing_cert_sha256"),
+                appVersionCode = obj.optLong("app_version_code"),
+                appLastUpdateTimeMs = obj.optLong("app_last_update_time_ms"),
+                trustedRefreshSupported = obj.optBoolean("trusted_refresh_supported", false),
                 installedAt = obj.optString("installed_at"),
                 installRequestId = obj.optString("install_request_id"),
                 protocolVersion = obj.optInt("protocol_version", 1),

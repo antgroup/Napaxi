@@ -55,19 +55,92 @@ pub(crate) fn llm_context_history_all(files_dir: &str, thread_id: &str) -> Vec<S
     let Some(record) = read_record(files_dir, thread_id) else {
         return Vec::new();
     };
-    record
-        .messages
-        .into_iter()
-        .filter(|message| match message.role.as_str() {
-            "user" | "assistant" => !message.content.trim().is_empty(),
-            "tool_calls" => !message.content.trim().is_empty(),
+    model_context_history(record.messages)
+}
+
+/// Project the durable UI transcript into model-facing history.
+///
+/// Reasoning is normally omitted from subsequent requests. The exception is a
+/// reasoning segment that produced tool calls: thinking-capable OpenAI-wire
+/// providers require that exact `reasoning_content` to be replayed on the
+/// assistant tool-call message. The durable transcript stores reasoning and
+/// tool calls as adjacent UI messages, so enrich the tool trace in memory
+/// without duplicating private reasoning in the on-disk record or exposing a
+/// standalone non-standard `reasoning` role to providers.
+fn model_context_history(messages: Vec<SessionMessage>) -> Vec<SessionMessage> {
+    let mut out = Vec::new();
+    let mut pending_reasoning: Option<(Option<String>, String)> = None;
+
+    for mut message in messages {
+        match message.role.as_str() {
+            "reasoning" if !message.content.trim().is_empty() => {
+                let same_turn = pending_reasoning
+                    .as_ref()
+                    .is_some_and(|(turn_id, _)| turn_id == &message.turn_id);
+                if same_turn {
+                    if let Some((_, content)) = pending_reasoning.as_mut() {
+                        content.push_str(&message.content);
+                    }
+                } else {
+                    pending_reasoning = Some((message.turn_id.clone(), message.content));
+                }
+            }
+            "tool_calls" if !message.content.trim().is_empty() => {
+                if let Some((reasoning_turn_id, reasoning)) = pending_reasoning.take()
+                    && trace_turns_match(reasoning_turn_id.as_deref(), message.turn_id.as_deref())
+                {
+                    message.content = tool_trace_with_reasoning(&message.content, &reasoning);
+                }
+                out.push(message);
+            }
+            "user" | "assistant" if !message.content.trim().is_empty() => {
+                pending_reasoning = None;
+                out.push(message);
+            }
             // Interrupt boundary marker. Kept in the model-facing history so the
             // alternation gap is filled; `messages.rs` maps it to assistant role.
             // Deliberately absent from the UI projection allowlists below.
-            "turn_aborted" => !message.content.trim().is_empty(),
-            _ => false,
-        })
-        .collect()
+            "turn_aborted" if !message.content.trim().is_empty() => {
+                pending_reasoning = None;
+                out.push(message);
+            }
+            _ => {
+                pending_reasoning = None;
+            }
+        }
+    }
+    out
+}
+
+fn trace_turns_match(reasoning_turn_id: Option<&str>, tool_turn_id: Option<&str>) -> bool {
+    match (reasoning_turn_id, tool_turn_id) {
+        (Some(reasoning), Some(tool)) => reasoning == tool,
+        // Older transcripts predate turn ids but still persist the pair
+        // adjacently. Adjacency is sufficient for their compatibility path.
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn tool_trace_with_reasoning(content: &str, reasoning: &str) -> String {
+    let Ok(mut value) = serde_json::from_str::<Value>(content) else {
+        return content.to_string();
+    };
+    let Some(object) = value.as_object_mut() else {
+        return content.to_string();
+    };
+    if object
+        .get("reasoning_content")
+        .and_then(Value::as_str)
+        .is_some_and(|text| !text.is_empty())
+    {
+        return content.to_string();
+    }
+    object.insert(
+        "reasoning_content".to_string(),
+        Value::String(reasoning.to_string()),
+    );
+    value.to_string()
 }
 
 pub fn get_history_page(

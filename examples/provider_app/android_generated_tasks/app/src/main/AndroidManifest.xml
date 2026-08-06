@@ -13,6 +13,9 @@
         android:label="Generated Tasks"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+        <meta-data
+            android:name="agent.provider.TRUSTED_REFRESH_SUPPORTED"
+            android:value="true" />
         <activity
             android:name="agent.provider.lite.AgentProviderInstallActivity"
             android:exported="true">

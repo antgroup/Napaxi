@@ -6213,11 +6213,16 @@ class _ChatScreenState extends State<ChatScreen>
                     'event=interrupted session=$sessionId '
                     'assistant=$currentAssistantMessageId',
                   );
-                  _forceCompleteInflightToolCalls(currentAssistantMessageId);
-                  markRun(
+                  // Publish the terminal state before any trace/message
+                  // cleanup. Stop must remain effective even if cleanup is
+                  // expensive or a malformed trace causes it to fail.
+                  _finishSessionRun(
+                    sessionId,
+                    currentAssistantMessageId,
                     status: sdk.SessionRunStatus.cancelled,
                     activity: 'Stopped',
                   );
+                  _forceCompleteInflightToolCalls(currentAssistantMessageId);
                   _flushPendingAssistantAttachments(
                     sessionId,
                     currentAssistantMessageId,
@@ -6236,6 +6241,11 @@ class _ChatScreenState extends State<ChatScreen>
             },
             onError: (Object error) {
               if (!mounted) return;
+              final run = _sessionRuns[sessionId];
+              final wasCancelled =
+                  run?.status == sdk.SessionRunStatus.cancelling ||
+                  run?.status == sdk.SessionRunStatus.cancelled ||
+                  _stoppingSessionIds.contains(sessionId);
               _traceChat(
                 'stream-error session=$sessionId assistant=$currentAssistantMessageId '
                 'error="${_tracePreview(_friendlyError(error))}"',
@@ -6243,23 +6253,29 @@ class _ChatScreenState extends State<ChatScreen>
               _finishSessionRun(
                 sessionId,
                 currentAssistantMessageId,
-                status: sdk.SessionRunStatus.failed,
-                activity: _friendlyError(error),
-                error: _friendlyError(error),
+                status: wasCancelled
+                    ? sdk.SessionRunStatus.cancelled
+                    : sdk.SessionRunStatus.failed,
+                activity: wasCancelled ? 'Stopped' : _friendlyError(error),
+                error: wasCancelled ? null : _friendlyError(error),
               );
               _flushPendingAssistantAttachments(
                 sessionId,
                 currentAssistantMessageId,
               );
-              _updateAssistantMessage(
-                currentAssistantMessageId,
-                (message) => message.copyWith(
-                  content: strings.sdkError(_friendlyError(error)),
-                  isStreaming: false,
-                  action: ChatMessageAction.openConfiguration,
-                  completedAt: DateTime.now(),
-                ),
-              );
+              if (wasCancelled) {
+                _forceCompleteInflightToolCalls(currentAssistantMessageId);
+              } else {
+                _updateAssistantMessage(
+                  currentAssistantMessageId,
+                  (message) => message.copyWith(
+                    content: strings.sdkError(_friendlyError(error)),
+                    isStreaming: false,
+                    action: ChatMessageAction.openConfiguration,
+                    completedAt: DateTime.now(),
+                  ),
+                );
+              }
               unawaited(_refreshContextStatusForSession(agentId, sessionId));
               _scrollToBottom();
             },
@@ -6278,11 +6294,16 @@ class _ChatScreenState extends State<ChatScreen>
               );
               final run = _sessionRuns[sessionId];
               if (run == null || !run.isTerminal) {
+                final wasStopping =
+                    run?.status == sdk.SessionRunStatus.cancelling ||
+                    _stoppingSessionIds.contains(sessionId);
                 _finishSessionRun(
                   sessionId,
                   currentAssistantMessageId,
-                  status: sdk.SessionRunStatus.completed,
-                  activity: 'Completed',
+                  status: wasStopping
+                      ? sdk.SessionRunStatus.cancelled
+                      : sdk.SessionRunStatus.completed,
+                  activity: wasStopping ? 'Stopped' : 'Completed',
                 );
               }
               unawaited(_refreshContextStatusForSession(agentId, sessionId));
@@ -6511,12 +6532,16 @@ class _ChatScreenState extends State<ChatScreen>
     String sessionId, {
     bool clearPendingInterjections = false,
   }) async {
-    if (_stoppingSessionIds.contains(sessionId)) return;
+    if (_stoppingSessionIds.contains(sessionId)) {
+      _traceChat('stop ignored already-stopping session=$sessionId');
+      return;
+    }
     final client = _chatClient;
     final run = _sessionRuns[sessionId];
-    if (run == null) return;
+    if (run == null || run.isTerminal) return;
     final messageId = run.assistantMessageId;
     final subscription = run.subscription;
+    var didStartStopping = false;
 
     if (mounted) {
       setState(() {
@@ -6526,6 +6551,7 @@ class _ChatScreenState extends State<ChatScreen>
             current.startedAt != run.startedAt) {
           return;
         }
+        didStartStopping = true;
         _stoppingSessionIds.add(sessionId);
         _sessionRuns[sessionId] = current.copyWith(
           status: sdk.SessionRunStatus.cancelling,
@@ -6533,6 +6559,8 @@ class _ChatScreenState extends State<ChatScreen>
         );
       });
     }
+    if (!didStartStopping) return;
+    _traceChat('stop requested session=$sessionId assistant=$messageId');
     try {
       _updateAssistantMessage(
         messageId,
@@ -6546,34 +6574,21 @@ class _ChatScreenState extends State<ChatScreen>
       );
 
       if (client != null) {
-        try {
-          await client.cancelSession(run.sessionKey, agentId: run.agentId);
-        } catch (_) {
-          // The local stream has already been stopped; SDK cancellation is best effort.
-        }
+        // Start native cancellation, but never make visible UI convergence
+        // depend on its acknowledgement.
+        unawaited(_requestSessionCancellation(client, run, sessionId));
       }
 
-      // Let the Rust stream's bounded cancel sequence (terminal ToolResult +
-      // Interrupted + close) drive `onDone`. If it doesn't close within the
-      // grace window we force-cancel locally so the UI never hangs.
-      final closed = await _awaitSubscriptionDone(
-        subscription,
-        timeout: const Duration(seconds: 4),
-      );
-      if (!closed) {
-        _forceCompleteInflightToolCalls(messageId);
-        unawaited(subscription.cancel());
-      }
-
-      final hasOtherActiveRuns = _sessionRuns.entries.any(
-        (entry) => entry.key != sessionId && !entry.value.isTerminal,
-      );
-      if (!hasOtherActiveRuns) {
-        await client?.stopBackgroundService();
-      }
+      // Cancellation acknowledgement and stream closure are separate
+      // concerns. Make the local terminal state authoritative immediately;
+      // native cleanup continues independently and the subscription gets a
+      // bounded grace period for its final ToolResult/Interrupted events.
       _flushPendingAssistantAttachments(sessionId, messageId);
       final latest = _sessionRuns[sessionId];
-      if (latest == null || !latest.isTerminal) {
+      if (latest != null &&
+          latest.startedAt == run.startedAt &&
+          !latest.isTerminal) {
+        _forceCompleteInflightToolCalls(messageId);
         _finishSessionRun(
           sessionId,
           messageId,
@@ -6581,7 +6596,7 @@ class _ChatScreenState extends State<ChatScreen>
           activity: 'Stopped',
           clearPendingInterjections: clearPendingInterjections,
         );
-      } else if (clearPendingInterjections) {
+      } else if (clearPendingInterjections && latest != null) {
         _finishSessionRun(
           sessionId,
           null,
@@ -6590,29 +6605,63 @@ class _ChatScreenState extends State<ChatScreen>
           clearPendingInterjections: true,
         );
       }
+
+      unawaited(_cancelSubscriptionAfterGrace(subscription, sessionId));
+      final hasOtherActiveRuns = _sessionRuns.entries.any(
+        (entry) => entry.key != sessionId && !entry.value.isTerminal,
+      );
+      if (!hasOtherActiveRuns && client != null) {
+        unawaited(
+          client
+              .stopBackgroundService()
+              .timeout(const Duration(seconds: 2))
+              .catchError((Object error) {
+                _traceChat(
+                  'stop background cleanup failed session=$sessionId '
+                  'error="${_tracePreview(_friendlyError(error))}"',
+                );
+              }),
+        );
+      }
     } finally {
       if (mounted) setState(() => _stoppingSessionIds.remove(sessionId));
     }
   }
 
-  Future<bool> _awaitSubscriptionDone(
-    StreamSubscription<sdk.ChatEvent> subscription, {
-    required Duration timeout,
-  }) async {
-    final completer = Completer<bool>();
-    Timer? timer;
-    timer = Timer(timeout, () {
-      if (!completer.isCompleted) completer.complete(false);
-    });
-    Future<void> notifyDone() async {
-      if (!completer.isCompleted) completer.complete(true);
+  Future<void> _requestSessionCancellation(
+    NapaxiChatClient client,
+    ChatSessionRunState run,
+    String sessionId,
+  ) async {
+    try {
+      final cancelled = await client
+          .cancelSession(run.sessionKey, agentId: run.agentId)
+          .timeout(const Duration(seconds: 2));
+      _traceChat('stop signal session=$sessionId accepted=$cancelled');
+    } on TimeoutException {
+      _traceChat('stop signal timeout session=$sessionId');
+    } catch (error) {
+      _traceChat(
+        'stop signal failed session=$sessionId '
+        'error="${_tracePreview(_friendlyError(error))}"',
+      );
     }
+  }
 
-    subscription.onDone(notifyDone);
-    subscription.onError((Object _) => notifyDone());
-    final result = await completer.future;
-    timer.cancel();
-    return result;
+  Future<void> _cancelSubscriptionAfterGrace(
+    StreamSubscription<sdk.ChatEvent> subscription,
+    String sessionId,
+  ) async {
+    await Future<void>.delayed(const Duration(seconds: 3));
+    try {
+      await subscription.cancel().timeout(const Duration(seconds: 1));
+      _traceChat('stop stream disposed session=$sessionId');
+    } catch (error) {
+      _traceChat(
+        'stop stream dispose failed session=$sessionId '
+        'error="${_tracePreview(_friendlyError(error))}"',
+      );
+    }
   }
 
   void _forceCompleteInflightToolCalls(String messageId) {

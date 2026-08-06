@@ -67,7 +67,7 @@ impl TurnHistoryRecorder {
             }
             ChatEvent::ResponseDelta { content } => {
                 self.saw_response_delta = true;
-                self.current_segment().content.push_str(content);
+                self.segment_for_model_output().content.push_str(content);
             }
             ChatEvent::StreamReset { .. } => {
                 // The current LLM attempt aborted before completing. Discard the
@@ -82,7 +82,7 @@ impl TurnHistoryRecorder {
             }
             ChatEvent::Response { content } => {
                 if !self.saw_response_delta {
-                    self.current_segment().content = content.clone();
+                    self.segment_for_model_output().content = content.clone();
                 }
             }
             ChatEvent::ToolCall {
@@ -96,13 +96,15 @@ impl TurnHistoryRecorder {
                 arguments,
                 ..
             } => {
-                self.current_segment().tool_calls.push(TurnHistoryToolCall {
-                    call_id: call_id.clone(),
-                    name: name.clone(),
-                    arguments: arguments.clone(),
-                    result: None,
-                    error: None,
-                });
+                self.segment_for_model_output()
+                    .tool_calls
+                    .push(TurnHistoryToolCall {
+                        call_id: call_id.clone(),
+                        name: name.clone(),
+                        arguments: arguments.clone(),
+                        result: None,
+                        error: None,
+                    });
             }
             ChatEvent::ToolResult {
                 call_id,
@@ -153,14 +155,31 @@ impl TurnHistoryRecorder {
     }
 
     fn segment_for_trace(&mut self) -> &mut TurnHistorySegment {
-        if self
-            .segments
-            .last()
-            .is_none_or(|segment| !segment.content.trim().is_empty())
-        {
+        if self.segments.last().is_none_or(|segment| {
+            !segment.content.trim().is_empty() || !segment.tool_calls.is_empty()
+        }) {
             self.segments.push(TurnHistorySegment::default());
         }
         self.segments.last_mut().expect("segment exists")
+    }
+
+    /// Select the segment for output from a new provider sub-turn. Once every
+    /// tool call in the current segment has a result, the next response/tool
+    /// delta belongs to a fresh assistant message even when the provider emits
+    /// no reasoning tokens before it. Parallel calls stay together until all
+    /// of their results have arrived.
+    fn segment_for_model_output(&mut self) -> &mut TurnHistorySegment {
+        let completed_tool_segment = self.segments.last().is_some_and(|segment| {
+            !segment.tool_calls.is_empty()
+                && segment
+                    .tool_calls
+                    .iter()
+                    .all(|call| call.result.is_some() || call.error.is_some())
+        });
+        if completed_tool_segment {
+            self.segments.push(TurnHistorySegment::default());
+        }
+        self.current_segment()
     }
 
     fn finish_tool_call(&mut self, call_id: &str, output: String, is_error: bool) {

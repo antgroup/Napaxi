@@ -165,6 +165,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         const val ACTION_HOST_INSTALL_PROVIDER_AGENT = "agent.host.action.INSTALL_PROVIDER_AGENT"
         const val ACTION_HOST_TRIGGER_AGENT = "agent.host.action.TRIGGER_AGENT"
         const val ACTION_HOST_A2A_DEEP_LINK = "agent.host.action.A2A_DEEP_LINK"
+        const val META_TRUSTED_REFRESH_SUPPORTED = "agent.provider.TRUSTED_REFRESH_SUPPORTED"
         const val EXTRA_INSTALL_REQUEST_JSON = "agent.provider.extra.INSTALL_REQUEST_JSON"
         const val EXTRA_INSTALL_RESULT_JSON = "agent.provider.extra.INSTALL_RESULT_JSON"
         const val EXTRA_TRIGGER_REQUEST_JSON = "agent.provider.extra.TRIGGER_REQUEST_JSON"
@@ -2152,15 +2153,18 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         }
     }
 
-    private fun listAgentProviders(ctx: Context): List<Map<String, String>> {
+    private fun listAgentProviders(ctx: Context): List<Map<String, Any>> {
         val packageManager = ctx.packageManager
         val installIntent = Intent(ACTION_INSTALL_AGENT).addCategory(Intent.CATEGORY_DEFAULT)
-        return packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        return packageManager.queryIntentActivities(
+            installIntent,
+            PackageManager.MATCH_DEFAULT_ONLY or PackageManager.GET_META_DATA,
+        )
             .mapNotNull { info -> providerDescriptor(ctx, info) }
             .distinctBy { "${it["packageName"]}/${it["installActivityName"]}" }
     }
 
-    private fun providerDescriptor(ctx: Context, installInfo: ResolveInfo): Map<String, String>? {
+    private fun providerDescriptor(ctx: Context, installInfo: ResolveInfo): Map<String, Any>? {
         val activityInfo = installInfo.activityInfo ?: return null
         val packageName = activityInfo.packageName ?: return null
         val installActivityName = activityInfo.name ?: return null
@@ -2169,12 +2173,28 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             installInfo.loadLabel(ctx.packageManager)?.toString() ?: packageName
         }.getOrDefault(packageName)
         val digest = signingCertSha256(ctx, packageName) ?: ""
+        val packageInfo = runCatching { ctx.packageManager.getPackageInfo(packageName, 0) }.getOrNull()
+        val applicationInfo = runCatching {
+            ctx.packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+        }.getOrNull()
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo?.longVersionCode ?: 0L
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo?.versionCode?.toLong() ?: 0L
+        }
+        val trustedRefreshSupported =
+            activityInfo.metaData?.getBoolean(META_TRUSTED_REFRESH_SUPPORTED, false) == true ||
+                applicationInfo?.metaData?.getBoolean(META_TRUSTED_REFRESH_SUPPORTED, false) == true
         return mapOf(
             "packageName" to packageName,
             "installActivityName" to installActivityName,
             "activityName" to actionActivityName,
             "label" to label,
-            "signingCertSha256" to digest
+            "signingCertSha256" to digest,
+            "packageVersionCode" to versionCode,
+            "packageLastUpdateTimeMs" to (packageInfo?.lastUpdateTime ?: 0L),
+            "trustedRefreshSupported" to trustedRefreshSupported,
         )
     }
 
@@ -2220,12 +2240,34 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             result.error("SIGNATURE_UNAVAILABLE", "Unable to read provider signing certificate", null)
             return
         }
+        val packageInfo = runCatching { ctx.packageManager.getPackageInfo(packageName, 0) }.getOrNull()
+        val providerActivityInfo = runCatching {
+            ctx.packageManager.getActivityInfo(
+                ComponentName(packageName, installActivityName),
+                PackageManager.GET_META_DATA,
+            )
+        }.getOrNull()
+        val applicationInfo = runCatching {
+            ctx.packageManager.getApplicationInfo(packageName, PackageManager.GET_META_DATA)
+        }.getOrNull()
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo?.longVersionCode ?: 0L
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo?.versionCode?.toLong() ?: 0L
+        }
+        val trustedRefreshSupported =
+            providerActivityInfo?.metaData?.getBoolean(META_TRUSTED_REFRESH_SUPPORTED, false) == true ||
+                applicationInfo?.metaData?.getBoolean(META_TRUSTED_REFRESH_SUPPORTED, false) == true
         pendingProviderInstallResult = result
         pendingProviderInstall = mapOf(
             "packageName" to packageName,
             "installActivityName" to installActivityName,
             "activityName" to actionActivityName,
             "signingCertSha256" to digest,
+            "packageVersionCode" to versionCode.toString(),
+            "packageLastUpdateTimeMs" to (packageInfo?.lastUpdateTime ?: 0L).toString(),
+            "trustedRefreshSupported" to trustedRefreshSupported.toString(),
             "requestJson" to requestJson
         )
         val intent = Intent(ACTION_INSTALL_AGENT).apply {
@@ -2268,6 +2310,11 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             "app_package_name" to (provider["packageName"] ?: ""),
             "activity_name" to (provider["activityName"] ?: ""),
             "signing_cert_sha256" to (provider["signingCertSha256"] ?: ""),
+            "app_version_code" to (provider["packageVersionCode"]?.toLongOrNull() ?: 0L),
+            "app_last_update_time_ms" to
+                (provider["packageLastUpdateTimeMs"]?.toLongOrNull() ?: 0L),
+            "trusted_refresh_supported" to
+                provider["trustedRefreshSupported"].equals("true", ignoreCase = true),
             "installed_at" to isoNow(),
             "install_request_id" to installRequestId(installResultJson),
             "protocol_version" to (request?.optInt("protocol_version", 1) ?: 1),
@@ -2400,8 +2447,18 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             return
         }
         val currentDigest = signingCertSha256(ctx, packageName)
-        if (currentDigest == null || !currentDigest.equals(expectedDigest, ignoreCase = true)) {
-            result.success(mapOf("success" to false, "error" to "Provider app signature changed; reinstall this Agent"))
+        if (currentDigest == null) {
+            result.success(mapOf(
+                "success" to false,
+                "error" to "provider_not_installed: Provider app is not installed"
+            ))
+            return
+        }
+        if (!currentDigest.equals(expectedDigest, ignoreCase = true)) {
+            result.success(mapOf(
+                "success" to false,
+                "error" to "Provider app signature changed; explicit reconnect is required",
+            ))
             return
         }
         pendingAgentActionResult = result

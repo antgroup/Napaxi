@@ -1,6 +1,6 @@
 ---
 name: android-apk-build
-version: "1.4.0"
+version: "1.5.0"
 display_name: Android APK Build
 description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a bundled immutable build script that AI must only run with parameters; Android framework WebView/local HTML assets are allowed only when the user is asking for an installable Android app/APK wrapper; when using HTML, bundle all local resources into the APK assets and reference them with relative paths instead of fixed device/workspace paths; do not turn ordinary HTML/webpage/front-end requests into APKs by default, and do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
 activation:
@@ -56,6 +56,8 @@ Before writing code, mentally pin these constants and do not reinterpret them fr
 - The final APK path must be `build/<APP_NAME>.apk` and it must be the only final APK emitted by the workflow. The bundled build script must not emit intermediate `*.apk` files; temporary packaging files stay under `build/apk-work/` with non-APK names and the script removes that work directory before exit. Do not present or copy multiple installable APK variants.
 - Keep the signing certificate stable across app updates. Generate the debug keystore only if it does not already exist, store it at `<project>/debug.keystore`, and never delete it during `rm -rf build`. Reusing this keystore lets Android install a newer APK over the previous one with the same package name.
 - Do not place the keystore inside `build/`, because `build/` is cleaned on every run and would change the signature on every rebuild.
+- When modifying an existing app, edit that existing project in place. Preserve its manifest package name, Java package/directory, `provider_id`, `agent_id`, and `<project>/debug.keystore`; increment `android:versionCode`; then add, remove, or update actions in `agent-app.json` and their handlers. Never change package/provider/agent identity merely to make an update install or to expose a new capability. A new identity is only for a genuinely separate app requested by the user.
+- Provider-enabled apps must declare `<meta-data android:name="agent.provider.TRUSTED_REFRESH_SUPPORTED" android:value="true" />` under `<application>`. This lets a Napaxi Host with the same trusted package and signing identity refresh the provider manifest after an in-place update. It does not bypass signature or provider/agent identity checks.
 - Use the bundled script resource `scripts/build_apk.sh`. Do not write, copy, patch, or regenerate a project-local `build.sh`; AI is only allowed to pass parameters to the bundled script.
 - Every newly generated app must expose at least one useful Agent App action by default. Put the package declaration at `app/src/main/assets/agent-app.json`, use the bundled Java Lite SDK from `sdk/java/`, route handlers through `AgentProviderActionRegistry`, and keep UI and Agent actions on the same app-owned domain service. Do not copy or rewrite the SDK sources into the project. Only omit Provider support when the user explicitly requests it; in that case omit the declaration/Provider activities and pass `--without-agent-provider`. Existing legacy projects without a declaration remain buildable.
 
@@ -128,6 +130,9 @@ Use reverse-domain lowercase package names such as `com.napaxi.generated.todo`. 
         android:roundIcon="@drawable/ic_launcher"
         android:allowBackup="false"
         android:supportsRtl="true">
+        <meta-data
+            android:name="agent.provider.TRUSTED_REFRESH_SUPPORTED"
+            android:value="true" />
         <activity
             android:name="agent.provider.lite.AgentProviderInstallActivity"
             android:exported="true">

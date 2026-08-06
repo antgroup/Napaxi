@@ -815,11 +815,15 @@ class ChatSessionRunState {
   bool get needsAttention =>
       unread || needsInput || status == sdk.SessionRunStatus.failed;
 
-  /// Applies metadata from a later update without allowing a finished run to
-  /// become active again. Async UI callbacks may complete after the event
-  /// stream has already closed; the first terminal status is authoritative.
+  /// Applies metadata from a later update without allowing a finished or
+  /// cancelling run to become active again. Async stream events may already be
+  /// queued when the user presses Stop, so cancellation must be monotonic too.
   ChatSessionRunState preserveTerminalFrom(ChatSessionRunState previous) {
-    if (!previous.isTerminal) return this;
+    final preservePreviousStatus =
+        previous.isTerminal ||
+        (previous.status == sdk.SessionRunStatus.cancelling &&
+            status != sdk.SessionRunStatus.cancelled);
+    if (!preservePreviousStatus) return this;
     return ChatSessionRunState(
       sessionKey: sessionKey,
       agentId: agentId,

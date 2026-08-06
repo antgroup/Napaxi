@@ -72,6 +72,12 @@ secret, keeps platform package/bundle and signing checks enabled, and never
 registers a changed Provider identity implicitly. Flutter's platform action
 executor may perform this restore automatically only for the standard
 pre-execution `host_not_bound` failure and retries the unchanged request once.
+The install APIs also expose trusted binding refresh. Refresh has the same
+identity checks as restore but registers the latest Provider manifest in Core;
+Core preserves host-owned auto-invoke and usage metadata. Android discovery
+reports package version, last-update time, and explicit trusted-refresh
+support. These values detect an in-place update but never replace package,
+signing, Provider, or Agent identity validation.
 
 ## Codex Model Configuration
 

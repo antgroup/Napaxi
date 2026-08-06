@@ -129,7 +129,10 @@ final class AgentProviderHostTests: XCTestCase {
             packageName: "com.example.wallet",
             installActivityName: "InstallActivity",
             activityName: "InstallActivity",
-            label: ""
+            label: "",
+            packageVersionCode: 7,
+            packageLastUpdateTimeMs: 123456,
+            trustedRefreshSupported: true
         )
         let descriptor = try JSONDecoder().decode(
             NapaxiAgentProviderDescriptor.self,
@@ -143,6 +146,11 @@ final class AgentProviderHostTests: XCTestCase {
         XCTAssertEqual(descriptor.activityName, "InstallActivity")
         XCTAssertEqual(descriptor.label, "")
         XCTAssertEqual(descriptor.signingCertSha256, "")
+        XCTAssertEqual(constructed.packageVersionCode, 7)
+        XCTAssertEqual(constructed.packageLastUpdateTimeMs, 123456)
+        XCTAssertTrue(constructed.trustedRefreshSupported)
+        XCTAssertEqual(descriptor.packageVersionCode, 0)
+        XCTAssertFalse(descriptor.trustedRefreshSupported)
         XCTAssertEqual(descriptor.installUrl, "")
         XCTAssertEqual(descriptor.iosBundleId, "")
     }

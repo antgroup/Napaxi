@@ -49,6 +49,15 @@ pub struct AgentAppInstallBinding {
     pub app_package_name: String,
     pub activity_name: String,
     pub signing_cert_sha256: String,
+    /// Android package version observed during the trusted handshake.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub app_version_code: u64,
+    /// Android package update timestamp observed during the trusted handshake.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub app_last_update_time_ms: u64,
+    /// Whether this provider explicitly allows a same-identity silent refresh.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub trusted_refresh_supported: bool,
     pub installed_at: String,
     pub install_request_id: String,
     pub protocol_version: u32,

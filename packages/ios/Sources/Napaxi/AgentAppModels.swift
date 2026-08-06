@@ -101,6 +101,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppInstallBindingTag 
         appPackageName: String,
         activityName: String,
         signingCertSha256: String,
+        appVersionCode: Int = 0,
+        appLastUpdateTimeMs: Int = 0,
+        trustedRefreshSupported: Bool = false,
         installedAt: String,
         installRequestId: String,
         protocolVersion: Int,
@@ -129,6 +132,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppInstallBindingTag 
             "protocol_version": .number(Double(protocolVersion)),
         ]
         raw.setNonEmpty("host_package_name", hostPackageName)
+        if appVersionCode > 0 { raw["app_version_code"] = .number(Double(appVersionCode)) }
+        if appLastUpdateTimeMs > 0 { raw["app_last_update_time_ms"] = .number(Double(appLastUpdateTimeMs)) }
+        if trustedRefreshSupported { raw["trusted_refresh_supported"] = .bool(true) }
         raw.setNonEmpty("host_signing_cert_sha256", hostSigningCertSha256)
         raw.setNonEmpty("host_instance_id", hostInstanceId)
         raw.setNonEmpty("host_shared_secret", hostSharedSecret)
@@ -155,6 +161,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppInstallBindingTag 
             appPackageName: map.string("app_package_name") ?? "",
             activityName: map.string("activity_name") ?? "",
             signingCertSha256: map.string("signing_cert_sha256") ?? "",
+            appVersionCode: map.int("app_version_code") ?? 0,
+            appLastUpdateTimeMs: map.int("app_last_update_time_ms") ?? 0,
+            trustedRefreshSupported: map.bool("trusted_refresh_supported") ?? false,
             installedAt: map.string("installed_at") ?? "",
             installRequestId: map.string("install_request_id") ?? "",
             protocolVersion: map.int("protocol_version") ?? 1,
@@ -186,6 +195,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppInstallBindingTag 
             "protocol_version": .number(Double(protocolVersion)),
         ]
         object.setNonEmpty("host_package_name", hostPackageName)
+        if appVersionCode > 0 { object["app_version_code"] = .number(Double(appVersionCode)) }
+        if appLastUpdateTimeMs > 0 { object["app_last_update_time_ms"] = .number(Double(appLastUpdateTimeMs)) }
+        if trustedRefreshSupported { object["trusted_refresh_supported"] = .bool(true) }
         object.setNonEmpty("host_signing_cert_sha256", hostSigningCertSha256)
         object.setNonEmpty("host_instance_id", hostInstanceId)
         object.setNonEmpty("host_shared_secret", hostSharedSecret)
@@ -206,6 +218,9 @@ public extension NapaxiStableModel where Tag == NapaxiAgentAppInstallBindingTag 
     var appPackageName: String { string("app_package_name") ?? string("appPackageName") ?? "" }
     var activityName: String { string("activity_name") ?? string("activityName") ?? "" }
     var signingCertSha256: String { string("signing_cert_sha256") ?? string("signingCertSha256") ?? "" }
+    var appVersionCode: Int { raw.int("app_version_code") ?? raw.int("appVersionCode") ?? 0 }
+    var appLastUpdateTimeMs: Int { raw.int("app_last_update_time_ms") ?? raw.int("appLastUpdateTimeMs") ?? 0 }
+    var trustedRefreshSupported: Bool { bool("trusted_refresh_supported") ?? bool("trustedRefreshSupported") ?? false }
     var installedAt: String { string("installed_at") ?? string("installedAt") ?? "" }
     var installRequestId: String { string("install_request_id") ?? string("installRequestId") ?? "" }
     var protocolVersion: Int { raw.int("protocol_version") ?? raw.int("protocolVersion") ?? 1 }

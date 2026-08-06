@@ -183,6 +183,17 @@ the provider package/bundle identity and signing identity still match the
 stored install binding. It must not loop after a second failure or silently
 trust a changed provider identity.
 
+Generated Android Providers opt into trusted in-place manifest refresh with
+the application metadata key `agent.provider.TRUSTED_REFRESH_SUPPORTED=true`.
+After a package replacement, the Host may repeat the install handshake and
+register the returned manifest only when the OS package name and signing
+certificate still match the stored binding and the returned `provider_id` and
+`agent_id` are unchanged. The Host preserves its existing instance id/shared
+secret and Core-owned auto-invoke/usage state. Package version code and last
+update time are change detectors, not trust anchors. A missing package or a
+changed signing/Provider/Agent identity remains unavailable until an explicit
+reconnect.
+
 Host to provider app:
 
 - Intent action: `agent.provider.action.HANDLE_PROPOSAL`

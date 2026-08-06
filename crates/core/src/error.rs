@@ -195,7 +195,11 @@ impl LlmError {
         if msg == "Chat cancelled" {
             return LlmError::Cancelled;
         }
-        if msg.contains("stream ended") || msg.contains("stream failed before") {
+        if msg.contains("stream ended")
+            || msg.contains("stream failed before")
+            || msg.contains("was truncated")
+            || msg.contains("completion cannot be verified")
+        {
             return LlmError::StreamTruncated(msg);
         }
         if msg.contains("did not contain") {

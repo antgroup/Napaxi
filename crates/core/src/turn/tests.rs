@@ -1475,6 +1475,78 @@ fn finish_cancelled_turn_persists_completed_tool_calls() {
 }
 
 #[test]
+fn tool_subturns_persist_separate_reasoning_for_provider_replay() {
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_string_lossy().to_string();
+    let session_key_json =
+        crate::session::create_session(&files_dir, "napaxi", "app", "user", None);
+    let key: crate::session::SessionKey = serde_json::from_str(&session_key_json).unwrap();
+    let mut recorder = TurnHistoryRecorder::default();
+
+    recorder.record(&ChatEvent::ReasoningDelta {
+        content: "reasoning one".to_string(),
+    });
+    recorder.record(&ChatEvent::ToolCall {
+        call_id: "call-1".to_string(),
+        name: "first_tool".to_string(),
+        arguments: "{}".to_string(),
+    });
+    recorder.record(&ChatEvent::ToolResult {
+        call_id: "call-1".to_string(),
+        name: "first_tool".to_string(),
+        output: "one".to_string(),
+        is_error: false,
+    });
+    recorder.record(&ChatEvent::ReasoningDelta {
+        content: "reasoning two".to_string(),
+    });
+    recorder.record(&ChatEvent::ToolCall {
+        call_id: "call-2".to_string(),
+        name: "second_tool".to_string(),
+        arguments: "{}".to_string(),
+    });
+    recorder.record(&ChatEvent::ToolResult {
+        call_id: "call-2".to_string(),
+        name: "second_tool".to_string(),
+        output: "two".to_string(),
+        is_error: false,
+    });
+    recorder.record(&ChatEvent::ResponseDelta {
+        content: "done".to_string(),
+    });
+    recorder.checkpoint(&files_dir, &session_key_json, false);
+
+    let history: serde_json::Value =
+        serde_json::from_str(&crate::session::get_history(&files_dir, &key.thread_id)).unwrap();
+    let roles: Vec<_> = history
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|message| message.get("role").and_then(serde_json::Value::as_str))
+        .collect();
+    assert_eq!(
+        roles,
+        vec![
+            "reasoning",
+            "tool_calls",
+            "reasoning",
+            "tool_calls",
+            "assistant"
+        ]
+    );
+
+    let context_history = crate::session::llm_context_history_all(&files_dir, &key.thread_id);
+    let raw = crate::llm::openai_messages_from_mobile_history(&context_history);
+    let tool_assistants: Vec<_> = raw
+        .iter()
+        .filter(|message| message.get("tool_calls").is_some())
+        .collect();
+    assert_eq!(tool_assistants.len(), 2);
+    assert_eq!(tool_assistants[0]["reasoning_content"], "reasoning one");
+    assert_eq!(tool_assistants[1]["reasoning_content"], "reasoning two");
+}
+
+#[test]
 fn finish_cancelled_turn_writes_nothing_when_recorder_is_empty() {
     let dir = tempfile::tempdir().unwrap();
     let files_dir = dir.path().to_string_lossy().to_string();

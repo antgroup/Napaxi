@@ -376,6 +376,9 @@ namespaces:
       restore_binding:
         params: [installed_package]
         return: AgentAppPackage
+      refresh_binding:
+        params: [installed_package]
+        return: AgentAppPackage
       consume_pending_trigger:
         params: [intent]
         return: AgentProviderTrigger?

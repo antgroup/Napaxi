@@ -1276,6 +1276,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   static const _legacyMockAgentAppProviderId = 'demo_provider';
 
   sdk.NapaxiEngine? _engine;
+  Future<List<sdk.AgentAppPackage>>? _connectedAppReconcileFuture;
   sdk.NapaxiCapabilitySelection _activeCapabilitySelection =
       _withDemoBaselineCapabilities(const sdk.NapaxiCapabilitySelection());
   Future<sdk.NapaxiCapabilityProfile>? _demoCapabilityProfileFuture;
@@ -1706,7 +1707,87 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   @override
   Future<List<sdk.AgentAppPackage>> listConnectedApps() async {
     final engine = await _ensureManagementEngine();
-    return engine.agentApp.listPackages();
+    final active = _connectedAppReconcileFuture;
+    if (active != null) return active;
+    final reconcile = _reconcileConnectedApps(engine);
+    _connectedAppReconcileFuture = reconcile;
+    try {
+      return await reconcile;
+    } finally {
+      if (identical(_connectedAppReconcileFuture, reconcile)) {
+        _connectedAppReconcileFuture = null;
+      }
+    }
+  }
+
+  Future<List<sdk.AgentAppPackage>> _reconcileConnectedApps(
+    sdk.NapaxiEngine engine,
+  ) async {
+    final installed = engine.agentApp.listPackages();
+    if (!Platform.isAndroid) return installed;
+
+    final discovered = await _agentProviderInstallApi().discoverProviders();
+    final providersByPackage = <String, sdk.AgentProviderDescriptor>{
+      for (final provider in discovered)
+        if (provider.packageName.isNotEmpty) provider.packageName: provider,
+    };
+    final visible = <sdk.AgentAppPackage>[];
+    for (final package in installed) {
+      final binding = package.installBinding;
+      if (binding == null || binding.platform != 'android') {
+        visible.add(package);
+        continue;
+      }
+      final provider = providersByPackage[binding.appPackageName];
+      if (provider == null) {
+        _disableUnavailableConnectedApp(engine, package, 'not installed');
+        continue;
+      }
+      if (provider.signingCertSha256.isEmpty ||
+          provider.signingCertSha256.toLowerCase() !=
+              binding.signingCertSha256.toLowerCase()) {
+        _disableUnavailableConnectedApp(engine, package, 'signature changed');
+        continue;
+      }
+      if (_needsTrustedProviderRefresh(binding, provider)) {
+        try {
+          visible.add(await _agentProviderInstallApi().refreshBinding(package));
+          continue;
+        } catch (error) {
+          debugPrint(
+            '[agentProvider] trusted refresh failed '
+            '${binding.appPackageName}: $error',
+          );
+        }
+      }
+      visible.add(package);
+    }
+    return visible;
+  }
+
+  bool _needsTrustedProviderRefresh(
+    sdk.AgentAppInstallBinding binding,
+    sdk.AgentProviderDescriptor provider,
+  ) {
+    if (!provider.trustedRefreshSupported) {
+      return false;
+    }
+    return binding.appVersionCode != provider.packageVersionCode ||
+        binding.appLastUpdateTimeMs != provider.packageLastUpdateTimeMs;
+  }
+
+  void _disableUnavailableConnectedApp(
+    sdk.NapaxiEngine engine,
+    sdk.AgentAppPackage package,
+    String reason,
+  ) {
+    if (package.autoInvokeEnabled) {
+      engine.agentApp.setAutoInvoke(package.providerId, false);
+    }
+    debugPrint(
+      '[agentProvider] hiding unavailable provider '
+      '${package.providerId}: $reason',
+    );
   }
 
   @override
@@ -1733,8 +1814,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
     if (installed == null) {
       throw StateError('Connected Agent App not found: $providerId');
     }
-    await _agentProviderInstallApi().restoreBinding(installed);
-    return installed;
+    return _agentProviderInstallApi().refreshBinding(installed);
   }
 
   @override
@@ -3893,7 +3973,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
         engine.agentApp.getPackage(request.proposal.providerId) ??
         engine.agentApp.getPackage(request.proposal.agentId);
     if (installed == null) return false;
-    await _agentProviderInstallApi().restoreBinding(installed);
+    await _agentProviderInstallApi().refreshBinding(installed);
     return true;
   }
 

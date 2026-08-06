@@ -2332,6 +2332,9 @@ class ModelsTest {
                 "app_package_name" to "provider.app",
                 "activity_name" to "ProviderActivity",
                 "signing_cert_sha256" to "abc",
+                "app_version_code" to 7,
+                "app_last_update_time_ms" to 123456L,
+                "trusted_refresh_supported" to true,
                 "installed_at" to "2030-01-01T00:00:00Z",
                 "install_request_id" to "install-2",
                 "host_package_name" to "host.app",
@@ -2342,6 +2345,9 @@ class ModelsTest {
         assertEquals("ProviderActivity", bindingFromJson.activityName)
         assertEquals("host.app", bindingFromJson.hostPackageName)
         assertEquals("install-2", bindingFromMap.installRequestId)
+        assertEquals(7L, bindingFromMap.appVersionCode)
+        assertEquals(123456L, bindingFromMap.appLastUpdateTimeMs)
+        assertEquals(true, bindingFromMap.trustedRefreshSupported)
         assertEquals(1, bindingFromMap.protocolVersion)
         assertEquals(true, bindingFromMap.backgroundTriggerSupported)
         assertEquals("TriggerService", bindingFromMap.hostBackgroundTriggerService)
@@ -2359,6 +2365,8 @@ class ModelsTest {
         assertEquals(false, minimalBindingJson.has("host_shared_secret"))
         assertEquals(false, minimalBindingJson.has("background_trigger_supported"))
         assertEquals(false, minimalBindingJson.has("host_background_trigger_service"))
+        assertEquals(false, minimalBindingJson.has("app_version_code"))
+        assertEquals(false, minimalBindingJson.has("trusted_refresh_supported"))
         assertEquals("request-2", AgentAppActionProposal.fromJsonObject(constructedProposal.toJsonObject()).requestId)
         assertEquals(
             "provider.app",

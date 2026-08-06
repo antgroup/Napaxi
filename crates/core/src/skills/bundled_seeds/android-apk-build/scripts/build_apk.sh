@@ -164,6 +164,10 @@ if [ "$PROVIDER_ENABLED" = true ]; then
     echo "AndroidManifest.xml must expose Agent Provider install and action entry points" >&2
     exit 1
   fi
+  if ! grep -q 'agent.provider.TRUSTED_REFRESH_SUPPORTED' "$SRC_DIR/AndroidManifest.xml"; then
+    echo "AndroidManifest.xml must opt in to trusted same-identity Provider refresh" >&2
+    exit 1
+  fi
   if ! grep -R -q 'AgentProviderActionRegistry' "$SRC_DIR/java"; then
     echo "Provider apps must route actions through AgentProviderActionRegistry" >&2
     exit 1

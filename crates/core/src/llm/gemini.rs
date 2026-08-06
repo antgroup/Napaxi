@@ -22,6 +22,25 @@ use super::sse::{
 use super::tool_schema::gemini_tool_schema;
 use super::{LlmStreamEvent, LlmToolCall, LlmTurn};
 
+fn validate_finish_reason(value: &Value) -> Result<()> {
+    match value
+        .pointer("/candidates/0/finishReason")
+        .and_then(Value::as_str)
+    {
+        Some("MAX_TOKENS") => anyhow::bail!(
+            "Gemini response was truncated because the model reached the output token limit"
+        ),
+        Some("SAFETY" | "RECITATION" | "MALFORMED_FUNCTION_CALL" | "UNEXPECTED_TOOL_CALL") => {
+            let reason = value
+                .pointer("/candidates/0/finishReason")
+                .and_then(Value::as_str)
+                .unwrap_or("UNKNOWN");
+            anyhow::bail!("Gemini response stopped with finish reason: {reason}")
+        }
+        _ => Ok(()),
+    }
+}
+
 pub(super) async fn complete(
     config: &PlatformLlmConfig,
     history: &[SessionMessage],
@@ -49,6 +68,7 @@ pub(super) async fn complete(
     if !status.is_success() {
         anyhow::bail!("{}", provider_error_message(&value, status.as_u16()));
     }
+    validate_finish_reason(&value)?;
     value
         .pointer("/candidates/0/content/parts/0/text")
         .and_then(Value::as_str)
@@ -208,6 +228,7 @@ where
 }
 
 pub(super) fn parse_turn(value: &Value) -> Result<LlmTurn> {
+    validate_finish_reason(value)?;
     let parts = value
         .pointer("/candidates/0/content/parts")
         .and_then(Value::as_array)

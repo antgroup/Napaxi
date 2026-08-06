@@ -36,6 +36,9 @@ class AgentProviderDescriptor {
   final String activityName;
   final String label;
   final String signingCertSha256;
+  final int packageVersionCode;
+  final int packageLastUpdateTimeMs;
+  final bool trustedRefreshSupported;
   final String installUrl;
   final String actionUrl;
   final String universalLinkDomain;
@@ -49,6 +52,9 @@ class AgentProviderDescriptor {
     required this.activityName,
     this.label = '',
     this.signingCertSha256 = '',
+    this.packageVersionCode = 0,
+    this.packageLastUpdateTimeMs = 0,
+    this.trustedRefreshSupported = false,
     this.installUrl = '',
     this.actionUrl = '',
     this.universalLinkDomain = '',
@@ -70,6 +76,9 @@ class AgentProviderDescriptor {
           '',
       label: map['label'] as String? ?? '',
       signingCertSha256: map['signingCertSha256'] as String? ?? '',
+      packageVersionCode: _providerInt(map['packageVersionCode']),
+      packageLastUpdateTimeMs: _providerInt(map['packageLastUpdateTimeMs']),
+      trustedRefreshSupported: _providerBool(map['trustedRefreshSupported']),
       installUrl: map['installUrl'] as String? ?? '',
       actionUrl: map['actionUrl'] as String? ?? '',
       universalLinkDomain: map['universalLinkDomain'] as String? ?? '',
@@ -85,6 +94,11 @@ class AgentProviderDescriptor {
     'activityName': activityName,
     'label': label,
     'signingCertSha256': signingCertSha256,
+    if (packageVersionCode > 0) 'packageVersionCode': packageVersionCode,
+    if (packageLastUpdateTimeMs > 0)
+      'packageLastUpdateTimeMs': packageLastUpdateTimeMs,
+    if (trustedRefreshSupported)
+      'trustedRefreshSupported': trustedRefreshSupported,
     if (installUrl.isNotEmpty) 'installUrl': installUrl,
     if (actionUrl.isNotEmpty) 'actionUrl': actionUrl,
     if (universalLinkDomain.isNotEmpty)
@@ -92,6 +106,16 @@ class AgentProviderDescriptor {
     if (iosBundleId.isNotEmpty) 'iosBundleId': iosBundleId,
     if (iosTeamId.isNotEmpty) 'iosTeamId': iosTeamId,
   };
+}
+
+int _providerInt(Object? value) {
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+bool _providerBool(Object? value) {
+  if (value is bool) return value;
+  return value?.toString().toLowerCase() == 'true';
 }
 
 /// A host-signed request asking a provider app to install/register itself,

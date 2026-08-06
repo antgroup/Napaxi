@@ -99,10 +99,11 @@ impl OpenAiStreamTurnAccumulator {
             .collect();
         if let Some(reason) = self.finish_reason.as_deref() {
             match reason {
-                // A length stop is only fatal when the model produced nothing
-                // usable. If it emitted tool calls or partial content, that work
-                // is durable and must be preserved rather than discarded.
-                "length" if tool_calls.is_empty() && self.content.trim().is_empty() => {
+                // Partial text and tool-call JSON are not a completed turn. The
+                // streaming caller has already emitted any received deltas, so
+                // surface truncation as a terminal error instead of silently
+                // executing an incomplete call or marking half an answer done.
+                "length" => {
                     anyhow::bail!(
                         "OpenAI-compatible stream was truncated because the model reached the output token limit"
                     );
@@ -185,10 +186,7 @@ impl AnthropicStreamTurnAccumulator {
             .collect();
         if let Some(reason) = self.stop_reason.as_deref() {
             match reason {
-                // A max_tokens stop is only fatal when nothing usable was
-                // produced. Preserve tool calls or partial content so durable
-                // work is not discarded on a length stop.
-                "max_tokens" if tool_calls.is_empty() && self.content.trim().is_empty() => {
+                "max_tokens" => {
                     anyhow::bail!(
                         "Anthropic stream was truncated because the model reached the output token limit"
                     );
@@ -229,10 +227,7 @@ impl GeminiStreamTurnAccumulator {
     pub(super) fn finish(self) -> Result<LlmTurn> {
         if let Some(reason) = self.finish_reason.as_deref() {
             match reason {
-                // A MAX_TOKENS stop is only fatal when nothing usable was
-                // produced. Preserve tool calls or partial content so durable
-                // work is not discarded on a length stop.
-                "MAX_TOKENS" if self.tool_calls.is_empty() && self.content.trim().is_empty() => {
+                "MAX_TOKENS" => {
                     anyhow::bail!(
                         "Gemini stream was truncated because the model reached the output token limit"
                     );
@@ -284,6 +279,11 @@ where
     };
     let data = data.trim();
     if data == "[DONE]" {
+        if accumulator.finish_reason.is_none() {
+            anyhow::bail!(
+                "OpenAI-compatible stream ended with [DONE] without a finish reason; completion cannot be verified"
+            );
+        }
         return Ok(true);
     }
     let value: Value = serde_json::from_str(data)?;
@@ -374,6 +374,11 @@ where
     };
     let data = data.trim();
     if data == "[DONE]" {
+        if accumulator.stop_reason.is_none() {
+            anyhow::bail!(
+                "Anthropic stream ended with [DONE] without a stop reason; completion cannot be verified"
+            );
+        }
         return Ok(true);
     }
     let value: Value = serde_json::from_str(data)?;
@@ -469,7 +474,14 @@ where
                 accumulator.stop_reason = Some(reason.to_string());
             }
         }
-        Some("message_stop") => return Ok(true),
+        Some("message_stop") => {
+            if accumulator.stop_reason.is_none() {
+                anyhow::bail!(
+                    "Anthropic stream ended with message_stop without a stop reason; completion cannot be verified"
+                );
+            }
+            return Ok(true);
+        }
         Some("error") => {
             anyhow::bail!("{}", provider_error_message(&value, 200));
         }
@@ -491,6 +503,11 @@ where
     }
     let data = line.strip_prefix("data:").map(str::trim).unwrap_or(line);
     if data == "[DONE]" {
+        if accumulator.finish_reason.is_none() {
+            anyhow::bail!(
+                "Gemini stream ended with [DONE] without a finish reason; completion cannot be verified"
+            );
+        }
         return Ok(true);
     }
     if data.is_empty() {
