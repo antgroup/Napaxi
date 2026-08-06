@@ -745,6 +745,15 @@ abstract class NapaxiChatClient {
     bool enabled,
   );
 
+  Future<sdk.AgentAppDiagnosticsSnapshot> listConnectedAppDiagnostics(
+    String providerId,
+  );
+
+  Future<sdk.AgentAppDiagnosticsSnapshot> setConnectedAppDetailedDiagnostics(
+    String providerId,
+    bool enabled,
+  );
+
   Future<DemoAgent> installAgentProvider(sdk.AgentProviderDescriptor provider);
 
   Future<DemoAgent?> installPendingAgentProvider();
@@ -1824,6 +1833,34 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
   ) async {
     final engine = await _ensureManagementEngine();
     return engine.agentApp.setAutoInvoke(providerId, enabled);
+  }
+
+  @override
+  Future<sdk.AgentAppDiagnosticsSnapshot> listConnectedAppDiagnostics(
+    String providerId,
+  ) async {
+    final engine = await _ensureManagementEngine();
+    final installed = engine.agentApp.getPackage(providerId);
+    if (installed == null) {
+      throw StateError('Connected Agent App not found: $providerId');
+    }
+    return _agentProviderInstallApi().listDiagnostics(installed);
+  }
+
+  @override
+  Future<sdk.AgentAppDiagnosticsSnapshot> setConnectedAppDetailedDiagnostics(
+    String providerId,
+    bool enabled,
+  ) async {
+    final engine = await _ensureManagementEngine();
+    final installed = engine.agentApp.getPackage(providerId);
+    if (installed == null) {
+      throw StateError('Connected Agent App not found: $providerId');
+    }
+    return _agentProviderInstallApi().setDetailedDiagnostics(
+      installed,
+      enabled,
+    );
   }
 
   @override

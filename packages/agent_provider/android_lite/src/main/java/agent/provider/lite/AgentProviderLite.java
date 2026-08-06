@@ -40,6 +40,8 @@ import javax.crypto.spec.SecretKeySpec;
 public final class AgentProviderLite {
     public static final String ACTION_INSTALL_AGENT = "agent.provider.action.INSTALL_AGENT";
     public static final String ACTION_HANDLE_PROPOSAL = "agent.provider.action.HANDLE_PROPOSAL";
+    public static final String ACTION_GET_DIAGNOSTICS =
+            "agent.provider.action.GET_DIAGNOSTICS";
     public static final String EXTRA_INSTALL_REQUEST_JSON =
             "agent.provider.extra.INSTALL_REQUEST_JSON";
     public static final String EXTRA_INSTALL_RESULT_JSON =
@@ -47,6 +49,10 @@ public final class AgentProviderLite {
     public static final String EXTRA_PACKAGE_JSON = "agent.provider.extra.PACKAGE_JSON";
     public static final String EXTRA_PROPOSAL_JSON = "agent.provider.extra.PROPOSAL_JSON";
     public static final String EXTRA_RESULT_JSON = "agent.provider.extra.RESULT_JSON";
+    public static final String EXTRA_DIAGNOSTICS_REQUEST_JSON =
+            "agent.provider.extra.DIAGNOSTICS_REQUEST_JSON";
+    public static final String EXTRA_DIAGNOSTICS_RESULT_JSON =
+            "agent.provider.extra.DIAGNOSTICS_RESULT_JSON";
     public static final String SIGNATURE_ALGORITHM = "hmac-sha256-v1";
     public static final String PACKAGE_ASSET = "agent-app.json";
 
@@ -173,6 +179,87 @@ public final class AgentProviderLite {
                     ? ((ProtocolException) error).code
                     : "invalid_proposal";
             return Validation.failure(code, safeMessage(error, "Invalid action proposal."));
+        }
+    }
+
+    /** Validates a Host-signed, model-hidden diagnostics request. */
+    public static DiagnosticsValidation validateTrustedDiagnosticsRequest(Activity activity) {
+        JSONObject request = null;
+        try {
+            Intent source = activity.getIntent();
+            if (source == null || !ACTION_GET_DIAGNOSTICS.equals(source.getAction())) {
+                throw new ProtocolException(
+                        "invalid_diagnostics_intent", "Invalid diagnostics intent.");
+            }
+            String raw = source.getStringExtra(EXTRA_DIAGNOSTICS_REQUEST_JSON);
+            if (raw == null || raw.trim().isEmpty()) {
+                throw new ProtocolException(
+                        "missing_diagnostics_request", "Diagnostics request is missing.");
+            }
+            request = new JSONObject(raw);
+            if (request.optInt("protocol_version", 0) != 1) {
+                throw new ProtocolException(
+                        "unsupported_diagnostics_protocol", "Diagnostics protocol v1 is required.");
+            }
+            requiredString(request, "request_id");
+            String providerId = requiredString(request, "provider_id");
+            JSONObject packageJson = readPackage(activity);
+            if (!providerId.equals(requiredString(packageJson, "provider_id"))) {
+                throw new ProtocolException(
+                        "provider_mismatch", "Diagnostics provider does not match this app.");
+            }
+            String operation = requiredString(request, "operation");
+            if (!"list".equals(operation)
+                    && !"ack".equals(operation)
+                    && !"configure".equals(operation)) {
+                throw new ProtocolException(
+                        "unsupported_diagnostics_operation", "Diagnostics operation is unsupported.");
+            }
+            requiredString(request, "nonce");
+            ensureNotExpired(requiredString(request, "expires_at"), "diagnostics_expired");
+            String hostInstanceId = requiredString(request, "host_instance_id");
+            SharedPreferences prefs = preferences(activity, providerId);
+            String bindingRaw = prefs.getString("binding_" + hostInstanceId, null);
+            if (bindingRaw == null) {
+                throw new ProtocolException("host_not_bound", "No trusted Host binding exists.");
+            }
+            JSONObject binding = new JSONObject(bindingRaw);
+            String callerPackage = activity.getCallingPackage();
+            if (callerPackage == null || callerPackage.trim().isEmpty()) {
+                throw new ProtocolException(
+                        "missing_calling_package", "Unable to verify the calling package.");
+            }
+            if (!callerPackage.equals(binding.optString("host_package_name"))) {
+                throw new ProtocolException("caller_mismatch", "Calling package is not trusted.");
+            }
+            String actualDigest = signingCertSha256(activity, callerPackage);
+            if (!actualDigest.equalsIgnoreCase(
+                    binding.optString("host_signing_cert_sha256"))) {
+                throw new ProtocolException(
+                        "caller_signature_mismatch", "Calling package signature is not trusted.");
+            }
+            if (!SIGNATURE_ALGORITHM.equals(request.optString("signature_algorithm"))) {
+                throw new ProtocolException(
+                        "missing_trust_fields", "Diagnostics signature algorithm is invalid.");
+            }
+            String signature = requiredString(request, "signature");
+            String secret = requiredString(binding, "host_shared_secret");
+            String expected = hmacSha256Base64NoPad(
+                    secret, diagnosticsSignaturePayload(request));
+            if (!MessageDigest.isEqual(
+                    signature.getBytes(StandardCharsets.UTF_8),
+                    expected.getBytes(StandardCharsets.UTF_8))) {
+                throw new ProtocolException(
+                        "signature_invalid", "Diagnostics signature is invalid.");
+            }
+            return DiagnosticsValidation.success(request);
+        } catch (Exception error) {
+            String code = error instanceof ProtocolException
+                    ? ((ProtocolException) error).code
+                    : "invalid_diagnostics_request";
+            String requestId = request == null ? "" : request.optString("request_id");
+            return DiagnosticsValidation.failure(
+                    requestId, code, safeMessage(error, "Invalid diagnostics request."));
         }
     }
 
@@ -368,6 +455,22 @@ public final class AgentProviderLite {
                 + "host_instance_id=" + proposal.getString("host_instance_id");
     }
 
+    private static String diagnosticsSignaturePayload(JSONObject request) throws Exception {
+        JSONArray reportIds = request.optJSONArray("report_ids");
+        if (reportIds == null) reportIds = new JSONArray();
+        String reportIdsHash = sha256Base64NoPad(
+                canonicalJson(reportIds).getBytes(StandardCharsets.UTF_8));
+        return "request_id=" + request.getString("request_id") + "\n"
+                + "provider_id=" + request.getString("provider_id") + "\n"
+                + "operation=" + request.getString("operation") + "\n"
+                + "report_ids_sha256=" + reportIdsHash + "\n"
+                + "detailed_logging=" + request.optBoolean("detailed_logging", false) + "\n"
+                + "created_at=" + request.getString("created_at") + "\n"
+                + "expires_at=" + request.getString("expires_at") + "\n"
+                + "nonce=" + request.getString("nonce") + "\n"
+                + "host_instance_id=" + request.getString("host_instance_id");
+    }
+
     private static String canonicalJson(Object value) throws Exception {
         if (value == null || value == JSONObject.NULL) {
             return "null";
@@ -526,6 +629,39 @@ public final class AgentProviderLite {
                             action.optString("confirmation_policy", "provider_required"))
                     || "high".equals(risk)
                     || "critical".equals(risk);
+        }
+    }
+
+    public static final class DiagnosticsValidation {
+        public final boolean valid;
+        public final JSONObject request;
+        public final String errorCode;
+        public final String errorMessage;
+        private final String failedRequestId;
+
+        private DiagnosticsValidation(
+                boolean valid,
+                JSONObject request,
+                String failedRequestId,
+                String errorCode,
+                String errorMessage) {
+            this.valid = valid;
+            this.request = request;
+            this.failedRequestId = failedRequestId == null ? "" : failedRequestId;
+            this.errorCode = errorCode == null ? "" : errorCode;
+            this.errorMessage = errorMessage == null ? "" : errorMessage;
+        }
+
+        static DiagnosticsValidation success(JSONObject request) {
+            return new DiagnosticsValidation(true, request, null, null, null);
+        }
+
+        static DiagnosticsValidation failure(String requestId, String code, String message) {
+            return new DiagnosticsValidation(false, null, requestId, code, message);
+        }
+
+        public String requestId() {
+            return request == null ? failedRequestId : request.optString("request_id");
         }
     }
 }

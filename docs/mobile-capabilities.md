@@ -183,6 +183,14 @@ action dispatches update host-owned `last_used_at` and `use_count` metadata for
 adapter UI ranking. Action execution still passes descriptor/invocation
 admission and Provider-side confirmation unchanged.
 
+Generated Android Agent Apps may additionally expose the trusted runtime
+diagnostics control endpoint described in `docs/agent-provider-protocol.md`.
+This is provider/adapter lifecycle infrastructure, not a Core capability or an
+Agent App action: it is absent from model descriptors and can only be read by
+the bound Host through explicit management UI. It carries bounded crash/ANR
+reports and structured runtime logs; debug-level collection is an explicit
+user-controlled Provider setting.
+
 ## Channel Capabilities
 
 IM channel ingress and egress use the host-carried service capability

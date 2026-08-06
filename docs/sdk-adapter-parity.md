@@ -79,6 +79,15 @@ reports package version, last-update time, and explicit trusted-refresh
 support. These values detect an in-place update but never replace package,
 signing, Provider, or Agent identity validation.
 
+Generated Android Agent Apps can also expose a model-hidden runtime diagnostics
+endpoint. The Flutter Android Host bridge returns a typed
+`AgentAppDiagnosticsSnapshot`; apps without the endpoint, Flutter on non-Android
+platforms, native Android SDK hosts, and iOS currently return or document an
+explicit unsupported state. Diagnostics are Provider-owned lifecycle data and
+do not enter the Core tool/capability surface. The snapshot contains bounded
+failure reports, structured runtime logs, and the Provider-owned detailed-log
+setting; configuring that setting requires the same signed Host binding.
+
 ## Codex Model Configuration
 
 Flutter, Android, and iOS expose matching typed model sync and clear methods.

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/agent_app.dart';
+import '../models/agent_app_diagnostics.dart';
 import '../models/agent_provider_install.dart';
 import '../tool_executor.dart';
 
@@ -194,6 +195,85 @@ class AgentProviderInstallApi {
     final installed = await requestInstall(provider);
     await _channel.invokeMethod<void>('clearPendingProviderInstallRequest');
     return installed;
+  }
+
+  /// Reads Provider-owned crash reports through the model-hidden trusted
+  /// diagnostics endpoint. Apps created before diagnostics support return an
+  /// unsupported snapshot instead of failing their existing Agent actions.
+  Future<AgentAppDiagnosticsSnapshot> listDiagnostics(
+    AgentAppPackage package,
+  ) => _requestDiagnostics(package, operation: 'list');
+
+  /// Enables or disables debug-level collection inside the Provider app. Info,
+  /// warning, error, and crash events remain enabled in both modes.
+  Future<AgentAppDiagnosticsSnapshot> setDetailedDiagnostics(
+    AgentAppPackage package,
+    bool enabled,
+  ) => _requestDiagnostics(
+    package,
+    operation: 'configure',
+    detailedLogging: enabled,
+  );
+
+  Future<AgentAppDiagnosticsSnapshot> _requestDiagnostics(
+    AgentAppPackage package, {
+    required String operation,
+    bool detailedLogging = false,
+  }) async {
+    final binding = package.installBinding;
+    if (binding == null || binding.platform != 'android') {
+      return const AgentAppDiagnosticsSnapshot(supported: false);
+    }
+    final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+      'listAgentProviderDiagnostics',
+      <String, dynamic>{
+        'packageJson': package.toJsonString(),
+        'operation': operation,
+        'detailedLogging': detailedLogging,
+      },
+    );
+    final envelope = Map<String, dynamic>.from(raw ?? const {});
+    final supported = envelope['supported'] as bool? ?? false;
+    final platformError = envelope['error']?.toString() ?? '';
+    if (!supported) {
+      return AgentAppDiagnosticsSnapshot(
+        supported: false,
+        error: platformError,
+      );
+    }
+    final responseJson = envelope['responseJson'] as String? ?? '';
+    if (responseJson.isEmpty) {
+      return AgentAppDiagnosticsSnapshot(
+        supported: true,
+        error: platformError.isEmpty
+            ? 'Provider diagnostics response missing'
+            : platformError,
+      );
+    }
+    final response = jsonDecode(responseJson) as Map<String, dynamic>;
+    final status = response['status'] as String? ?? '';
+    final responseError = response['error'];
+    final error = responseError is Map
+        ? responseError['message']?.toString() ?? responseError.toString()
+        : responseError?.toString() ?? '';
+    if (status != 'succeeded') {
+      return AgentAppDiagnosticsSnapshot(supported: true, error: error);
+    }
+    final reports = (response['reports'] as List? ?? const <Object>[])
+        .whereType<Map>()
+        .map(AgentAppDiagnosticReport.fromMap)
+        .toList(growable: false);
+    final logs = (response['logs'] as List? ?? const <Object>[])
+        .whereType<Map>()
+        .map(AgentAppDiagnosticLogEntry.fromMap)
+        .toList(growable: false);
+    return AgentAppDiagnosticsSnapshot(
+      supported: true,
+      reports: reports,
+      logs: logs,
+      detailedLoggingEnabled:
+          response['detailed_logging_enabled'] as bool? ?? false,
+    );
   }
 
   Future<AgentInstallRequest> _createInstallRequest({

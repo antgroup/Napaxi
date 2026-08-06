@@ -3,6 +3,7 @@ package agent.provider.sdk
 object AgentProviderContract {
     const val ACTION_INSTALL_AGENT = "agent.provider.action.INSTALL_AGENT"
     const val ACTION_HANDLE_PROPOSAL = "agent.provider.action.HANDLE_PROPOSAL"
+    const val ACTION_GET_DIAGNOSTICS = "agent.provider.action.GET_DIAGNOSTICS"
     const val ACTION_RESULT = "agent.provider.action.RESULT"
     const val ACTION_HOST_INSTALL_PROVIDER_AGENT = "agent.host.action.INSTALL_PROVIDER_AGENT"
     const val ACTION_HOST_TRIGGER_AGENT = "agent.host.action.TRIGGER_AGENT"
@@ -14,6 +15,10 @@ object AgentProviderContract {
     const val EXTRA_PACKAGE_JSON = "agent.provider.extra.PACKAGE_JSON"
     const val EXTRA_ACTION_JSON = "agent.provider.extra.ACTION_JSON"
     const val EXTRA_RESULT_JSON = "agent.provider.extra.RESULT_JSON"
+    const val EXTRA_DIAGNOSTICS_REQUEST_JSON =
+        "agent.provider.extra.DIAGNOSTICS_REQUEST_JSON"
+    const val EXTRA_DIAGNOSTICS_RESULT_JSON =
+        "agent.provider.extra.DIAGNOSTICS_RESULT_JSON"
 }
 
 object ActionRisk {
@@ -44,4 +49,18 @@ object AgentInstallStatus {
     const val SUCCEEDED = "succeeded"
     const val FAILED = "failed"
     const val CANCELED = "canceled"
+}
+
+object DiagnosticsOperation {
+    const val LIST = "list"
+    const val ACK = "ack"
+    const val CONFIGURE = "configure"
+}
+
+object DiagnosticLogLevel {
+    const val DEBUG = "debug"
+    const val INFO = "info"
+    const val WARNING = "warning"
+    const val ERROR = "error"
+    const val CRASH = "crash"
 }

@@ -80,9 +80,30 @@ public final class AgentProviderActionRegistry {
             return AgentProviderLite.validationFailureResult(validation);
         }
         try {
+            JSONObject actionMetadata = new JSONObject()
+                    .put("action_id", validation.actionId())
+                    .put("request_id", validation.requestId());
+            AgentProviderDiagnostics.recordBreadcrumb(
+                    activity, "agent_action", "started:" + validation.actionId());
+            AgentProviderDiagnostics.log(
+                    activity,
+                    AgentProviderDiagnostics.LEVEL_INFO,
+                    "agent_action",
+                    "action_started",
+                    "Agent App action started.",
+                    actionMetadata,
+                    validation.requestId());
             validateAgainstPackage(validation.packageJson);
             Entry entry = entries.get(validation.actionId());
             if (entry == null) {
+                AgentProviderDiagnostics.log(
+                        activity,
+                        AgentProviderDiagnostics.LEVEL_ERROR,
+                        "agent_action",
+                        "handler_not_found",
+                        "No handler is registered for the action.",
+                        actionMetadata,
+                        validation.requestId());
                 return AgentProviderLite.failedResult(
                         validation, "handler_not_found", "No handler is registered for the action.");
             }
@@ -90,9 +111,28 @@ public final class AgentProviderActionRegistry {
                 AgentProviderLite.markConsumed(activity, validation);
             }
             JSONObject result = entry.handler.execute(activity, validation.arguments());
+            AgentProviderDiagnostics.recordBreadcrumb(
+                    activity, "agent_action", "succeeded:" + validation.actionId());
+            AgentProviderDiagnostics.log(
+                    activity,
+                    AgentProviderDiagnostics.LEVEL_INFO,
+                    "agent_action",
+                    "action_succeeded",
+                    "Agent App action completed.",
+                    actionMetadata,
+                    validation.requestId());
             return AgentProviderLite.successResult(
                     validation, result == null ? new JSONObject() : result);
         } catch (Exception error) {
+            JSONObject metadata = new JSONObject();
+            try {
+                metadata.put("action_id", validation.actionId());
+                metadata.put("request_id", validation.requestId());
+            } catch (Exception ignored) {
+                // Primitive JSON writes do not fail.
+            }
+            AgentProviderDiagnostics.recordCaughtException(
+                    activity, "agent_action_failure", error, metadata);
             String message = error.getMessage();
             return AgentProviderLite.failedResult(
                     validation,

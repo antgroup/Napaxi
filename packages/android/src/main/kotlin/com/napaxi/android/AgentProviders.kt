@@ -131,6 +131,77 @@ public data class AgentProviderDescriptor(
     }
 }
 
+/** Provider-owned failure details returned by the trusted diagnostics channel. */
+public data class AgentAppDiagnosticReport(
+    val id: String,
+    val kind: String,
+    val timestamp: String,
+    val exceptionType: String = "",
+    val message: String = "",
+    val stackTrace: String = "",
+    val description: String = "",
+    val metadata: Map<String, Any?> = emptyMap(),
+) {
+    public companion object {
+        @JvmStatic
+        public fun fromMap(map: Map<String, *>): AgentAppDiagnosticReport =
+            AgentAppDiagnosticReport(
+                id = map["id"]?.toString().orEmpty(),
+                kind = map["kind"]?.toString() ?: "unknown",
+                timestamp = map["timestamp"]?.toString().orEmpty(),
+                exceptionType = map["exception_type"]?.toString().orEmpty(),
+                message = map["message"]?.toString().orEmpty(),
+                stackTrace = map["stack_trace"]?.toString().orEmpty(),
+                description = map["description"]?.toString().orEmpty(),
+                metadata = (map["metadata"] as? Map<*, *>)
+                    ?.entries
+                    ?.associate { it.key.toString() to it.value }
+                    .orEmpty(),
+            )
+    }
+}
+
+/** Provider-owned structured runtime event. */
+public data class AgentAppDiagnosticLogEntry(
+    val id: String,
+    val timestamp: String,
+    val level: String,
+    val module: String,
+    val event: String,
+    val message: String = "",
+    val traceId: String = "",
+    val thread: String = "",
+    val metadata: Map<String, Any?> = emptyMap(),
+) {
+    public companion object {
+        @JvmStatic
+        public fun fromMap(map: Map<String, *>): AgentAppDiagnosticLogEntry =
+            AgentAppDiagnosticLogEntry(
+                id = map["id"]?.toString().orEmpty(),
+                timestamp = map["timestamp"]?.toString().orEmpty(),
+                level = map["level"]?.toString() ?: "info",
+                module = map["module"]?.toString().orEmpty(),
+                event = map["event"]?.toString().orEmpty(),
+                message = map["message"]?.toString().orEmpty(),
+                traceId = map["trace_id"]?.toString().orEmpty(),
+                thread = map["thread"]?.toString().orEmpty(),
+                metadata = (map["metadata"] as? Map<*, *>)
+                    ?.entries
+                    ?.associate { it.key.toString() to it.value }
+                    .orEmpty(),
+            )
+    }
+}
+
+/** Typed diagnostics result with an explicit unsupported state. */
+public data class AgentAppDiagnosticsSnapshot(
+    val supported: Boolean,
+    val reports: List<AgentAppDiagnosticReport> = emptyList(),
+    val logs: List<AgentAppDiagnosticLogEntry> = emptyList(),
+    val detailedLoggingEnabled: Boolean = false,
+    val error: String = "",
+)
+
 public data class PendingAgentProviderInstall(
     val descriptor: AgentProviderDescriptor,
     val request: AgentInstallRequest,
@@ -185,6 +256,27 @@ public class AgentProviderInstallApi internal constructor(
         installed: AgentAppPackage,
         requestCode: Int = AgentProviderHostApi.REQUEST_INSTALL_AGENT,
     ): PendingAgentProviderInstall = host.restoreBinding(activity, installed, requestCode)
+
+    /** Native Android Host diagnostics are not wired in this release. */
+    public fun listDiagnostics(packageDef: AgentAppPackage): AgentAppDiagnosticsSnapshot {
+        require(packageDef.providerId.isNotBlank()) { "providerId must not be empty" }
+        return AgentAppDiagnosticsSnapshot(
+            supported = false,
+            error = "unsupported_host_adapter",
+        )
+    }
+
+    /** Native Android Host detailed-log configuration is not wired in this release. */
+    public fun setDetailedDiagnostics(
+        packageDef: AgentAppPackage,
+        enabled: Boolean,
+    ): AgentAppDiagnosticsSnapshot {
+        require(packageDef.providerId.isNotBlank()) { "providerId must not be empty" }
+        return AgentAppDiagnosticsSnapshot(
+            supported = false,
+            error = "unsupported_host_adapter",
+        )
+    }
 
     /** Discovers and starts the trusted enable handshake for an installed app. */
     public fun enableInstalledProvider(

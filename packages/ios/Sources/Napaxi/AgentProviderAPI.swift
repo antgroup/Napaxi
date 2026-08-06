@@ -4,6 +4,54 @@ import Foundation
 import UIKit
 #endif
 
+/// Provider-owned failure details. iOS returns an unsupported snapshot in this release.
+public struct AgentAppDiagnosticReport: Sendable, Equatable {
+    public let id: String
+    public let kind: String
+    public let timestamp: String
+    public let appPackage: String
+    public let versionName: String
+    public let versionCode: Int
+    public let exceptionType: String
+    public let message: String
+    public let stackTrace: String
+    public let description: String
+    public let thread: String
+    public let process: String
+    public let breadcrumbs: [[String: String]]
+    public let metadata: [String: String]
+}
+
+/// Provider-owned structured runtime event.
+public struct AgentAppDiagnosticLogEntry: Sendable, Equatable {
+    public let id: String
+    public let timestamp: String
+    public let level: String
+    public let module: String
+    public let event: String
+    public let message: String
+    public let traceId: String
+    public let thread: String
+    public let metadata: [String: String]
+}
+
+/// Typed diagnostics result with an explicit unsupported state.
+public struct AgentAppDiagnosticsSnapshot: Sendable, Equatable {
+    public let supported: Bool
+    public let reports: [AgentAppDiagnosticReport]
+    public let logs: [AgentAppDiagnosticLogEntry]
+    public let detailedLoggingEnabled: Bool
+    public let error: String
+
+    public static let unsupported = AgentAppDiagnosticsSnapshot(
+        supported: false,
+        reports: [],
+        logs: [],
+        detailedLoggingEnabled: false,
+        error: "unsupported_platform"
+    )
+}
+
 public protocol NapaxiAgentProviderDiscovery: Sendable {
     func discoverAgentProviders() async throws -> [NapaxiAgentProviderDescriptor]
 }
@@ -163,6 +211,24 @@ public struct NapaxiAgentProviderAPI: Sendable {
         )
         return try registerPackage(restored.jsonString())
             .decodedObject(of: NapaxiAgentAppPackage.self)
+    }
+
+    /// Agent App runtime diagnostics are Android-only in this release.
+    public func listAgentAppDiagnostics(
+        _ installed: NapaxiAgentAppPackage
+    ) -> AgentAppDiagnosticsSnapshot {
+        _ = installed
+        return .unsupported
+    }
+
+    /// Agent App detailed-log configuration is Android-only in this release.
+    public func setDetailedDiagnostics(
+        _ installed: NapaxiAgentAppPackage,
+        enabled: Bool
+    ) -> AgentAppDiagnosticsSnapshot {
+        _ = installed
+        _ = enabled
+        return .unsupported
     }
 
     public func installFromLaunchIntent(

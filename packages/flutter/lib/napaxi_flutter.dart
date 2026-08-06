@@ -52,6 +52,7 @@ export 'models/session.dart';
 export 'models/session_run.dart';
 export 'models/skill.dart';
 export 'models/agent_app.dart';
+export 'models/agent_app_diagnostics.dart';
 export 'models/agent_provider_install.dart';
 export 'models/agent_provider_trigger.dart';
 export 'models/workspace.dart';

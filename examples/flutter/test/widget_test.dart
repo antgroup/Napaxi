@@ -3406,6 +3406,32 @@ void main() {
     );
     final fakeClient = FakeNapaxiChatClient(
       discoveredAgentProviders: const [notesProvider, tasksProvider],
+      agentAppDiagnostics: const {
+        'notes.provider': sdk.AgentAppDiagnosticsSnapshot(
+          supported: true,
+          reports: [
+            sdk.AgentAppDiagnosticReport(
+              id: 'crash-1',
+              kind: 'java_crash',
+              timestamp: '2026-08-05T08:30:00Z',
+              exceptionType: 'IllegalStateException',
+              message: 'Unable to save note',
+              stackTrace: 'IllegalStateException: Unable to save note',
+            ),
+          ],
+          logs: [
+            sdk.AgentAppDiagnosticLogEntry(
+              id: 'log-1',
+              timestamp: '2026-08-05T08:29:59Z',
+              level: 'error',
+              module: 'storage',
+              event: 'save_failed',
+              message: 'Unable to persist note',
+              traceId: 'trace-1',
+            ),
+          ],
+        ),
+      },
       connectedApps: const [
         sdk.AgentAppPackage(
           providerId: 'notes.provider',
@@ -3519,6 +3545,29 @@ void main() {
     expect(find.text('Create note'), findsOneWidget);
     expect(find.text('Create a new note in the app.'), findsOneWidget);
     expect(find.text('Confirmation required'), findsOneWidget);
+    expect(find.text('Runtime diagnostics'), findsOneWidget);
+    expect(find.text('Runtime failures'), findsOneWidget);
+    expect(find.text('Runtime logs'), findsOneWidget);
+    expect(find.text('Unable to persist note'), findsOneWidget);
+    expect(
+      find.text('IllegalStateException: Unable to save note'),
+      findsOneWidget,
+    );
+    final detailedDiagnosticsRow = find.byKey(
+      const Key('connected_app_detailed_diagnostics_notes.provider'),
+    );
+    expect(detailedDiagnosticsRow, findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: detailedDiagnosticsRow,
+        matching: find.byType(Switch),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      fakeClient.agentAppDiagnostics['notes.provider']!.detailedLoggingEnabled,
+      isTrue,
+    );
     final autoInvokeRow = find.byKey(
       const Key('connected_app_auto_invoke_notes.provider'),
     );

@@ -497,6 +497,111 @@ void main() {
     expect(result.errorCode, 'host_not_bound');
     expect(result.isHostBindingMissing, isTrue);
   });
+
+  test('listDiagnostics decodes trusted provider crash reports', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'listAgentProviderDiagnostics');
+          final args = Map<String, dynamic>.from(call.arguments as Map);
+          final package = jsonDecode(args['packageJson'] as String) as Map;
+          expect(package['provider_id'], 'provider');
+          expect(args['operation'], 'list');
+          expect(args['detailedLogging'], isFalse);
+          return {
+            'supported': true,
+            'responseJson': jsonEncode({
+              'status': 'succeeded',
+              'request_id': 'diagnostics-1',
+              'reports': [
+                {
+                  'id': 'crash-1',
+                  'kind': 'java_crash',
+                  'timestamp': '2026-08-05T01:00:00Z',
+                  'app_package': 'trusted.app',
+                  'version_name': '1.0',
+                  'version_code': 1,
+                  'exception_type': 'java.lang.NullPointerException',
+                  'message': 'boom',
+                  'stack_trace': 'MainActivity.java:42',
+                },
+              ],
+              'logs': [
+                {
+                  'id': 'log-1',
+                  'timestamp': '2026-08-05T00:59:59Z',
+                  'level': 'error',
+                  'module': 'storage',
+                  'event': 'save_failed',
+                  'message': 'Unable to save',
+                  'trace_id': 'trace-1',
+                },
+              ],
+              'detailed_logging_enabled': true,
+            }),
+          };
+        });
+    final api = AgentProviderInstallApi(
+      registerPackage: (package) => package,
+      channel: channel,
+    );
+
+    final snapshot = await api.listDiagnostics(_installedPackage());
+
+    expect(snapshot.supported, isTrue);
+    expect(snapshot.reports, hasLength(1));
+    expect(snapshot.reports.single.id, 'crash-1');
+    expect(snapshot.reports.single.summary, contains('NullPointerException'));
+    expect(snapshot.logs.single.event, 'save_failed');
+    expect(snapshot.logs.single.traceId, 'trace-1');
+    expect(snapshot.detailedLoggingEnabled, isTrue);
+  });
+
+  test('setDetailedDiagnostics sends an explicit configure request', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          final args = Map<String, dynamic>.from(call.arguments as Map);
+          expect(args['operation'], 'configure');
+          expect(args['detailedLogging'], isTrue);
+          return {
+            'supported': true,
+            'responseJson': jsonEncode({
+              'status': 'succeeded',
+              'reports': <Object>[],
+              'logs': <Object>[],
+              'detailed_logging_enabled': true,
+            }),
+          };
+        });
+    final api = AgentProviderInstallApi(
+      registerPackage: (package) => package,
+      channel: channel,
+    );
+
+    final snapshot = await api.setDetailedDiagnostics(
+      _installedPackage(),
+      true,
+    );
+
+    expect(snapshot.supported, isTrue);
+    expect(snapshot.detailedLoggingEnabled, isTrue);
+  });
+
+  test('listDiagnostics keeps older providers compatible', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'listAgentProviderDiagnostics');
+          return {'supported': false};
+        });
+    final api = AgentProviderInstallApi(
+      registerPackage: (package) => package,
+      channel: channel,
+    );
+
+    final snapshot = await api.listDiagnostics(_installedPackage());
+
+    expect(snapshot.supported, isFalse);
+    expect(snapshot.reports, isEmpty);
+  });
 }
 
 Map<String, dynamic> _installResponse(
@@ -575,3 +680,22 @@ String _packageJson({AgentAppInstallBinding? installBinding}) {
     installBinding: installBinding,
   ).toJsonString();
 }
+
+AgentAppPackage _installedPackage() => const AgentAppPackage(
+  providerId: 'provider',
+  agentId: 'provider.agent',
+  displayName: 'Provider Agent',
+  installBinding: AgentAppInstallBinding(
+    platform: 'android',
+    appPackageName: 'trusted.app',
+    activityName: 'trusted.Activity',
+    signingCertSha256: 'provider123',
+    installedAt: '2026-05-26T00:00:00Z',
+    installRequestId: 'install-1',
+    protocolVersion: 2,
+    hostPackageName: 'host.app',
+    hostSigningCertSha256: 'host123',
+    hostInstanceId: 'host-instance',
+    hostSharedSecret: 'host-secret',
+  ),
+);

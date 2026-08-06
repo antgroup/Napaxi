@@ -3589,8 +3589,18 @@ class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
   late sdk.AgentAppPackage _package = widget.package;
   bool _savingAutoInvoke = false;
   bool _repairingBinding = false;
+  bool _loadingDiagnostics = false;
+  bool _savingDetailedDiagnostics = false;
+  int _diagnosticsGeneration = 0;
+  sdk.AgentAppDiagnosticsSnapshot? _diagnostics;
 
   bool get _chinese => widget.language == AppLanguage.chinese;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadDiagnostics());
+  }
 
   @override
   void didUpdateWidget(_ConnectedAppDetailPage oldWidget) {
@@ -3599,6 +3609,56 @@ class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
         oldWidget.package.autoInvokeEnabled !=
             widget.package.autoInvokeEnabled) {
       _package = widget.package;
+    }
+    if (oldWidget.package.providerId != widget.package.providerId) {
+      _diagnostics = null;
+      unawaited(_loadDiagnostics(supersede: true));
+    }
+  }
+
+  Future<void> _loadDiagnostics({bool supersede = false}) async {
+    if (_loadingDiagnostics && !supersede) return;
+    final generation = ++_diagnosticsGeneration;
+    final providerId = _package.providerId;
+    setState(() => _loadingDiagnostics = true);
+    try {
+      final client = await widget.clientFuture;
+      final diagnostics = await client.listConnectedAppDiagnostics(providerId);
+      if (!mounted || generation != _diagnosticsGeneration) return;
+      setState(() => _diagnostics = diagnostics);
+    } catch (error) {
+      if (!mounted || generation != _diagnosticsGeneration) return;
+      setState(
+        () => _diagnostics = sdk.AgentAppDiagnosticsSnapshot(
+          supported: true,
+          error: _friendlyDisplayError(error),
+        ),
+      );
+    } finally {
+      if (mounted && generation == _diagnosticsGeneration) {
+        setState(() => _loadingDiagnostics = false);
+      }
+    }
+  }
+
+  Future<void> _setDetailedDiagnostics(bool enabled) async {
+    if (_savingDetailedDiagnostics) return;
+    setState(() => _savingDetailedDiagnostics = true);
+    try {
+      final client = await widget.clientFuture;
+      final diagnostics = await client.setConnectedAppDetailedDiagnostics(
+        _package.providerId,
+        enabled,
+      );
+      if (!mounted) return;
+      setState(() => _diagnostics = diagnostics);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_friendlyDisplayError(error))));
+    } finally {
+      if (mounted) setState(() => _savingDetailedDiagnostics = false);
     }
   }
 
@@ -3684,6 +3744,46 @@ class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
         ),
         const SizedBox(height: 24),
         _SettingsGroupTitle(
+          title: _chinese ? '运行诊断' : 'Runtime diagnostics',
+          trailing: TextButton(
+            key: Key(
+              'connected_app_diagnostics_refresh_${_package.providerId}',
+            ),
+            onPressed: _loadingDiagnostics
+                ? null
+                : () => unawaited(_loadDiagnostics()),
+            child: Text(_chinese ? '重新检查' : 'Check again'),
+          ),
+        ),
+        if (_diagnostics?.supported == true) ...[
+          _SettingsGroupCard(
+            dividerInset: 16,
+            children: [
+              _ConnectedAppRow(
+                key: Key(
+                  'connected_app_detailed_diagnostics_${_package.providerId}',
+                ),
+                title: _chinese ? '详细日志' : 'Detailed logs',
+                subtitle: _chinese
+                    ? '开启后额外记录调试信息；普通运行和错误日志始终保留'
+                    : 'Also collect debug events; normal and error logs are always retained',
+                enabled: _diagnostics!.detailedLoggingEnabled,
+                busy: _savingDetailedDiagnostics,
+                onChanged: (enabled) =>
+                    unawaited(_setDetailedDiagnostics(enabled)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        _ConnectedAppDiagnosticsCard(
+          providerId: _package.providerId,
+          language: widget.language,
+          loading: _loadingDiagnostics,
+          snapshot: _diagnostics,
+        ),
+        const SizedBox(height: 24),
+        _SettingsGroupTitle(
           title: _chinese
               ? '${_package.actions.length} 项能力'
               : '${_package.actions.length} ${_package.actions.length == 1 ? 'capability' : 'capabilities'}',
@@ -3712,6 +3812,468 @@ class _ConnectedAppDetailPageState extends State<_ConnectedAppDetailPage> {
       ],
     );
   }
+}
+
+class _ConnectedAppDiagnosticsCard extends StatefulWidget {
+  const _ConnectedAppDiagnosticsCard({
+    required this.providerId,
+    required this.language,
+    required this.loading,
+    required this.snapshot,
+  });
+
+  final String providerId;
+  final AppLanguage language;
+  final bool loading;
+  final sdk.AgentAppDiagnosticsSnapshot? snapshot;
+
+  @override
+  State<_ConnectedAppDiagnosticsCard> createState() =>
+      _ConnectedAppDiagnosticsCardState();
+}
+
+class _ConnectedAppDiagnosticsCardState
+    extends State<_ConnectedAppDiagnosticsCard> {
+  String _levelFilter = 'all';
+  String _moduleFilter = 'all';
+  String _timeFilter = 'all';
+
+  bool get _chinese => widget.language == AppLanguage.chinese;
+
+  @override
+  void didUpdateWidget(_ConnectedAppDiagnosticsCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.providerId != widget.providerId) {
+      _levelFilter = 'all';
+      _moduleFilter = 'all';
+      _timeFilter = 'all';
+    }
+    final modules = widget.snapshot?.logs.map((entry) => entry.module).toSet();
+    if (_moduleFilter != 'all' && modules?.contains(_moduleFilter) != true) {
+      _moduleFilter = 'all';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final diagnostics = widget.snapshot;
+    return Material(
+      key: Key('connected_app_diagnostics_${widget.providerId}'),
+      color: _configSurface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child:
+          diagnostics == null ||
+              (widget.loading &&
+                  diagnostics.reports.isEmpty &&
+                  diagnostics.logs.isEmpty)
+          ? const Padding(
+              padding: EdgeInsets.all(18),
+              child: Center(
+                child: SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            )
+          : _buildContent(diagnostics),
+    );
+  }
+
+  Widget _buildContent(sdk.AgentAppDiagnosticsSnapshot diagnostics) {
+    if (!diagnostics.supported) {
+      return _status(
+        title: _chinese ? '此应用版本暂不支持诊断' : 'Diagnostics are not supported',
+        description: _chinese
+            ? '应用原有能力不受影响；重新生成或升级应用后即可使用。'
+            : 'Existing capabilities still work. Regenerate or update the app to enable diagnostics.',
+      );
+    }
+    if (diagnostics.error.isNotEmpty) {
+      return _status(
+        title: _chinese ? '暂时无法读取诊断信息' : 'Diagnostics are unavailable',
+        description: diagnostics.error,
+      );
+    }
+    if (diagnostics.reports.isEmpty && diagnostics.logs.isEmpty) {
+      return _status(
+        title: _chinese ? '暂无诊断信息' : 'No diagnostics yet',
+        description: _chinese
+            ? '应用运行、出现普通错误、崩溃或无响应后，相关信息会在这里显示。'
+            : 'Runtime events, ordinary errors, crashes, and not-responding details will appear here.',
+      );
+    }
+    final modules =
+        diagnostics.logs
+            .map((entry) => entry.module)
+            .where((module) => module.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final filteredLogs = diagnostics.logs.where(_matchesLogFilters).toList();
+    final visibleLogs = filteredLogs.take(50).toList(growable: false);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _sectionHeader(
+          _chinese ? '异常记录' : 'Runtime failures',
+          diagnostics.reports.length,
+        ),
+        if (diagnostics.reports.isEmpty)
+          _inlineMessage(
+            _chinese ? '未发现崩溃或运行异常' : 'No crashes or runtime failures found',
+          )
+        else
+          for (var index = 0; index < diagnostics.reports.length; index++) ...[
+            if (index > 0)
+              const Padding(
+                padding: EdgeInsets.only(left: 16),
+                child: Divider(height: 1, color: _configBorderFaint),
+              ),
+            _ConnectedAppDiagnosticReportTile(
+              report: diagnostics.reports[index],
+              language: widget.language,
+            ),
+          ],
+        const Divider(height: 24, color: _configBorderFaint),
+        _sectionHeader(
+          _chinese ? '运行日志' : 'Runtime logs',
+          diagnostics.logs.length,
+        ),
+        if (diagnostics.logs.isEmpty)
+          _inlineMessage(_chinese ? '暂无运行日志' : 'No runtime logs available')
+        else ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _filterDropdown(
+                  value: _levelFilter,
+                  values: const [
+                    'all',
+                    'crash',
+                    'error',
+                    'warning',
+                    'info',
+                    'debug',
+                  ],
+                  label: (value) => _diagnosticLevelLabel(value, _chinese),
+                  onChanged: (value) => setState(() => _levelFilter = value),
+                ),
+                _filterDropdown(
+                  value: _moduleFilter,
+                  values: ['all', ...modules],
+                  label: (value) => value == 'all'
+                      ? (_chinese ? '全部模块' : 'All modules')
+                      : value,
+                  onChanged: (value) => setState(() => _moduleFilter = value),
+                ),
+                _filterDropdown(
+                  value: _timeFilter,
+                  values: const ['all', '1h', '24h', '3d'],
+                  label: (value) => _diagnosticTimeLabel(value, _chinese),
+                  onChanged: (value) => setState(() => _timeFilter = value),
+                ),
+              ],
+            ),
+          ),
+          if (visibleLogs.isEmpty)
+            _inlineMessage(
+              _chinese ? '没有符合筛选条件的日志' : 'No logs match these filters',
+            )
+          else
+            for (var index = 0; index < visibleLogs.length; index++) ...[
+              if (index > 0)
+                const Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: Divider(height: 1, color: _configBorderFaint),
+                ),
+              _ConnectedAppDiagnosticLogTile(
+                entry: visibleLogs[index],
+                language: widget.language,
+              ),
+            ],
+          if (filteredLogs.length > visibleLogs.length)
+            _inlineMessage(
+              _chinese
+                  ? '仅显示最新 50 条符合条件的日志'
+                  : 'Showing the newest 50 matching logs',
+            ),
+        ],
+      ],
+    );
+  }
+
+  bool _matchesLogFilters(sdk.AgentAppDiagnosticLogEntry entry) {
+    if (_levelFilter != 'all' && entry.level != _levelFilter) return false;
+    if (_moduleFilter != 'all' && entry.module != _moduleFilter) return false;
+    if (_timeFilter == 'all') return true;
+    final timestamp = DateTime.tryParse(entry.timestamp)?.toUtc();
+    if (timestamp == null) return false;
+    final duration = switch (_timeFilter) {
+      '1h' => const Duration(hours: 1),
+      '24h' => const Duration(hours: 24),
+      _ => const Duration(days: 3),
+    };
+    return timestamp.isAfter(DateTime.now().toUtc().subtract(duration));
+  }
+
+  Widget _sectionHeader(String title, int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: _configTextPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            '$count',
+            style: const TextStyle(color: _configTextTertiary, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _inlineMessage(String message) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 16),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Text(
+          message,
+          style: const TextStyle(color: _configTextSecondary, fontSize: 13),
+        ),
+      ),
+    );
+  }
+
+  Widget _filterDropdown({
+    required String value,
+    required List<String> values,
+    required String Function(String value) label,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: _configSurfaceMuted,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _configBorderFaint),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isDense: true,
+          borderRadius: BorderRadius.circular(12),
+          dropdownColor: _configSurface,
+          style: const TextStyle(color: _configTextSecondary, fontSize: 12),
+          items: [
+            for (final item in values)
+              DropdownMenuItem(value: item, child: Text(label(item))),
+          ],
+          onChanged: (next) {
+            if (next != null) onChanged(next);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _status({required String title, required String description}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: _configTextPrimary,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            description,
+            style: const TextStyle(
+              color: _configTextSecondary,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConnectedAppDiagnosticReportTile extends StatelessWidget {
+  const _ConnectedAppDiagnosticReportTile({
+    required this.report,
+    required this.language,
+  });
+
+  final sdk.AgentAppDiagnosticReport report;
+  final AppLanguage language;
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese = language == AppLanguage.chinese;
+    final occurredAt = DateTime.tryParse(report.timestamp);
+    final details = report.stackTrace.trim().isNotEmpty
+        ? report.stackTrace.trim()
+        : report.description.trim().isNotEmpty
+        ? report.description.trim()
+        : report.summary;
+    return ExpansionTile(
+      key: Key('connected_app_diagnostic_report_${report.id}'),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      iconColor: _configTextSecondary,
+      collapsedIconColor: _configTextTertiary,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: Text(
+        report.summary,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: _configTextPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        [
+          _diagnosticKindLabel(report.kind, chinese),
+          if (occurredAt != null) _formatFileDate(occurredAt),
+        ].join(' · '),
+        style: const TextStyle(color: _configTextTertiary, fontSize: 12),
+      ),
+      children: [
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: SelectableText(
+            details,
+            style: const TextStyle(
+              color: _configTextSecondary,
+              fontSize: 12,
+              height: 1.45,
+              fontFamily: 'monospace',
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ConnectedAppDiagnosticLogTile extends StatelessWidget {
+  const _ConnectedAppDiagnosticLogTile({
+    required this.entry,
+    required this.language,
+  });
+
+  final sdk.AgentAppDiagnosticLogEntry entry;
+  final AppLanguage language;
+
+  @override
+  Widget build(BuildContext context) {
+    final chinese = language == AppLanguage.chinese;
+    final occurredAt = DateTime.tryParse(entry.timestamp);
+    final details = <String>[
+      '${chinese ? '事件' : 'Event'}: ${entry.event}',
+      if (entry.traceId.isNotEmpty)
+        '${chinese ? '追踪 ID' : 'Trace ID'}: ${entry.traceId}',
+      if (entry.thread.isNotEmpty)
+        '${chinese ? '线程' : 'Thread'}: ${entry.thread}',
+      if (entry.metadata.isNotEmpty)
+        '${chinese ? '上下文' : 'Context'}:\n${const JsonEncoder.withIndent('  ').convert(entry.metadata)}',
+    ].join('\n');
+    return ExpansionTile(
+      key: Key('connected_app_diagnostic_log_${entry.id}'),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      iconColor: _configTextSecondary,
+      collapsedIconColor: _configTextTertiary,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: Text(
+        entry.summary,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: _configTextPrimary,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      subtitle: Text(
+        [
+          _diagnosticLevelLabel(entry.level, chinese),
+          if (entry.module.isNotEmpty) entry.module,
+          if (occurredAt != null) _formatFileDate(occurredAt),
+        ].join(' · '),
+        style: const TextStyle(color: _configTextTertiary, fontSize: 12),
+      ),
+      children: [
+        if (details.isNotEmpty)
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SelectableText(
+              details,
+              style: const TextStyle(
+                color: _configTextSecondary,
+                fontSize: 12,
+                height: 1.45,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+String _diagnosticKindLabel(String kind, bool chinese) {
+  return switch (kind.toLowerCase()) {
+    'anr' => chinese ? '应用无响应' : 'Not responding',
+    'java_crash' || 'crash' => chinese ? '应用崩溃' : 'Crash',
+    'native_crash' => chinese ? '原生崩溃' : 'Native crash',
+    'low_memory' => chinese ? '内存不足' : 'Low memory',
+    _ => chinese ? '运行异常' : 'Runtime failure',
+  };
+}
+
+String _diagnosticLevelLabel(String level, bool chinese) {
+  return switch (level.toLowerCase()) {
+    'all' => chinese ? '全部等级' : 'All levels',
+    'crash' => chinese ? '崩溃' : 'Crash',
+    'error' => chinese ? '错误' : 'Error',
+    'warning' => chinese ? '警告' : 'Warning',
+    'debug' => chinese ? '调试' : 'Debug',
+    _ => chinese ? '信息' : 'Info',
+  };
+}
+
+String _diagnosticTimeLabel(String value, bool chinese) {
+  return switch (value) {
+    '1h' => chinese ? '最近 1 小时' : 'Last hour',
+    '24h' => chinese ? '最近 24 小时' : 'Last 24 hours',
+    '3d' => chinese ? '最近 3 天' : 'Last 3 days',
+    _ => chinese ? '全部时间' : 'All time',
+  };
 }
 
 class _ConnectedAppCapabilityRow extends StatelessWidget {

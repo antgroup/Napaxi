@@ -163,6 +163,38 @@ val trust = AgentProviderSecurity.validateTrustedProposal(
 
 Trusted validation 会检查 Android caller package/signature、proposal HMAC signature、expiry、nonce/idempotency 和 replay store。
 
+## Android 运行诊断
+
+Napaxi 端上新生成的 Android App 默认包含私有、限量的运行诊断存储。它会
+记录未捕获 Java 异常、Android 可提供的历史进程退出原因（包括 ANR 和原生
+崩溃）、少量 action 生命周期线索以及结构化运行日志。日志分为 `debug`、
+`info`、`warning`、`error` 和 `crash`；默认不采集 `debug`。日志最多保留
+300 条或 512 KiB，三天后自动过期，每次向 Host 返回的数据再限制为 256 KiB。
+内容会先做基础脱敏，并始终保留在 Provider App 的私有存储中；不会自动进入
+对话、记忆、workspace 文件或模型上下文。
+
+Napaxi 在 Agent 应用详情页通过第三个、对模型隐藏的 Android 入口读取：
+
+- Action: `agent.provider.action.GET_DIAGNOSTICS`
+- Request extra: `agent.provider.extra.DIAGNOSTICS_REQUEST_JSON`
+- Result extra: `agent.provider.extra.DIAGNOSTICS_RESULT_JSON`
+
+诊断协议 v1 支持 `list`、`ack` 和 `configure`；`configure` 只控制 debug
+日志，info、warning、error 和 crash 始终保留。请求包含 `provider_id`、
+`host_instance_id`、操作、报告 ID 列表、详细日志设置、创建时间、过期时间和 nonce，并用
+现有可信 Host binding 的 shared secret 进行 `hmac-sha256-v1` 签名。Provider
+返回数据前会验证调用方包名和证书、binding、过期时间及签名。该入口不能
+声明为 `AgentPackage.actions`，不能挂载成模型工具，也不能被自然语言路由
+自动调用。
+
+生成 App 应记录小而明确的语义事件，而不是复制整段 `logcat`。每条包含模块、
+事件名、简短描述、可选 trace id 和有限的结构化字段；同一次用户操作应在 UI、
+domain、存储或网络和结果阶段复用 trace id。不得记录凭证、完整请求响应、原始
+用户内容或任意 WebView console 输出。
+
+第一版由 Android Lite SDK 和 Flutter Android Host bridge 实现；旧 Android
+Provider App 与 iOS 会返回明确的“不支持”，不影响已有 action。
+
 ## Result return
 
 Provider app 通过 Activity result 或 callback URI 返回 `ActionResult`：

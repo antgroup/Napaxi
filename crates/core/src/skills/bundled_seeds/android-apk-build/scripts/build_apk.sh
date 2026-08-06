@@ -168,6 +168,10 @@ if [ "$PROVIDER_ENABLED" = true ]; then
     echo "AndroidManifest.xml must opt in to trusted same-identity Provider refresh" >&2
     exit 1
   fi
+  if ! grep -q 'agent.provider.action.GET_DIAGNOSTICS' "$SRC_DIR/AndroidManifest.xml" || \
+     ! grep -q 'AgentProviderDiagnosticsInitializer' "$SRC_DIR/AndroidManifest.xml"; then
+    echo "      Existing Provider app has no Napaxi diagnostics entry point"
+  fi
   if ! grep -R -q 'AgentProviderActionRegistry' "$SRC_DIR/java"; then
     echo "Provider apps must route actions through AgentProviderActionRegistry" >&2
     exit 1

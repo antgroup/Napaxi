@@ -237,6 +237,45 @@ signature, expiry, nonce/idempotency fields, and local replay store. Untrusted
 requests may be downgraded to explicit provider confirmation or rejected, but
 must not run silently.
 
+## Android Runtime Diagnostics
+
+New Android apps generated on-device include a private, bounded runtime
+diagnostics store. It captures uncaught Java exceptions, relevant Android
+historical process-exit reasons (including ANR and native crash when exposed by
+the OS), small action-lifecycle breadcrumbs, and structured app runtime logs.
+Log levels are `debug`, `info`, `warning`, `error`, and `crash`; debug collection
+is off by default. Logs are capped at 300 entries or 512 KiB, expire after three
+days, and are further capped to 256 KiB per Host response. Reports and logs are
+sanitized and remain in the Provider app's private storage; they are not copied
+into chat, memory, workspace files, or model context.
+
+Napaxi retrieves reports from the Agent App detail page through a third,
+model-hidden Android entry point:
+
+- Intent action: `agent.provider.action.GET_DIAGNOSTICS`
+- Request extra: `agent.provider.extra.DIAGNOSTICS_REQUEST_JSON`
+- Result extra: `agent.provider.extra.DIAGNOSTICS_RESULT_JSON`
+
+Diagnostics protocol v1 supports `list`, `ack`, and `configure`. `configure`
+changes only debug-level collection; info, warning, error, and crash collection
+remain enabled. Every request identifies the `provider_id`, `host_instance_id`,
+operation, report-id list, detailed-log setting, timestamp, expiry, and nonce,
+and is signed with `hmac-sha256-v1` using the Provider's
+existing trusted Host binding. The Provider validates the caller package and
+certificate, binding, expiry, and signature before returning data. Diagnostics
+must not be declared in `AgentPackage.actions`, mounted as a tool, or invoked by
+natural-language routing.
+
+Generated app domain code should emit small semantic events rather than mirror
+raw `logcat`: module, event name, short message, optional trace id, and bounded
+metadata. A trace id should connect one user operation across UI, domain,
+storage/network, and outcome. Providers must not record credentials, full
+payloads, raw user content, or arbitrary WebView console output.
+
+This first version is implemented by the Android Lite SDK and Flutter Android
+Host bridge. Older Android Provider apps and iOS return an explicit unsupported
+state without affecting their existing actions.
+
 ## Result Return
 
 Provider app returns an `ActionResult` through Activity result or a callback URI:

@@ -149,6 +149,19 @@ Use reverse-domain lowercase package names such as `com.napaxi.generated.todo`. 
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+        <provider
+            android:name="agent.provider.lite.AgentProviderDiagnosticsInitializer"
+            android:authorities="com.napaxi.generated.sample.napaxi-diagnostics"
+            android:exported="false" />
+        <activity
+            android:name="agent.provider.lite.AgentProviderDiagnosticsActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="agent.provider.action.GET_DIAGNOSTICS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -277,6 +290,33 @@ and verifies that declared action ids have matching registry handlers.
 Do not copy them into the generated project and do not implement custom HMAC,
 caller-certificate, expiry, nonce, idempotency, or replay validation.
 
+Every newly generated Provider app also includes the fixed diagnostics
+initializer and diagnostics Activity shown in the manifest template above.
+Use the app package followed by `.napaxi-diagnostics` as the initializer
+authority so it stays unique. The SDK captures uncaught Java exceptions,
+recent Android process-exit information, and structured runtime logs into
+bounded private storage. Napaxi retrieves them through a Host-signed internal
+request; diagnostics are not business actions, never appear in the model tool
+list, and do not depend on explicit `@` selection or automatic invocation.
+
+Instrument every generated app's important local runtime boundaries with
+`AgentProviderDiagnostics.log(context, level, module, event, message, metadata,
+traceId)`. Record normal lifecycle and successful domain operations at `info`,
+recoverable degradation or retry at `warning`, and caught network, database,
+background, or UI-domain failures at `error`. Use `debug` only for extra detail;
+the SDK drops it unless the user enables detailed logging in Napaxi. Reuse one
+generated trace id across the UI event, domain service, storage or network step,
+and outcome. Agent actions already reuse their request id as the trace id. For
+WebView apps, forward sanitized semantic load or JavaScript failure events from
+the Java host; never persist raw page contents or arbitrary console output.
+
+The SDK retains at most 300 log entries or 512 KiB for three days and sanitizes
+common credential and phone fields. Metadata must still be deliberately small
+and non-sensitive: never record passwords, credentials, tokens, cookies, full
+request or response bodies, raw user content, contact details, or entire
+database rows. `recordBreadcrumb` remains available for the small crash-context
+trail, but structured `log` calls are the normal debugging surface.
+
 `app/src/main/res/values/styles.xml`:
 
 ```xml
@@ -317,7 +357,7 @@ public class MainActivity extends Activity {
 
 ## Build workflow
 
-1. Create the fixed project layout, `assets/agent-app.json`, a shared domain service, and a validated `NapaxiActionActivity`. Do not create, edit, or copy `build.sh`; the build script lives in this skill at `scripts/build_apk.sh`.
+1. Create the fixed project layout, `assets/agent-app.json`, a shared domain service, a validated `NapaxiActionActivity`, and the fixed diagnostics manifest entries. Do not create, edit, or copy `build.sh`; the build script lives in this skill at `scripts/build_apk.sh`.
 2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading `file:///android_asset/www/index.html` only when the user asks for a web/HTML-style installable Android app or APK wrapper. Put every local HTML/CSS/JS/image/font/data asset under `app/src/main/assets/www/` and use relative links inside the HTML bundle; never reference fixed workspace/device paths.
 3. Run `bash /skills/android-apk-build/scripts/build_apk.sh --project-dir <project> --app-name <APP_NAME>` (or the same `scripts/build_apk.sh` path from the active skill directory if `/skills` is mounted differently). If and only if the user explicitly opted out, omit all Provider files/manifest entries and add `--without-agent-provider`. A legacy project that predates Provider-by-default can still rebuild without that flag when it has no Provider declaration.
 4. If build succeeds, report exactly one APK path and summarize the generated Provider id and exact action ids/tool names. Note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that the bundled script cleaned and verified the absence of intermediate APK files. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.

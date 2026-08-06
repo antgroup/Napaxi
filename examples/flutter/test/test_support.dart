@@ -64,6 +64,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     this.agents = const [],
     this.discoveredAgentProviders = const [],
     List<sdk.AgentAppPackage> connectedApps = const [],
+    Map<String, sdk.AgentAppDiagnosticsSnapshot> agentAppDiagnostics = const {},
     this.skills = const [],
     this.skillStatusReport,
     this.skillUsage = const [],
@@ -78,6 +79,9 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
     this.answerHumanRequestResult,
     Set<String> inactiveSessionThreadIds = const {},
   }) : connectedApps = List<sdk.AgentAppPackage>.from(connectedApps),
+       agentAppDiagnostics = Map<String, sdk.AgentAppDiagnosticsSnapshot>.from(
+         agentAppDiagnostics,
+       ),
        pendingEvolution = List<Map<String, dynamic>>.from(pendingEvolution),
        inactiveSessionThreadIds = Set<String>.from(inactiveSessionThreadIds);
 
@@ -109,6 +113,7 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
   final List<DemoAgent> agents;
   final List<sdk.AgentProviderDescriptor> discoveredAgentProviders;
   final List<sdk.AgentAppPackage> connectedApps;
+  final Map<String, sdk.AgentAppDiagnosticsSnapshot> agentAppDiagnostics;
   List<sdk.SkillInfo> skills;
   final sdk.SkillStatusReport? skillStatusReport;
   final List<sdk.SkillUsageRecord> skillUsage;
@@ -377,6 +382,32 @@ class FakeNapaxiChatClient implements NapaxiChatClient {
       'auto_invoke_enabled': enabled,
     });
     connectedApps[index] = updated;
+    return updated;
+  }
+
+  @override
+  Future<sdk.AgentAppDiagnosticsSnapshot> listConnectedAppDiagnostics(
+    String providerId,
+  ) async {
+    return agentAppDiagnostics[providerId] ??
+        const sdk.AgentAppDiagnosticsSnapshot(supported: false);
+  }
+
+  @override
+  Future<sdk.AgentAppDiagnosticsSnapshot> setConnectedAppDetailedDiagnostics(
+    String providerId,
+    bool enabled,
+  ) async {
+    final current = await listConnectedAppDiagnostics(providerId);
+    if (!current.supported) return current;
+    final updated = sdk.AgentAppDiagnosticsSnapshot(
+      supported: true,
+      reports: current.reports,
+      logs: current.logs,
+      detailedLoggingEnabled: enabled,
+      error: current.error,
+    );
+    agentAppDiagnostics[providerId] = updated;
     return updated;
   }
 

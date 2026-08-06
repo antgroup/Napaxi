@@ -10,7 +10,7 @@ use super::paths::app_bundled_skills_dir;
 
 /// Current bundled skill set version. Increment when updating seed content
 /// to trigger re-deployment on next engine start.
-const BUNDLED_VERSION: u32 = 14;
+const BUNDLED_VERSION: u32 = 16;
 
 struct BundledSkill {
     slug: &'static str,
@@ -56,6 +56,24 @@ const BUNDLED_SKILLS: &[BundledSkill] = &[
                 "sdk/java/agent/provider/lite/AgentProviderActionRegistry.java",
                 include_str!(
                     "../../../../packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderActionRegistry.java"
+                ),
+            ),
+            (
+                "sdk/java/agent/provider/lite/AgentProviderDiagnostics.java",
+                include_str!(
+                    "../../../../packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderDiagnostics.java"
+                ),
+            ),
+            (
+                "sdk/java/agent/provider/lite/AgentProviderDiagnosticsInitializer.java",
+                include_str!(
+                    "../../../../packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderDiagnosticsInitializer.java"
+                ),
+            ),
+            (
+                "sdk/java/agent/provider/lite/AgentProviderDiagnosticsActivity.java",
+                include_str!(
+                    "../../../../packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderDiagnosticsActivity.java"
                 ),
             ),
         ],
@@ -180,6 +198,18 @@ mod tests {
         assert!(
             base.join(
                 "android-apk-build/sdk/java/agent/provider/lite/AgentProviderActionRegistry.java"
+            )
+            .exists()
+        );
+        let diagnostics = base
+            .join("android-apk-build/sdk/java/agent/provider/lite/AgentProviderDiagnostics.java");
+        assert!(diagnostics.exists());
+        let diagnostics_content = std::fs::read_to_string(diagnostics).unwrap();
+        assert!(diagnostics_content.contains("MAX_LOGS = 300"));
+        assert!(diagnostics_content.contains("setDetailedLoggingEnabled"));
+        assert!(
+            base.join(
+                "android-apk-build/sdk/java/agent/provider/lite/AgentProviderDiagnosticsActivity.java"
             )
             .exists()
         );

@@ -30,6 +30,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import android.util.Base64
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -50,8 +51,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -87,6 +91,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
     private var pendingA2ADeepLink: Map<String, String>? = null
     private var pendingAgentActionResult: Result? = null
     private var pendingAgentActionRequestId: String? = null
+    private var pendingAgentDiagnosticsResult: Result? = null
     private var a2aLocalTransport: A2ALocalTransport? = null
     private val sandboxPtySessions = ConcurrentHashMap<Long, Thread>()
     private var pendingSpeechRecognitionResult: Result? = null
@@ -147,6 +152,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         const val METHOD_GET_AGENT_PROVIDER_HOST_PACKAGE_NAME = "getAgentProviderHostPackageName"
         const val METHOD_GET_AGENT_PROVIDER_HOST_INFO = "getAgentProviderHostInfo"
         const val METHOD_EXECUTE_AGENT_PROVIDER_ACTION = "executeAgentProviderAction"
+        const val METHOD_LIST_AGENT_PROVIDER_DIAGNOSTICS = "listAgentProviderDiagnostics"
         const val METHOD_SCHEDULE_AUTOMATION_WAKE = "scheduleAutomationWake"
         const val METHOD_CANCEL_AUTOMATION_WAKE = "cancelAutomationWake"
         const val METHOD_GET_AUTOMATION_SCHEDULER_STATUS = "getAutomationSchedulerStatus"
@@ -156,12 +162,18 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         const val REQUEST_INSTALL_UNKNOWN_APPS = 4202
         const val REQUEST_AGENT_PROVIDER_INSTALL = 4203
         const val REQUEST_AGENT_PROVIDER_ACTION = 4204
+        const val REQUEST_AGENT_PROVIDER_DIAGNOSTICS = 4209
         const val REQUEST_LOCATION_PERMISSION = 4205
         const val REQUEST_A2A_LOCAL_PERMISSION = 4206
         const val REQUEST_MEDIA_LIBRARY_PERMISSION = 4207
         const val REQUEST_MICROPHONE_PERMISSION = 4208
         const val ACTION_INSTALL_AGENT = "agent.provider.action.INSTALL_AGENT"
         const val ACTION_HANDLE_PROPOSAL = "agent.provider.action.HANDLE_PROPOSAL"
+        const val ACTION_GET_DIAGNOSTICS = "agent.provider.action.GET_DIAGNOSTICS"
+        const val EXTRA_DIAGNOSTICS_REQUEST_JSON =
+            "agent.provider.extra.DIAGNOSTICS_REQUEST_JSON"
+        const val EXTRA_DIAGNOSTICS_RESULT_JSON =
+            "agent.provider.extra.DIAGNOSTICS_RESULT_JSON"
         const val ACTION_HOST_INSTALL_PROVIDER_AGENT = "agent.host.action.INSTALL_PROVIDER_AGENT"
         const val ACTION_HOST_TRIGGER_AGENT = "agent.host.action.TRIGGER_AGENT"
         const val ACTION_HOST_A2A_DEEP_LINK = "agent.host.action.A2A_DEEP_LINK"
@@ -324,6 +336,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         pendingA2ADeepLink = null
         pendingAgentActionResult = null
         pendingAgentActionRequestId = null
+        pendingAgentDiagnosticsResult = null
         cleanupSpeechRecognition()
         finishTtsError("UNAVAILABLE", "Flutter engine detached.", null)
         a2aLocalTransport = null
@@ -745,6 +758,18 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 val requestJson = call.argument<String>("requestJson") ?: ""
                 executeAgentProviderAction(ctx, requestJson, result)
             }
+            METHOD_LIST_AGENT_PROVIDER_DIAGNOSTICS -> {
+                val packageJson = call.argument<String>("packageJson") ?: ""
+                val operation = call.argument<String>("operation") ?: "list"
+                val detailedLogging = call.argument<Boolean>("detailedLogging") ?: false
+                readAgentProviderDiagnostics(
+                    ctx,
+                    packageJson,
+                    operation,
+                    detailedLogging,
+                    result,
+                )
+            }
             METHOD_SCHEDULE_AUTOMATION_WAKE -> {
                 val args = call.arguments as? Map<*, *>
                 result.success(NapaxiAutomationScheduler.schedule(ctx, args))
@@ -842,6 +867,10 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         }
         if (requestCode == REQUEST_AGENT_PROVIDER_ACTION) {
             handleAgentProviderActionResult(resultCode, data)
+            return true
+        }
+        if (requestCode == REQUEST_AGENT_PROVIDER_DIAGNOSTICS) {
+            handleAgentProviderDiagnosticsResult(resultCode, data)
             return true
         }
         if (requestCode != REQUEST_INSTALL_UNKNOWN_APPS) return false
@@ -2498,6 +2527,157 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         ))
     }
 
+    private fun readAgentProviderDiagnostics(
+        ctx: Context,
+        packageJson: String,
+        operation: String,
+        detailedLogging: Boolean,
+        result: Result,
+    ) {
+        val activity = activityBinding?.activity
+        if (activity == null) {
+            result.success(mapOf(
+                "supported" to false,
+                "error" to "An Activity is required to read provider diagnostics",
+            ))
+            return
+        }
+        if (pendingAgentDiagnosticsResult != null) {
+            result.success(mapOf(
+                "supported" to true,
+                "error" to "Agent provider diagnostics request already in progress",
+            ))
+            return
+        }
+        val pkg = runCatching { JSONObject(packageJson) }.getOrNull()
+        val binding = pkg?.optJSONObject("install_binding")
+        if (pkg == null || binding == null) {
+            result.success(mapOf("supported" to false, "error" to "Agent App has no Android binding"))
+            return
+        }
+        val providerId = pkg.optString("provider_id")
+        val packageName = binding.optString("app_package_name")
+        val expectedProviderDigest = binding.optString("signing_cert_sha256")
+        val hostPackageName = binding.optString("host_package_name")
+        val expectedHostDigest = binding.optString("host_signing_cert_sha256")
+        val hostInstanceId = binding.optString("host_instance_id")
+        val secret = binding.optString("host_shared_secret")
+        if (providerId.isBlank() || packageName.isBlank() || expectedProviderDigest.isBlank() ||
+            hostInstanceId.isBlank() || secret.isBlank()) {
+            result.success(mapOf("supported" to false, "error" to "Agent App diagnostics binding is incomplete"))
+            return
+        }
+        if (hostPackageName.isNotBlank() && hostPackageName != ctx.packageName) {
+            result.success(mapOf("supported" to false, "error" to "Agent App is bound to a different Host"))
+            return
+        }
+        val currentProviderDigest = signingCertSha256(ctx, packageName)
+        val currentHostDigest = signingCertSha256(ctx, ctx.packageName)
+        if (!currentProviderDigest.equals(expectedProviderDigest, ignoreCase = true) ||
+            (expectedHostDigest.isNotBlank() &&
+                !currentHostDigest.equals(expectedHostDigest, ignoreCase = true))) {
+            result.success(mapOf("supported" to false, "error" to "Agent App signing identity changed"))
+            return
+        }
+        val diagnosticsActivity = findAgentProviderDiagnosticsActivity(ctx, packageName)
+        if (diagnosticsActivity == null) {
+            result.success(mapOf("supported" to false, "reports" to emptyList<Map<String, Any>>()))
+            return
+        }
+        val now = System.currentTimeMillis()
+        val request = JSONObject()
+            .put("protocol_version", 1)
+            .put("request_id", UUID.randomUUID().toString())
+            .put("provider_id", providerId)
+            .put("operation", if (operation == "configure") "configure" else "list")
+            .put("report_ids", JSONArray())
+            .put("detailed_logging", detailedLogging)
+            .put("created_at", isoAt(now))
+            .put("expires_at", isoAt(now + 60_000L))
+            .put("nonce", UUID.randomUUID().toString())
+            .put("host_instance_id", hostInstanceId)
+            .put("signature_algorithm", "hmac-sha256-v1")
+        request.put(
+            "signature",
+            hmacSha256Base64NoPad(secret, diagnosticsSignaturePayload(request)),
+        )
+        pendingAgentDiagnosticsResult = result
+        val intent = Intent(ACTION_GET_DIAGNOSTICS).apply {
+            component = ComponentName(packageName, diagnosticsActivity)
+            putExtra(EXTRA_DIAGNOSTICS_REQUEST_JSON, request.toString())
+        }
+        try {
+            activity.startActivityForResult(intent, REQUEST_AGENT_PROVIDER_DIAGNOSTICS)
+        } catch (error: Exception) {
+            pendingAgentDiagnosticsResult = null
+            result.success(mapOf(
+                "supported" to true,
+                "error" to (error.message ?: "Provider diagnostics handoff failed"),
+            ))
+        }
+    }
+
+    private fun handleAgentProviderDiagnosticsResult(resultCode: Int, data: Intent?) {
+        val pendingResult = pendingAgentDiagnosticsResult
+        pendingAgentDiagnosticsResult = null
+        if (pendingResult == null) return
+        val responseJson = data?.getStringExtra(EXTRA_DIAGNOSTICS_RESULT_JSON)
+        if (resultCode == Activity.RESULT_OK && !responseJson.isNullOrBlank()) {
+            pendingResult.success(mapOf(
+                "supported" to true,
+                "responseJson" to responseJson,
+            ))
+            return
+        }
+        pendingResult.success(mapOf(
+            "supported" to true,
+            "error" to "Provider diagnostics request was canceled or returned no result",
+        ))
+    }
+
+    private fun findAgentProviderDiagnosticsActivity(ctx: Context, packageName: String): String? {
+        val intent = Intent(ACTION_GET_DIAGNOSTICS).apply {
+            addCategory(Intent.CATEGORY_DEFAULT)
+            setPackage(packageName)
+        }
+        return ctx.packageManager
+            .queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            .firstOrNull()
+            ?.activityInfo
+            ?.name
+    }
+
+    private fun diagnosticsSignaturePayload(request: JSONObject): String {
+        val reportIds = request.optJSONArray("report_ids") ?: JSONArray()
+        val reportIdsHash = sha256Base64NoPad(reportIds.toString())
+        return listOf(
+            "request_id=${request.getString("request_id")}",
+            "provider_id=${request.getString("provider_id")}",
+            "operation=${request.getString("operation")}",
+            "report_ids_sha256=$reportIdsHash",
+            "detailed_logging=${request.optBoolean("detailed_logging", false)}",
+            "created_at=${request.getString("created_at")}",
+            "expires_at=${request.getString("expires_at")}",
+            "nonce=${request.getString("nonce")}",
+            "host_instance_id=${request.getString("host_instance_id")}",
+        ).joinToString("\n")
+    }
+
+    private fun sha256Base64NoPad(value: String): String =
+        Base64.encodeToString(
+            MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8)),
+            Base64.NO_WRAP or Base64.NO_PADDING,
+        )
+
+    private fun hmacSha256Base64NoPad(secret: String, payload: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return Base64.encodeToString(
+            mac.doFinal(payload.toByteArray(Charsets.UTF_8)),
+            Base64.NO_WRAP or Base64.NO_PADDING,
+        )
+    }
+
     private fun signingCertSha256(ctx: Context, packageName: String): String? {
         return try {
             val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -2540,9 +2720,13 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             .toString()
 
     private fun isoNow(): String {
+        return isoAt(System.currentTimeMillis())
+    }
+
+    private fun isoAt(timestampMillis: Long): String {
         val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
         format.timeZone = TimeZone.getTimeZone("UTC")
-        return format.format(Date())
+        return format.format(Date(timestampMillis))
     }
 
     private fun Map<String, Any>.stringValue(key: String): String? =

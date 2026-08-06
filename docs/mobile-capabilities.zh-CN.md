@@ -80,6 +80,7 @@ Platform tools 是 host-carried capabilities。Core 拥有 tool names、paramete
 - **Memory tools**：`napaxi.tool.memory` 覆盖 memory read/write/search 和 session recall。
 - **Browser control**：`napaxi.tool.browser` 是 high-risk host-carried tool，adapter 负责 WebView、登录界面、审批 UI 和敏感字段处理。
 - **Agent App Actions**：`napaxi.tool.agent_app_action` 连接外部 app/backend action，proposal/result lifecycle 由 core 管理。Provider 按 `provider_id` 独立注册，不会成为可切换 `AgentDefinition`；V2 `agent_id` 仅是 wire 兼容身份。
+- **Agent App 运行诊断**：端上生成的 Android App 可通过可信、对模型隐藏的控制入口提供崩溃、ANR 和结构化运行日志。它属于 Provider/adapter 生命周期基础设施，不是 Core capability 或 Agent action；只允许已绑定 Host 在管理页面显式读取，debug 级别由用户单独开启。
 - **Channel capabilities**：`napaxi.channel.im` 和 `napaxi.channel.device` 支撑 IM、设备和外设通道。
 - **Agent engines**：core-owned runtime loop capabilities，用于不同 agent loop。
 
