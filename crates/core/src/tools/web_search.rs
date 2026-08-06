@@ -191,20 +191,44 @@ async fn search_with_browser(
     context: &BrowserSearchContext,
     query: &str,
     count: usize,
-    _language: &str,
-    _freshness: &str,
+    language: &str,
+    freshness: &str,
 ) -> Result<Vec<SearchResult>, String> {
-    let url = browser_bing_search_url(query);
+    let url = browser_bing_search_url(query, count, language, freshness);
     let open_output = crate::tool_registry::request_host_tool_execution_with_context(
         context.bridge.clone(),
         crate::browser_tools::BROWSER_OPEN,
-        serde_json::json!({"url": url}),
+        serde_json::json!({
+            "url": url,
+            // Android WebView's mobile Bing page can return a sparse snapshot
+            // immediately after load. The desktop result page is more stable
+            // for the generic browser element parser and still stays inside
+            // the host browser surface.
+            "mode": "desktop",
+            "force_reload": true,
+        }),
         BROWSER_SEARCH_TIMEOUT,
         Some(&context.tool_context),
     )
     .await?;
 
     let mut results = parse_browser_search_results(&open_output, count);
+    tracing::debug!(query, result_count = results.len(), "web_search parsed browser_open output");
+    if results.is_empty() {
+        let wait_output = crate::tool_registry::request_host_tool_execution_with_context(
+            context.bridge.clone(),
+            crate::browser_tools::BROWSER_WAIT,
+            serde_json::json!({
+                "milliseconds": 1500,
+                "screenshot_mode": "never",
+            }),
+            BROWSER_SEARCH_TIMEOUT,
+            Some(&context.tool_context),
+        )
+        .await?;
+        results = parse_browser_search_results(&wait_output, count);
+        tracing::debug!(query, result_count = results.len(), "web_search parsed browser_wait output");
+    }
     if results.is_empty() {
         let snapshot_output = crate::tool_registry::request_host_tool_execution_with_context(
             context.bridge.clone(),
@@ -215,19 +239,13 @@ async fn search_with_browser(
         )
         .await?;
         results = parse_browser_search_results(&snapshot_output, count);
+        tracing::debug!(query, result_count = results.len(), "web_search parsed browser_snapshot output");
     }
     Ok(results)
 }
 
-fn browser_bing_search_url(query: &str) -> String {
-    format!(
-        "https://www.bing.com/search?q={}",
-        openminis_search_query(query)
-    )
-}
-
-fn openminis_search_query(query: &str) -> String {
-    query.split_whitespace().collect::<Vec<_>>().join("+")
+fn browser_bing_search_url(query: &str, count: usize, language: &str, freshness: &str) -> String {
+    bing_search_url(query, count, language, freshness)
 }
 
 fn bing_search_url(query: &str, count: usize, language: &str, freshness: &str) -> String {
@@ -724,10 +742,10 @@ mod tests {
     }
 
     #[test]
-    fn browser_bing_url_matches_openminis_shape() {
+    fn browser_bing_url_reuses_http_bing_parameters() {
         assert_eq!(
-            browser_bing_search_url("重庆 近期 活动 2026年8月"),
-            "https://www.bing.com/search?q=重庆+近期+活动+2026年8月"
+            browser_bing_search_url("重庆 近期 活动 2026年8月", 5, "zh-Hans", ""),
+            "https://www.bing.com/search?q=%E9%87%8D%E5%BA%86+%E8%BF%91%E6%9C%9F+%E6%B4%BB%E5%8A%A8+2026%E5%B9%B48%E6%9C%88&pq=%E9%87%8D%E5%BA%86+%E8%BF%91%E6%9C%9F+%E6%B4%BB%E5%8A%A8+2026%E5%B9%B48%E6%9C%88&setlang=zh-Hans&cc=&count=10"
         );
     }
 
