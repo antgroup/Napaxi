@@ -2,18 +2,18 @@ import Foundation
 
 /// iOS QEMU sandbox integration point.
 ///
-/// Android treats the aarch64 Alpine image as a baked runtime asset and loads
-/// it through the Android PRoot backend. iOS uses the same baked rootfs artifact
-/// and swaps only the outer runner to Napaxi's vendored lower-level QEMU
-/// C/static-library backend; it does not link the adjacent sandbox SDK
-/// wrapper.
+/// Android treats the aarch64 Alpine image as a full development runtime asset.
+/// iOS uses a separate lightweight Alpine rootfs profile and links Napaxi's
+/// vendored lower-level QEMU C/static-library backend; it does not package
+/// Codex CLI, OpenJDK, Android SDK/build-tools, qemu-x86_64, or the adjacent
+/// sandbox SDK wrapper.
 public enum NapaxiIosQemuSandboxSupport {
     public static let shellCapabilityId = "napaxi.tool.shell"
     public static let codexCapabilityId = "napaxi.agent_engine.codex"
     public static let sandboxCapabilityId = "napaxi.platform.ios_qemu"
 
-    /// Keep the Android artifact name exactly so Android/iOS package the same
-    /// baked Alpine aarch64 rootfs.
+    /// Keep the artifact name stable while allowing the iOS package to ship a
+    /// lightweight rootfs that differs from Android's full APK-build profile.
     public static let bundledRootfsCandidates: [(name: String, extension: String)] = [
         ("alpine-rootfs", "bin"),
     ]
@@ -67,6 +67,11 @@ public enum NapaxiIosQemuSandboxSupport {
         rootfsAvailable: Bool = isBundledRootfsAvailable,
         runtimeLinked: Bool = isRuntimeLinked
     ) -> [String] {
-        rootfsAvailable && runtimeLinked ? [] : [shellCapabilityId, codexCapabilityId, sandboxCapabilityId]
+        var disabled = [codexCapabilityId]
+        if !(rootfsAvailable && runtimeLinked) {
+            disabled.append(shellCapabilityId)
+            disabled.append(sandboxCapabilityId)
+        }
+        return disabled
     }
 }

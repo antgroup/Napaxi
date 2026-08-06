@@ -372,12 +372,15 @@ iOS install binding fields expected by core (`ios_bundle_id`, `ios_team_id`,
 acceptance validates protocol v2, expiry, replay, installed package/provider
 matching, host binding, and `hmac-sha256-v1` signatures.
 
-iOS shell/Codex sandbox support is routed through Napaxi's iOS QEMU backend.
-The resource contract intentionally matches Android: package
-`Sources/Napaxi/Resources/alpine-rootfs.bin` from the same baked Alpine rootfs
-used by Android. The package links the vendored lower-level QEMU C bridge and
-static libraries through `NapaxiIosQemu`; if those artifacts or the rootfs are
-missing, `NapaxiIosQemuSandboxSupport` reports the sandbox as unavailable.
+iOS shell sandbox support is routed through Napaxi's iOS QEMU backend. The
+resource contract keeps the stable `Sources/Napaxi/Resources/alpine-rootfs.bin`
+name, but the iOS bake profile is lightweight: it includes Python, Node/npm,
+shell, curl/wget, zip/unzip, and git, and excludes Codex CLI, OpenJDK, Android
+SDK/build-tools, qemu-x86_64, and the x86_64 sysroot. The package links the
+vendored lower-level QEMU C bridge and static libraries through
+`NapaxiIosQemu`; if those artifacts or the rootfs are missing,
+`NapaxiIosQemuSandboxSupport` reports the sandbox as unavailable. The Codex
+agent-engine capability remains disabled on iOS.
 
 Default iOS platform tools cover URL, phone/SMS handoff, clipboard, device
 info, location, notifications, contacts, calendar events, camera capture,

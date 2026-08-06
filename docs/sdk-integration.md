@@ -32,11 +32,13 @@ Generated bridge outputs are intentionally ignored by git:
 
 Android proot runtime assets under `packages/flutter/android/assets` and the checked-in proot helper libraries are source assets for the SDK and should remain available. These prebuilt third-party binaries are stored via Git LFS; their provenance and integrity hashes are documented in `packages/flutter/android/jniLibs/THIRD-PARTY.md`, and their licenses (including GPL/LGPL) in `THIRD-PARTY-LICENSES.md`. A working `git lfs` install is required to check them out.
 The native Swift Package in `packages/ios` is wired for the iOS QEMU sandbox
-backend. iOS uses the same baked Alpine rootfs artifact name as Android
-(`alpine-rootfs.bin`) and swaps the outer runner from Android PRoot to
-Napaxi's vendored lower-level QEMU C/static-library backend. The iOS shell and
-Codex sandbox capabilities become available when the QEMU artifacts are linked,
-the rootfs resource is packaged, and the host enables the capabilities. The
+backend. iOS keeps the stable artifact name `alpine-rootfs.bin` but bakes a
+separate lightweight rootfs profile instead of Android's full APK-build image:
+Python, Node/npm, shell, curl/wget, zip/unzip, and git are included, while Codex
+CLI, OpenJDK, Android SDK/build-tools, qemu-x86_64, and the x86_64 sysroot are
+not packaged. The iOS shell sandbox capability becomes available when the QEMU
+artifacts are linked, the rootfs resource is packaged, and the host enables the
+capabilities; the Codex agent-engine capability remains disabled on iOS. The
 generated `packages/ios/Frameworks/napaxi_api_bridge.xcframework` binary target
 with headers/modulemap must still exist locally before opening the package in
 Xcode or running SwiftPM iOS builds.
@@ -96,10 +98,10 @@ reverse-engineer them.
 
 The native iOS SDK in `packages/ios` calls the same `napaxi_core::api` boundary
 as the Flutter adapter through the stable C ABI. Shell-like platform execution
-is routed through Napaxi's iOS QEMU backend. The contract matches Android:
-reuse the baked Alpine aarch64 rootfs as `alpine-rootfs.bin`, while the
-platform-specific runner is the vendored lower-level QEMU C bridge and static
-libraries.
+is routed through Napaxi's iOS QEMU backend. The contract keeps the stable
+`alpine-rootfs.bin` resource name, but iOS uses a lightweight rootfs profile
+instead of Android's full APK-build profile. The platform-specific runner is the
+vendored lower-level QEMU C bridge and static libraries.
 
 - Native Swift hosts should consume `packages/ios`; Flutter continues to
   consume `packages/flutter`. Both adapters share `packages/api_bridge` and
@@ -107,8 +109,9 @@ libraries.
 - Do not depend on sandbox-specific filesystem layout or shell semantics from
   adapter code; route everything through `napaxi_core::api::platform`.
 - If the iOS QEMU runtime is not linked or the rootfs is not packaged, the
-  shell/Codex sandbox capability is disabled and the
-  `napaxi_api_ios_qemu_*` readiness entrypoints return false.
+  shell sandbox capability is disabled and the `napaxi_api_ios_qemu_*`
+  readiness entrypoints return false. The Codex agent-engine capability remains
+  disabled on iOS because the lightweight rootfs does not package Codex CLI.
 - The native device gate requires a connected physical iOS device. It signs the
   integration app, installs it with `devicectl`, launches it, then copies back
   the app-written smoke report and checks the launch token plus native engine

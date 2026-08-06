@@ -43,7 +43,7 @@ Pod::Spec.new do |s|
   # Rust compiled xcframework
   s.vendored_frameworks = 'Frameworks/napaxi_api_bridge.xcframework'
 
-  # iOS QEMU sandbox bootstrap archive. Reuse the same baked Alpine rootfs
-  # artifact as Android; the QEMU runtime itself is linked once compiled.
+  # iOS QEMU sandbox bootstrap archive. This is the lightweight iOS rootfs
+  # profile, not Android's full APK-build rootfs.
   s.resources = 'Resources/alpine-rootfs.bin'
 end

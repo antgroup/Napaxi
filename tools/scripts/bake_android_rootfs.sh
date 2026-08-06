@@ -33,9 +33,9 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SDK_DIR="$ROOT_DIR/packages/flutter"
 
 # Packages to bake in. Add or remove here; the script picks up changes on the
-# next run. This is the shared Alpine rootfs artifact also consumed by iOS QEMU
-# (python3, node, npm, curl, bash, zip, git) that the clean Android base lacks.
-# OpenJDK and qemu support the offline Android APK build pipeline.
+# next run. This is the Android full APK-build rootfs profile. iOS intentionally
+# uses tools/scripts/bake_ios_rootfs.sh for a smaller profile without Codex,
+# OpenJDK, Android SDK/build-tools, qemu-x86_64, or the x86_64 sysroot.
 readonly BAKE_PACKAGES=(
     python3
     py3-pip

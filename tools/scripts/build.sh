@@ -107,6 +107,49 @@ check_android_runtime_assets() {
     done
 }
 
+
+check_ios_rootfs_asset() {
+    local rootfs_path="$1"
+    local label="$2"
+
+    [ -f "$rootfs_path" ] || err "Missing $label iOS QEMU rootfs asset: $rootfs_path"
+    [ ! -L "$rootfs_path" ] || err "$label iOS rootfs asset must be a packaged file, not a symlink: $rootfs_path"
+    if head -n 1 "$rootfs_path" | grep -qx 'version https://git-lfs.github.com/spec/v1'; then
+        err "$label iOS rootfs asset is a Git LFS pointer, not a baked rootfs: $rootfs_path"
+    fi
+    gzip -t "$rootfs_path" >/dev/null 2>&1 || err "$label iOS rootfs asset is not a valid gzip archive: $rootfs_path"
+
+    for expected in \
+        ./usr/bin/python3 \
+        ./usr/bin/node \
+        ./usr/bin/npm \
+        ./usr/bin/curl \
+        ./usr/bin/wget \
+        ./bin/bash \
+        ./usr/bin/zip \
+        ./usr/bin/unzip \
+        ./usr/bin/git; do
+        tar -tzf "$rootfs_path" "$expected" >/dev/null 2>&1 || \
+            err "$label iOS rootfs is missing expected lightweight tool: $expected"
+    done
+
+    for forbidden in \
+        ./usr/bin/codex \
+        ./usr/lib/node_modules/@openai/codex \
+        ./usr/bin/java \
+        ./usr/bin/javac \
+        ./usr/bin/keytool \
+        ./usr/bin/qemu-x86_64 \
+        ./usr/lib/jvm \
+        ./opt/android \
+        ./opt/x86root; do
+        if tar -tzf "$rootfs_path" | grep -F -x "$forbidden" >/dev/null || \
+           tar -tzf "$rootfs_path" | grep -F "${forbidden%/}/" >/dev/null; then
+            err "$label iOS rootfs contains Android/Codex-only path: $forbidden"
+        fi
+    done
+}
+
 check_ios_native_assets() {
     local ios_dir="$ROOT_DIR/packages/ios"
     local flutter_ios_dir="$SDK_DIR/ios"
@@ -121,10 +164,8 @@ check_ios_native_assets() {
 
     [ -f "$ios_dir/Package.swift" ] || err "Missing native iOS Swift package: $ios_dir/Package.swift"
     [ -f "$ios_dir/Sources/Napaxi/NapaxiIosQemuSandboxSupport.swift" ] || err "Missing native iOS QEMU sandbox support: $ios_dir/Sources/Napaxi/NapaxiIosQemuSandboxSupport.swift"
-    [ -f "$resource_dir/alpine-rootfs.bin" ] || err "Missing native iOS QEMU rootfs asset: $resource_dir/alpine-rootfs.bin"
-    [ -f "$flutter_resource_dir/alpine-rootfs.bin" ] || err "Missing Flutter iOS QEMU rootfs asset: $flutter_resource_dir/alpine-rootfs.bin"
-    [ ! -L "$resource_dir/alpine-rootfs.bin" ] || err "Native iOS rootfs asset must be a packaged file, not a symlink: $resource_dir/alpine-rootfs.bin"
-    [ ! -L "$flutter_resource_dir/alpine-rootfs.bin" ] || err "Flutter iOS rootfs asset must be a packaged file, not a symlink: $flutter_resource_dir/alpine-rootfs.bin"
+    check_ios_rootfs_asset "$resource_dir/alpine-rootfs.bin" "Native"
+    check_ios_rootfs_asset "$flutter_resource_dir/alpine-rootfs.bin" "Flutter"
 
     for bridge_source in qemu_bridge.c qemu_bridge.h qemu_runner.c qemu_runner.h; do
         [ -f "$qemu_source_dir/$bridge_source" ] || err "Missing native iOS QEMU bridge source: $qemu_source_dir/$bridge_source"
@@ -150,16 +191,8 @@ check_ios_app_qemu_artifacts() {
     local app_path="$1"
     local rootfs_path="$app_path/Napaxi_Napaxi.bundle/Resources/alpine-rootfs.bin"
     local binary_path="$app_path/NapaxiIOSIntegrationApp.debug.dylib"
-    local android_rootfs="$SDK_DIR/android/assets/alpine-rootfs.bin"
 
-    [ -f "$rootfs_path" ] || err "iOS app is missing packaged QEMU rootfs: $rootfs_path"
-    [ ! -L "$rootfs_path" ] || err "iOS app QEMU rootfs must be copied into the app bundle, not packaged as a symlink: $rootfs_path"
-
-    local app_rootfs_size android_rootfs_size
-    app_rootfs_size="$(stat -f '%z' "$rootfs_path")"
-    android_rootfs_size="$(stat -f '%z' "$android_rootfs")"
-    [ "$app_rootfs_size" = "$android_rootfs_size" ] || \
-        err "iOS app QEMU rootfs size ($app_rootfs_size) does not match Android Alpine rootfs size ($android_rootfs_size)."
+    check_ios_rootfs_asset "$rootfs_path" "Packaged app"
 
     [ -f "$binary_path" ] || err "iOS app is missing debug dylib for QEMU symbol verification: $binary_path"
     if ! nm -gU "$binary_path" | grep -E '(_qemu_sandbox_init|_napaxi_api_ios_qemu_is_ready)' >/dev/null; then

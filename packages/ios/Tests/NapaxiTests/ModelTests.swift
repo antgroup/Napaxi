@@ -934,10 +934,10 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(activated.activatedSkills.first?.reason, "matched")
     }
 
-    func testIosQemuSupportDisablesShellAndCodexUntilRootfsAndRuntimeAreAvailable() {
+    func testIosQemuSupportKeepsCodexDisabledAndDisablesShellUntilRootfsAndRuntimeAreAvailable() {
         let unavailable = [
-            NapaxiIosQemuSandboxSupport.shellCapabilityId,
             NapaxiIosQemuSandboxSupport.codexCapabilityId,
+            NapaxiIosQemuSandboxSupport.shellCapabilityId,
             NapaxiIosQemuSandboxSupport.sandboxCapabilityId,
         ]
         XCTAssertEqual(
@@ -954,11 +954,11 @@ final class ModelTests: XCTestCase {
         )
         XCTAssertEqual(
             NapaxiIosQemuSandboxSupport.disabledCapabilities(rootfsAvailable: true, runtimeLinked: true),
-            []
+            [NapaxiIosQemuSandboxSupport.codexCapabilityId]
         )
     }
 
-    func testIosQemuSupportPrefersAndroidRootfsArtifactName() {
+    func testIosQemuSupportUsesStableRootfsArtifactName() {
         XCTAssertEqual(NapaxiIosQemuSandboxSupport.bundledRootfsCandidates.first?.name, "alpine-rootfs")
         XCTAssertEqual(NapaxiIosQemuSandboxSupport.bundledRootfsCandidates.first?.extension, "bin")
     }
@@ -982,8 +982,8 @@ final class ModelTests: XCTestCase {
         }
         XCTAssertEqual(object["platform"], .string("ios"))
         XCTAssertEqual(object["disabled_capabilities"], .array([
-            .string("napaxi.tool.shell"),
             .string("napaxi.agent_engine.codex"),
+            .string("napaxi.tool.shell"),
             .string("napaxi.platform.ios_qemu"),
         ]))
     }

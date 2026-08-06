@@ -63,9 +63,9 @@ iOS SDK 暴露与 Flutter 兼容的 typed models 和 facade names，用于：
 
 ## iOS QEMU sandbox
 
-iOS shell-like platform execution 已切到 Napaxi iOS QEMU backend。当前仓库保留 `napaxi_api_ios_qemu_*` 稳定 bridge、Swift wiring、与 Android 对齐的 `alpine-rootfs.bin` 资源约定，并通过 vendored 底层 QEMU C bridge/静态库提供实际 runner；没有接入隔壁 adjacent sandbox SDK wrapper。
+iOS shell-like platform execution 已切到 Napaxi iOS QEMU backend。当前仓库保留 `napaxi_api_ios_qemu_*` 稳定 bridge、Swift wiring、稳定的 `alpine-rootfs.bin` 资源名，并通过 vendored 底层 QEMU C bridge/静态库提供实际 runner；没有接入隔壁 adjacent sandbox SDK wrapper。
 
-`Sources/Napaxi/Resources/alpine-rootfs.bin` 复用 Android baked Alpine rootfs artifact，不再维护单独的 iOS rootfs。
+`Sources/Napaxi/Resources/alpine-rootfs.bin` 使用独立 lightweight iOS bake profile：保留 Python、Node/npm、shell、curl/wget、zip/unzip、git；不打包 Codex CLI、OpenJDK、Android SDK/build-tools、qemu-x86_64 或 x86_64 sysroot。iOS Codex agent-engine capability 保持 disabled。
 
 ## 验证
 
