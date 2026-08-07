@@ -100,10 +100,10 @@ fn thread_open_params(
     if let Some(instructions) = request.and_then(codex_developer_instructions) {
         params["developerInstructions"] = Value::String(instructions);
     }
-    if thread_id.is_none() {
-        if let Some(dynamic_tools) = codex_dynamic_tools(dynamic_tools) {
-            params["dynamicTools"] = dynamic_tools;
-        }
+    if thread_id.is_none()
+        && let Some(dynamic_tools) = codex_dynamic_tools(dynamic_tools)
+    {
+        params["dynamicTools"] = dynamic_tools;
     }
     params
 }
@@ -341,7 +341,7 @@ fn parse_codex_attachments(attachments_json: &str) -> Vec<CodexAttachmentInput> 
     };
     items
         .into_iter()
-        .filter_map(|item| {
+        .map(|item| {
             let kind = string_field(&item, "kind").unwrap_or_else(|| {
                 let mime_type = string_field(&item, "mime_type")
                     .or_else(|| string_field(&item, "mimeType"))
@@ -359,13 +359,13 @@ fn parse_codex_attachments(attachments_json: &str) -> Vec<CodexAttachmentInput> 
                 .or_else(|| string_field(&item, "storageKey"))
                 .or_else(|| string_field(&item, "path").filter(|path| is_codex_sandbox_path(path)))
                 .filter(|path| is_codex_sandbox_path(path));
-            Some(CodexAttachmentInput {
+            CodexAttachmentInput {
                 kind,
                 mime_type: string_field(&item, "mime_type")
                     .or_else(|| string_field(&item, "mimeType")),
                 filename: string_field(&item, "filename").or_else(|| string_field(&item, "name")),
                 sandbox_path,
-            })
+            }
         })
         .collect()
 }

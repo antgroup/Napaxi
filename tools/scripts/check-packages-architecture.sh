@@ -37,8 +37,8 @@ done
 
 [ -d packages/api_contract/fixtures/workspace ] || err "Missing workspace API contract fixtures: packages/api_contract/fixtures/workspace"
 
-if git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- packages >/dev/null; then
-    git grep -n -E '^(<<<<<<<|=======|>>>>>>>)' -- packages >&2
+if git grep -I -n -E '^(<<<<<<<|=======|>>>>>>>)' -- packages >/dev/null; then
+    git grep -I -n -E '^(<<<<<<<|=======|>>>>>>>)' -- packages >&2
     err "Unresolved merge conflict markers found under packages/."
 fi
 

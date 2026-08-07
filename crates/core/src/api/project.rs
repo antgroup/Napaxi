@@ -156,3 +156,146 @@ pub use crate::project::SessionPlacement;
 pub use crate::project::WorkspaceKind;
 /// Workspace record exposed to typed adapter code.
 pub use crate::project::WorkspaceRecord;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_handle() -> (i64, tempfile::TempDir) {
+        let temp = tempfile::tempdir().unwrap();
+        let config_json = serde_json::json!({
+            "provider": "openai",
+            "api_key": "test",
+            "base_url": null,
+            "model": "test-model",
+            "system_prompt": "",
+            "max_tokens": 128
+        })
+        .to_string();
+        let context_json = serde_json::json!({
+            "platform": "test",
+            "files_dir": temp.path().to_str().unwrap(),
+            "native_library_dir": null
+        })
+        .to_string();
+        let handle = crate::runtime::create_engine_handle(&config_json, &context_json).unwrap();
+        (handle, temp)
+    }
+
+    fn assert_error_json(value: &str, expected: &str) {
+        let parsed: serde_json::Value = serde_json::from_str(value).unwrap();
+        assert_eq!(
+            parsed.get("error").and_then(serde_json::Value::as_str),
+            Some(expected)
+        );
+    }
+
+    #[tokio::test]
+    async fn invalid_handle_returns_error_for_project_api() {
+        assert_error_json(
+            &register_project_handle(0, "project-a", "acct-a", "agent-a", "Project A").await,
+            "invalid engine handle",
+        );
+        assert_error_json(
+            &list_projects_handle(0, "acct-a", "agent-a").await,
+            "invalid engine handle",
+        );
+        assert_error_json(
+            &archive_project_handle(0, "project-a", "acct-a", "agent-a").await,
+            "invalid engine handle",
+        );
+        assert_error_json(
+            &get_session_placement_handle(0, "{}").await,
+            "invalid engine handle",
+        );
+        assert_error_json(
+            &list_session_placements_handle(0, "acct-a", "agent-a").await,
+            "invalid engine handle",
+        );
+        assert_error_json(
+            &move_session_to_project_handle(0, "{}", None, "keep_current", None).await,
+            "invalid engine handle",
+        );
+        assert_error_json(
+            &list_project_files_handle(0, "project-a", "acct-a", "agent-a", None, false).await,
+            "invalid engine handle",
+        );
+    }
+
+    #[tokio::test]
+    async fn handle_project_lifecycle_returns_json_contracts() {
+        let (handle, temp) = make_handle();
+        let files_dir = temp.path().to_str().unwrap();
+        let key_json = crate::session::create_session(files_dir, "agent-a", "app", "acct-a", None);
+
+        let registered =
+            register_project_handle(handle, "project-a", "acct-a", "agent-a", "Project A").await;
+        let project: ProjectRecord = serde_json::from_str(&registered).unwrap();
+        assert_eq!(project.id, "project-a");
+
+        let projects_json = list_projects_handle(handle, "acct-a", "agent-a").await;
+        let projects: Vec<ProjectRecord> = serde_json::from_str(&projects_json).unwrap();
+        assert_eq!(projects.len(), 1);
+
+        let initial_json = get_session_placement_handle(handle, &key_json).await;
+        let initial: SessionPlacement = serde_json::from_str(&initial_json).unwrap();
+        assert_eq!(initial.project_id, None);
+
+        let moved_json = move_session_to_project_handle(
+            handle,
+            &key_json,
+            Some("project-a"),
+            "use_project_default",
+            Some(initial.revision),
+        )
+        .await;
+        let moved: SessionPlacement = serde_json::from_str(&moved_json).unwrap();
+        assert_eq!(moved.project_id.as_deref(), Some("project-a"));
+        assert_eq!(moved.runtime_workspace_id, project.default_workspace_id);
+
+        let placements_json = list_session_placements_handle(handle, "acct-a", "agent-a").await;
+        let placements: Vec<SessionPlacement> = serde_json::from_str(&placements_json).unwrap();
+        assert_eq!(placements.len(), 1);
+
+        let workspace =
+            crate::project::project_workspace(files_dir, "project-a", "acct-a", "agent-a")
+                .await
+                .unwrap();
+        let bridge = crate::storage::FileBridge::new_with_workspace_files_dir(
+            files_dir,
+            &workspace.physical_root,
+        );
+        bridge.ensure_workspace_inner().unwrap();
+        std::fs::create_dir_all(bridge.workspace_dir().join("notes")).unwrap();
+        std::fs::write(bridge.workspace_dir().join("notes/todo.txt"), "hello").unwrap();
+        let files = list_project_files_handle(
+            handle,
+            "project-a",
+            "acct-a",
+            "agent-a",
+            Some("notes"),
+            true,
+        )
+        .await;
+        assert!(
+            files.contains("/workspace/notes/todo.txt"),
+            "files: {files}"
+        );
+
+        let archived_json = archive_project_handle(handle, "project-a", "acct-a", "agent-a").await;
+        assert!(serde_json::from_str::<bool>(&archived_json).unwrap());
+        let projects_after: Vec<ProjectRecord> =
+            serde_json::from_str(&list_projects_handle(handle, "acct-a", "agent-a").await).unwrap();
+        assert!(projects_after.is_empty());
+
+        crate::runtime::dispose_engine_handle(handle);
+    }
+
+    #[tokio::test]
+    async fn handle_move_rejects_unknown_workspace_policy() {
+        let (handle, _temp) = make_handle();
+        let json = move_session_to_project_handle(handle, "{}", None, "unknown_policy", None).await;
+        assert_error_json(&json, "Unknown workspace policy: unknown_policy");
+        crate::runtime::dispose_engine_handle(handle);
+    }
+}

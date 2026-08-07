@@ -35,7 +35,7 @@ and contains a native engine handle.
 Set `IOS_DEVELOPMENT_TEAM` before the device gate for automatic signing; add
 `IOS_ALLOW_PROVISIONING_UPDATES=1` when Xcode should create or update local
 development signing assets. If your Apple team already has a different
-development profile, set `IOS_BUNDLE_IDENTIFIER=com.example.your.bundle` so the
+development profile, set `IOS_BUNDLE_IDENTIFIER=dev.napaxi.integration` so the
 signed app, launch, and app-data copy steps all use that bundle identifier.
 For manual signing with an existing profile, set
 `IOS_PROVISIONING_PROFILE_SPECIFIER` or `IOS_PROVISIONING_PROFILE_UUID`, plus

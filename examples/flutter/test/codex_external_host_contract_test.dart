@@ -83,7 +83,7 @@ void main() {
 
     expect(scenariosSource, contains('napaxi.agent_engine.codex'));
     expect(scenariosSource, contains('napaxi.agent_engine.external_host'));
-    expect(chatScreenSource, contains("if (agentId == 'engine.cc')"));
+    expect(chatScreenSource, contains("_isCliAgent(String agentId) => agentId == 'engine.cc'"));
     expect(chatScreenSource, contains('napaxi.agent_engine.codex'));
     expect(chatScreenSource, contains('core-owned'));
     expect(

@@ -3879,8 +3879,9 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _restoreSdkSessions(LlmConfigState config) async {
     if (_isCliAgent(_activeAgentId)) {
-      // CLI engines (CC/Codex) own one persistent conversation per engine and
-      // restore straight from their native session store — no Rust record.
+      // CC is still an external CLI host and restores from its native session
+      // store. Codex is core-owned by napaxi.agent_engine.codex and follows
+      // the regular Rust session restore path below.
       await _restoreCliEngineSession(_activeAgentId);
       return;
     }
@@ -4000,10 +4001,9 @@ class _ChatScreenState extends State<ChatScreen>
 
   bool _isCliAgent(String agentId) => agentId == 'engine.cc';
 
-  /// Restore CLI engine sessions. CLI engines bypass the Rust session store.
-  /// For Codex, conversations are pulled straight from `thread/list` (one UI
-  /// session per codex thread). For CC there's no list RPC, so we fall back to
-  /// a single fresh conversation.
+  /// Restore external CLI engine sessions. CC bypasses the Rust session store.
+  /// Codex history is core-owned by napaxi.agent_engine.codex, so Codex should
+  /// not enter this path.
   Future<void> _restoreCliEngineSession(String agentId) async {
     final logTag = agentId == 'engine.cc'
         ? 'napaxiCCHistory'

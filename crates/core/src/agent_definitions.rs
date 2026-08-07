@@ -168,6 +168,7 @@ fn default_max_tokens() -> i32 {
 
 impl AgentDefinition {
     /// Create a new definition with a generated UUID and timestamps.
+    #[allow(dead_code)]
     pub fn new(name: String, model: String) -> Self {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         Self {

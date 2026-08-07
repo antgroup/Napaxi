@@ -337,10 +337,10 @@ pub async fn register_project(
         return Err("Project account, agent, and name are required".to_string());
     }
     let conn = connection(files_dir).await?;
-    if let Some(existing) = get_project_on_conn(&conn, &project_id).await? {
-        if existing.account_id != account_id || existing.agent_id != agent_id {
-            return Err("Project id belongs to a different owner".to_string());
-        }
+    if let Some(existing) = get_project_on_conn(&conn, &project_id).await?
+        && (existing.account_id != account_id || existing.agent_id != agent_id)
+    {
+        return Err("Project id belongs to a different owner".to_string());
     }
     let workspace_id = deterministic_workspace_id("project", account_id, agent_id, &project_id);
     let physical_root = workspace_root(files_dir, &workspace_id);
