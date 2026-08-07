@@ -867,6 +867,7 @@ fn normalize_workdir(workdir: Option<&str>) -> &'static str {
     "/workspace"
 }
 
+#[path = "ios_qemu_env/pty.rs"]
 pub mod pty;
 
 fn qemu_env_json() -> String {

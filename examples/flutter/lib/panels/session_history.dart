@@ -1356,144 +1356,146 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Material(
-                  color: _appSurfaceColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: const BorderSide(color: _appSurfaceBorderColor),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    key: Key('session_preview_action_${session.id}'),
-                    onTap: () =>
-                        Navigator.of(sheetContext).pop(_SessionAction.open),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 18, 14, 20),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  strings.latestMessage,
-                                  style: const TextStyle(
-                                    color: _sessionMenuMuted,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                                Text(
-                                  _sessionHistoryDisplayTitle(session),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    color: _sessionMenuText,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    minHeight: 72,
-                                  ),
-                                  child: Align(
-                                    alignment: Alignment.topLeft,
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        for (
-                                          var index = 0;
-                                          index < previewEntries.length;
-                                          index++
-                                        ) ...[
-                                          if (index > 0)
-                                            const SizedBox(height: 5),
-                                          Text(
-                                            previewEntries[index],
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Color(0xFF5F5F5F),
-                                              fontSize: 14,
-                                              height: 1.45,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Material(
+                    color: _appSurfaceColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: const BorderSide(color: _appSurfaceBorderColor),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      key: Key('session_preview_action_${session.id}'),
+                      onTap: () =>
+                          Navigator.of(sheetContext).pop(_SessionAction.open),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 18, 14, 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    strings.latestMessage,
+                                    style: const TextStyle(
+                                      color: _sessionMenuMuted,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 7),
+                                  Text(
+                                    _sessionHistoryDisplayTitle(session),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: _sessionMenuText,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 72,
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.topLeft,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          for (
+                                            var index = 0;
+                                            index < previewEntries.length;
+                                            index++
+                                          ) ...[
+                                            if (index > 0)
+                                              const SizedBox(height: 5),
+                                            Text(
+                                              previewEntries[index],
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Color(0xFF5F5F5F),
+                                                fontSize: 14,
+                                                height: 1.45,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 12),
+                            const Icon(
+                              Icons.arrow_forward_ios_rounded,
+                              color: Color(0xFF989898),
+                              size: 17,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Material(
+                    color: _appSurfaceColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: const BorderSide(color: _appSurfaceBorderColor),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _SessionSheetAction(
+                            key: Key('session_pin_action_${session.id}'),
+                            icon: Icons.push_pin_outlined,
+                            showIconSlash: session.isPinned,
+                            label: session.isPinned
+                                ? strings.unpinChat
+                                : strings.pinChat,
+                            onTap: () => Navigator.of(
+                              sheetContext,
+                            ).pop(_SessionAction.pinToggle),
                           ),
-                          const SizedBox(width: 12),
-                          const Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            color: Color(0xFF989898),
-                            size: 17,
+                          const SizedBox(height: 2),
+                          _SessionSheetAction(
+                            key: Key('session_rename_action_${session.id}'),
+                            icon: Icons.edit_outlined,
+                            label: strings.renameChat,
+                            onTap: () => Navigator.of(
+                              sheetContext,
+                            ).pop(_SessionAction.rename),
+                          ),
+                          const SizedBox(height: 2),
+                          _SessionSheetAction(
+                            key: Key('session_delete_action_${session.id}'),
+                            icon: Icons.delete_outline_rounded,
+                            label: strings.deleteChat,
+                            isDestructive: true,
+                            onTap: () => Navigator.of(
+                              sheetContext,
+                            ).pop(_SessionAction.delete),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                Material(
-                  color: _appSurfaceColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: const BorderSide(color: _appSurfaceBorderColor),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: Padding(
-                    padding: const EdgeInsets.all(6),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _SessionSheetAction(
-                          key: Key('session_pin_action_${session.id}'),
-                          icon: Icons.push_pin_outlined,
-                          showIconSlash: session.isPinned,
-                          label: session.isPinned
-                              ? strings.unpinChat
-                              : strings.pinChat,
-                          onTap: () => Navigator.of(
-                            sheetContext,
-                          ).pop(_SessionAction.pinToggle),
-                        ),
-                        const SizedBox(height: 2),
-                        _SessionSheetAction(
-                          key: Key('session_rename_action_${session.id}'),
-                          icon: Icons.edit_outlined,
-                          label: strings.renameChat,
-                          onTap: () => Navigator.of(
-                            sheetContext,
-                          ).pop(_SessionAction.rename),
-                        ),
-                        const SizedBox(height: 2),
-                        _SessionSheetAction(
-                          key: Key('session_delete_action_${session.id}'),
-                          icon: Icons.delete_outline_rounded,
-                          label: strings.deleteChat,
-                          isDestructive: true,
-                          onTap: () => Navigator.of(
-                            sheetContext,
-                          ).pop(_SessionAction.delete),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
