@@ -423,6 +423,13 @@ class AgentAppActionResult {
   bool get isHostBindingMissing =>
       status == 'failed' && errorCode == 'host_not_bound';
 
+  /// True when trusted Provider state can be safely restored and the same
+  /// proposal retried. Both failures happen before business logic or replay
+  /// consumption, so a single trusted refresh cannot duplicate side effects.
+  bool get isTrustedBindingRejected =>
+      status == 'failed' &&
+      (errorCode == 'host_not_bound' || errorCode == 'signature_invalid');
+
   factory AgentAppActionResult.fromMap(Map<dynamic, dynamic> map) {
     return AgentAppActionResult(
       requestId: map['request_id'] as String? ?? '',

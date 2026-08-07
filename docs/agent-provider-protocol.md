@@ -122,6 +122,11 @@ The Host uses them to render the Agent App capability detail page. Locale keys
 use BCP 47-style tags such as `zh-CN` and `en`; when no localized value matches,
 the Host falls back to `display_name` and `description`.
 
+`confirmation_policy` accepts `none` and `provider_required`. Hosts and the
+Lite Provider SDK normalize the legacy value `provider` to
+`provider_required` so existing manifests remain fail-closed, but newly built
+Provider apps must not emit that legacy alias. Unknown values are rejected.
+
 Provider action tool names continue to use the host-side
 `app_action_` prefix so descriptor and invocation admission can map to the
 compiled Agent App Action capability.

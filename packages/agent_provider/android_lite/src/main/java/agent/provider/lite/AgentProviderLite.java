@@ -341,15 +341,27 @@ public final class AgentProviderLite {
                 throw new ProtocolException(
                         "invalid_tool_name", "Provider tool names must start with app_action_.");
             }
+            String confirmationPolicy = normalizeConfirmationPolicy(action);
+            action.put("confirmation_policy", confirmationPolicy);
             String risk = action.optString("risk", "high");
             if (("high".equals(risk) || "critical".equals(risk))
-                    && !"provider_required".equals(
-                            action.optString("confirmation_policy", "provider_required"))) {
+                    && !"provider_required".equals(confirmationPolicy)) {
                 throw new ProtocolException(
                         "unsafe_confirmation_policy",
                         "High-risk actions require provider confirmation.");
             }
         }
+    }
+
+    private static String normalizeConfirmationPolicy(JSONObject action) throws Exception {
+        String value = action.optString("confirmation_policy", "provider_required").trim();
+        if (value.isEmpty() || "provider_required".equals(value) || "provider".equals(value)) {
+            return "provider_required";
+        }
+        if ("none".equals(value)) return "none";
+        throw new ProtocolException(
+                "unsupported_confirmation_policy",
+                "confirmation_policy must be none or provider_required.");
     }
 
     private static void validateInstallRequest(Activity activity, JSONObject request)
@@ -625,8 +637,10 @@ public final class AgentProviderLite {
         public boolean requiresProviderConfirmation() {
             if (action == null) return true;
             String risk = action.optString("risk", "high");
-            return "provider_required".equals(
-                            action.optString("confirmation_policy", "provider_required"))
+            String confirmationPolicy =
+                    action.optString("confirmation_policy", "provider_required");
+            return "provider_required".equals(confirmationPolicy)
+                    || "provider".equals(confirmationPolicy)
                     || "high".equals(risk)
                     || "critical".equals(risk);
         }

@@ -266,6 +266,12 @@ each locale supported by the app. Napaxi uses these fields in the Agent App
 capability detail page; keep technical identifiers such as `action_id` and
 `tool_name` out of user-facing copy.
 
+`confirmation_policy` has exactly two supported values: use `none` only when
+the action may execute without Provider-owned confirmation, and use
+`provider_required` whenever the Provider must ask the user before execution.
+Never emit the legacy value `provider`; the runtime accepts it only to keep
+already-installed Agent Apps fail-closed during migration.
+
 Create an exported `.NapaxiActionActivity` that:
 
 1. Calls `AgentProviderLite.validateTrustedProposal(this)` before reading any

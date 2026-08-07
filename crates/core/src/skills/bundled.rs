@@ -10,7 +10,7 @@ use super::paths::app_bundled_skills_dir;
 
 /// Current bundled skill set version. Increment when updating seed content
 /// to trigger re-deployment on next engine start.
-const BUNDLED_VERSION: u32 = 16;
+const BUNDLED_VERSION: u32 = 17;
 
 struct BundledSkill {
     slug: &'static str,

@@ -65,6 +65,32 @@ fn provider_cannot_enable_automatic_invocation_during_registration() {
 }
 
 #[test]
+fn legacy_provider_confirmation_policy_is_normalized_fail_closed() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let mut manifest: Value = serde_json::from_str(&package_json()).unwrap();
+    manifest["actions"][0]["risk"] = json!("medium");
+    manifest["actions"][0]["confirmation_policy"] = json!("provider");
+
+    let package: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &manifest.to_string())).unwrap();
+
+    assert_eq!(package.actions[0].confirmation_policy, "provider_required");
+}
+
+#[test]
+fn unsupported_confirmation_policy_is_rejected() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let mut manifest: Value = serde_json::from_str(&package_json()).unwrap();
+    manifest["actions"][0]["confirmation_policy"] = json!("host_optional");
+
+    let error = register_package(&files_dir, &manifest.to_string());
+
+    assert!(error.contains("unsupported value 'host_optional'"));
+}
+
+#[test]
 fn resolves_canonical_and_display_name_provider_mentions() {
     let temp = tempfile::tempdir().unwrap();
     let files_dir = temp.path().to_string_lossy();

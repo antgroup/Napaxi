@@ -96,6 +96,10 @@ Provider app 声明一个 `AgentPackage`，其中包含一个或多个 action：
 Host 会用它们展示 Agent 应用的能力详情；locale key 使用 `zh-CN`、`en` 这类
 BCP 47 风格标签，未匹配到本地化内容时回退到 `display_name` 和 `description`。
 
+`confirmation_policy` 仅支持 `none` 和 `provider_required`。Host 与 Lite Provider
+SDK 会把历史值 `provider` 兼容归一化为 `provider_required`，保证旧清单仍采用失败
+关闭的确认策略；新生成的 Provider 不得继续输出该历史别名，未知值会被拒绝。
+
 Provider action tool name 继续使用 `app_action_` 前缀，便于 host admission 映射到编译期 Agent App Action capability。
 
 ## Android install handoff

@@ -480,6 +480,43 @@ void main() {
     },
   );
 
+  test(
+    'action executor repairs a rejected signature and retries exactly once',
+    () async {
+      var actionAttempts = 0;
+      var repairs = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            expect(call.method, 'executeAgentProviderAction');
+            actionAttempts += 1;
+            return {
+              'resultJson': jsonEncode({
+                'request_id': 'request-1',
+                'status': actionAttempts == 1 ? 'failed' : 'succeeded',
+                'result': actionAttempts == 1 ? {} : {'ok': true},
+                if (actionAttempts == 1)
+                  'error': 'signature_invalid: Proposal signature is invalid.',
+                'completed_at': '2026-05-26T00:00:00Z',
+              }),
+            };
+          });
+      final executor = AndroidAgentProviderActionExecutor(
+        channel: channel,
+        repairBinding: _TestBindingRepair((request) async {
+          repairs += 1;
+          expect(request.proposal.requestId, 'request-1');
+          return true;
+        }),
+      );
+
+      final result = await executor.execute(_actionRequest());
+
+      expect(result.status, 'succeeded');
+      expect(actionAttempts, 2);
+      expect(repairs, 1);
+    },
+  );
+
   test('structured host_not_bound error is normalized for recovery', () {
     final result = AgentAppActionResult.fromMap({
       'request_id': 'request-1',
@@ -496,6 +533,21 @@ void main() {
 
     expect(result.errorCode, 'host_not_bound');
     expect(result.isHostBindingMissing, isTrue);
+    expect(result.isTrustedBindingRejected, isTrue);
+  });
+
+  test('signature_invalid is safe for one trusted binding repair', () {
+    final result = AgentAppActionResult.fromMap({
+      'request_id': 'request-1',
+      'status': 'failed',
+      'result': <String, dynamic>{},
+      'error': 'signature_invalid: Proposal signature is invalid.',
+      'completed_at': '2026-05-26T00:00:00Z',
+    });
+
+    expect(result.errorCode, 'signature_invalid');
+    expect(result.isHostBindingMissing, isFalse);
+    expect(result.isTrustedBindingRejected, isTrue);
   });
 
   test('listDiagnostics decodes trusted provider crash reports', () async {

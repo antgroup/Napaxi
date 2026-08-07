@@ -191,6 +191,22 @@ if [ "$PROVIDER_ENABLED" = true ]; then
     echo "assets/agent-app.json contains duplicate action_id values" >&2
     exit 1
   fi
+  while IFS= read -r confirmation_policy; do
+    case "$confirmation_policy" in
+      none|provider_required)
+        ;;
+      provider)
+        echo "      Deprecated confirmation_policy 'provider' treated as 'provider_required'; regenerate the manifest" >&2
+        ;;
+      *)
+        echo "invalid confirmation_policy '$confirmation_policy': use 'none' or 'provider_required'" >&2
+        exit 1
+        ;;
+    esac
+  done < <(
+    sed -n 's/^[[:space:]]*"confirmation_policy"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+      "$SRC_DIR/assets/agent-app.json"
+  )
   REGISTERED_ACTION_IDS=()
   while IFS= read -r java_source; do
     while IFS= read -r action_id; do

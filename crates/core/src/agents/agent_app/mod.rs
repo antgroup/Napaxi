@@ -729,7 +729,13 @@ fn prepare_package(mut package: AgentAppPackage) -> Result<AgentAppPackage, Stri
             })
             .collect();
         action.risk = normalize_risk(&action.risk)?;
-        action.confirmation_policy = normalize_confirmation_policy(&action.confirmation_policy);
+        action.confirmation_policy = normalize_confirmation_policy(&action.confirmation_policy)
+            .map_err(|error| {
+                format!(
+                    "agent app action '{}' invalid confirmation policy: {error}",
+                    action.action_id
+                )
+            })?;
         action.timeout_seconds = action
             .timeout_seconds
             .clamp(MIN_TIMEOUT_SECONDS, MAX_TIMEOUT_SECONDS);
@@ -915,12 +921,14 @@ fn normalize_risk(value: &str) -> Result<String, String> {
     }
 }
 
-fn normalize_confirmation_policy(value: &str) -> String {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        DEFAULT_CONFIRMATION_POLICY.to_string()
-    } else {
-        trimmed.to_string()
+fn normalize_confirmation_policy(value: &str) -> Result<String, String> {
+    let normalized = value.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "" | "provider" | "provider_required" => Ok(DEFAULT_CONFIRMATION_POLICY.to_string()),
+        "none" => Ok("none".to_string()),
+        _ => Err(format!(
+            "unsupported value '{value}'; use 'none' or 'provider_required'"
+        )),
     }
 }
 

@@ -407,7 +407,7 @@ class AndroidAgentProviderActionExecutor implements AgentAppActionExecutor {
   Future<AgentAppActionResult> execute(AgentAppActionRequest request) async {
     final first = await _executeOnce(request);
     final repairBinding = _repairBinding;
-    if (!first.isHostBindingMissing || repairBinding == null) return first;
+    if (!first.isTrustedBindingRejected || repairBinding == null) return first;
     try {
       final repaired = await repairBinding.repair(request);
       if (!repaired) return first;
@@ -462,7 +462,7 @@ class IosAgentProviderActionExecutor implements AgentAppActionExecutor {
   Future<AgentAppActionResult> execute(AgentAppActionRequest request) async {
     final first = await _executeOnce(request);
     final repairBinding = _repairBinding;
-    if (!first.isHostBindingMissing || repairBinding == null) return first;
+    if (!first.isTrustedBindingRejected || repairBinding == null) return first;
     try {
       final repaired = await repairBinding.repair(request);
       if (!repaired) return first;
