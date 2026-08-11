@@ -67,8 +67,9 @@ public enum NapaxiIosQemuSandboxSupport {
         rootfsAvailable: Bool = isBundledRootfsAvailable,
         runtimeLinked: Bool = isRuntimeLinked
     ) -> [String] {
-        var disabled = [codexCapabilityId]
+        var disabled: [String] = []
         if !(rootfsAvailable && runtimeLinked) {
+            disabled.append(codexCapabilityId)
             disabled.append(shellCapabilityId)
             disabled.append(sandboxCapabilityId)
         }

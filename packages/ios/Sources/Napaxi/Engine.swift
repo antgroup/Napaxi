@@ -1572,6 +1572,7 @@ public final class NapaxiEngine: @unchecked Sendable {
                 NapaxiChannelCapability.device,
                 hasCustomToolExecutor ? "napaxi.tool.custom_host" : nil,
                 iosQemuRootfsAvailable && iosQemuRuntimeLinked ? NapaxiIosQemuSandboxSupport.sandboxCapabilityId : nil,
+                iosQemuRootfsAvailable && iosQemuRuntimeLinked ? NapaxiIosQemuSandboxSupport.codexCapabilityId : nil,
                 hasAgentAppActionExecutor ? "napaxi.tool.agent_app_action" : nil,
                 enablePlatformTools ? "napaxi.platform_tool.*" : nil,
                 hasBrowserController ? "napaxi.tool.browser" : nil,

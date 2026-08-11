@@ -934,7 +934,7 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(activated.activatedSkills.first?.reason, "matched")
     }
 
-    func testIosQemuSupportKeepsCodexDisabledAndDisablesShellUntilRootfsAndRuntimeAreAvailable() {
+    func testIosQemuSupportKeepsCodexDisabledOnlyUntilRootfsAndRuntimeAreAvailable() {
         let unavailable = [
             NapaxiIosQemuSandboxSupport.codexCapabilityId,
             NapaxiIosQemuSandboxSupport.shellCapabilityId,
@@ -954,7 +954,7 @@ final class ModelTests: XCTestCase {
         )
         XCTAssertEqual(
             NapaxiIosQemuSandboxSupport.disabledCapabilities(rootfsAvailable: true, runtimeLinked: true),
-            [NapaxiIosQemuSandboxSupport.codexCapabilityId]
+            []
         )
     }
 

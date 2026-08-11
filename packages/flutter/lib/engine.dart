@@ -419,9 +419,10 @@ class NapaxiEngine {
     required bool enableAutomation,
   }) {
     final iosQemuSandboxAvailable = platform == 'ios' && iosQemuSandboxReady;
-    // iOS ships a lightweight QEMU rootfs without Codex CLI, so only Android
-    // advertises the built-in sandboxed Codex agent engine by default.
-    final sandboxedCodexAvailable = platform == 'android';
+    // iOS now advertises the sandboxed Codex agent engine once the bundled
+    // QEMU rootfs and runtime bridge are available.
+    final sandboxedCodexAvailable =
+        platform == 'android' || iosQemuSandboxAvailable;
     return NapaxiCapabilityProfile(
       platform: platform,
       supportedCapabilities: [
@@ -437,7 +438,8 @@ class NapaxiEngine {
         if (enableAutomation) 'napaxi.service.automation',
       ],
       disabledCapabilities: [
-        if (platform == 'ios') 'napaxi.agent_engine.codex',
+        if (platform == 'ios' && !iosQemuSandboxReady)
+          'napaxi.agent_engine.codex',
         if (platform == 'ios' && !iosQemuSandboxReady) 'napaxi.tool.shell',
         if (platform == 'ios' && !iosQemuSandboxReady)
           'napaxi.platform.ios_qemu',
@@ -455,9 +457,10 @@ class NapaxiEngine {
     required bool enableAutomation,
   }) {
     final iosQemuSandboxAvailable = platform == 'ios' && iosQemuSandboxReady;
-    // iOS ships a lightweight QEMU rootfs without Codex CLI, so only Android
-    // advertises the built-in sandboxed Codex agent engine by default.
-    final sandboxedCodexAvailable = platform == 'android';
+    // iOS now advertises the sandboxed Codex agent engine once the bundled
+    // QEMU rootfs and runtime bridge are available.
+    final sandboxedCodexAvailable =
+        platform == 'android' || iosQemuSandboxAvailable;
     return NapaxiCapabilitySelection(
       enabledCapabilities: [
         NapaxiChannelCapability.im,
@@ -471,7 +474,8 @@ class NapaxiEngine {
         if (enableAutomation) 'napaxi.service.automation',
       ],
       disabledCapabilities: [
-        if (platform == 'ios') 'napaxi.agent_engine.codex',
+        if (platform == 'ios' && !iosQemuSandboxReady)
+          'napaxi.agent_engine.codex',
         if (platform == 'ios' && !iosQemuSandboxReady) 'napaxi.tool.shell',
         if (platform == 'ios' && !iosQemuSandboxReady)
           'napaxi.platform.ios_qemu',

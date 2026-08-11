@@ -4870,7 +4870,7 @@ class _ChatScreenState extends State<ChatScreen>
     bool showFailure = false,
     int? sourceConfigRevision,
   }) {
-    if (!Platform.isAndroid && !_usesInjectedChatClient) {
+    if (!Platform.isAndroid && !Platform.isIOS && !_usesInjectedChatClient) {
       return Future.value(null);
     }
     final revision = ++_codexConfigSyncRevision;
@@ -5039,7 +5039,7 @@ class _ChatScreenState extends State<ChatScreen>
   }) async {
     final targetAgentId = agentId ?? _activeAgentId;
     if (targetAgentId != 'engine.codex') return true;
-    if (!Platform.isAndroid) {
+    if (!(Platform.isAndroid || Platform.isIOS)) {
       if (_usesInjectedChatClient) {
         if (widget.codexModelCatalogFetcher == null) return true;
         return _ensureCodexMainModelReady();
@@ -5052,6 +5052,9 @@ class _ChatScreenState extends State<ChatScreen>
       return false;
     }
     if (!await _ensureCodexMainModelReady()) return false;
+    if (Platform.isIOS) {
+      return true;
+    }
     if (_codexEnvironmentReady) {
       final check = await _runDemoEnvironmentShell(
         _codexCliCheckCommand,
