@@ -1,4 +1,3 @@
-use chrono::Utc;
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -281,8 +280,7 @@ pub(crate) async fn prepare_prompt_sections(
     // these files frequently within a session. Keeping them below the static
     // instruction sections preserves a stable, cacheable prefix; a memory or
     // profile write only invalidates the cache from here onward instead of from
-    // the second section. It sits just above CurrentTime, which still changes
-    // every turn.
+    // the second section. It sits just above CurrentTime timezone guidance.
     push_prompt_section(
         &mut sections,
         PromptSectionSource::WorkspaceVolatile,
@@ -294,12 +292,8 @@ pub(crate) async fn prepare_prompt_sections(
         PromptPriority::Normal,
         workspace_split.volatile,
     );
-    // CurrentTime is pushed last on purpose: it is the only section whose
-    // content changes every turn. Keeping it at the tail of the system prompt
-    // preserves a stable prefix for all preceding (static) sections, so the
-    // provider-side prompt cache (Anthropic / OpenAI / Gemini auto prefix
-    // caching) can hit on everything above it instead of missing from the
-    // first changed byte onward.
+    // CurrentTime is pushed last on purpose so any user-timezone context stays
+    // out of the cacheable static prefix.
     push_prompt_section(
         &mut sections,
         PromptSectionSource::CurrentTime,
@@ -386,59 +380,39 @@ fn group_context_prompt(is_group_context: bool, response_language: &str) -> Stri
 }
 
 fn current_time_prompt(config: &PlatformLlmConfig, response_language: &str) -> String {
-    let now_utc = Utc::now();
     let uses_chinese = uses_chinese_prompt(response_language);
     let heading = if uses_chinese {
         "## 当前时间"
     } else {
         "## Current Time"
     };
-    let utc_label = if uses_chinese {
-        "当前 UTC 时间"
-    } else {
-        "Current Time UTC"
-    };
-    let mut lines = vec![
-        heading.to_string(),
-        format!("{utc_label}: {}", now_utc.format("%Y-%m-%d %H:%M %:z")),
-    ];
+    let mut lines = vec![heading.to_string()];
 
     if let Some(raw_timezone) = normalized_user_timezone(config.user_timezone.as_deref()) {
-        let Some(timezone) = valid_user_timezone(&raw_timezone) else {
+        if valid_user_timezone(&raw_timezone).is_some() {
             if uses_chinese {
-                lines.push(format!(
-                    "用户时区: {} (无效 IANA 时区，本地时间不可用)",
-                    raw_timezone
-                ));
+                lines.push(format!("用户时区: {}", raw_timezone));
+                lines.push(
+                    "用用户时区解释相对日期和本地时间请求；存储、时间戳和 wire 值仍使用 UTC。"
+                        .to_string(),
+                );
             } else {
-                lines.push(format!(
-                    "User Timezone: {} (invalid IANA timezone; local time unavailable)",
-                    raw_timezone
-                ));
+                lines.push(format!("User Timezone: {}", raw_timezone));
+                lines.push(
+                    "Interpret relative dates and local-time requests using the user's timezone; use UTC for storage, timestamps, and wire values."
+                        .to_string(),
+                );
             }
-            return lines.join("\n");
-        };
-        let local = now_utc.with_timezone(&timezone);
-        if uses_chinese {
-            lines.push(format!("用户时区: {}", raw_timezone));
+        } else if uses_chinese {
             lines.push(format!(
-                "当前本地时间: {}",
-                local.format("%Y-%m-%d %H:%M %:z")
+                "用户时区: {} (无效 IANA 时区，本地时间不可用)",
+                raw_timezone
             ));
-            lines.push(
-                "使用当前本地时间解释相对日期和本地时间请求；存储、时间戳和 wire 值仍使用 UTC。"
-                    .to_string(),
-            );
         } else {
-            lines.push(format!("User Timezone: {}", raw_timezone));
             lines.push(format!(
-                "Current Local Time: {}",
-                local.format("%Y-%m-%d %H:%M %:z")
+                "User Timezone: {} (invalid IANA timezone; local time unavailable)",
+                raw_timezone
             ));
-            lines.push(
-                "Interpret relative dates and local-time requests using Current Local Time; use UTC for storage, timestamps, and wire values."
-                    .to_string(),
-            );
         }
     }
 

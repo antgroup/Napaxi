@@ -480,7 +480,7 @@ async fn prompt_sections_keep_source_order_and_compile_to_existing_prompt_order(
     assert!(compiled.system_prompt.contains("image_analyze"));
     assert!(compiled.system_prompt.contains("last_action_effect"));
     // CurrentTime is intentionally last (after shell/apply_patch) to keep the
-    // every-turn-changing timestamp out of the cacheable static prefix.
+    // timezone guidance out of the cacheable static prefix.
     assert!(
         response_language < workspace
             && workspace < host
@@ -521,7 +521,7 @@ async fn volatile_workspace_sinks_below_static_sections_and_keeps_stable_prefix(
     let sys = &compiled.system_prompt;
 
     // Stable identity stays in the prefix; volatile memory sinks below the
-    // static instruction sections and just above the per-turn time block.
+    // static instruction sections and just above the time/timezone guidance.
     let identity = sys.find("## Identity").unwrap();
     let host = sys.find("Host prompt.").unwrap();
     let apply_patch = sys.find("## apply_patch").unwrap();
@@ -630,9 +630,8 @@ async fn current_time_prompt_includes_user_timezone_context() {
         .iter()
         .find(|section| section.source == PromptSectionSource::CurrentTime)
         .unwrap();
-    assert!(time.content.contains("Current Time UTC:"));
+    assert!(!time.content.contains("Current Time UTC:"));
     assert!(time.content.contains("User Timezone: Asia/Shanghai"));
-    assert!(time.content.contains("Current Local Time:"));
     assert!(
         time.content
             .contains("Interpret relative dates and local-time requests")
