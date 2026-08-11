@@ -20,7 +20,7 @@ public struct NapaxiIOSIntegrationSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-public enum NapaxiIOSIntegrationSmoke {
+public enum NapaxiIOSIntegrationHost {
     public static let filesDirName = "napaxi-ios-integration"
 
     public static func makeConfig(apiKey: String = "sk-integration-placeholder") -> NapaxiConfig {
@@ -28,7 +28,7 @@ public enum NapaxiIOSIntegrationSmoke {
             provider: "openai",
             apiKey: apiKey,
             model: "gpt-4o-mini",
-            systemPrompt: "You are running inside the Napaxi iOS integration smoke package.",
+            systemPrompt: "You are running inside the Napaxi iOS integration package.",
             maxToolIterations: 4,
             shellSecurity: NapaxiShellSecurityConfig(approvalMode: .trustedAllow)
         )
@@ -101,11 +101,11 @@ public enum NapaxiIOSIntegrationSmoke {
         )
     }
 
-    public static func createEngineForSmoke(
+    public static func createEngineForIntegration(
         filesDir: String = makeFilesDir(),
-        toolExecutor: NapaxiToolExecutor = SmokeToolExecutor(),
-        approvalHandler: NapaxiStructuredToolApprovalHandler = SmokeApprovalHandler(),
-        platformToolExecutor: NapaxiPlatformToolExecutor = SmokePlatformToolExecutor()
+        toolExecutor: NapaxiToolExecutor = IntegrationToolExecutor(),
+        approvalHandler: NapaxiStructuredToolApprovalHandler = IntegrationApprovalHandler(),
+        platformToolExecutor: NapaxiPlatformToolExecutor = IntegrationPlatformToolExecutor()
     ) throws -> NapaxiEngine {
         try NapaxiEngine.create(
             config: makeConfig(),
@@ -120,7 +120,7 @@ public enum NapaxiIOSIntegrationSmoke {
     }
 }
 
-public final class SmokeToolExecutor: NapaxiToolExecutor {
+public final class IntegrationToolExecutor: NapaxiToolExecutor {
     public init() {}
 
     public func execute(toolName: String, paramsJSON: String, context: NapaxiJSONValue?) async -> Result<String, Error> {
@@ -133,18 +133,18 @@ public final class SmokeToolExecutor: NapaxiToolExecutor {
     }
 }
 
-public final class SmokeApprovalHandler: NapaxiStructuredToolApprovalHandler {
+public final class IntegrationApprovalHandler: NapaxiStructuredToolApprovalHandler {
     public init() {}
 
     public func approve(_ request: NapaxiHostToolApprovalRequest) async -> NapaxiHostToolApprovalResponse {
         NapaxiHostToolApprovalResponse(
             approved: true,
-            message: "Approved by iOS integration smoke host for \(request.toolName)"
+            message: "Approved by iOS integration host for \(request.toolName)"
         )
     }
 }
 
-public final class SmokePlatformToolExecutor: NapaxiPlatformToolExecutor {
+public final class IntegrationPlatformToolExecutor: NapaxiPlatformToolExecutor {
     public init() {}
 
     public func executePlatformTool(name: String, params: [String: NapaxiJSONValue]) async throws -> NapaxiJSONValue {

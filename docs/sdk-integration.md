@@ -69,23 +69,23 @@ test harness uses a local socket between `flutter_tester` and the test runner.
 public surface parity, native Swift Package iPhoneOS compile/tests, independent
 host package integration, and the no-codesign Xcode app build. Run
 `check-ios-device` preflights `devicectl` availability without building.
-Run `check-ios-app-device` separately for physical-device launch proof.
-Because the device smoke installs a signed app, `IOS_DEVELOPMENT_TEAM` is
+Run `check-ios-app-device` separately for physical-device Release IPA export and install.
+Because the device IPA export and install signs the app, `IOS_DEVELOPMENT_TEAM` is
 required. Use `IOS_ALLOW_PROVISIONING_UPDATES=1` when Xcode should create or
 update the local development certificate and provisioning profile.
 Automatic provisioning still requires the matching Apple ID to be logged in and
 valid in Xcode Accounts; an existing keychain certificate alone is not enough.
 If Xcode reports `No Account for Team` or `No profiles for
 'dev.napaxi.integration.iosapp' were found`, open Xcode settings, refresh the
-Apple ID for that team, then rerun the device smoke with the same team id.
+Apple ID for that team, then rerun the device IPA flow with the same team id.
 
 The physical-device gate requires `devicectl` to report an available iPhone.
 If the preflight prints `tunnel=unavailable` or `developerMode=disabled`, fix
-the device/Xcode pairing state before rerunning the app launch smoke. Typical
+the device/Xcode pairing state before rerunning the app IPA install. Typical
 fixes are enabling Developer Mode on the iPhone, trusting/re-pairing the device
 in Xcode, reconnecting USB, and waiting for Xcode to mount Developer Disk Image
 services. A selected wired device may still print `ddiServices=false`; the
-device smoke continues so install/launch can activate device support or fail
+Release IPA install continues so device support can activate or fail
 with the real CoreDevice/Xcode error.
 
 ## Current Limitations & Long-Term Plan
@@ -114,7 +114,7 @@ vendored lower-level QEMU C bridge and static libraries.
   disabled on iOS because the lightweight rootfs does not package Codex CLI.
 - The native device gate requires a connected physical iOS device. It signs the
   integration app, installs it with `devicectl`, launches it, then copies back
-  the app-written smoke report and checks the launch token plus native engine
+  the packaged app bundle and QEMU asset state on device
   handle.
 
 ### Vendored `libsql`

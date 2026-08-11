@@ -19,14 +19,14 @@ final class MainViewController: UIViewController {
             statusLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
 
-        let summary = buildSmokeSummary()
+        let summary = buildStatusSummary()
         statusLabel.text = summary
-        Self.writeSmokeReport(summary)
+        Self.writeStatusReport(summary)
     }
 
-    private func buildSmokeSummary() -> String {
+    private func buildStatusSummary() -> String {
         do {
-            let token = Self.smokeToken()
+            let token = Self.launchToken()
             let filesDir = Self.makeFilesDir()
             let rootfsRegistered = NapaxiIosQemuSandboxSupport.registerBundledRootfsArchive()
             let qemuReady = NapaxiIosQemuSandboxSupport.isReady(filesDir: filesDir)
@@ -38,11 +38,11 @@ final class MainViewController: UIViewController {
                 capabilityProfile: profile,
                 capabilitySelection: selection
             )
-            let engine = try Self.makeEngineForSmoke(filesDir: filesDir, qemuReady: qemuReady)
-            let shellSmoke = qemuReady ? try Self.runQemuShellSmoke(engine: engine) : "skipped: qemuReady=false"
+            let engine = try Self.makeEngineForIntegration(filesDir: filesDir, qemuReady: qemuReady)
+            let shellProbe = qemuReady ? try Self.runQemuShellProbe(engine: engine) : "skipped: qemuReady=false"
 
             return [
-                "Napaxi native iOS app smoke is ready.",
+                "Napaxi native iOS app release is ready.",
                 "token=\(token)",
                 "engineHandle=\(engine.handle)",
                 "filesDir=\(context.filesDir)",
@@ -51,23 +51,23 @@ final class MainViewController: UIViewController {
                 "rootfsRegistered=\(rootfsRegistered)",
                 "qemuRuntime=\(NapaxiIosQemuSandboxSupport.isRuntimeLinked)",
                 "qemuReady=\(qemuReady)",
-                "qemuShell=\(shellSmoke)",
+                "qemuShell=\(shellProbe)",
             ].joined(separator: "\n")
         } catch {
-            return "Napaxi native iOS app smoke failed: \(error)"
+            return "Napaxi native iOS app release failed: \(error)"
         }
     }
 
-    static func smokeToken() -> String {
+    static func launchToken() -> String {
         let arguments = ProcessInfo.processInfo.arguments
-        if let tokenFlagIndex = arguments.firstIndex(of: "--napaxi-smoke-token") {
+        if let tokenFlagIndex = arguments.firstIndex(of: "--napaxi-launch-token") {
             let tokenIndex = arguments.index(after: tokenFlagIndex)
             if arguments.indices.contains(tokenIndex) {
                 return arguments[tokenIndex]
             }
         }
 
-        if let environmentToken = ProcessInfo.processInfo.environment["NAPAXI_SMOKE_TOKEN"],
+        if let environmentToken = ProcessInfo.processInfo.environment["NAPAXI_LAUNCH_TOKEN"],
            !environmentToken.isEmpty {
             return environmentToken
         }
@@ -115,7 +115,7 @@ final class MainViewController: UIViewController {
         )
     }
 
-    static func makeEngineForSmoke(filesDir: String, qemuReady: Bool = NapaxiIosQemuSandboxSupport.isBundledSandboxAvailable) throws -> NapaxiEngine {
+    static func makeEngineForIntegration(filesDir: String, qemuReady: Bool = NapaxiIosQemuSandboxSupport.isBundledSandboxAvailable) throws -> NapaxiEngine {
         try NapaxiEngine.create(
             config: NapaxiConfig(
                 provider: "openai",
@@ -135,13 +135,13 @@ final class MainViewController: UIViewController {
     }
 
 
-    static func runQemuShellSmoke(engine: NapaxiEngine) throws -> String {
+    static func runQemuShellProbe(engine: NapaxiEngine) throws -> String {
         let arguments: [String: NapaxiJSONValue] = [
-            "command": .string("echo napaxi-ios-qemu-smoke && pwd && uname -m"),
+            "command": .string("echo napaxi-ios-qemu-probe && pwd && uname -m"),
             "timeout": .number(20),
         ]
         let request = try NapaxiRawJSON(.object([
-            "call_id": .string("ios-qemu-smoke-shell"),
+            "call_id": .string("ios-qemu-probe-shell"),
             "name": .string("shell"),
             "arguments": .object(arguments),
         ])).jsonString()
@@ -156,7 +156,7 @@ final class MainViewController: UIViewController {
         return "isError=\(isError); output=\(output.trimmingCharacters(in: .whitespacesAndNewlines))"
     }
 
-    private static func writeSmokeReport(_ summary: String) {
+    private static func writeStatusReport(_ summary: String) {
         do {
             let documentsDir = try FileManager.default.url(
                 for: .documentDirectory,
@@ -164,10 +164,10 @@ final class MainViewController: UIViewController {
                 appropriateFor: nil,
                 create: true
             )
-            let reportURL = documentsDir.appendingPathComponent("napaxi-ios-app-smoke.txt")
+            let reportURL = documentsDir.appendingPathComponent("napaxi-ios-app-release.txt")
             try summary.write(to: reportURL, atomically: true, encoding: .utf8)
         } catch {
-            NSLog("Napaxi iOS app smoke report write failed: \(error)")
+            NSLog("Napaxi iOS app release report write failed: \(error)")
         }
     }
 }
@@ -185,7 +185,7 @@ final class AppToolExecutor: NapaxiToolExecutor {
 
 final class AppApprovalHandler: NapaxiStructuredToolApprovalHandler {
     func approve(_ request: NapaxiHostToolApprovalRequest) async -> NapaxiHostToolApprovalResponse {
-        NapaxiHostToolApprovalResponse(approved: true, message: "Approved by iOS app smoke")
+        NapaxiHostToolApprovalResponse(approved: true, message: "Approved by iOS app integration")
     }
 }
 

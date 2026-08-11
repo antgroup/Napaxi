@@ -8,21 +8,21 @@ let package = Package(
         .macOS(.v12),
     ],
     products: [
-        .library(name: "NapaxiIOSIntegrationSmoke", targets: ["NapaxiIOSIntegrationSmoke"]),
+        .library(name: "NapaxiIOSIntegrationHost", targets: ["NapaxiIOSIntegrationHost"]),
     ],
     dependencies: [
         .package(name: "Napaxi", path: "../../../../packages/ios"),
     ],
     targets: [
         .target(
-            name: "NapaxiIOSIntegrationSmoke",
+            name: "NapaxiIOSIntegrationHost",
             dependencies: [
                 .product(name: "Napaxi", package: "Napaxi"),
             ]
         ),
         .testTarget(
-            name: "NapaxiIOSIntegrationSmokeTests",
-            dependencies: ["NapaxiIOSIntegrationSmoke"]
+            name: "NapaxiIOSIntegrationHostTests",
+            dependencies: ["NapaxiIOSIntegrationHost"]
         ),
     ]
 )

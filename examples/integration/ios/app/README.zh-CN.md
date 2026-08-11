@@ -8,7 +8,7 @@
 - 创建 Napaxi engine。
 - 验证 native bridge handle。
 - 验证 iOS QEMU/rootfs 相关资源状态。
-- 生成 smoke report 供脚本读取。
+- 用于构建与打包 Release IPA。
 
 ## 构建
 
@@ -28,4 +28,4 @@ IOS_DEVELOPMENT_TEAM=ABCDE12345 IOS_BUNDLE_IDENTIFIER=dev.napaxi.integration ./t
 IOS_BUNDLE_IDENTIFIER=dev.napaxi.integration IOS_PROVISIONING_PROFILE_SPECIFIER="Profile Name" ./tools/scripts/build.sh check-ios-app-device
 ```
 
-需要有效 Xcode Accounts、Team、provisioning profile 和已连接 iPhone。真机脚本会校验 app 内打包的 Alpine rootfs、QEMU 符号、QEMU ready 状态，并通过 shell smoke 命令确认 iOS QEMU 沙箱真的可用。若 Xcode 报 `No Account for Team` 或找不到 `dev.napaxi.integration.iosapp` 的 profile，可以在 Xcode 登录对应 Team，或通过 `IOS_BUNDLE_IDENTIFIER` 指定已有开发 profile 的 bundle id；手动签名时可传 `IOS_PROVISIONING_PROFILE_SPECIFIER`/`IOS_PROVISIONING_PROFILE_UUID` 和可选的 `IOS_CODE_SIGN_IDENTITY`。更多说明见 [`../../../docs/sdk-integration.zh-CN.md`](../../../docs/sdk-integration.zh-CN.md)。
+需要有效 Xcode Accounts、Team、provisioning profile 和已连接 iPhone。真机脚本会导出 Release IPA，安装 IPA payload，并校验 app 内打包的 Alpine rootfs、QEMU 符号和 QEMU ready 状态。若 Xcode 报 `No Account for Team` 或找不到 `dev.napaxi.integration.iosapp` 的 profile，可以在 Xcode 登录对应 Team，或通过 `IOS_BUNDLE_IDENTIFIER` 指定已有开发 profile 的 bundle id；手动签名时可传 `IOS_PROVISIONING_PROFILE_SPECIFIER`/`IOS_PROVISIONING_PROFILE_UUID` 和可选的 `IOS_CODE_SIGN_IDENTITY`。更多说明见 [`../../../docs/sdk-integration.zh-CN.md`](../../../docs/sdk-integration.zh-CN.md)。

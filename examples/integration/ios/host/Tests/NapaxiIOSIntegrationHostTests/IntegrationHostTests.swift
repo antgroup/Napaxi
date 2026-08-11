@@ -1,15 +1,15 @@
 import Napaxi
-@testable import NapaxiIOSIntegrationSmoke
+@testable import NapaxiIOSIntegrationHost
 import XCTest
 
-final class SmokeHostTests: XCTestCase {
+final class IntegrationHostTests: XCTestCase {
     func testSnapshotUsesNativeIosPlatformContextShape() throws {
-        let snapshot = try NapaxiIOSIntegrationSmoke.makeSnapshot(filesDir: "/tmp/napaxi-ios-host-smoke")
+        let snapshot = try NapaxiIOSIntegrationHost.makeSnapshot(filesDir: "/tmp/napaxi-ios-host-integration")
         let context = try decodeJsonObject(snapshot.platformContextJSON)
 
-        XCTAssertEqual(snapshot.filesDir, "/tmp/napaxi-ios-host-smoke")
+        XCTAssertEqual(snapshot.filesDir, "/tmp/napaxi-ios-host-integration")
         XCTAssertEqual(context["platform"]?.stringValue, "ios")
-        XCTAssertEqual(context["files_dir"]?.stringValue, "/tmp/napaxi-ios-host-smoke")
+        XCTAssertEqual(context["files_dir"]?.stringValue, "/tmp/napaxi-ios-host-integration")
         XCTAssertEqual(snapshot.enabledCapabilities, [
             "napaxi.tool.custom_host",
             "napaxi.platform_tool.open_url",
@@ -19,25 +19,25 @@ final class SmokeHostTests: XCTestCase {
 
     func testHostPackageCanCreateNativeEngine() throws {
         let filesDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("napaxi-ios-host-engine-smoke", isDirectory: true)
+            .appendingPathComponent("napaxi-ios-host-engine-integration", isDirectory: true)
             .path
 
         #if os(iOS)
-        let engine = try NapaxiIOSIntegrationSmoke.createEngineForSmoke(filesDir: filesDir)
+        let engine = try NapaxiIOSIntegrationHost.createEngineForIntegration(filesDir: filesDir)
 
         XCTAssertGreaterThan(engine.handle, 0)
         XCTAssertEqual(engine.filesDir, filesDir)
         XCTAssertEqual(engine.capabilityProfile?.platform, "ios")
         XCTAssertTrue(engine.capabilityProfile?.supportedCapabilities.contains("napaxi.platform_tool.*") ?? false)
         #else
-        XCTAssertThrowsError(try NapaxiIOSIntegrationSmoke.createEngineForSmoke(filesDir: filesDir)) { error in
+        XCTAssertThrowsError(try NapaxiIOSIntegrationHost.createEngineForIntegration(filesDir: filesDir)) { error in
             XCTAssertTrue(String(describing: error).contains("Napaxi native engine is only available on iOS"))
         }
         #endif
     }
 
     func testHostExecutorsReturnPublicJsonShapes() async throws {
-        let toolExecutor = SmokeToolExecutor()
+        let toolExecutor = IntegrationToolExecutor()
         let toolResult = await toolExecutor.execute(
             toolName: "ios_integration_ping",
             paramsJSON: #"{"input":"hello"}"#,
@@ -48,7 +48,7 @@ final class SmokeHostTests: XCTestCase {
         XCTAssertEqual(toolJSON["params_json"]?.stringValue, #"{"input":"hello"}"#)
         XCTAssertEqual(toolJSON["ok"]?.boolValue, true)
 
-        let approval = await SmokeApprovalHandler().approve(NapaxiHostToolApprovalRequest(
+        let approval = await IntegrationApprovalHandler().approve(NapaxiHostToolApprovalRequest(
             requestId: 7,
             toolName: "open_url",
             description: "Open a test URL",
@@ -57,7 +57,7 @@ final class SmokeHostTests: XCTestCase {
         XCTAssertTrue(approval.approved)
         XCTAssertEqual(approval.always, false)
 
-        let platformResult = try await SmokePlatformToolExecutor().executePlatformTool(
+        let platformResult = try await IntegrationPlatformToolExecutor().executePlatformTool(
             name: "open_url",
             params: ["url": .string("https://example.com")]
         )

@@ -70,7 +70,7 @@ cd examples/flutter && flutter analyze --no-fatal-infos && flutter test
 - 有效的 Apple ID、Team 和 provisioning profile。
 - 环境变量 `IOS_DEVELOPMENT_TEAM`。
 
-如果 Xcode 报 `No Account for Team` 或 `No profiles ... were found`，请先在 Xcode Accounts 中刷新 Apple ID 和 team，再重跑 device smoke。
+如果 Xcode 报 `No Account for Team` 或 `No profiles ... were found`，请先在 Xcode Accounts 中刷新 Apple ID 和 team，再重跑 Release IPA 流程。
 
 ## 已知权衡
 

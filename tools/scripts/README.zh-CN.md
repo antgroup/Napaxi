@@ -40,9 +40,9 @@
 ./tools/scripts/build.sh check-ios
 ```
 
-该命令会运行 iOS/Flutter public surface parity、native Swift Package compile/tests、independent host package integration 和 no-codesign Xcode app build。真机 launch smoke 需单独运行 `check-ios-app-device`。
+该命令会运行 iOS/Flutter public surface parity、native Swift Package compile/tests、independent host package integration 和 no-codesign Xcode app build。真机 Release IPA 导出与安装需单独运行 `check-ios-app-device`。
 
-## 真机 iOS smoke
+## 真机 iOS Release IPA
 
 ```sh
 ./tools/scripts/build.sh check-ios-device

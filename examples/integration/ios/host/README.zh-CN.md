@@ -5,7 +5,7 @@
 ## 用途
 
 - 编译独立 host package。
-- 运行 host-side smoke tests。
+- 运行 host-side integration tests。
 - 验证 Swift Package integration 不依赖 Flutter app。
 
 ## 验证
@@ -16,4 +16,4 @@
 ./tools/scripts/build.sh check-ios-integration
 ```
 
-该命令会编译 `examples/integration/ios/host` 和 XCTest target，并在 macOS 上运行 host-side smoke tests。
+该命令会编译 `examples/integration/ios/host` 和 XCTest target，并在 macOS 上运行 host-side integration tests。

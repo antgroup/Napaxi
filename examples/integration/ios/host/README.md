@@ -19,7 +19,7 @@ Run it from the repository root:
 ```
 
 The command regenerates the native iOS bridge artifacts, runs an iPhoneOS
-SwiftPM build for this package, and runs the host-side smoke tests on macOS.
+SwiftPM build for this package, and runs the host-side integration tests on macOS.
 
 The package intentionally keeps all reusable behavior in `packages/ios`; code
 under this directory is iOS host integration check code only.

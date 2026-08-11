@@ -200,6 +200,13 @@ check_ios_app_qemu_artifacts() {
     fi
 }
 
+check_ios_app_release_payload() {
+    local app_path="$1"
+    local rootfs_path="$app_path/Napaxi_Napaxi.bundle/Resources/alpine-rootfs.bin"
+
+    check_ios_rootfs_asset "$rootfs_path" "Release IPA payload"
+}
+
 ensure_ios_artifacts() {
     check_ios_native_assets
     if [ "${NAPAXI_IOS_ARTIFACTS_READY:-0}" = "1" ]; then
@@ -667,8 +674,6 @@ check_ios_app_integration() {
     require_command xcodebuild
     require_command grep
     require_command nm
-    check_ios_app_smoke_report_validator
-
     cd "$ROOT_DIR/examples/integration/ios/app"
     xcodebuild \
         -project NapaxiIOSIntegrationApp.xcodeproj \
@@ -759,7 +764,7 @@ if (requested) {
   }
 
   if (matches.length === 1) {
-    console.error(`Requested iOS device is not available for launch smoke: ${requested}`);
+    console.error(`Requested iOS device is not available for IPA install: ${requested}`);
     console.error(`- ${describeDevice(matches[0])}`);
     console.error('Choose an online iPhone with Developer Mode enabled, or clear IOS_DEVICE_ID / DEVICECTL_DEVICE.');
     process.exit(2);
@@ -796,7 +801,7 @@ if (candidates.length > 1) {
   process.exit(2);
 }
 
-console.error('No available physical iOS device found for app launch smoke.');
+console.error('No available physical iOS device found for IPA install.');
 printKnownDevices();
 console.error('Connect an iPhone with Developer Mode enabled, or set IOS_DEVICE_ID / DEVICECTL_DEVICE to a usable device identifier.');
 console.error('If a listed iPhone has tunnel=unavailable, trust/re-pair it in Xcode, reconnect USB, and wait for CoreDevice device support to finish.');
@@ -810,77 +815,7 @@ check_ios_device_ready() {
 
     local device_id
     device_id="$(ios_device_id)"
-    info "iOS device is available for launch smoke: $device_id"
-}
-
-check_ios_app_smoke_report() {
-    local report_path="$1"
-    local token="$2"
-
-    [ -f "$report_path" ] || err "iOS integration app did not write a smoke report after launch."
-    if ! grep -q '^Napaxi native iOS app smoke is ready\.$' "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app smoke did not report ready."
-    fi
-    if ! grep -q "^token=$token$" "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app smoke report is stale or missing the launch token."
-    fi
-    if ! grep -Eq '^engineHandle=[1-9][0-9]*$' "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app did not create a native Napaxi engine."
-    fi
-    if ! grep -q '^rootfs=true$' "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app did not report bundled rootfs availability."
-    fi
-    if ! grep -q '^rootfsRegistered=true$' "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app did not register the bundled rootfs with the QEMU backend."
-    fi
-    if ! grep -q '^qemuRuntime=true$' "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app did not report the QEMU runtime as linked."
-    fi
-    if ! grep -q '^qemuReady=true$' "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app did not initialize the QEMU sandbox."
-    fi
-    if ! grep -q '^qemuShell=isError=false; output=napaxi-ios-qemu-smoke' "$report_path"; then
-        sed 's/^/[SMOKE] /' "$report_path" >&2
-        err "iOS integration app did not execute the shell tool through the QEMU sandbox."
-    fi
-}
-
-check_ios_app_smoke_report_validator() {
-    local smoke_dir token good_report bad_report
-    mkdir -p "$ROOT_DIR/target"
-    smoke_dir="$(mktemp -d "$ROOT_DIR/target/napaxi-ios-report-validator.XXXXXX")"
-    token="validator-token"
-    good_report="$smoke_dir/good.txt"
-    bad_report="$smoke_dir/bad.txt"
-
-    printf '%s\n' \
-        "Napaxi native iOS app smoke is ready." \
-        "token=$token" \
-        "engineHandle=42" \
-        "filesDir=/tmp/napaxi-ios-app-integration" \
-        "enabled=napaxi.tool.custom_host,napaxi.tool.shell,napaxi.agent_engine.codex,napaxi.platform.ios_qemu,napaxi.platform_tool.open_url" \
-        "rootfs=true" \
-        "rootfsRegistered=true" \
-        "qemuRuntime=true" \
-        "qemuReady=true" \
-        "qemuShell=isError=false; output=napaxi-ios-qemu-smoke" > "$good_report"
-    check_ios_app_smoke_report "$good_report" "$token"
-
-    printf '%s\n' \
-        "Napaxi native iOS app smoke is ready." \
-        "token=old-token" \
-        "engineHandle=42" \
-        "rootfs=true" > "$bad_report"
-    if (check_ios_app_smoke_report "$bad_report" "$token" >/dev/null 2>&1); then
-        err "iOS app smoke report validator accepted a stale launch token."
-    fi
+    info "iOS device is available for IPA install: $device_id"
 }
 
 check_ios_device_signing_ready() {
@@ -906,42 +841,128 @@ check_ios_device_signing_ready() {
     fi
 }
 
-check_ios_app_device_smoke() {
-    info "Checking iOS SDK integration app on device"
+write_ios_export_options_plist() {
+    local plist_path="$1"
+    local bundle_id="$2"
+    local method="${IOS_EXPORT_METHOD:-debugging}"
+    local signing_style="automatic"
+    local profile_value=""
+
+    if [ -n "${IOS_PROVISIONING_PROFILE_SPECIFIER:-}" ]; then
+        signing_style="manual"
+        profile_value="$IOS_PROVISIONING_PROFILE_SPECIFIER"
+    elif [ -n "${IOS_PROVISIONING_PROFILE_UUID:-}" ]; then
+        signing_style="manual"
+        profile_value="$IOS_PROVISIONING_PROFILE_UUID"
+    fi
+
+    cat > "$plist_path" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>destination</key>
+    <string>export</string>
+    <key>method</key>
+    <string>$method</string>
+    <key>signingStyle</key>
+    <string>$signing_style</string>
+    <key>stripSwiftSymbols</key>
+    <true/>
+    <key>thinning</key>
+    <string>&lt;none&gt;</string>
+EOF
+
+    if [ -n "${IOS_DEVELOPMENT_TEAM:-}" ]; then
+        cat >> "$plist_path" <<EOF
+    <key>teamID</key>
+    <string>$IOS_DEVELOPMENT_TEAM</string>
+EOF
+    fi
+
+    if [ "$signing_style" = "manual" ]; then
+        cat >> "$plist_path" <<EOF
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>$bundle_id</key>
+        <string>$profile_value</string>
+    </dict>
+EOF
+        if [ -n "${IOS_CODE_SIGN_IDENTITY:-}" ]; then
+            cat >> "$plist_path" <<EOF
+    <key>signingCertificate</key>
+    <string>$IOS_CODE_SIGN_IDENTITY</string>
+EOF
+        else
+            cat >> "$plist_path" <<EOF
+    <key>signingCertificate</key>
+    <string>Apple Development</string>
+EOF
+        fi
+    fi
+
+    cat >> "$plist_path" <<EOF
+</dict>
+</plist>
+EOF
+}
+
+install_ios_app_ipa_on_device() {
+    info "Building and installing Release iOS IPA on device"
     require_command xcodebuild
     require_command xcrun
     require_command grep
     require_command nm
+    require_command unzip
 
     local bundle_id="${IOS_BUNDLE_IDENTIFIER:-dev.napaxi.integration.iosapp}"
     local device_id
     device_id="$(ios_device_id)"
 
     if [ -z "${IOS_DEVELOPMENT_TEAM:-}" ] && [ -z "${IOS_PROVISIONING_PROFILE_SPECIFIER:-}" ] && [ -z "${IOS_PROVISIONING_PROFILE_UUID:-}" ]; then
-        err "Signed iOS app device smoke requires signing inputs. Set IOS_DEVELOPMENT_TEAM for automatic signing, or set IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID for an existing development profile."
+        err "Signed iOS IPA export requires signing inputs. Set IOS_DEVELOPMENT_TEAM for automatic signing, or set IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID for an existing development profile."
     fi
 
     check_ios_device_signing_ready
     ensure_ios_artifacts
 
     local app_dir="$ROOT_DIR/examples/integration/ios/app"
-    local derived_data="$app_dir/DerivedDataDevice"
-    local app_path="$derived_data/Build/Products/Debug-iphoneos/NapaxiIOSIntegrationApp.app"
-    local xcodebuild_args=(
+    local derived_data="$app_dir/DerivedDataRelease"
+    local output_dir="$ROOT_DIR/target/ios-ipa"
+    local archive_path="$output_dir/NapaxiIOSIntegrationApp.xcarchive"
+    local export_path="$output_dir/export"
+    local export_options="$output_dir/ExportOptions.plist"
+    local payload_dir="$output_dir/payload"
+    local install_json="$output_dir/install.json"
+    local ipa_path app_path
+
+    rm -rf "$archive_path" "$export_path" "$payload_dir"
+    mkdir -p "$output_dir" "$export_path" "$payload_dir"
+    write_ios_export_options_plist "$export_options" "$bundle_id"
+
+    local archive_args=(
         -project NapaxiIOSIntegrationApp.xcodeproj
         -scheme NapaxiIOSIntegrationApp
-        -configuration Debug
+        -configuration Release
         -sdk iphoneos
-        -destination "platform=iOS,id=$device_id"
+        -destination generic/platform=iOS
+        -archivePath "$archive_path"
         -derivedDataPath "$derived_data"
+    )
+    local export_args=(
+        -exportArchive
+        -archivePath "$archive_path"
+        -exportPath "$export_path"
+        -exportOptionsPlist "$export_options"
     )
     local signing_args=(
         CODE_SIGNING_ALLOWED=YES
         CODE_SIGNING_REQUIRED=YES
         ARCHS=arm64
-        ONLY_ACTIVE_ARCH=YES
+        ONLY_ACTIVE_ARCH=NO
         PRODUCT_BUNDLE_IDENTIFIER="$bundle_id"
     )
+    local manual_signing=0
 
     if [ -n "${IOS_DEVELOPMENT_TEAM:-}" ]; then
         signing_args+=(DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM")
@@ -949,77 +970,53 @@ check_ios_app_device_smoke() {
     if [ -n "${IOS_PROVISIONING_PROFILE_SPECIFIER:-}" ]; then
         signing_args+=(CODE_SIGN_STYLE=Manual)
         signing_args+=(PROVISIONING_PROFILE_SPECIFIER="$IOS_PROVISIONING_PROFILE_SPECIFIER")
+        manual_signing=1
     fi
     if [ -n "${IOS_PROVISIONING_PROFILE_UUID:-}" ]; then
         signing_args+=(CODE_SIGN_STYLE=Manual)
         signing_args+=(PROVISIONING_PROFILE="$IOS_PROVISIONING_PROFILE_UUID")
+        manual_signing=1
     fi
-    if [ -n "${IOS_CODE_SIGN_IDENTITY:-}" ]; then
+    if [ "$manual_signing" = "1" ] && [ -n "${IOS_CODE_SIGN_IDENTITY:-}" ]; then
         signing_args+=(CODE_SIGN_IDENTITY="$IOS_CODE_SIGN_IDENTITY")
+    elif [ -n "${IOS_CODE_SIGN_IDENTITY:-}" ]; then
+        warn "Ignoring IOS_CODE_SIGN_IDENTITY for automatic signing; set IOS_PROVISIONING_PROFILE_SPECIFIER or IOS_PROVISIONING_PROFILE_UUID to use a manual signing identity."
     fi
 
     if [ "${IOS_ALLOW_PROVISIONING_UPDATES:-0}" = "1" ]; then
-        xcodebuild_args+=(-allowProvisioningUpdates)
+        archive_args+=(-allowProvisioningUpdates -allowProvisioningDeviceRegistration)
+        export_args+=(-allowProvisioningUpdates)
     fi
 
     cd "$app_dir"
     if ! xcodebuild \
-        "${xcodebuild_args[@]}" \
+        "${archive_args[@]}" \
         "${signing_args[@]}" \
-        build; then
-        err "Signed iOS app build failed. Set IOS_DEVELOPMENT_TEAM for automatic signing, or IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID plus optional IOS_CODE_SIGN_IDENTITY for manual signing. Optionally set IOS_BUNDLE_IDENTIFIER, and IOS_ALLOW_PROVISIONING_UPDATES=1 if Xcode should create/update profiles."
+        archive; then
+        err "Signed Release iOS archive failed. Set IOS_DEVELOPMENT_TEAM for automatic signing, or IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID plus optional IOS_CODE_SIGN_IDENTITY for manual signing. Optionally set IOS_BUNDLE_IDENTIFIER, and IOS_ALLOW_PROVISIONING_UPDATES=1 if Xcode should create/update profiles."
     fi
 
-    [ -d "$app_path" ] || err "Signed iOS app build did not produce $app_path"
-    check_ios_app_qemu_artifacts "$app_path"
+    if ! xcodebuild "${export_args[@]}"; then
+        err "Release iOS IPA export failed. Check $export_options and signing inputs. Set IOS_EXPORT_METHOD=debugging for personal/development signing or another Xcode export method when needed."
+    fi
 
-    local smoke_dir token install_json launch_json copy_json report_path
-    mkdir -p "$ROOT_DIR/target"
-    smoke_dir="$(mktemp -d "$ROOT_DIR/target/napaxi-ios-device-smoke.XXXXXX")"
-    token="napaxi-ios-smoke-$(date +%s)"
-    install_json="$smoke_dir/install.json"
-    launch_json="$smoke_dir/launch.json"
-    copy_json="$smoke_dir/copy.json"
-    report_path="$smoke_dir/napaxi-ios-app-smoke.txt"
+    ipa_path="$(find "$export_path" -maxdepth 1 -name '*.ipa' -type f | sort | head -1)"
+    [ -n "$ipa_path" ] && [ -f "$ipa_path" ] || err "Release iOS IPA export did not produce an .ipa under $export_path"
 
-    info "Installing iOS integration app on device $device_id"
+    unzip -q "$ipa_path" -d "$payload_dir"
+    app_path="$(find "$payload_dir/Payload" -maxdepth 1 -name '*.app' -type d | sort | head -1)"
+    [ -n "$app_path" ] && [ -d "$app_path" ] || err "Release iOS IPA does not contain a Payload/*.app bundle: $ipa_path"
+    check_ios_app_release_payload "$app_path"
+
+    info "Generated iOS IPA: $ipa_path"
+    info "Installing IPA payload on device $device_id"
     xcrun devicectl device install app \
         --device "$device_id" \
         "$app_path" \
-        --timeout 120 \
+        --timeout 180 \
         --json-output "$install_json"
 
-    info "Launching iOS integration app on device $device_id"
-    xcrun devicectl device process launch \
-        --device "$device_id" \
-        --terminate-existing \
-        --timeout 60 \
-        --json-output "$launch_json" \
-        --environment-variables "{\"NAPAXI_SMOKE_TOKEN\":\"$token\"}" \
-        "$bundle_id" \
-        --napaxi-smoke-token "$token"
-
-    local attempt
-    for attempt in $(seq 1 20); do
-        if xcrun devicectl device copy from \
-            --device "$device_id" \
-            --domain-type appDataContainer \
-            --domain-identifier "$bundle_id" \
-            --source "Documents/napaxi-ios-app-smoke.txt" \
-            --destination "$report_path" \
-            --timeout 30 \
-            --json-output "$copy_json" \
-            --quiet; then
-            if [ -f "$report_path" ] && grep -q "^token=$token$" "$report_path"; then
-                break
-            fi
-        fi
-        sleep 1
-    done
-
-    check_ios_app_smoke_report "$report_path" "$token"
-
-    info "iOS integration app smoke completed on $device_id"
+    info "Release iOS IPA installed on $device_id"
 }
 
 check_ios_offline_acceptance() {
@@ -1387,7 +1384,7 @@ case "$TARGET_PLATFORM" in
         check_ios_device_ready
         ;;
     check-ios-app-device)
-        check_ios_app_device_smoke
+        install_ios_app_ipa_on_device
         ;;
     check-android-host)
         check_android_integration_app
