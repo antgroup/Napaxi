@@ -72,7 +72,6 @@ iOS shell-like platform execution 已切到 Napaxi iOS QEMU backend。当前仓�
 ```sh
 ./tools/scripts/build.sh check-ios
 ./tools/scripts/build.sh check-ios-native
-./tools/scripts/build.sh check-ios-integration
 ./tools/scripts/build.sh check-ios-app
 IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
 ```

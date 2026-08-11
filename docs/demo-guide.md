@@ -15,12 +15,8 @@ Android SDK integration check:
 examples/integration/android/
 ```
 
-iOS SDK integration check:
-
-```text
-examples/integration/ios/host/
-examples/integration/ios/app/
-```
+The iOS package is the Flutter demo itself; build and install it through the
+Flutter iOS packaging flow instead of a separate iOS package.
 
 Examples should depend on SDK adapters from `packages/` and should not contain
 reusable SDK implementation code.

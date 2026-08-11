@@ -12,7 +12,6 @@
 ./tools/scripts/build.sh check-android-integration
 ./tools/scripts/build.sh check-android-integration-device
 ./tools/scripts/build.sh check-ios-native
-./tools/scripts/build.sh check-ios-integration
 ./tools/scripts/build.sh check-ios-app
 ./tools/scripts/build.sh check-ios-device
 ./tools/scripts/build.sh check-ios-app-device
@@ -40,15 +39,22 @@
 ./tools/scripts/build.sh check-ios
 ```
 
-该命令会运行 iOS/Flutter public surface parity、native Swift Package compile/tests、independent host package integration 和 no-codesign Xcode app build。真机 Release IPA 导出与安装需单独运行 `check-ios-app-device`。
+该命令会运行 iOS/Flutter public surface parity、native Swift Package compile/tests 和 Flutter iOS package build。
 
-## 真机 iOS Release IPA
+## Flutter iOS package
 
 ```sh
+./tools/scripts/build.sh check-ios-app
 ./tools/scripts/build.sh check-ios-device
 IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
 ```
 
-`IOS_DEVELOPMENT_TEAM` 必填。需要 Xcode 自动创建或更新 provisioning profile 时设置 `IOS_ALLOW_PROVISIONING_UPDATES=1`。
+`check-ios-app` 会构建并校验 `examples/flutter` 生成的 IPA。`check-ios-app-device` 会构建、签名、安装并启动 iOS 包，因此需要：
 
-更多背景见 [`../../docs/sdk-integration.zh-CN.md`](../../docs/sdk-integration.zh-CN.md)。
+- 可用的 Xcode command-line tools。
+- 已连接且可用的 iPhone。
+- 已启用 Developer Mode。
+- 有效的 Apple ID、Team 和 provisioning profile。
+- 如有需要，环境变量 `IOS_DEVELOPMENT_TEAM`。
+
+如果 Xcode 报 `No Account for Team` 或找不到对应 app 的 profile，请先在 Xcode Accounts 中刷新 Apple ID 和 team，再重跑 Release IPA 流程。

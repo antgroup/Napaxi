@@ -49,7 +49,6 @@ iOS Swift Package (`packages/ios`) 现在接入 iOS QEMU 沙箱 backend：iOS �
 ./tools/scripts/build.sh check-boundary
 ./tools/scripts/build.sh check-ios
 ./tools/scripts/build.sh check-ios-native
-./tools/scripts/build.sh check-ios-integration
 ./tools/scripts/build.sh check-ios-app
 ./tools/scripts/build.sh check-ios-device
 IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
@@ -62,21 +61,21 @@ cd examples/flutter && flutter analyze --no-fatal-infos && flutter test
 
 ## iOS 真机
 
-`check-ios-app-device` 会构建、签名、安装并启动 iOS integration app，因此需要：
+`check-ios-app-device` 会构建、签名、安装并启动 `examples/flutter` 里的 Flutter iOS 包，因此需要：
 
 - 可用的 Xcode command-line tools。
 - 已连接且可用的 iPhone。
 - 已启用 Developer Mode。
 - 有效的 Apple ID、Team 和 provisioning profile。
-- 环境变量 `IOS_DEVELOPMENT_TEAM`。
+- 环境变量 `IOS_DEVELOPMENT_TEAM`，如果你的本地签名配置需要显式指定。
 
-如果 Xcode 报 `No Account for Team` 或 `No profiles ... were found`，请先在 Xcode Accounts 中刷新 Apple ID 和 team，再重跑 Release IPA 流程。
+如果 Xcode 报 `No Account for Team` 或找不到对应 app 的 profile，请先在 Xcode Accounts 中刷新 Apple ID 和 team，再重跑 Release IPA 流程。
 
 ## 已知权衡
 
 ### iOS QEMU sandbox
 
-Native iOS SDK 通过 stable C ABI 调用与 Flutter 相同的 `napaxi_core::api`。Shell-like platform execution 已切到 Napaxi iOS QEMU backend。当前仓库保留稳定 API、Swift wiring、稳定的 `alpine-rootfs.bin` 资源名，并通过 vendored 底层 QEMU C bridge/静态库提供实际 runner；没有接入隔壁 adjacent sandbox SDK wrapper。iOS rootfs 使用 lightweight profile，不包含 Codex CLI 或 Android APK 构建工具链。
+Native iOS SDK 通过 stable C ABI 调用与 Flutter 相同的 `napaxi_core::api`。Shell-like platform execution 已切到 Napaxi iOS QEMU backend。当前仓库保留稳定 API、Swift wiring、稳定的 `alpine-rootfs.bin` 资源名，并通过 vendored 底层 QEMU C bridge/静态库提供实际 runner；iOS rootfs 使用 lightweight profile，不包含 Codex CLI 或 Android APK 构建工具链。
 
 ### Vendored `libsql`
 

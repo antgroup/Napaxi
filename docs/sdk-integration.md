@@ -52,7 +52,6 @@ generated xcframework object files match that minimum deployment target.
 ./tools/scripts/build.sh check-boundary
 ./tools/scripts/build.sh check-ios
 ./tools/scripts/build.sh check-ios-native
-./tools/scripts/build.sh check-ios-integration
 ./tools/scripts/build.sh check-ios-app
 ./tools/scripts/build.sh check-ios-device
 IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
@@ -66,18 +65,24 @@ When `HTTP_PROXY` or `HTTPS_PROXY` is set, make sure `NO_PROXY` includes
 test harness uses a local socket between `flutter_tester` and the test runner.
 
 `check-ios` is the offline native iOS SDK acceptance gate: it runs iOS/Flutter
-public surface parity, native Swift Package iPhoneOS compile/tests, independent
-host package integration, and the no-codesign Xcode app build. Run
-`check-ios-device` preflights `devicectl` availability without building.
-Run `check-ios-app-device` separately for physical-device Release IPA export and install.
-Because the device IPA export and install signs the app, `IOS_DEVELOPMENT_TEAM` is
-required. Use `IOS_ALLOW_PROVISIONING_UPDATES=1` when Xcode should create or
-update the local development certificate and provisioning profile.
-Automatic provisioning still requires the matching Apple ID to be logged in and
-valid in Xcode Accounts; an existing keychain certificate alone is not enough.
-If Xcode reports `No Account for Team` or `No profiles for
-'dev.napaxi.integration.iosapp' were found`, open Xcode settings, refresh the
-Apple ID for that team, then rerun the device IPA flow with the same team id.
+public surface parity, native Swift Package iPhoneOS compile/tests, and the
+Flutter iOS package build. Run `check-ios-device` preflights `devicectl`
+availability without building. Run `check-ios-app-device` separately for
+physical-device Release IPA export and install.
+
+`check-ios-app` builds and validates the Flutter iOS IPA produced from
+`examples/flutter`. `check-ios-app-device` builds the same IPA, exports the
+packaged app payload, installs it with `devicectl`, and validates the packaged
+bundle and QEMU assets on device.
+
+Because the device IPA export and install signs the app, `IOS_DEVELOPMENT_TEAM`
+may be required by your local signing setup. Use `IOS_ALLOW_PROVISIONING_UPDATES=1`
+when Xcode should create or update the local development certificate and
+provisioning profile. Automatic provisioning still requires the matching Apple
+ID to be logged in and valid in Xcode Accounts; an existing keychain certificate
+alone is not enough. If Xcode reports `No Account for Team` or cannot find a
+matching app profile, open Xcode settings, refresh the Apple
+ID for that team, then rerun the device IPA flow with the same signing inputs.
 
 The physical-device gate requires `devicectl` to report an available iPhone.
 If the preflight prints `tunnel=unavailable` or `developerMode=disabled`, fix
@@ -90,18 +95,9 @@ with the real CoreDevice/Xcode error.
 
 ## Current Limitations & Long-Term Plan
 
-A few pieces of the integration story are intentional trade-offs rather than
-the final shape. They are recorded here so integrators do not have to
-reverse-engineer them.
-
-### iOS QEMU sandbox
-
-The native iOS SDK in `packages/ios` calls the same `napaxi_core::api` boundary
-as the Flutter adapter through the stable C ABI. Shell-like platform execution
-is routed through Napaxi's iOS QEMU backend. The contract keeps the stable
-`alpine-rootfs.bin` resource name, but iOS uses a lightweight rootfs profile
-instead of Android's full APK-build profile. The platform-specific runner is the
-vendored lower-level QEMU C bridge and static libraries.
+The iOS QEMU sandbox is intentionally lightweight. It keeps the stable
+`alpine-rootfs.bin` resource name, but the packaged rootfs is smaller than the
+Android one and does not include Codex CLI or Android build tooling.
 
 - Native Swift hosts should consume `packages/ios`; Flutter continues to
   consume `packages/flutter`. Both adapters share `packages/api_bridge` and
@@ -110,12 +106,7 @@ vendored lower-level QEMU C bridge and static libraries.
   adapter code; route everything through `napaxi_core::api::platform`.
 - If the iOS QEMU runtime is not linked or the rootfs is not packaged, the
   shell sandbox capability is disabled and the `napaxi_api_ios_qemu_*`
-  readiness entrypoints return false. The Codex agent-engine capability remains
-  disabled on iOS because the lightweight rootfs does not package Codex CLI.
-- The native device gate requires a connected physical iOS device. It signs the
-  integration app, installs it with `devicectl`, launches it, then copies back
-  the packaged app bundle and QEMU asset state on device
-  handle.
+  readiness entrypoints return false.
 
 ### Vendored `libsql`
 

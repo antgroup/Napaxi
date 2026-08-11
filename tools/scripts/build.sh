@@ -14,7 +14,6 @@
 #   ./tools/scripts/build.sh release check-android-integration
 #   ./tools/scripts/build.sh release check-android-integration-device
 #   ./tools/scripts/build.sh release check-ios-native
-#   ./tools/scripts/build.sh release check-ios-integration
 #   ./tools/scripts/build.sh release check-ios-app
 #   ./tools/scripts/build.sh release check-ios-device
 #   ./tools/scripts/build.sh release check-ios-app-device
@@ -47,7 +46,7 @@ case "$BUILD_MODE" in
         CARGO_PROFILE="dev"
         PROFILE_DIR="debug"
         ;;
-    android|ios|ios-all|all|codegen|check-boundary|check-android-parity|check-ios-parity|check-ios|check-android-integration|check-android-integration-device|check-android-host|check-android-device|check-ios-native|check-ios-integration|check-ios-app|check-ios-device|check-ios-app-device|check-hygiene|check-packages-architecture|check-test-stability|check-api-contract|clean)
+    android|ios|ios-all|all|codegen|check-boundary|check-android-parity|check-ios-parity|check-ios|check-android-integration|check-android-integration-device|check-android-host|check-android-device|check-ios-native|check-ios-app|check-ios-device|check-ios-app-device|check-hygiene|check-packages-architecture|check-test-stability|check-api-contract|clean)
         TARGET_PLATFORM="$BUILD_MODE"
         BUILD_MODE="release"
         CARGO_PROFILE="release"
@@ -187,22 +186,9 @@ check_ios_native_assets() {
     done
 }
 
-check_ios_app_qemu_artifacts() {
-    local app_path="$1"
-    local rootfs_path="$app_path/Napaxi_Napaxi.bundle/Resources/alpine-rootfs.bin"
-    local binary_path="$app_path/NapaxiIOSIntegrationApp.debug.dylib"
-
-    check_ios_rootfs_asset "$rootfs_path" "Packaged app"
-
-    [ -f "$binary_path" ] || err "iOS app is missing debug dylib for QEMU symbol verification: $binary_path"
-    if ! nm -gU "$binary_path" | grep -E '(_qemu_sandbox_init|_napaxi_api_ios_qemu_is_ready)' >/dev/null; then
-        err "iOS app binary does not contain the required Napaxi iOS QEMU symbols."
-    fi
-}
-
 check_ios_app_release_payload() {
     local app_path="$1"
-    local rootfs_path="$app_path/Napaxi_Napaxi.bundle/Resources/alpine-rootfs.bin"
+    local rootfs_path="$app_path/alpine-rootfs.bin"
 
     check_ios_rootfs_asset "$rootfs_path" "Release IPA payload"
 }
@@ -641,53 +627,32 @@ check_ios_native_package() {
             --sdk "$sdk_path"
 }
 
-check_ios_integration_app() {
-    info "Checking iOS SDK integration package"
+check_ios_flutter_app_package() {
+    info "Checking Flutter iOS app package"
     ensure_ios_artifacts
-    require_command swift
-    require_command xcrun
+    require_command flutter
+    require_command unzip
 
-    local sdk_path
-    sdk_path="$(xcrun --sdk iphoneos --show-sdk-path)" || \
-        err "Unable to resolve iPhoneOS SDK path with xcrun"
-    [ -d "$sdk_path" ] || err "iPhoneOS SDK not found: $sdk_path"
+    local app_dir="$ROOT_DIR/examples/flutter"
+    local output_dir="$app_dir/build/ios/ipa"
+    local payload_dir="$ROOT_DIR/target/napaxi-flutter-ios-payload"
+    local ipa_path app_path
 
-    local swiftpm_scratch="$ROOT_DIR/target/napaxi-ios-integration-swiftpm"
-    local clang_module_cache="$ROOT_DIR/target/swiftpm-module-cache"
-    mkdir -p "$swiftpm_scratch" "$clang_module_cache"
+    rm -rf "$payload_dir"
+    mkdir -p "$output_dir" "$payload_dir"
 
-    cd "$ROOT_DIR/examples/integration/ios/host"
-    CLANG_MODULE_CACHE_PATH="$clang_module_cache" \
-        swift build \
-            --build-tests \
-            --scratch-path "$swiftpm_scratch" \
-            --triple arm64-apple-ios \
-            --sdk "$sdk_path"
+    cd "$app_dir"
+    flutter build ipa --release --export-method development --dart-define=NAPA_UMENG_ENABLED=false
 
-    local host_test_scratch="$ROOT_DIR/target/napaxi-ios-integration-host-tests"
-    swift test --scratch-path "$host_test_scratch"
-}
+    ipa_path="$(find "$output_dir" -maxdepth 1 -name '*.ipa' -type f | sort | head -1)"
+    [ -n "$ipa_path" ] && [ -f "$ipa_path" ] || err "Flutter iOS build did not produce an .ipa under $output_dir"
 
-check_ios_app_integration() {
-    info "Checking iOS SDK integration app"
-    ensure_ios_artifacts
-    require_command xcodebuild
-    require_command grep
-    require_command nm
-    cd "$ROOT_DIR/examples/integration/ios/app"
-    xcodebuild \
-        -project NapaxiIOSIntegrationApp.xcodeproj \
-        -scheme NapaxiIOSIntegrationApp \
-        -configuration Debug \
-        -sdk iphoneos \
-        -destination generic/platform=iOS \
-        -derivedDataPath DerivedData \
-        CODE_SIGNING_ALLOWED=NO \
-        ARCHS=arm64 \
-        ONLY_ACTIVE_ARCH=YES \
-        build
+    unzip -q "$ipa_path" -d "$payload_dir"
+    app_path="$(find "$payload_dir/Payload" -maxdepth 1 -name '*.app' -type d | sort | head -1)"
+    [ -n "$app_path" ] && [ -d "$app_path" ] || err "Flutter iOS IPA does not contain a Payload/*.app bundle: $ipa_path"
 
-    check_ios_app_qemu_artifacts "$ROOT_DIR/examples/integration/ios/app/DerivedData/Build/Products/Debug-iphoneos/NapaxiIOSIntegrationApp.app"
+    check_ios_app_release_payload "$app_path"
+    info "Generated Flutter iOS IPA: $ipa_path"
 }
 
 ios_device_id() {
@@ -908,107 +873,41 @@ EOF
 }
 
 install_ios_app_ipa_on_device() {
-    info "Building and installing Release iOS IPA on device"
-    require_command xcodebuild
+    info "Building and installing Flutter iOS IPA on device"
+    require_command flutter
     require_command xcrun
-    require_command grep
-    require_command nm
     require_command unzip
 
-    local bundle_id="${IOS_BUNDLE_IDENTIFIER:-dev.napaxi.integration.iosapp}"
     local device_id
     device_id="$(ios_device_id)"
 
     if [ -z "${IOS_DEVELOPMENT_TEAM:-}" ] && [ -z "${IOS_PROVISIONING_PROFILE_SPECIFIER:-}" ] && [ -z "${IOS_PROVISIONING_PROFILE_UUID:-}" ]; then
-        err "Signed iOS IPA export requires signing inputs. Set IOS_DEVELOPMENT_TEAM for automatic signing, or set IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID for an existing development profile."
+        warn "Flutter iOS IPA packaging relies on the bundle signing configured in examples/flutter/ios/Runner.xcodeproj/project.pbxproj. Set IOS_DEVELOPMENT_TEAM or provisioning inputs if your local Xcode setup needs an explicit override."
     fi
 
-    check_ios_device_signing_ready
     ensure_ios_artifacts
 
-    local app_dir="$ROOT_DIR/examples/integration/ios/app"
-    local derived_data="$app_dir/DerivedDataRelease"
-    local output_dir="$ROOT_DIR/target/ios-ipa"
-    local archive_path="$output_dir/NapaxiIOSIntegrationApp.xcarchive"
-    local export_path="$output_dir/export"
-    local export_options="$output_dir/ExportOptions.plist"
-    local payload_dir="$output_dir/payload"
-    local install_json="$output_dir/install.json"
+    local app_dir="$ROOT_DIR/examples/flutter"
+    local output_dir="$app_dir/build/ios/ipa"
+    local payload_dir="$ROOT_DIR/target/napaxi-flutter-ios-payload"
+    local install_json="$ROOT_DIR/target/napaxi-flutter-ios-install.json"
     local ipa_path app_path
 
-    rm -rf "$archive_path" "$export_path" "$payload_dir"
-    mkdir -p "$output_dir" "$export_path" "$payload_dir"
-    write_ios_export_options_plist "$export_options" "$bundle_id"
-
-    local archive_args=(
-        -project NapaxiIOSIntegrationApp.xcodeproj
-        -scheme NapaxiIOSIntegrationApp
-        -configuration Release
-        -sdk iphoneos
-        -destination generic/platform=iOS
-        -archivePath "$archive_path"
-        -derivedDataPath "$derived_data"
-    )
-    local export_args=(
-        -exportArchive
-        -archivePath "$archive_path"
-        -exportPath "$export_path"
-        -exportOptionsPlist "$export_options"
-    )
-    local signing_args=(
-        CODE_SIGNING_ALLOWED=YES
-        CODE_SIGNING_REQUIRED=YES
-        ARCHS=arm64
-        ONLY_ACTIVE_ARCH=NO
-        PRODUCT_BUNDLE_IDENTIFIER="$bundle_id"
-    )
-    local manual_signing=0
-
-    if [ -n "${IOS_DEVELOPMENT_TEAM:-}" ]; then
-        signing_args+=(DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM")
-    fi
-    if [ -n "${IOS_PROVISIONING_PROFILE_SPECIFIER:-}" ]; then
-        signing_args+=(CODE_SIGN_STYLE=Manual)
-        signing_args+=(PROVISIONING_PROFILE_SPECIFIER="$IOS_PROVISIONING_PROFILE_SPECIFIER")
-        manual_signing=1
-    fi
-    if [ -n "${IOS_PROVISIONING_PROFILE_UUID:-}" ]; then
-        signing_args+=(CODE_SIGN_STYLE=Manual)
-        signing_args+=(PROVISIONING_PROFILE="$IOS_PROVISIONING_PROFILE_UUID")
-        manual_signing=1
-    fi
-    if [ "$manual_signing" = "1" ] && [ -n "${IOS_CODE_SIGN_IDENTITY:-}" ]; then
-        signing_args+=(CODE_SIGN_IDENTITY="$IOS_CODE_SIGN_IDENTITY")
-    elif [ -n "${IOS_CODE_SIGN_IDENTITY:-}" ]; then
-        warn "Ignoring IOS_CODE_SIGN_IDENTITY for automatic signing; set IOS_PROVISIONING_PROFILE_SPECIFIER or IOS_PROVISIONING_PROFILE_UUID to use a manual signing identity."
-    fi
-
-    if [ "${IOS_ALLOW_PROVISIONING_UPDATES:-0}" = "1" ]; then
-        archive_args+=(-allowProvisioningUpdates -allowProvisioningDeviceRegistration)
-        export_args+=(-allowProvisioningUpdates)
-    fi
+    rm -rf "$payload_dir"
+    mkdir -p "$output_dir" "$payload_dir"
 
     cd "$app_dir"
-    if ! xcodebuild \
-        "${archive_args[@]}" \
-        "${signing_args[@]}" \
-        archive; then
-        err "Signed Release iOS archive failed. Set IOS_DEVELOPMENT_TEAM for automatic signing, or IOS_PROVISIONING_PROFILE_SPECIFIER/IOS_PROVISIONING_PROFILE_UUID plus optional IOS_CODE_SIGN_IDENTITY for manual signing. Optionally set IOS_BUNDLE_IDENTIFIER, and IOS_ALLOW_PROVISIONING_UPDATES=1 if Xcode should create/update profiles."
-    fi
+    flutter build ipa --release --export-method development --dart-define=NAPA_UMENG_ENABLED=false
 
-    if ! xcodebuild "${export_args[@]}"; then
-        err "Release iOS IPA export failed. Check $export_options and signing inputs. Set IOS_EXPORT_METHOD=debugging for personal/development signing or another Xcode export method when needed."
-    fi
-
-    ipa_path="$(find "$export_path" -maxdepth 1 -name '*.ipa' -type f | sort | head -1)"
-    [ -n "$ipa_path" ] && [ -f "$ipa_path" ] || err "Release iOS IPA export did not produce an .ipa under $export_path"
+    ipa_path="$(find "$output_dir" -maxdepth 1 -name '*.ipa' -type f | sort | head -1)"
+    [ -n "$ipa_path" ] && [ -f "$ipa_path" ] || err "Flutter iOS build did not produce an .ipa under $output_dir"
 
     unzip -q "$ipa_path" -d "$payload_dir"
     app_path="$(find "$payload_dir/Payload" -maxdepth 1 -name '*.app' -type d | sort | head -1)"
-    [ -n "$app_path" ] && [ -d "$app_path" ] || err "Release iOS IPA does not contain a Payload/*.app bundle: $ipa_path"
+    [ -n "$app_path" ] && [ -d "$app_path" ] || err "Flutter iOS IPA does not contain a Payload/*.app bundle: $ipa_path"
     check_ios_app_release_payload "$app_path"
 
-    info "Generated iOS IPA: $ipa_path"
+    info "Generated Flutter iOS IPA: $ipa_path"
     info "Installing IPA payload on device $device_id"
     xcrun devicectl device install app \
         --device "$device_id" \
@@ -1016,7 +915,7 @@ install_ios_app_ipa_on_device() {
         --timeout 180 \
         --json-output "$install_json"
 
-    info "Release iOS IPA installed on $device_id"
+    info "Flutter iOS IPA installed on $device_id"
 }
 
 check_ios_offline_acceptance() {
@@ -1027,8 +926,7 @@ check_ios_offline_acceptance() {
     local previous_ready="${NAPAXI_IOS_ARTIFACTS_READY:-}"
     export NAPAXI_IOS_ARTIFACTS_READY=1
     check_ios_native_package
-    check_ios_integration_app
-    check_ios_app_integration
+    check_ios_flutter_app_package
     if [ -n "$previous_ready" ]; then
         export NAPAXI_IOS_ARTIFACTS_READY="$previous_ready"
     else
@@ -1140,8 +1038,6 @@ check_open_source_hygiene() {
         packages/agent_provider
         examples/flutter
         examples/integration/android
-        examples/integration/ios/host
-        examples/integration/ios/app
     )
 
     if rg -n "$pattern" "${paths[@]}" \
@@ -1374,11 +1270,8 @@ case "$TARGET_PLATFORM" in
     check-ios-native)
         check_ios_native_package
         ;;
-    check-ios-integration)
-        check_ios_integration_app
-        ;;
     check-ios-app)
-        check_ios_app_integration
+        check_ios_flutter_app_package
         ;;
     check-ios-device)
         check_ios_device_ready
@@ -1408,6 +1301,6 @@ case "$TARGET_PLATFORM" in
         clean_outputs
         ;;
     *)
-        err "Unknown platform: $TARGET_PLATFORM. Use: android, ios, ios-all, all, codegen, check-boundary, check-android-parity, check-ios-parity, check-ios, check-android-integration, check-android-integration-device, check-ios-native, check-ios-integration, check-ios-app, check-ios-device, check-ios-app-device, check-hygiene, check-packages-architecture, check-test-stability, check-api-contract, clean"
+        err "Unknown platform: $TARGET_PLATFORM. Use: android, ios, ios-all, all, codegen, check-boundary, check-android-parity, check-ios-parity, check-ios, check-android-integration, check-android-integration-device, check-ios-native, check-ios-app, check-ios-device, check-ios-app-device, check-hygiene, check-packages-architecture, check-test-stability, check-api-contract, clean"
         ;;
 esac

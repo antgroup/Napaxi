@@ -1,6 +1,6 @@
 # Napaxi Examples
 
-这个目录包含 integration examples 和 demo applications，用于展示如何在宿主应用中嵌入 Napaxi SDK。
+这个目录包含项目 demo 和平台级 example app。
 
 ## Flutter Demo (`flutter/`)
 
@@ -27,18 +27,18 @@ flutter test
 dart run tool/check_a2a_user_contract.dart
 ```
 
-## Integration Tests (`integration/`)
+## Android Integration Check (`integration/android/`)
 
 平台 smoke tests 用于验证 native library 加载和 engine 启动：
 
 - `integration/android/`：Android instrumentation test。
-- `integration/ios/`：iOS host/app smoke。
+
+这些是 functional smoke tests，不是教学 demo。iOS 现在直接以 `examples/flutter` 作为打包目标。
 
 常用命令：
 
 ```sh
 ./tools/scripts/build.sh check-android-integration-device
-./tools/scripts/build.sh check-ios-app-device
 ```
 
 ## Provider App Examples (`provider_app/`)

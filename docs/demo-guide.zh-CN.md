@@ -34,15 +34,15 @@ flutter test
 dart run tool/check_a2a_user_contract.dart
 ```
 
-## Integration Tests
+## Android Integration Check
 
 平台 smoke tests 位于：
 
 - `examples/integration/android/`
-- `examples/integration/ios/host/`
-- `examples/integration/ios/app/`
 
-它们用于验证 native library 加载、engine 启动、workspace I/O 和 iOS rootfs 等关键路径，不是教学 demo。
+iOS 现在直接以 `examples/flutter` 作为打包目标。
+
+它们用于验证 native library 加载、engine 启动和 workspace I/O，不是教学 demo。
 
 ## Provider App Examples
 

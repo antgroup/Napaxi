@@ -1,7 +1,6 @@
 # Napaxi Examples
 
-This directory contains integration examples and demo applications that show
-how to embed the Napaxi SDK in a host application.
+This directory contains the project demo and platform-specific example apps.
 
 ## Flutter Demo (`flutter/`)
 
@@ -40,21 +39,18 @@ flutter test
 dart run tool/check_a2a_user_contract.dart
 ```
 
-## Integration Tests (`integration/`)
+## Android Integration Check (`integration/android/`)
 
 Platform-specific smoke tests used by `tools/scripts/build.sh` to verify that
 the native library loads and the engine starts on real devices.
 
 - `integration/android/` — Android Instrumentation test that loads
   `libnapaxi_api_bridge.so`, creates an engine, and verifies workspace I/O.
-- `integration/ios/` — iOS app that links the Swift Package, creates an
-  engine, and verifies the iOS QEMU/rootfs sandbox state.
 
 These are functional smoke tests, not pedagogical examples. They are run by:
 
 ```sh
 ./tools/scripts/build.sh check-android-integration-device
-./tools/scripts/build.sh check-ios-app-device
 ```
 
 ## Provider App Examples (`provider_app/`)

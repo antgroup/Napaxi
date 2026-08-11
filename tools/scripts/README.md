@@ -12,7 +12,6 @@ Run them from the repository root, for example:
 ./tools/scripts/build.sh check-android-integration
 ./tools/scripts/build.sh check-android-integration-device
 ./tools/scripts/build.sh check-ios-native
-./tools/scripts/build.sh check-ios-integration
 ./tools/scripts/build.sh check-ios-app
 ./tools/scripts/build.sh check-ios-device
 ./tools/scripts/build.sh check-ios-app-device
@@ -37,7 +36,7 @@ Run the offline native iOS SDK acceptance gate:
 ./tools/scripts/build.sh check-ios
 ```
 
-This runs iOS/Flutter public surface parity, native Swift Package compile/tests for iPhoneOS, independent host package integration, and the no-codesign Xcode app build. It intentionally excludes the physical-device Release IPA export and install; run `check-ios-app-device` separately when a usable iPhone is connected.
+This runs iOS/Flutter public surface parity, native Swift Package compile/tests for iPhoneOS, and the Flutter iOS package build. It intentionally excludes the physical-device Release IPA export and install; run `check-ios-app-device` separately when a usable iPhone is connected.
 
 Build and compile-check the native iOS Swift Package:
 
@@ -51,22 +50,13 @@ bridge, Swift SDK target, and XCTest compile surface are checked together.
 The Rust iOS bridge build defaults `NAPAXI_IOS_DEPLOYMENT_TARGET` to `16.0`;
 set that environment variable when intentionally changing the package minimum.
 
-Compile-check an independent native iOS host package consuming `packages/ios`:
-
-```bash
-./tools/scripts/build.sh check-ios-integration
-```
-
-This compiles `examples/integration/ios/host` and its XCTest target for
-iPhoneOS, then runs the host-side validation tests on macOS.
-
-Build the native iOS integration app in `examples/integration/ios/app` through Xcode:
+Build the Flutter iOS app and validate the packaged IPA:
 
 ```bash
 ./tools/scripts/build.sh check-ios-app
 ```
 
-Run the native iOS integration app on a connected iPhone:
+Run the Flutter iOS app on a connected iPhone:
 
 ```bash
 ./tools/scripts/build.sh check-ios-device
@@ -74,15 +64,7 @@ IOS_DEVELOPMENT_TEAM=ABCDE12345 ./tools/scripts/build.sh check-ios-app-device
 ```
 
 The device preflight checks `devicectl` state without building the SDK or app.
-The device gate builds a signed Release app for the selected physical iOS device, exports an IPA, installs the IPA payload with `devicectl`, and validates the packaged app bundle and QEMU assets. Set `IOS_DEVICE_ID` when more than one usable device is
-connected; explicit device ids are still validated against `devicectl` before
-any build starts. Set `IOS_ALLOW_PROVISIONING_UPDATES=1` when Xcode should
-create or update provisioning profiles. `IOS_DEVELOPMENT_TEAM` is required
-because the integration app project intentionally does not check in a team id.
-Automatic provisioning still requires a valid Xcode Accounts login for that
-team. `No Account for Team` means the keychain certificate may exist, but Xcode
-cannot create or refresh profiles until the Apple ID is added or refreshed in
-Xcode settings.
+The device gate builds a signed Release app from `examples/flutter`, exports an IPA, installs the IPA payload with `devicectl`, and validates the packaged app bundle and QEMU assets. Set `IOS_DEVICE_ID` when more than one usable device is connected; explicit device ids are still validated against `devicectl` before any build starts. Set `IOS_ALLOW_PROVISIONING_UPDATES=1` when Xcode should create or update provisioning profiles.
 
 If `check-ios-device` reports devices with `tunnel=unavailable` or `developerMode=disabled`, the SDK/app build is not the blocker yet. Enable Developer Mode on the iPhone, trust or re-pair it in Xcode, reconnect USB, and wait for Xcode/CoreDevice to finish Developer Disk Image services before rerunning `check-ios-app-device`. A selected wired device may still print `ddiServices=false`; the Release IPA install continues so device support can activate or fail with the real CoreDevice/Xcode error.
 
