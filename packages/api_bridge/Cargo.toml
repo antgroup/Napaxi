@@ -58,7 +58,7 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4" }
 
 # Base64 编解码（附件数据）
-base64 = "0.22"
+base64 = "0.23"
 
 # HTTP 请求（ClawHub API）
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
