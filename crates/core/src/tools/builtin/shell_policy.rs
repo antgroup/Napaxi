@@ -80,7 +80,9 @@ fn hard_gate_reason_depth(command: &str, depth: usize) -> Option<&'static str> {
     // into each `$(…)` / `` `…` `` / `<(…)` body so e.g. `echo $(rm -rf /)` is a
     // hard-gate hit even though `echo` itself is harmless.
     for token in shell_syntax_tokens(&strip_heredoc_bodies(command)) {
-        let ShellSyntaxToken::Substitution(body) = token else {
+        let (ShellSyntaxToken::Substitution(body) | ShellSyntaxToken::RedirectSubstitution(body)) =
+            token
+        else {
             continue;
         };
         // Fail CLOSED past the recursion bound: the shell still evaluates the
@@ -166,12 +168,17 @@ fn git_shell_intent_depth(command: &str, depth: usize) -> Option<GitShellIntent>
                 }
                 segment.clear();
             }
-            ShellSyntaxToken::Substitution(body) if depth < MAX_SUBSTITUTION_DEPTH => {
+            ShellSyntaxToken::Substitution(body) | ShellSyntaxToken::RedirectSubstitution(body)
+                if depth < MAX_SUBSTITUTION_DEPTH =>
+            {
                 if let Some(intent) = git_shell_intent_depth(&body, depth + 1) {
                     return Some(intent);
                 }
             }
             ShellSyntaxToken::RedirectIn
+            | ShellSyntaxToken::RedirectOut
+            | ShellSyntaxToken::RedirectTarget(_)
+            | ShellSyntaxToken::RedirectSubstitution(_)
             | ShellSyntaxToken::HereDoc
             | ShellSyntaxToken::Substitution(_)
             | ShellSyntaxToken::Expansion => {}
@@ -305,12 +312,26 @@ fn blocked_shell_command_reason(command: &str) -> Option<&'static str> {
             }
             // A `<(…)` / `$(…)` argument feeds dynamic content to the segment's
             // command; the body itself is recursed separately in `hard_gate_reason`.
-            ShellSyntaxToken::Substitution(_) => segment_has_substitution = true,
+            ShellSyntaxToken::Substitution(_) | ShellSyntaxToken::RedirectSubstitution(_) => {
+                segment_has_substitution = true;
+            }
             // A heredoc (`sh <<EOF … EOF`) feeds its body to the command as input
             // — for an interpreter, that body IS the program. The body is stripped
             // before tokenizing, so it can't be inspected; treat it like a pipe.
             ShellSyntaxToken::HereDoc => segment_has_heredoc = true,
-            ShellSyntaxToken::RedirectIn | ShellSyntaxToken::Expansion => {}
+            // Operands are not command words, but device redirections must
+            // still hit the hard gate, including redirect-only commands.
+            ShellSyntaxToken::RedirectTarget(path) => {
+                if is_raw_block_device(&path) {
+                    return Some("raw block device access");
+                }
+                if is_network_device(&path) {
+                    return Some("network device redirect");
+                }
+            }
+            ShellSyntaxToken::RedirectIn
+            | ShellSyntaxToken::RedirectOut
+            | ShellSyntaxToken::Expansion => {}
         }
     }
     destructive_segment_reason(
@@ -570,6 +591,9 @@ fn blocked_long_running_service_reason(command: &str) -> Option<&'static str> {
                 segment.clear();
             }
             ShellSyntaxToken::RedirectIn
+            | ShellSyntaxToken::RedirectOut
+            | ShellSyntaxToken::RedirectTarget(_)
+            | ShellSyntaxToken::RedirectSubstitution(_)
             | ShellSyntaxToken::HereDoc
             | ShellSyntaxToken::Substitution(_)
             | ShellSyntaxToken::Expansion => {}

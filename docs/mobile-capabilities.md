@@ -443,6 +443,14 @@ is a snake_case enum that maps to a fixed posture.
 hard-gated — they are simply not known-safe, so the mode decides their fate.
 Under `on_request` they prompt; under `trusted_allow` they run.
 
+Background commands (`&`) are checked per segment, just like `&&`, `;`, and
+pipelines (including `|&`). Output redirections (`>`, `>>`, `>|`, `>&`, and
+combined `&>` / `&>>` forms) are never known-safe: they follow the configured
+approval posture. Redirection file descriptors and operands do not count as
+command names or arguments, so a leading redirect cannot hide a hard-gate hit.
+Quoted or escaped operators remain literal text. These checks live in shared
+Core and apply equally to Flutter, Android, and iOS without wire/API changes.
+
 The `Prompt` decision is resolved in the shell tool layer through the existing
 approval bridge (`request_host_tool_execution`); it never enters the binary
 `CapabilityAdmissionDecision { Allow, Deny }` enum, so capability admission is

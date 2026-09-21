@@ -7,6 +7,11 @@ pub(super) enum ShellSyntaxToken {
     Word(String),
     Pipe,
     RedirectIn,
+    RedirectOut,
+    /// A redirection operand, never an executable or command argument.
+    RedirectTarget(String),
+    /// An evaluated substitution inside a redirection operand.
+    RedirectSubstitution(String),
     HereDoc,
     Segment,
     /// Command/process substitution: `$(body)`, `` `body` ``, `<(body)`, `>(body)`.
@@ -78,6 +83,7 @@ fn detect_netcat_with_data_piping(command: &str) -> bool {
     let mut expecting_command = true;
     let mut previous_was_pipe = false;
     let mut current_command_is_netcat = false;
+    let mut has_input_redirect = false;
 
     for token in tokens {
         match token {
@@ -87,7 +93,7 @@ fn detect_netcat_with_data_piping(command: &str) -> bool {
                         continue;
                     }
                     current_command_is_netcat = is_netcat_command(&word);
-                    if current_command_is_netcat && previous_was_pipe {
+                    if current_command_is_netcat && (previous_was_pipe || has_input_redirect) {
                         return true;
                     }
                     expecting_command = false;
@@ -95,16 +101,19 @@ fn detect_netcat_with_data_piping(command: &str) -> bool {
                 }
             }
             ShellSyntaxToken::RedirectIn | ShellSyntaxToken::HereDoc => {
+                has_input_redirect = true;
                 if current_command_is_netcat {
                     return true;
                 }
             }
             ShellSyntaxToken::Pipe => {
+                has_input_redirect = false;
                 expecting_command = true;
                 previous_was_pipe = true;
                 current_command_is_netcat = false;
             }
             ShellSyntaxToken::Segment => {
+                has_input_redirect = false;
                 expecting_command = true;
                 previous_was_pipe = false;
                 current_command_is_netcat = false;
@@ -118,6 +127,9 @@ fn detect_netcat_with_data_piping(command: &str) -> bool {
                     previous_was_pipe = false;
                 }
             }
+            ShellSyntaxToken::RedirectOut
+            | ShellSyntaxToken::RedirectTarget(_)
+            | ShellSyntaxToken::RedirectSubstitution(_) => {}
         }
     }
 
@@ -160,7 +172,7 @@ fn find_heredoc_delimiters(line: &str) -> Vec<String> {
     for token in tokens {
         match token {
             ShellSyntaxToken::HereDoc => after_heredoc = true,
-            ShellSyntaxToken::Word(word) if after_heredoc => {
+            ShellSyntaxToken::RedirectTarget(word) if after_heredoc => {
                 if let Some(delimiter) = normalize_heredoc_delimiter(&word) {
                     delimiters.push(delimiter);
                 }
@@ -168,10 +180,12 @@ fn find_heredoc_delimiters(line: &str) -> Vec<String> {
             }
             ShellSyntaxToken::Pipe
             | ShellSyntaxToken::RedirectIn
+            | ShellSyntaxToken::RedirectOut
+            | ShellSyntaxToken::RedirectSubstitution(_)
             | ShellSyntaxToken::Segment
             | ShellSyntaxToken::Substitution(_)
             | ShellSyntaxToken::Expansion => after_heredoc = false,
-            ShellSyntaxToken::Word(_) => {}
+            ShellSyntaxToken::Word(_) | ShellSyntaxToken::RedirectTarget(_) => {}
         }
     }
 
@@ -193,6 +207,7 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
     let mut word = String::new();
     let mut i = 0;
     let mut quote: Option<u8> = None;
+    let mut word_is_plain = true;
 
     while i < bytes.len() {
         let b = bytes[i];
@@ -218,7 +233,9 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
                 // NOT a substitution). Treating any `\X` as literal `X` is a safe
                 // over-approximation here — it can only make a substitution look
                 // less dangerous, never hide a real one.
-                word.push(bytes[i + 1] as char);
+                if bytes[i + 1] != b'\n' {
+                    word.push(bytes[i + 1] as char);
+                }
                 i += 2;
                 continue;
             }
@@ -256,15 +273,22 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
 
         match b {
             b'\'' | b'"' => {
+                word_is_plain = false;
                 quote = Some(b);
                 i += 1;
             }
             b'\\' if i + 1 < bytes.len() => {
-                word.push(bytes[i + 1] as char);
+                // Backslash-newline is removed by the shell before parsing;
+                // it must not hide a command or a protected redirect path.
+                if bytes[i + 1] != b'\n' {
+                    word_is_plain = false;
+                    word.push(bytes[i + 1] as char);
+                }
                 i += 2;
             }
             // `$(...)` command substitution and `${...}` / `$VAR` expansion.
             b'$' if i + 1 < bytes.len() && bytes[i + 1] == b'(' => {
+                word_is_plain = false;
                 push_shell_word(&mut tokens, &mut word);
                 let (body, next) = read_balanced_parens(bytes, i + 1);
                 tokens.push(ShellSyntaxToken::Substitution(body));
@@ -273,6 +297,7 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
             b'$' => {
                 // `${...}` / `$VAR` expand; a bare `$` (no name follows) is literal.
                 if let Some(next) = read_variable_expansion(bytes, i) {
+                    word_is_plain = false;
                     push_shell_word(&mut tokens, &mut word);
                     tokens.push(ShellSyntaxToken::Expansion);
                     i = next;
@@ -283,6 +308,7 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
             }
             // Backtick command substitution: `` `...` ``.
             b'`' => {
+                word_is_plain = false;
                 push_shell_word(&mut tokens, &mut word);
                 let (body, next) = read_backtick(bytes, i + 1);
                 tokens.push(ShellSyntaxToken::Substitution(body));
@@ -290,6 +316,7 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
             }
             // Process substitution `<(...)` / `>(...)`.
             b'<' | b'>' if i + 1 < bytes.len() && bytes[i + 1] == b'(' => {
+                word_is_plain = false;
                 push_shell_word(&mut tokens, &mut word);
                 let (body, next) = read_balanced_parens(bytes, i + 1);
                 tokens.push(ShellSyntaxToken::Substitution(body));
@@ -297,31 +324,53 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
             }
             b' ' | b'\t' | b'\r' => {
                 push_shell_word(&mut tokens, &mut word);
+                word_is_plain = true;
                 i += 1;
             }
             b'\n' | b';' => {
                 push_shell_word(&mut tokens, &mut word);
+                word_is_plain = true;
                 tokens.push(ShellSyntaxToken::Segment);
                 i += 1;
             }
             b'|' => {
                 push_shell_word(&mut tokens, &mut word);
+                word_is_plain = true;
                 if i + 1 < bytes.len() && bytes[i + 1] == b'|' {
                     tokens.push(ShellSyntaxToken::Segment);
                     i += 2;
                 } else {
                     tokens.push(ShellSyntaxToken::Pipe);
-                    i += 1;
+                    i += if bytes.get(i + 1) == Some(&b'&') {
+                        2
+                    } else {
+                        1
+                    };
                 }
             }
-            b'&' if i + 1 < bytes.len() && bytes[i + 1] == b'&' => {
+            b'&' => {
                 push_shell_word(&mut tokens, &mut word);
+                word_is_plain = true;
                 tokens.push(ShellSyntaxToken::Segment);
-                i += 2;
+                // Treat `&>` / `&>>` conservatively as background + redirect:
+                // some /bin/sh implementations do not support Bash's combined
+                // redirect and execute a second command after the `&`.
+                i += if bytes.get(i + 1) == Some(&b'&') {
+                    2
+                } else {
+                    1
+                };
             }
-            b'<' => {
-                push_shell_word(&mut tokens, &mut word);
-                if i + 1 < bytes.len() && bytes[i + 1] == b'<' {
+            b'<' | b'>' => {
+                // An adjacent, unquoted IO number belongs to the redirect:
+                // `2>file rm ...` must still expose `rm` as the executable.
+                if word_is_plain && word.bytes().all(|b| b.is_ascii_digit()) {
+                    word.clear();
+                } else {
+                    push_shell_word(&mut tokens, &mut word);
+                }
+                word_is_plain = true;
+                if b == b'<' && bytes.get(i + 1) == Some(&b'<') {
                     tokens.push(ShellSyntaxToken::HereDoc);
                     i += 2;
                     if i < bytes.len() && bytes[i] == b'<' {
@@ -331,9 +380,22 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
                         i += 1;
                     }
                 } else {
-                    tokens.push(ShellSyntaxToken::RedirectIn);
+                    tokens.push(if b == b'<' {
+                        ShellSyntaxToken::RedirectIn
+                    } else {
+                        ShellSyntaxToken::RedirectOut
+                    });
                     i += 1;
+                    // Consume duplication, append, noclobber override, and
+                    // read/write operators before parsing their operand. In
+                    // particular, `>&` / `<&` contain no background separator.
+                    if bytes.get(i).is_some_and(|next| {
+                        *next == b'&' || *next == b'>' || (b == b'>' && *next == b'|')
+                    }) {
+                        i += 1;
+                    }
                 }
+                i = read_redirect_target(command, i, &mut tokens);
             }
             _ => {
                 word.push(b as char);
@@ -350,6 +412,76 @@ fn push_shell_word(tokens: &mut Vec<ShellSyntaxToken>, word: &mut String) {
     if !word.is_empty() {
         tokens.push(ShellSyntaxToken::Word(std::mem::take(word)));
     }
+}
+
+/// Consume one redirection operand, preserving substitutions for the hard gate
+/// but keeping literal fragments out of executable/argument detection. Shell
+/// redirections may precede or interrupt a command, not just follow it.
+fn read_redirect_target(command: &str, mut i: usize, tokens: &mut Vec<ShellSyntaxToken>) -> usize {
+    let bytes = command.as_bytes();
+    loop {
+        match bytes.get(i) {
+            Some(b' ' | b'\t' | b'\r') => i += 1,
+            Some(b'\\') if bytes.get(i + 1) == Some(&b'\n') => i += 2,
+            _ => break,
+        }
+    }
+    let start = i;
+    let mut quote = None;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if quote == Some(b'\'') {
+            if b == b'\'' {
+                quote = None;
+            }
+            i += 1;
+            continue;
+        }
+        if b == b'\\' && i + 1 < bytes.len() {
+            i += 2;
+            continue;
+        }
+        if b == b'`' {
+            i = read_backtick(bytes, i + 1).1;
+            continue;
+        }
+        if (b == b'$' || (quote.is_none() && matches!(b, b'<' | b'>')))
+            && bytes.get(i + 1) == Some(&b'(')
+        {
+            i = read_balanced_parens(bytes, i + 1).1;
+            continue;
+        }
+        if b == b'$'
+            && let Some(next) = read_variable_expansion(bytes, i)
+        {
+            i = next;
+            continue;
+        }
+        if quote == Some(b'"') {
+            if b == b'"' {
+                quote = None;
+            }
+        } else if matches!(b, b'\'' | b'"') {
+            quote = Some(b);
+        } else if matches!(
+            b,
+            b' ' | b'\t' | b'\r' | b'\n' | b';' | b'|' | b'&' | b'<' | b'>'
+        ) {
+            break;
+        }
+        i += 1;
+    }
+    for token in shell_syntax_tokens(&command[start..i]) {
+        tokens.push(match token {
+            ShellSyntaxToken::Word(word) => ShellSyntaxToken::RedirectTarget(word),
+            ShellSyntaxToken::Substitution(body) => ShellSyntaxToken::RedirectSubstitution(body),
+            // No value is statically known, and the redirect already prevents
+            // auto-approval. Do not mistake this expansion for an executable.
+            ShellSyntaxToken::Expansion => ShellSyntaxToken::RedirectTarget(String::new()),
+            other => other,
+        });
+    }
+    i
 }
 
 /// Reads a `$(...)` / `<(...)` / `>(...)` body starting at the opening `(`
