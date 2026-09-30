@@ -90,7 +90,7 @@ urlencoding = "2"
 # Cryptography
 # ============================================================================
 sha2 = "0.10"
-rand = "0.8"
+rand = "0.10"
 base64 = "0.22"
 ring = "0.17.14"
 # Constant-time equality for HMAC signature verification. Already in the tree
