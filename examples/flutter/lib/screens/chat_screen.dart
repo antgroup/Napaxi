@@ -9898,11 +9898,11 @@ $candidate
 
   void _openWorkbenchDrawer() {
     _dismissKeyboard();
-    _workbenchDrawerController.forward(curve: Curves.easeOutCubic);
+    _workbenchDrawerController.animateTo(1, curve: Curves.easeOutCubic);
   }
 
   void _closeWorkbenchDrawer() {
-    _workbenchDrawerController.reverse(curve: Curves.easeOutCubic);
+    _workbenchDrawerController.animateBack(0, curve: Curves.easeOutCubic);
   }
 
   void _handleWorkbenchDrawerDragUpdate(DragUpdateDetails details) {
@@ -9922,18 +9922,18 @@ $candidate
         details.primaryVelocity ?? details.velocity.pixelsPerSecond.dx;
 
     if (velocity < -_sessionMenuFlingVelocity) {
-      _workbenchDrawerController.forward(curve: Curves.easeOutCubic);
+      _workbenchDrawerController.animateTo(1, curve: Curves.easeOutCubic);
       return;
     }
     if (velocity > _sessionMenuFlingVelocity) {
-      _workbenchDrawerController.reverse(curve: Curves.easeOutCubic);
+      _workbenchDrawerController.animateBack(0, curve: Curves.easeOutCubic);
       return;
     }
 
     if (_workbenchDrawerController.value >= 0.75) {
-      _workbenchDrawerController.forward(curve: Curves.easeOutCubic);
+      _workbenchDrawerController.animateTo(1, curve: Curves.easeOutCubic);
     } else {
-      _workbenchDrawerController.reverse(curve: Curves.easeOutCubic);
+      _workbenchDrawerController.animateBack(0, curve: Curves.easeOutCubic);
     }
   }
 
@@ -10756,9 +10756,10 @@ $candidate
                   return const SizedBox.shrink();
                 }
 
-                // Drag progress is linear in the controller value so the panel
-                // tracks the pointer 1:1. Open/close animations carry their
-                // easing on the controller itself (see forward/reverse calls).
+                // Drag progress is linear in the controller value so the
+                // panel tracks the pointer 1:1. Programmatic open/close
+                // animations carry their easing on the animateTo/animateBack
+                // calls, not here (see _openWorkbenchDrawer etc.).
                 final progress = _workbenchDrawerController.value;
                 final size = MediaQuery.sizeOf(context);
 
