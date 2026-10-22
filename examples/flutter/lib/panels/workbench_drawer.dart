@@ -106,6 +106,7 @@ class _WorkbenchDrawerHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
+      key: const Key('workbench_drawer_header'),
       bottom: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),

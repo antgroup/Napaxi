@@ -9432,6 +9432,133 @@ void main() {
     expect(fakeClient.commitMessages.last, 'Initial commit');
   });
 
+  testWidgets('dev workbench drawer drag tracks the pointer 1:1', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'napaxi_demo.active_scenario.v1': 'napaxi.scenario.mobile_development',
+    });
+    const mobileScenario = sdk.NapaxiScenarioPack(
+      id: 'napaxi.scenario.mobile_development',
+      version: '1',
+      label: 'Developer Workbench',
+      description: 'Mobile development scenario.',
+      risk: 'critical',
+      activation: 'host_policy',
+      uiContributions: [
+        sdk.NapaxiScenarioUiContribution(
+          id: 'ui.repo_workbench',
+          capabilityId: 'napaxi.tool.git',
+          placement: 'left_menu',
+          title: 'Projects',
+          icon: 'folder_git',
+          renderer: 'repo_workbench',
+        ),
+      ],
+    );
+    final fakeClient = FakeNapaxiChatClient(
+      scenarioPacks: const [mobileScenario],
+      gitRepositories: [
+        DemoRepositoryInfo(
+          name: 'demo',
+          directory: 'demo',
+          displayDirectory: 'demo',
+          absolutePath: '/tmp/git_repos/demo',
+          modified: DateTime(2026, 1, 2, 3, 4),
+        ),
+      ],
+      gitChangesSets: {
+        'demo': const DemoGitChangeSet(
+          success: true,
+          branch: 'main',
+          entries: [
+            DemoGitChangeEntry(
+              path: 'lib/main.dart',
+              indexCode: 'M',
+              workCode: ' ',
+              area: DemoGitChangeArea.staged,
+              category: DemoGitChangeCategory.modified,
+              additions: 5,
+              deletions: 1,
+            ),
+          ],
+        ),
+      },
+      gitBranches: const {
+        'demo': [
+          DemoGitBranchInfo(name: 'main', remote: false, current: true),
+        ],
+      },
+    );
+
+    await tester.pumpWidget(
+      _testApp(chatClientFactory: () async => fakeClient),
+    );
+    await configureSingleModel(tester);
+
+    await tester.tap(find.byKey(const Key('dev_workbench_button')));
+    await tester.pumpAndSettle();
+    await pumpUntilFound(
+      tester,
+      find.byKey(const Key('source_control_tab_files')),
+    );
+
+    double drawerOffset() {
+      final transform = tester.widget<Transform>(
+        find.byKey(const Key('workbench_drawer_transform')),
+      );
+      return transform.transform.getTranslation().x;
+    }
+
+    // Fully open: the panel sits flush with the right edge.
+    expect(drawerOffset(), closeTo(0, 0.5));
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('workbench_drawer_header'))),
+    );
+    // Consume the touch slop and use the post-slop position as the baseline.
+    await gesture.moveBy(const Offset(40, 0));
+    await tester.pump();
+    final baseline = drawerOffset();
+
+    // Slow drag: eight 5px steps must move the panel by exactly 40px.
+    for (var i = 0; i < 8; i++) {
+      await gesture.moveBy(const Offset(5, 0));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(drawerOffset() - baseline, closeTo(40, 1));
+
+    // Fast drag: a single large step is still 1:1 with the pointer.
+    final beforeFastStep = drawerOffset();
+    await gesture.moveBy(const Offset(160, 0));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(drawerOffset() - beforeFastStep, closeTo(160, 1));
+
+    // Slide back slowly so the release stays above the 0.75 snapshot
+    // threshold and lands below the fling threshold: the drawer stays open.
+    for (var i = 0; i < 16; i++) {
+      await gesture.moveBy(const Offset(-5, 0));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('workbench_drawer_header')), findsOneWidget);
+    expect(drawerOffset(), closeTo(0, 0.5));
+
+    // A drag past the closing threshold dismisses the drawer again.
+    final closeGesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const Key('workbench_drawer_header'))),
+    );
+    for (var i = 0; i < 4; i++) {
+      await closeGesture.moveBy(const Offset(155, 0));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await closeGesture.up();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('workbench_drawer_header')), findsNothing);
+    expect(find.byKey(const Key('workbench_drawer_transform')), findsNothing);
+  });
+
   testWidgets('commit split-button dropdown drives push and pull', (
     tester,
   ) async {
