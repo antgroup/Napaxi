@@ -19,6 +19,8 @@ mod shell_safe;
 mod shell_util;
 
 #[cfg(test)]
+mod shell_security_tests;
+#[cfg(test)]
 mod tests;
 
 pub(crate) use shell_policy::{GitShellIntent, git_shell_intent};

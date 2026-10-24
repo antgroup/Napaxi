@@ -26,7 +26,11 @@ pub(super) fn is_known_safe_command(command: &str) -> bool {
             }
             // Redirections and heredocs can write files or feed data, so a
             // command using them is not "plain read-only".
-            ShellSyntaxToken::RedirectIn | ShellSyntaxToken::HereDoc => return false,
+            ShellSyntaxToken::RedirectIn
+            | ShellSyntaxToken::RedirectOut
+            | ShellSyntaxToken::RedirectTarget(_)
+            | ShellSyntaxToken::RedirectSubstitution(_)
+            | ShellSyntaxToken::HereDoc => return false,
             // Command/process substitution and variable expansion are evaluated
             // by the real shell — their effect can't be statically bounded, so a
             // command containing them is never known-safe (e.g. `echo $(rm -rf /)`,
