@@ -12,6 +12,32 @@ use super::{
     default_token_type, sanitize_error_body,
 };
 
+// Clock policy (DIMA-2026102900120175601 / monotonic clock unification):
+//
+// OAuth times in this module are *absolute* wall-clock values because they
+// cross process boundaries (persisted to disk via RFC3339):
+//   - `McpOAuthTokens::expires_at`: persisted; compared against
+//     `chrono::Utc::now()` in `oauth_token_needs_refresh`.
+//   - `oauth_tokens_from_response`: computes `expires_at` from the OAuth
+//     server-provided `expires_in` (seconds) using
+//     `chrono::Utc::now() + chrono::Duration::seconds(expires_in)`.
+//   - `McpOAuthPending::created_at` (in `oauth_flow.rs`): persisted RFC3339.
+//
+// These MUST stay on `chrono::Utc::now()`; migrating them to
+// `std::time::Instant` (monotonic) would break after a process restart,
+// because `Instant` cannot be persisted across runs.
+//
+// "Relative" timers in this module (HTTP request deadlines via
+// `reqwest::Client::builder().timeout(std::time::Duration::from_secs(N))`)
+// are already constant `std::time::Duration`s and therefore effectively
+// monotonic at the reqwest/tokio layer; no migration is needed there.
+//
+// If a future change adds a non-expires-style relative timer / backoff /
+// cooldown to this module (e.g. an MCP startup retry cooldown), it MUST use
+// `std::time::Instant::now()` + `Instant::elapsed()` and must NOT touch
+// `chrono::Utc::now()`, mirroring the precedent in
+// `crates/core/src/agent_engine/codex/process.rs`.
+
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct AuthorizationServerMetadata {
     pub(super) issuer: String,

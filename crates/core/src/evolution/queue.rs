@@ -8,7 +8,10 @@ use crate::session::SessionMessage;
 use crate::types::PlatformLlmConfig;
 
 use super::review::{log_background_review_result, review_memory_now, review_skill_now};
-use super::store::{load_state, save_state, update_run_record, upsert_run_record};
+use super::store::{
+    load_state, record_monotonic_anchor, save_state, take_monotonic_anchor, update_run_record,
+    upsert_run_record,
+};
 use super::{
     DEFAULT_MEMORY_REVIEW_INTERVAL, DEFAULT_SKILL_REVIEW_INTERVAL, EvolutionRun,
     EvolutionRunRecord, EvolutionRunStatus, QueuedEvolutionRun, review_type_name,
@@ -271,6 +274,10 @@ fn create_queued_run_record(
         pending_count: 0,
         error: None,
     };
+    // Record a monotonic anchor at queue time so that `refresh_stale_runs`
+    // uses `Instant::elapsed()` (monotonic) rather than the wall-clock
+    // `queued_at` RFC3339 value, which is sensitive to NTP/manual clock jumps.
+    record_monotonic_anchor(&record.id, std::time::Instant::now());
     if let Err(error) = upsert_run_record(files_dir, record.clone()) {
         tracing::warn!(
             run_id = record.id,
@@ -290,6 +297,10 @@ fn mark_run_started(files_dir: &str, run_id: &str) {
         record.started_at = Some(Utc::now().to_rfc3339());
         record.error = None;
     });
+    // Refresh the monotonic anchor to "now" so the stale window measures
+    // elapsed-since-start rather than elapsed-since-queue, matching the
+    // previous wall-clock behavior (which preferred `started_at`).
+    record_monotonic_anchor(run_id, std::time::Instant::now());
 }
 
 fn mark_run_completed(files_dir: &str, run_id: &str, result: &EvolutionRun) {
@@ -305,4 +316,7 @@ fn mark_run_completed(files_dir: &str, run_id: &str, result: &EvolutionRun) {
             EvolutionRunStatus::Completed
         };
     });
+    // Reclaim the monotonic anchor slot; the run is now terminal and the
+    // registry should not retain it across the lifetime of the process.
+    let _ = take_monotonic_anchor(run_id);
 }

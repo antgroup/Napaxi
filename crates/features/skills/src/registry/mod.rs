@@ -457,9 +457,26 @@ fn push_search_terms(out: &mut Vec<String>, text: &str) {
 }
 
 fn push_search_term(out: &mut Vec<String>, term: &str) {
+    // Stopword audit (DIMA-2026102900120175601 / #178496):
+    // English high-frequency function words (be-verbs, articles, preps,
+    // auxiliaries, pronouns, conjunctions) that carry no skill-search signal;
+    // Chinese high-frequency 助词/连词/代词/虚词. Note the `term.len() < 3`
+    // filter below already blocks ASCII 1–2 byte tokens ("a", "an", "is",
+    // "of", "in", "on", "to", "it", "as", "so", "by", "do", "be", ...).
+    // Those entries are kept here for documentation intent; only tokens with
+    // `len() >= 3` actually reach the STOPWORDS check (single Chinese chars
+    // are 3 UTF-8 bytes and DO reach it).
     const STOPWORDS: &[&str] = &[
+        // English
         "and", "are", "for", "from", "how", "the", "this", "use", "user", "using", "when", "with",
-        "you", "your", "什么", "使用", "用户", "需要", "触发",
+        "you", "your", "be", "been", "being", "is", "am", "was", "were", "does", "did", "doing",
+        "done", "do", "can", "could", "will", "would", "shall", "should", "may", "might", "must",
+        "about", "above", "after", "before", "between", "into", "during", "through", "that",
+        "these", "those", "they", "them", "their", "its", "has", "had", "have", "having", "your",
+        "yours", "our", "ours", "not", "but", "and", "or", "nor", "so", "yet",
+        // Chinese
+        "是", "的", "了", "在", "有", "就", "都", "也", "和", "与", "或", "因为", "所以", "但是",
+        "可以", "如果", "什么", "使用", "用户", "需要", "触发",
     ];
     let term = term.trim();
     if term.len() < 3 || STOPWORDS.contains(&term) {
