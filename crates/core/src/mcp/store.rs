@@ -29,7 +29,20 @@ pub(super) fn load_state(files_dir: &str) -> McpState {
     let mut state: McpState = serde_json::from_str(&content).unwrap_or_default();
     hydrate_oauth_secrets(files_dir, &mut state);
     normalize_legacy_default_users(&mut state);
+    normalize_legacy_tools_loaded(&mut state);
     state
+}
+
+/// Treat existing servers whose persisted `tools` are already populated as
+/// `tools_loaded == true`. Pre-lazy-load records stored `tools` eagerly, so
+/// their `tools_loaded` field defaults to `false` after deserialization; this
+/// normalization prevents a one-time re-fetch on first read for存量激活服务器.
+fn normalize_legacy_tools_loaded(state: &mut McpState) {
+    for server in &mut state.servers {
+        if !server.tools.is_empty() {
+            server.tools_loaded = true;
+        }
+    }
 }
 
 fn normalize_legacy_default_users(state: &mut McpState) {

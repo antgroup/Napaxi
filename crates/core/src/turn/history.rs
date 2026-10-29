@@ -183,6 +183,10 @@ impl TurnHistoryRecorder {
     }
 
     fn finish_tool_call(&mut self, call_id: &str, output: String, is_error: bool) {
+        // Cap any deep JSON nesting in the tool result before persisting so the
+        // on-disk checkpoint never carries unbounded recursion. Mirrors the
+        // depth cap in `session::history` (idea reference: OpenClaw #186481).
+        let output = crate::session::cap_tool_result_string(&output);
         for segment in self.segments.iter_mut().rev() {
             if let Some(call) = segment
                 .tool_calls

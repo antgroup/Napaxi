@@ -515,6 +515,251 @@ fn history_page_compacts_large_tool_results() {
     assert!(call["result"].as_str().unwrap().len() < 2000);
 }
 
+/// Build a JSON object whose only path has the requested Object/Array nesting
+/// `depth` (root object counts as depth 1). Used to exercise the depth cap.
+fn build_nested_object(depth: usize) -> serde_json::Value {
+    let mut value = serde_json::json!({"leaf": "deep"});
+    for _ in 1..depth {
+        value = serde_json::json!({ "nested": value });
+    }
+    value
+}
+
+#[test]
+fn cap_tool_result_string_replaces_deeply_nested_subtrees() {
+    let input = build_nested_object(300);
+    let raw = input.to_string();
+    let capped = crate::session::cap_tool_result_string(&raw);
+    let parsed: Value = serde_json::from_str(&capped).unwrap();
+    let total_depth = measure_depth(&parsed);
+    assert!(
+        total_depth <= 256,
+        "output depth must stay within the cap, got {total_depth}"
+    );
+    // The deepest kept subtree must be replaced with a marker carrying the
+    // original subtree's local depth.
+    let mut found = false;
+    walk_values(&parsed, &mut |value| {
+        if value.get("result_depth_truncated").and_then(Value::as_bool) == Some(true) {
+            found = true;
+            let original_depth = value
+                .get("original_depth")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            assert!(
+                original_depth > 0,
+                "marker must record a positive original depth, got {original_depth}"
+            );
+        }
+    });
+    assert!(found, "expected at least one result_depth_truncated marker");
+}
+
+#[test]
+fn cap_tool_result_string_preserves_shallow_and_non_json_strings() {
+    // A flat plaintext string is left unchanged.
+    let plain = "x".repeat(2000);
+    assert_eq!(crate::session::cap_tool_result_string(&plain), plain);
+
+    // A shallow JSON object (depth 1) round-trips with no replacement.
+    let shallow = serde_json::json!({"a": "b"}).to_string();
+    assert_eq!(crate::session::cap_tool_result_string(&shallow), shallow);
+
+    // A structure whose depth is within the cap is preserved untouched. The
+    // cap is set just below serde_json's default parse-time recursion limit
+    // (see `TOOL_RESULT_MAX_DEPTH`); this `within_cap` value is one less than
+    // the cap so the in-memory depth cap does not trip and the input round-
+    // trips byte-for-byte.
+    let within_cap = build_nested_object(125).to_string();
+    assert_eq!(
+        crate::session::cap_tool_result_string(&within_cap),
+        within_cap
+    );
+}
+
+#[test]
+fn append_trace_messages_caps_deeply_nested_tool_results() {
+    let files_dir = temp_files_dir("trace_caps_depth");
+    let key_json = create_session(&files_dir, "agent-a", "app", "user-a", None);
+    let key: SessionKey = serde_json::from_str(&key_json).unwrap();
+
+    let deep_result = build_nested_object(300).to_string();
+    let deep_arguments = build_nested_object(280).to_string();
+    assert!(append_trace_messages(
+        &files_dir,
+        &key_json,
+        "I should inspect the workspace.",
+        &[serde_json::json!({
+            "call_id": "call_1",
+            "name": "shell",
+            "arguments": deep_arguments,
+            "result": deep_result,
+        })]
+    ));
+    // Follow the trace with an assistant message so the trailing-tool_calls /
+    // reasoning trimming in `get_history` does not drop the trace entry. This
+    // mirrors `history_page_compacts_large_tool_results`, which appends a
+    // sentinel `assistant` turn after the tool_calls segment.
+    assert!(append_message(&files_dir, &key_json, "assistant", "done"));
+
+    let history: Value = serde_json::from_str(&get_history(&files_dir, &key.thread_id)).unwrap();
+    let calls_entry = history
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["role"] == "tool_calls")
+        .unwrap();
+    let payload: Value = serde_json::from_str(calls_entry["content"].as_str().unwrap()).unwrap();
+    let calls = payload["calls"].as_array().unwrap();
+    let result_value: Value = serde_json::from_str(calls[0]["result"].as_str().unwrap()).unwrap();
+    let args_value: Value = serde_json::from_str(calls[0]["arguments"].as_str().unwrap()).unwrap();
+    assert!(
+        measure_depth(&result_value) <= 256,
+        "capped result depth must not exceed the cap"
+    );
+    assert!(
+        measure_depth(&args_value) <= 256,
+        "capped arguments depth must not exceed the cap"
+    );
+    // The depth cap replaces the deepest over-cap subtree with the marker
+    // object; the outer structure is preserved, so the marker sits at the
+    // replaced depth rather than the root. Walk the tree to confirm it is
+    // present (mirrors the check in `cap_tool_result_string_replaces_deeply_nested_subtrees`).
+    let assert_has_marker = |value: &Value, label: &str| {
+        let mut found = false;
+        walk_values(value, &mut |v| {
+            if v.get("result_depth_truncated").and_then(Value::as_bool) == Some(true) {
+                found = true;
+            }
+        });
+        assert!(
+            found,
+            "{label} should contain a result_depth_truncated marker"
+        );
+    };
+    assert_has_marker(&result_value, "capped result");
+    assert_has_marker(&args_value, "capped arguments");
+}
+
+#[test]
+fn history_page_truncates_deeply_nested_tool_results() {
+    let files_dir = temp_files_dir("history_page_truncates_deep_tool_results");
+    let key_json = create_session(&files_dir, "agent-a", "app", "user-a", None);
+    let key: SessionKey = serde_json::from_str(&key_json).unwrap();
+
+    let deep_result = build_nested_object(300).to_string();
+    assert!(append_messages(
+        &files_dir,
+        &key_json,
+        &[
+            SessionAppendMessage {
+                role: "tool_calls".to_string(),
+                content: serde_json::json!({
+                    "calls": [{
+                        "call_id": "c1",
+                        "name": "shell",
+                        "arguments": "{}",
+                        "result": deep_result,
+                    }]
+                })
+                .to_string(),
+                interrupted: false,
+                turn_id: Some("turn-x".to_string()),
+            },
+            // Sentinel assistant turn so the trailing-tool_calls trim in
+            // `get_history` keeps the tool_calls segment (mirrors
+            // `history_page_compacts_large_tool_results`).
+            SessionAppendMessage {
+                role: "assistant".to_string(),
+                content: "done".to_string(),
+                interrupted: false,
+                turn_id: Some("turn-x".to_string()),
+            },
+        ],
+    ));
+
+    // The full history view (non-page) goes through project_tool_calls_for_history_page,
+    // which now applies the depth cap before the text compaction step.
+    let history: Value = serde_json::from_str(&get_history(&files_dir, &key.thread_id)).unwrap();
+    let item = &history.as_array().unwrap()[0];
+    let payload: Value = serde_json::from_str(item["content"].as_str().unwrap()).unwrap();
+    let call = &payload["calls"][0];
+    let result_string = call["result"].as_str().unwrap();
+    let result_value: Value = serde_json::from_str(result_string).unwrap();
+    assert!(
+        measure_depth(&result_value) <= 256,
+        "page result depth must not exceed the cap"
+    );
+    // The depth cap replaces the deepest over-cap subtree with the marker
+    // object; the outer structure is preserved, so the marker sits at the
+    // replaced depth rather than the root. Walk the tree to confirm.
+    let mut found = false;
+    walk_values(&result_value, &mut |v| {
+        if v.get("result_depth_truncated").and_then(Value::as_bool) == Some(true) {
+            found = true;
+        }
+    });
+    assert!(
+        found,
+        "page result should contain a result_depth_truncated marker"
+    );
+
+    // The page projection additionally applies the result_truncated preview
+    // cap on top of the depth-capped string. The depth cap leaves the marker
+    // at the deepest (final) level of the result JSON, which the
+    // preview-length compaction then truncates out of the leading preview —
+    // so we assert the projection recorded the truncation flag rather than
+    // expecting the marker text to surface in the leading characters.
+    let page: Value =
+        serde_json::from_str(&get_history_page(&files_dir, &key.thread_id, None, 10)).unwrap();
+    let page_item = &page["messages"].as_array().unwrap()[0];
+    let page_payload: Value = serde_json::from_str(page_item["content"].as_str().unwrap()).unwrap();
+    let page_call = &page_payload["calls"].as_array().unwrap()[0];
+    assert_eq!(
+        page_call["result_truncated"],
+        Value::Bool(true),
+        "page projection should flag the depth-capped result as truncated"
+    );
+    let page_result = page_call["result"].as_str().unwrap();
+    assert!(
+        page_result.len() < result_string.len(),
+        "page result preview ({}) should be shorter than the depth-capped result ({})",
+        page_result.len(),
+        result_string.len()
+    );
+}
+
+fn measure_depth(value: &Value) -> usize {
+    match value {
+        Value::Object(map) => {
+            let max = map.values().map(measure_depth).max().unwrap_or(0);
+            max + 1
+        }
+        Value::Array(items) => {
+            let max = items.iter().map(measure_depth).max().unwrap_or(0);
+            max + 1
+        }
+        _ => 0,
+    }
+}
+
+fn walk_values<F: FnMut(&Value)>(value: &Value, visit: &mut F) {
+    visit(value);
+    match value {
+        Value::Object(map) => {
+            for (_, child) in map {
+                walk_values(child, visit);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                walk_values(child, visit);
+            }
+        }
+        _ => {}
+    }
+}
+
 #[test]
 fn inject_user_message_persists_message_and_attachments() {
     let files_dir = temp_files_dir("inject");

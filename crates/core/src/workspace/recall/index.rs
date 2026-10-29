@@ -230,19 +230,50 @@ async fn search_docs_async(
     }
 }
 
+/// Run [`ensure_schema`] on `conn` unless the per-process schema-ensured
+/// cache (idea reference: OpenClaw #186483 `04681a3efc`) already records this
+/// `files_dir`. The DDL is idempotent but expensive on the read path; once a
+/// files_dir's schema has been ensured in this process, subsequent calls
+/// (e.g. the per-source `refresh_*_async` refreshes that run on every
+/// `search_memory_results`) skip the no-op DDL pass. On success the cache is
+/// marked so future callers in this process also skip. The cache is
+/// invalidated by `reset_db_file` / `rebuild_index_async`.
+async fn ensure_schema_cached(files_dir: &str, conn: &libsql::Connection) -> Result<(), String> {
+    if super::schema_is_ensured(files_dir) {
+        return Ok(());
+    }
+    ensure_schema(conn).await?;
+    super::mark_schema_ensured(files_dir);
+    Ok(())
+}
+
 async fn ensure_index_async(files_dir: &str) -> Result<(), String> {
     let db = open_db(files_dir).await?;
     let conn = db.connect().map_err(|e| e.to_string())?;
-    if let Err(error) = ensure_schema(&conn).await {
-        reset_db_file(files_dir);
-        return rebuild_index_async(files_dir)
-            .await
-            .map_err(|e| format!("{error}; reset failed: {e}"));
-    }
-    let version = meta_value(&conn, "schema_version").await?;
-    if version.as_deref() != Some(&SCHEMA_VERSION.to_string()) {
-        rebuild_index_async(files_dir).await?;
-        return Ok(());
+    // Schema-ensured cache (idea reference: OpenClaw #186483 `04681a3efc`):
+    // once a files_dir's database has been schema-ensured in this process,
+    // skip the DDL + `meta_value("schema_version")` comparison on subsequent
+    // reads — both are no-ops for an unchanged file. The cache is
+    // invalidated on `reset_db_file` / rebuild so the next read does the
+    // work again. The source-fingerprint refresh below already uses its
+    // own cheap meta-value cache, so we leave it alone here.
+    if !super::schema_is_ensured(files_dir) {
+        if let Err(error) = ensure_schema(&conn).await {
+            super::invalidate_schema_cache(files_dir);
+            reset_db_file(files_dir);
+            let result = rebuild_index_async(files_dir)
+                .await
+                .map_err(|e| format!("{error}; reset failed: {e}"));
+            return result;
+        }
+        let version = meta_value(&conn, "schema_version").await?;
+        if version.as_deref() != Some(&SCHEMA_VERSION.to_string()) {
+            super::invalidate_schema_cache(files_dir);
+            rebuild_index_async(files_dir).await?;
+            super::mark_schema_ensured(files_dir);
+            return Ok(());
+        }
+        super::mark_schema_ensured(files_dir);
     }
     refresh_curated_memory_async(files_dir).await?;
     refresh_journal_async(files_dir).await?;
@@ -251,6 +282,7 @@ async fn ensure_index_async(files_dir: &str) -> Result<(), String> {
 }
 
 pub(super) async fn rebuild_index_async(files_dir: &str) -> Result<(), String> {
+    super::invalidate_schema_cache(files_dir);
     let memory_docs = collect_memory_docs(files_dir);
     let journal_docs = collect_journal_docs(files_dir);
     let legacy_daily_docs = collect_legacy_daily_docs(files_dir);
@@ -295,6 +327,13 @@ pub(super) async fn rebuild_index_async(files_dir: &str) -> Result<(), String> {
         Ok(())
     }
     .await;
+    // `rebuild_index_async` already called `invalidate_schema_cache` on entry.
+    // We deliberately do NOT re-mark the cache here: the schema-ensured cache
+    // is invalidated by `rebuild_index` so the next read re-runs `ensure_schema`
+    // (idea reference: OpenClaw #186483 `04681a3efc`). Callers that drive a
+    // rebuild from inside `ensure_index_async` re-mark the cache themselves
+    // after a successful rebuild, so the steady-state read path stays hot
+    // without bypassing the post-rebuild re-ensure the test exercises here.
     finish_write_transaction(&conn, result).await
 }
 
@@ -323,7 +362,7 @@ async fn refresh_source_docs_async(
     let fingerprint = source_hash(&docs);
     let db = open_db(files_dir).await?;
     let conn = db.connect().map_err(|e| e.to_string())?;
-    ensure_schema(&conn).await?;
+    ensure_schema_cached(files_dir, &conn).await?;
     let meta_key = source_fingerprint_meta_key(source);
     if meta_value(&conn, &meta_key).await?.as_deref() == Some(fingerprint.as_str()) {
         return Ok(());

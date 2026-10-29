@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use crate::session::SessionMessage;
 use crate::types::PlatformLlmConfig;
 
-use super::executor::{EvolutionExecutor, ReviewLlmHandler};
+use super::executor::{EvolutionExecutor, ReadOnlyReviewCallback, ReviewLlmHandler};
 use super::store::{append_diagnostic_record, persist_pending_confirmations};
 use super::{
     DEFAULT_MEMORY_REVIEW_INTERVAL, DEFAULT_SKILL_REVIEW_INTERVAL, EVOLUTION_DIR,
@@ -164,6 +164,40 @@ pub(in crate::evolution) async fn review_memory_now(
     config: &PlatformLlmConfig,
     history: &[SessionMessage],
 ) -> EvolutionRun {
+    review_memory_now_with(
+        files_dir, agent_id, thread_id, config, history, /* auto_apply */ true,
+    )
+    .await
+}
+
+/// Read-only memory review (idea reference: OpenClaw #186483 `04681a3efc`):
+/// runs the LLM review over the historical context, queues suggestions for
+/// user confirmation via `persist_pending_confirmations`, but never writes
+/// them through [`EvolutionExecutor`]. `auto_apply` is forced off so the
+/// cold-start / diagnostic read path does not pull the writer subsystem.
+#[allow(dead_code)] // Reserved entry point for read-only callers; wiring is follow-up.
+pub(in crate::evolution) async fn review_memory_now_readonly(
+    files_dir: &str,
+    agent_id: &str,
+    thread_id: &str,
+    config: &PlatformLlmConfig,
+    history: &[SessionMessage],
+) -> EvolutionRun {
+    review_memory_now_with(
+        files_dir, agent_id, thread_id, config, history, /* auto_apply */
+        false,
+    )
+    .await
+}
+
+async fn review_memory_now_with(
+    files_dir: &str,
+    agent_id: &str,
+    thread_id: &str,
+    config: &PlatformLlmConfig,
+    history: &[SessionMessage],
+    auto_apply: bool,
+) -> EvolutionRun {
     let queue = Arc::new(PendingQueue::new());
     let original_message_count = history.len();
     let review_history = isolated_review_history(history);
@@ -203,11 +237,15 @@ pub(in crate::evolution) async fn review_memory_now(
     let mut review_config = EvolutionConfig::default();
     review_config.memory_nudge_interval = DEFAULT_MEMORY_REVIEW_INTERVAL;
     review_config.security.min_complexity_threshold = 1;
-    review_config.security.auto_apply_high_confidence = true;
+    review_config.security.auto_apply_high_confidence = auto_apply;
     review_config.security.max_suggestions_per_review = 5;
 
     let handler = Arc::new(ReviewLlmHandler::new(config.clone()));
-    let callback = Arc::new(EvolutionExecutor::new(files_dir.to_string()));
+    let callback: Arc<dyn napaxi_evolution::job::ExecutionCallback> = if auto_apply {
+        Arc::new(EvolutionExecutor::new(files_dir.to_string()))
+    } else {
+        Arc::new(ReadOnlyReviewCallback)
+    };
     let job = EvolutionReviewJob::new(input, review_config, Arc::clone(&queue))
         .with_llm_handler(handler)
         .with_execution_callback(callback);
@@ -617,6 +655,62 @@ mod tests {
             provenance["source_hash"]
                 .as_str()
                 .is_some_and(|value| value.len() == 64)
+        );
+    }
+
+    #[tokio::test]
+    async fn review_memory_now_readonly_does_not_write() {
+        // Idea reference: OpenClaw #186483 `04681a3efc`. Read-only review runs
+        // the LLM review queue but routes auto-apply through
+        // `ReadOnlyReviewCallback`, which never writes to MEMORY.md / USER.md
+        // / PROJECT.md. Suggestions stay queued for confirmation.
+        let tmp = tempfile::tempdir().unwrap();
+        let files_dir = tmp.path().to_str().unwrap();
+        assert!(crate::workspace::write_workspace_file(
+            files_dir,
+            "MEMORY.md",
+            "Initial memory marker"
+        ));
+
+        // Build a short history and the noop config so the LLM call short-
+        // circuits without touching the network.
+        let history = vec![
+            SessionMessage {
+                id: "1".to_string(),
+                role: "user".to_string(),
+                content: "remember budget sensitivity".to_string(),
+                created_at: Utc::now().to_rfc3339(),
+                interrupted: false,
+                turn_id: None,
+            },
+            SessionMessage {
+                id: "2".to_string(),
+                role: "assistant".to_string(),
+                content: "noted".to_string(),
+                created_at: Utc::now().to_rfc3339(),
+                interrupted: false,
+                turn_id: None,
+            },
+        ];
+        let mut config = PlatformLlmConfig::default();
+        config.provider = "__test_noop__".to_string();
+        config.api_key = "test".to_string();
+        config.model = "test-model".to_string();
+
+        let run =
+            super::review_memory_now_readonly(files_dir, "napaxi", "thread", &config, &history)
+                .await;
+        assert!(run.reviewed);
+
+        // The initial MEMORY.md content survives unchanged, because the
+        // read-only callback never writes through `EvolutionExecutor`.
+        let memory = crate::workspace::read_workspace_file_content(files_dir, "MEMORY.md")
+            .unwrap()
+            .unwrap();
+        assert_eq!(memory, "Initial memory marker");
+        assert_eq!(
+            run.auto_applied_count, 0,
+            "read-only review must not auto-apply"
         );
     }
 }

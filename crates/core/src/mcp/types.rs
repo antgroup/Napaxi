@@ -29,6 +29,26 @@ pub struct McpServer {
     pub active: bool,
     #[serde(default)]
     pub tools: Vec<McpTool>,
+    /// Whether `tools` has been populated since activation. Lazy-load
+    /// discovery (idea reference: OpenClaw #186776 `32f9477bf4`) keeps server
+    /// activation cheap: `active` only marks the server usable; the first
+    /// `list_tools` / `tool_descriptors` / `call_tool` request populates this
+    /// field (and `tools`) from a remote `tools/list` call. Older persisted
+    /// records default to `false`; [`super::store::load_state`] normalizes
+    /// records whose `tools` are already populated to `true` so existing
+    /// servers are not re-fetched on first read.
+    #[serde(default, skip_serializing)]
+    pub tools_loaded: bool,
+    /// Cached error from the most recent lazy fetch attempt, surfaced to
+    /// adapters without forcing a retry on every call. A back-off window
+    /// (see `last_tools_attempt_at`) limits retry frequency.
+    #[serde(default, skip_serializing)]
+    pub tools_error: Option<String>,
+    /// RFC3339 timestamp of the last remote tools/list attempt. Used by the
+    /// lazy-load back-off so a failing server is not retried more than once
+    /// per minute.
+    #[serde(default, skip_serializing)]
+    pub last_tools_attempt_at: Option<String>,
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]

@@ -79,3 +79,16 @@ rebase cadence, and the exit criteria for dropping the patch are tracked in
 The patch is MIT-licensed and permissive, so it carries no copyleft
 obligation; it is called out here only because it is a modified redistribution
 rather than an unmodified one.
+
+## Idea references (no source copying)
+
+Selected Napaxi runtime improvements (session tool-result depth cap, MCP
+lazy-load tool discovery, memory-read path slimming) are self-implemented
+under GPL-3.0-or-later using OpenClaw (MIT-licensed) commits as idea
+references only. No OpenClaw source code is copied into this repository;
+the implementations are independent and respect the GPL/MIT license boundary
+as well as Napaxi's on-device redaction / no-leak posture.
+
+- OpenClaw #186481 `c7bd622b95` — deeply nested tool result depth cap
+- OpenClaw #186776 `32f9477bf4` — MCP tool discovery on demand
+- OpenClaw #186483 `04681a3efc` — memory read path slimming

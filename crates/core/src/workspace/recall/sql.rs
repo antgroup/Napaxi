@@ -10,6 +10,18 @@ use chrono::Utc;
 
 use super::{RecallDoc, corpus::source_weight, db_path, reset_db_file};
 
+/// Test-only counter of [`ensure_schema`] invocations. Used by
+/// `recall_schema_ensure_is_cached` to verify that the schema-ensured cache
+/// (idea reference: OpenClaw #186483) skips the DDL pass on subsequent reads.
+#[cfg(test)]
+pub(crate) static ENSURE_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_ensure_calls_counter() {
+    ENSURE_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub(super) async fn open_db(files_dir: &str) -> Result<libsql::Database, String> {
     let path = db_path(files_dir);
     if let Some(parent) = path.parent() {
@@ -28,6 +40,8 @@ pub(super) async fn open_db(files_dir: &str) -> Result<libsql::Database, String>
 }
 
 pub(super) async fn ensure_schema(conn: &libsql::Connection) -> Result<(), String> {
+    #[cfg(test)]
+    ENSURE_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     conn.execute_batch(
         r#"
         PRAGMA busy_timeout = 5000;
