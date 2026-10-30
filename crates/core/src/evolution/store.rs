@@ -1,5 +1,8 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration as StdDuration, Instant};
 
 use chrono::{Duration, Utc};
 use napaxi_evolution::PendingConfirmation;
@@ -8,6 +11,47 @@ use super::{
     EVOLUTION_DIR, EvolutionDiagnosticRecord, EvolutionRunRecord, EvolutionRunStatus,
     EvolutionState, PendingEvolution, PendingStatus,
 };
+
+/// Monotonic anchor registry for in-flight evolution runs.
+///
+/// Wall-clock `queued_at` / `started_at` / `completed_at` fields stay on
+/// `chrono::Utc` because they are persisted as RFC3339 and need to survive
+/// process restarts (see `EvolutionRunRecord`). The stale check, however, is a
+/// single-process elapsed-time judgement: wall-clock jumps (NTP, manual time
+/// changes) would otherwise mis-flag a run as stale. We therefore record a
+/// process-local monotonic anchor per `run_id` and compare `anchor.elapsed()`
+/// against `RUN_STALE_AFTER_MINUTES`. When no anchor is present (a run
+/// persisted by an earlier process), we gracefully fall back to the
+/// wall-clock comparison.
+fn monotonic_anchors() -> &'static Mutex<HashMap<String, Instant>> {
+    static ANCHORS: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    ANCHORS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Record (or refresh) the monotonic anchor for a given run id. Called from
+/// `queue::create_queued_run_record` (queue anchor) and `queue::mark_run_started`
+/// (start anchor refresh).
+pub(super) fn record_monotonic_anchor(run_id: &str, at: Instant) {
+    if let Ok(mut anchors) = monotonic_anchors().lock() {
+        anchors.insert(run_id.to_string(), at);
+    }
+}
+
+/// Take (peek + remove) the monotonic anchor for a given run id. Used to clean
+/// up the anchor slot once a run reaches a terminal state.
+pub(super) fn take_monotonic_anchor(run_id: &str) -> Option<Instant> {
+    match monotonic_anchors().lock() {
+        Ok(mut anchors) => anchors.remove(run_id),
+        Err(_) => None,
+    }
+}
+
+fn peek_monotonic_anchor(run_id: &str) -> Option<Instant> {
+    match monotonic_anchors().lock() {
+        Ok(anchors) => anchors.get(run_id).copied(),
+        Err(_) => None,
+    }
+}
 
 const PENDING_FILE: &str = "pending.json";
 const RUNS_FILE: &str = "runs.json";
@@ -105,6 +149,7 @@ pub(super) fn save_run_store(files_dir: &str, runs: &[EvolutionRunRecord]) -> Re
 pub(super) fn refresh_stale_runs(runs: &mut [EvolutionRunRecord]) -> bool {
     let now = Utc::now();
     let stale_after = Duration::minutes(RUN_STALE_AFTER_MINUTES);
+    let monotonic_threshold = StdDuration::from_secs((RUN_STALE_AFTER_MINUTES.max(0) as u64) * 60);
     let mut changed = false;
     for run in runs {
         if !matches!(
@@ -113,16 +158,38 @@ pub(super) fn refresh_stale_runs(runs: &mut [EvolutionRunRecord]) -> bool {
         ) {
             continue;
         }
-        let anchor = run
-            .started_at
-            .as_deref()
-            .or(Some(run.queued_at.as_str()))
-            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-            .map(|value| value.with_timezone(&Utc));
-        if anchor
-            .map(|started| now.signed_duration_since(started) >= stale_after)
-            .unwrap_or(true)
-        {
+        let stale = match peek_monotonic_anchor(&run.id) {
+            Some(anchor) => anchor.elapsed() >= monotonic_threshold,
+            None => {
+                tracing::debug!(
+                    run_id = %run.id,
+                    "[Evolution] No monotonic anchor; falling back to wall-clock stale check"
+                );
+                let anchor = run
+                    .started_at
+                    .as_deref()
+                    .or(Some(run.queued_at.as_str()))
+                    .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+                    .map(|value| value.with_timezone(&Utc));
+                match anchor {
+                    Some(started) => now.signed_duration_since(started) >= stale_after,
+                    None => {
+                        // RFC3339 parse failed: do not prematurely fail the run.
+                        // Keep it alive and let a future refresh (with an anchor
+                        // or a parseable timestamp) decide.
+                        tracing::warn!(
+                            run_id = %run.id,
+                            "[Evolution] Failed to parse run timestamps; keeping run alive"
+                        );
+                        false
+                    }
+                }
+            }
+        };
+        if stale {
+            // Drop the monotonic anchor slot alongside flipping the record to
+            // a terminal state so the registry cannot leak past a stale run.
+            let _ = take_monotonic_anchor(&run.id);
             run.status = EvolutionRunStatus::Failed;
             run.completed_at = Some(now.to_rfc3339());
             run.error = Some("evolution run expired before completion".to_string());

@@ -374,6 +374,22 @@ impl JobQueue for DefaultJobQueue {
         let timeout = job.timeout();
 
         // Execute Job immediately (using tokio::spawn for async execution)
+        //
+        // Cancel-propagation review (DIMA-2026102900120175601 / #187429):
+        // The `tokio::time::timeout(timeout, job.run(&ctx))` below cancels
+        // `job.run` if it exceeds `job.timeout()`. For an LLM-style memory /
+        // skill review, cancelling mid-flight is safe: the work is
+        // side-effect-free short of the model call itself and produces no
+        // shared state. If a future job kind performs shared index- or
+        // memory-rebuild work that must survive caller-side timeout, do NOT
+        // rely on outer timeout; spawn a leaf task inside `job.run` whose
+        // handle is detached from this future so the cancel downgrades to
+        // "abandon the wait" rather than "terminate the rebuild". The
+        // shared rebuild lifecycle should instead be owned by the
+        // service/shutdown layer (see `queue.rs::spawn_memory_review` /
+        // `spawn_skill_review`, which already use bare `tokio::spawn`
+        // outside a per-turn timeout — those are NOT cancelled when a
+        // single caller's retrieval times out).
         tokio::spawn(async move {
             let ctx = JobContext::new(&job_id_clone);
             tracing::info!(job_id = %job_id_clone, job_type, "[Evolution] Job started");

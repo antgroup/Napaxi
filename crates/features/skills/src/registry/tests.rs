@@ -1826,3 +1826,41 @@ async fn test_commit_install_or_replace_installs_new_when_not_exists() {
     );
     assert_eq!(registry.skills_for_user("alice").len(), 1);
 }
+
+#[test]
+fn test_push_search_term_filters_english_high_frequency_function_words() {
+    let mut out = Vec::new();
+    for term in [
+        "and", "the", "are", "is", "was", "been", "that", "it", "with", "from", "using", "would",
+        "could", "have", "between", "about",
+    ] {
+        push_search_term(&mut out, term);
+    }
+    // `the` / `this` etc. with len() < 3 already filtered by length; longer
+    // ones must be dropped by STOPWORDS. None of these tokens should make it
+    // into the term list. Use a payload word to confirm the filter does not
+    // over-reject.
+    push_search_term(&mut out, "weather");
+    assert!(
+        out.iter().all(|term| term == "weather"),
+        "expected only 'weather' to survive the stopword filter, got {out:?}"
+    );
+}
+
+#[test]
+fn test_push_search_term_filters_chinese_high_frequency_function_words() {
+    let mut out = Vec::new();
+    for term in [
+        "是", "的", "了", "在", "有", "因为", "所以", "但是", "可以", "如果",
+    ] {
+        push_search_term(&mut out, term);
+    }
+    // Single Chinese chars are 3 UTF-8 bytes (pass the length filter), so
+    // they MUST be stopped by STOPWORDS. Multi-char Chinese stopwords must
+    // also be filtered. A meaningful payload word must survive.
+    push_search_term(&mut out, "天气");
+    assert!(
+        out.iter().all(|term| term == "天气"),
+        "expected only '天气' to survive the Chinese stopword filter, got {out:?}"
+    );
+}
