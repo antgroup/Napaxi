@@ -1,0 +1,218 @@
+CHANGELOG.md
+  h_62469dfb80cfc4 7-54
+crates/core/Cargo.toml
+  h_62469dfb80cfc4 27,36-38,124-125
+crates/core/src/api/engine.rs
+  h_62469dfb80cfc4 43-45
+crates/core/src/api/infra.rs
+  h_62469dfb80cfc4 8-9,15-69,152-161,189-209,223-226,267-299
+crates/core/src/capabilities/definitions.rs
+  h_62469dfb80cfc4 13-48
+crates/core/src/capabilities/resolve.rs
+  h_62469dfb80cfc4 240,245
+crates/core/src/capabilities/service_selection.rs
+  h_62469dfb80cfc4 46-73,120-139
+crates/core/src/infra/binding.rs
+  h_62469dfb80cfc4 28,77-109,151,167,259,294,541,544-555,588,650,752-762,807-817,831
+crates/core/src/infra/diagnostics.rs
+  h_62469dfb80cfc4 8,16,100-104,113-211,278
+crates/core/src/infra/discovery_interpret.rs
+  h_62469dfb80cfc4 1-470
+crates/core/src/infra/interpret.rs
+  h_62469dfb80cfc4 1-431
+crates/core/src/infra/invoke.rs
+  h_62469dfb80cfc4 2-4,20-29,64,125,138,140,161,169-172,185
+crates/core/src/infra/mod.rs
+  h_62469dfb80cfc4 5-6,15,209-227
+crates/core/src/infra/private_diagnostics.rs
+  h_62469dfb80cfc4 98,306,313
+crates/core/src/infra/search.rs
+  h_62469dfb80cfc4 7-10,50-51,116,165-196,230,285-307
+crates/core/src/infra/stream.rs
+  h_62469dfb80cfc4 27-28,43-49,75,82-88,106,109-111,113,115,118-119,121,136-164,166-175,177-201,205-208,218,266-276,332-351,359-365,376,378,387,390,408,414,426,429,454,457,465,566-575,586-589,592-623,643-659,665,688-690,701-704,725,743-781
+crates/core/src/infra/tool.rs
+  h_62469dfb80cfc4 33,45,60-88,117
+crates/core/src/infra/types.rs
+  h_62469dfb80cfc4 74-75,119-162,169-171,189-190,194-200,207-274
+crates/core/src/infra/workflow/mod.rs
+  h_62469dfb80cfc4 1-453
+crates/core/src/infra/workflow/plan.rs
+  h_62469dfb80cfc4 1-176
+crates/core/src/infra/workflow/runner.rs
+  h_62469dfb80cfc4 1-532
+crates/core/src/infra/workflow/tests.rs
+  h_62469dfb80cfc4 1-1074
+crates/core/src/infra/workflow/types.rs
+  h_62469dfb80cfc4 1-115
+crates/core/src/lib.rs
+  h_62469dfb80cfc4 22-24,42-46
+crates/core/src/llm/dispatch.rs
+  h_62469dfb80cfc4 159-188
+crates/core/src/llm/mod.rs
+  h_62469dfb80cfc4 23
+crates/core/src/platform/android_infra.rs
+  h_62469dfb80cfc4 47-52
+crates/core/src/runtime/engine.rs
+  h_62469dfb80cfc4 109-114,116,121-124
+crates/core/src/runtime/handle.rs
+  h_62469dfb80cfc4 1,3-4,11-61,118-128,131-132,135-137,139,142-143,146-147,149-151,153,157-158,165-166,173-174
+crates/core/src/runtime/tests.rs
+  h_62469dfb80cfc4 599-635
+crates/core/src/tools/loop.rs
+  h_62469dfb80cfc4 219
+docs/api-contract.md
+  h_62469dfb80cfc4 31-35
+docs/api-contract.zh-CN.md
+  h_62469dfb80cfc4 21-24
+docs/infra-discovery-response-interpretation.md
+  h_62469dfb80cfc4 1-272
+docs/infra-integration.md
+  h_62469dfb80cfc4 154-158,264-396,426-435,463,469,471-472,479,481-482,537-623
+docs/infra-multistep-service-flow.md
+  h_62469dfb80cfc4 1-198
+docs/infra-streaming.md
+  h_62469dfb80cfc4 5-10,21-22,40-41,100-110,132-139,192-196,208-303
+docs/mobile-capabilities.md
+  h_62469dfb80cfc4 473-475,478-480,486-490,553-555,568-609
+docs/sdk-adapter-parity.md
+  h_62469dfb80cfc4 72-118
+examples/flutter/lib/demo_client/agent_network_task_coordinator.dart
+  h_62469dfb80cfc4 224-225,236-266,272-283,330,401-405
+examples/flutter/lib/demo_client/infra_client.dart
+  h_62469dfb80cfc4 7-83,137,142,147,252-262,283,290,295,300,311,318-321,348-357,389,404,410-411,414,430-435,446-479
+examples/flutter/lib/demo_client/napaxi_chat_client.dart
+  h_62469dfb80cfc4 1312-1317,1321-1323,1392-1427,1436-1441,1495,1582-1672,1693,1913,2082-2083,2306-2307,2474-2477,5269-5270,5304-5305,5344-5347,7995-8003,8005-8006,8008-8010,8027,8032-8034,8037-8039,8042-8051
+examples/flutter/lib/main.dart
+  h_62469dfb80cfc4 39-41,67
+examples/flutter/lib/models/infra_chat_discovery.dart
+  h_62469dfb80cfc4 14-15,49-55,98-104,114-116,131,137-141,176,179,184-206,269,271,274,276
+examples/flutter/lib/models/infra_chat_workflow.dart
+  h_62469dfb80cfc4 1-129
+examples/flutter/lib/models/infra_stream_display.dart
+  h_62469dfb80cfc4 21-24,30,34-37,44,48-49,51,187-190
+examples/flutter/lib/panels/session_history.dart
+  h_62469dfb80cfc4 1491-1499
+examples/flutter/lib/screens/chat_screen.dart
+  h_62469dfb80cfc4 5,456-457,967,1007,3187,3368,4580,7608,7655,8348,8608
+examples/flutter/lib/screens/chat_screen_infra.dart
+  h_62469dfb80cfc4 82-84,90-100,136,202-213,283-291,381-392,421-435,445-482
+examples/flutter/lib/screens/chat_screen_infra_workflow.dart
+  h_62469dfb80cfc4 1-215
+examples/flutter/lib/screens/config_screen.dart
+  h_62469dfb80cfc4 11,21,315-320
+examples/flutter/lib/screens/infra_network.dart
+  h_62469dfb80cfc4 71,81,142-150,202,209,212-220,226-229,271-279,366,548-550,560-566,570-571,577-584,1719,1723,1733-1735,1811-1816,1818-1835,1837-1848,1855-1857,1861,1891-1893,1898,1900-1903,1906,1908,2008-2040,2042,2044,2054,2057,2062,2068-2076,2140-2343,2396-2405
+examples/flutter/lib/widgets/chat_message.dart
+  h_62469dfb80cfc4 223-224,227
+examples/flutter/lib/widgets/infra_chat_flow_cards.dart
+  h_62469dfb80cfc4 4-5,37,52-59,61-63,79-86,112-123,125-131,197,201-204,211-228,261-265,271-279,286-317,390-417,420-447,449-454,457-468,470,477-478,480-482,485-506,508,512-522,525-617,621-629,631,633-639,641-642,656-734,741-771,846-847,849,864-908
+examples/flutter/lib/widgets/infra_discovery_interpretation.dart
+  h_62469dfb80cfc4 1-93
+examples/flutter/lib/widgets/infra_interpreted_service_result.dart
+  h_62469dfb80cfc4 1-154
+examples/flutter/lib/widgets/infra_invocation_notice.dart
+  h_62469dfb80cfc4 1-585
+examples/flutter/lib/widgets/infra_raw_service_result.dart
+  h_62469dfb80cfc4 17-18,26-27,47-55,84-93,96
+examples/flutter/lib/widgets/infra_workflow_cards.dart
+  h_62469dfb80cfc4 1-95
+examples/flutter/pubspec.yaml
+  h_62469dfb80cfc4 19
+examples/flutter/test/infra_chat_flow_cards_test.dart
+  h_62469dfb80cfc4 6,53-143,160-195,197,199,202-208,219,221,224-225,227,230-338,340,343-358,388-391,411-412,525-588,590-601,612-616,618-635
+examples/flutter/test/infra_chat_service_cards_test.dart
+  h_62469dfb80cfc4 195-216
+examples/flutter/test/infra_invocation_notice_test.dart
+  h_62469dfb80cfc4 1-129
+examples/flutter/test/infra_network_test.dart
+  h_62469dfb80cfc4 9,23,31-33,36-39,41,121-136,397-456,826-828,1230,1260,1266-1287,1309-1314,1342,1346-1354,1515,1528-1658,1692-1779,1787
+examples/flutter/test/infra_stream_display_scenarios.dart
+  h_62469dfb80cfc4 49-57,89,92-116
+examples/flutter/test/infra_workflow_test.dart
+  h_62469dfb80cfc4 1-185
+examples/flutter/test/widget_test.dart
+  h_62469dfb80cfc4 151-171,1382,1714-1756,5422
+packages/agent_network_mclaw_adapter/CHANGELOG.md
+  h_62469dfb80cfc4 3-11
+packages/agent_network_mclaw_adapter/docs/integration-guide.md
+  h_62469dfb80cfc4 87-89,91-93,176-186,190
+packages/agent_network_mclaw_adapter/lib/src/agent_network_inbox_listener.dart
+  h_62469dfb80cfc4 149-152,182-183,185,189-191,200,202-231,234,237-238,247,249,275-278,280-297,301,303-305,312-318,360-367,371-372,498-499,566-567,572-573,578-583,588,590
+packages/agent_network_mclaw_adapter/lib/src/agent_network_sdk.dart
+  h_62469dfb80cfc4 50,78,91,106,152,167-187,234,236
+packages/agent_network_mclaw_adapter/test/agent_network_inbox_listener_lifecycle_test.dart
+  h_62469dfb80cfc4 1-119
+packages/android/build.gradle.kts
+  h_62469dfb80cfc4 8-23,61-65
+packages/android/settings.gradle.kts
+  h_62469dfb80cfc4 14-16
+packages/android/src/main/kotlin/com/napaxi/android/Infra.kt
+  h_62469dfb80cfc4 10,65-66,78-147,157,171-172,191-223,232-233,261-305
+packages/android/src/main/kotlin/com/napaxi/android/InfraWorkflow.kt
+  h_62469dfb80cfc4 1-36
+packages/android/src/test/kotlin/com/napaxi/android/InfraTest.kt
+  h_62469dfb80cfc4 9-40,53,106,112-123
+packages/api_bridge/android_jni.rs
+  h_62469dfb80cfc4 105-110
+packages/api_bridge/bridge/android/consumer-rules.pro
+  h_62469dfb80cfc4 4-6
+packages/api_bridge/bridge/mod.rs
+  h_62469dfb80cfc4 12-13,153-179,192-214
+packages/api_bridge/tests/ffi_roundtrip.rs
+  h_62469dfb80cfc4 150-156
+packages/api_contract/capability_matrix.yaml
+  h_62469dfb80cfc4 109-115,121-128
+packages/api_contract/fixtures/infra/interpretation.json
+  h_62469dfb80cfc4 1-34
+packages/api_contract/fixtures/infra/request_errors.json
+  h_62469dfb80cfc4 184-323
+packages/api_contract/fixtures/infra/search.json
+  h_62469dfb80cfc4 122-192
+packages/api_contract/fixtures/infra/stream.json
+  h_62469dfb80cfc4 15
+packages/api_contract/fixtures/infra/workflow.json
+  h_62469dfb80cfc4 1-208
+packages/api_contract/methods.yaml
+  h_62469dfb80cfc4 6,18,29-46
+packages/flutter/android/build.gradle
+  h_62469dfb80cfc4 7-33,35,83-84
+packages/flutter/lib/api/infra_api.dart
+  h_62469dfb80cfc4 4,72,80,135,137-138,143,188-339,345
+packages/flutter/lib/models/infra.dart
+  h_62469dfb80cfc4 106-191,197,204,212-216,283-351
+packages/flutter/lib/models/infra_workflow.dart
+  h_62469dfb80cfc4 1-150
+packages/flutter/lib/napaxi_flutter.dart
+  h_62469dfb80cfc4 9
+packages/flutter/test/infra_test.dart
+  h_62469dfb80cfc4 7-72,98,168,179-201
+packages/ios/Sources/Napaxi/Infra.swift
+  h_62469dfb80cfc4 74-75,86-165,216-273,276-277,299-324
+packages/ios/Sources/Napaxi/InfraWorkflow.swift
+  h_62469dfb80cfc4 1-49
+packages/ios/Tests/NapaxiTests/InfraTests.swift
+  h_62469dfb80cfc4 6-40,47,56,122-150
+tools/scripts/build.sh
+  h_62469dfb80cfc4 885-888
+tools/scripts/check-android-flutter-parity.js
+  h_62469dfb80cfc4 203
+vendor/rustls-platform-verifier-android/LICENSE-APACHE
+  h_62469dfb80cfc4 1-201
+vendor/rustls-platform-verifier-android/LICENSE-MIT
+  h_62469dfb80cfc4 1-21
+vendor/rustls-platform-verifier-android/README.md
+  h_62469dfb80cfc4 1-15
+vendor/rustls-platform-verifier-android/maven/org/rustls/rustls-platform-verifier/0.2.0/rustls-platform-verifier-0.2.0.pom
+  h_62469dfb80cfc4 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f7e35a905a1938138c1d742761c8500ba286b8db",
+  "prompts": {},
+  "humans": {
+    "h_62469dfb80cfc4": {
+      "author": "夏果 <jiaozhiwei.jzw@antgroup.com>"
+    }
+  }
+}
