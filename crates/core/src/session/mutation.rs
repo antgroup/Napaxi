@@ -226,7 +226,9 @@ pub fn append_trace_messages(
         ok &= append_message(files_dir, session_key_json, "reasoning", reasoning);
     }
     if !tool_calls.is_empty() {
-        let content = serde_json::json!({ "calls": tool_calls }).to_string();
+        let mut payload = serde_json::json!({ "calls": tool_calls });
+        super::cap_calls_payload(&mut payload);
+        let content = payload.to_string();
         ok &= append_message(files_dir, session_key_json, "tool_calls", &content);
     }
     ok

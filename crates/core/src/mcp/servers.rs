@@ -37,27 +37,28 @@ pub async fn add_server(
     };
 
     let user_id = default_user(user_id);
-    let activation = load_remote_tools(name, &server_url, &transport, &headers, None).await;
+    // Lazy-load discovery (idea reference: OpenClaw #186776 `32f9477bf4`):
+    // server add and activation only validate configuration; `tools` are no
+    // longer eagerly fetched on activation. The first `list_tools` /
+    // `tool_descriptors` / `call_tool` request triggers a single remote
+    // `tools/list` call, caches the result in `McpServer::tools`, and flips
+    // `tools_loaded` to `true`. Failing the initial fetch records
+    // `tools_error` and a back-off timestamp instead of leaving the server
+    // stuck in an inactive state.
     let mut state = load_state(files_dir);
-    let (active, tools, session_id, activation_error) = match activation {
-        Ok(activation) => (true, activation.tools, activation.session_id, None),
-        Err(error) => (
-            false,
-            Vec::new(),
-            None,
-            Some(format!("Activation failed: {error}")),
-        ),
-    };
     let server = McpServer {
         name: name.to_string(),
         url: server_url,
         transport,
         headers,
         user_id: user_id.clone(),
-        active,
-        tools,
-        session_id,
-        activation_error,
+        active: false,
+        tools: Vec::new(),
+        tools_loaded: false,
+        tools_error: None,
+        last_tools_attempt_at: None,
+        session_id: None,
+        activation_error: None,
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
@@ -67,25 +68,21 @@ pub async fn add_server(
         .iter_mut()
         .find(|server| server.name == name && server.user_id == user_id)
     {
+        // Preserve OAuth metadata and any prior activation state across edits.
+        let oauth = existing.oauth.clone();
+        let oauth_pending = existing.oauth_pending.clone();
+        let oauth_tokens = existing.oauth_tokens.clone();
         *existing = server;
+        existing.oauth = oauth;
+        existing.oauth_pending = oauth_pending;
+        existing.oauth_tokens = oauth_tokens;
     } else {
         state.servers.push(server);
     }
     if !save_state(files_dir, &state) {
         return result_json(name, &[], "Failed to save MCP server");
     }
-    let Some(saved) = state
-        .servers
-        .iter()
-        .find(|server| server.name == name && server.user_id == user_id)
-    else {
-        return result_json(name, &[], "Failed to save MCP server");
-    };
-    result_json_for_tools(
-        name,
-        &saved.tools,
-        saved.activation_error.as_deref().unwrap_or(""),
-    )
+    result_json_for_tools(name, &[], "")
 }
 
 pub fn remove_server(files_dir: &str, name: &str, user_id: &str) -> String {
@@ -137,35 +134,21 @@ pub async fn activate_server(files_dir: &str, name: &str, user_id: &str) -> Stri
         let _ = save_state(files_dir, &state);
         return result_json(name, &[], &activation_error);
     }
-    let loaded = load_remote_tools(
-        name,
-        &state.servers[index].url,
-        &state.servers[index].transport,
-        &effective_headers(files_dir, &state.servers[index]),
-        state.servers[index].session_id.as_deref(),
-    )
-    .await;
+    // Lazy-load discovery: activation only marks the server usable. The
+    // remote `tools/list` call is deferred to the first
+    // `list_tools` / `tool_descriptors` / `call_tool` request.
     let server = &mut state.servers[index];
-    match loaded {
-        Ok(activation) => {
-            server.active = true;
-            server.tools = activation.tools;
-            server.session_id = activation.session_id;
-            server.activation_error = None;
-        }
-        Err(error) => {
-            server.active = false;
-            server.tools.clear();
-            server.session_id = None;
-            server.activation_error = Some(format!("Activation failed: {error}"));
-        }
-    }
-    let tools = server.tools.clone();
-    let error = server.activation_error.clone().unwrap_or_default();
+    server.active = true;
+    server.tools.clear();
+    server.tools_loaded = false;
+    server.tools_error = None;
+    server.last_tools_attempt_at = None;
+    server.session_id = None;
+    server.activation_error = None;
     if !save_state(files_dir, &state) {
         return result_json(name, &[], "Failed to save MCP servers");
     }
-    result_json_for_tools(name, &tools, &error)
+    result_json_for_tools(name, &[], "")
 }
 
 #[allow(dead_code)] // Direct activation helper kept alongside handle-routed entry point.
@@ -181,6 +164,14 @@ pub fn set_server_active(files_dir: &str, name: &str, user_id: &str) -> String {
     };
     server.active = true;
     server.activation_error = None;
+    // Preserve any cached tools across a purely-synchronous re-activation. The
+    // lazy-load machinery (`tools_loaded` / `tools_error`) is left untouched
+    // so an already-loaded server does not get re-fetched, and an unloaded
+    // one is still fetched on the next `list_tools` / `tool_descriptors` /
+    // `call_tool` request. `set_server_active` is a local flag flip, not a
+    // remote re-handshake — clearing the cache here would force a network
+    // round-trip on servers that have never needed one (idea reference:
+    // OpenClaw #186776 `32f9477bf4`).
     let tools = server.tools.clone();
     if !save_state(files_dir, &state) {
         return result_json(name, &[], "Failed to save MCP servers");

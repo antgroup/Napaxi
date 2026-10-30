@@ -100,6 +100,24 @@ impl EvolutionExecutor {
     }
 }
 
+/// Read-only `ExecutionCallback` used by review entry points that should not
+/// apply suggestion actions to disk (idea reference: OpenClaw #186483
+/// `04681a3efc`). Returning `Err` from `execute` keeps the suggestion in the
+/// pending queue instead of writing through `EvolutionExecutor`. The cold-
+/// start / diagnostic read path thus avoids pulling the writer subsystem
+/// while still producing pending suggestions for later confirmation.
+pub(super) struct ReadOnlyReviewCallback;
+
+#[async_trait]
+impl ExecutionCallback for ReadOnlyReviewCallback {
+    async fn execute(&self, action: &PendingActionType) -> Result<String, String> {
+        Err(format!(
+            "read-only review: action {} not applied (queued for confirmation)",
+            action.action_type_name()
+        ))
+    }
+}
+
 #[async_trait]
 impl ExecutionCallback for EvolutionExecutor {
     async fn execute(&self, action: &PendingActionType) -> Result<String, String> {

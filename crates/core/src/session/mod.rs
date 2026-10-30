@@ -38,4 +38,6 @@ pub use history::{
 };
 
 #[allow(unused_imports)]
-pub(crate) use history::{llm_context_history_all, llm_history_all};
+pub(crate) use history::{
+    cap_calls_payload, cap_tool_result_string, llm_context_history_all, llm_history_all,
+};

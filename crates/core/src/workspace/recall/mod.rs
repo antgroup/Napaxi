@@ -32,6 +32,46 @@ const SCHEMA_VERSION: i64 = 1;
 pub(super) const MAX_SESSION_CHARS: usize = 100_000;
 pub(super) const MAX_SUMMARY_CHARS: usize = 2_500;
 
+// Schema-ensured cache (idea reference: OpenClaw #186483 `04681a3efc`):
+// `ensure_schema` runs DDL on every read, which is wasteful on the cold-start
+// / steady-state read path. This per-process cache records which `files_dir`
+// databases have already been schema-ensured so subsequent reads skip the
+// DDL + `meta_value("schema_version")` comparison, while the
+// `refresh_*_async` source fingerprint checks still run their own cheap
+// cache lookups. The cache is invalidated on `reset_db_file` / rebuilds.
+#[cfg(feature = "libsql")]
+fn schema_cache_inner() -> &'static std::sync::Mutex<std::collections::HashSet<PathBuf>> {
+    use std::sync::OnceLock;
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashSet<PathBuf>>> = OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+#[cfg(feature = "libsql")]
+pub(super) fn schema_is_ensured(files_dir: &str) -> bool {
+    schema_cache_inner()
+        .lock()
+        .map(|cache| cache.contains(&db_path(files_dir)))
+        .unwrap_or(false)
+}
+
+#[cfg(feature = "libsql")]
+pub(super) fn mark_schema_ensured(files_dir: &str) {
+    if let Ok(mut cache) = schema_cache_inner().lock() {
+        cache.insert(db_path(files_dir));
+    }
+}
+
+#[cfg(feature = "libsql")]
+pub(super) fn invalidate_schema_cache(files_dir: &str) {
+    if let Ok(mut cache) = schema_cache_inner().lock() {
+        cache.remove(&db_path(files_dir));
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "libsql")]
+pub(crate) use sql::{ENSURE_CALLS, reset_ensure_calls_counter};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecallIndexStats {
@@ -239,6 +279,7 @@ pub(super) fn db_path(files_dir: &str) -> PathBuf {
 
 #[cfg(feature = "libsql")]
 pub(super) fn reset_db_file(files_dir: &str) {
+    invalidate_schema_cache(files_dir);
     let path = db_path(files_dir);
     let _ = std::fs::remove_file(path);
 }

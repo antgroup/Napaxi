@@ -184,6 +184,49 @@ fn recall_search_forgets_deleted_curated_memory() {
     assert!(!results.iter().any(|result| result.path == MEMORY));
 }
 
+/// Schema-ensured cache (idea reference: OpenClaw #186483 `04681a3efc`):
+/// verify that the second recall read in the same process reuses the cached
+/// schema state and only runs `ensure_schema` once. The cache is invalidated
+/// by `rebuild_index` / `reset_db_file`, which we exercise between calls.
+#[cfg(feature = "libsql")]
+#[test]
+fn recall_schema_ensure_is_cached_across_reads() {
+    use super::recall::{ENSURE_CALLS, reset_ensure_calls_counter};
+
+    let dir = temp_dir("recall_schema_cached");
+    let files_dir = dir.to_string_lossy().to_string();
+    write_workspace_file(&files_dir, MEMORY, "Curated schema cache marker");
+    reset_ensure_calls_counter();
+    let counter_before_first = ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+    let _ = search_memory_results(&files_dir, "schema cache marker", 10).unwrap();
+    let calls_first =
+        ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed) - counter_before_first;
+    assert!(
+        calls_first >= 1,
+        "first read should run ensure_schema at least once"
+    );
+
+    let counter_before_second = ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+    let _ = search_memory_results(&files_dir, "schema cache marker", 10).unwrap();
+    let calls_second =
+        ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed) - counter_before_second;
+    assert_eq!(
+        calls_second, 0,
+        "second read should hit the schema cache and skip ensure_schema"
+    );
+
+    // rebuild_index must invalidate the cache so the next read re-ensures.
+    let _ = super::recall::rebuild_index(&files_dir).unwrap();
+    let counter_before_rebuild_read = ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+    let _ = search_memory_results(&files_dir, "schema cache marker", 10).unwrap();
+    let calls_after_rebuild =
+        ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed) - counter_before_rebuild_read;
+    assert!(
+        calls_after_rebuild >= 1,
+        "read after rebuild should re-run ensure_schema because the cache was invalidated"
+    );
+}
+
 #[test]
 fn recall_search_forgets_deleted_legacy_daily() {
     let dir = temp_dir("recall_deleted_legacy");

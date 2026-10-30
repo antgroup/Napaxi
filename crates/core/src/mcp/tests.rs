@@ -60,6 +60,9 @@ fn stores_mcp_servers_without_network() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
     assert!(list_servers(&files_dir, "user").contains("demo"));
@@ -88,6 +91,9 @@ fn list_servers_reports_explicit_lifecycle_status() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     };
     // Configured-but-not-activated: not a failure.
     state.servers.push(base("configured"));
@@ -139,6 +145,9 @@ fn tool_descriptors_are_scoped_by_user_id() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
 
@@ -171,6 +180,9 @@ fn legacy_flutter_user_servers_are_read_as_default_user() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
 
@@ -209,6 +221,9 @@ async fn handle_wrappers_delegate_to_mcp_state() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     state.servers.push(McpServer {
         name: "remote".to_string(),
@@ -223,6 +238,9 @@ async fn handle_wrappers_delegate_to_mcp_state() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
 
@@ -288,6 +306,9 @@ fn preserves_non_http_transport_config() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
 
     assert!(save_state(&files_dir, &state));
@@ -314,6 +335,9 @@ async fn starts_oauth_with_explicit_config_without_network() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
 
@@ -369,6 +393,9 @@ async fn finish_oauth_rejects_state_mismatch_before_exchange() {
             created_at: chrono::Utc::now().to_rfc3339(),
         }),
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
 
@@ -637,6 +664,9 @@ fn admission_can_hide_mcp_tool_from_descriptors() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
 
@@ -682,6 +712,9 @@ async fn admission_can_block_mcp_call_tool_before_io() {
         oauth: None,
         oauth_pending: None,
         oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
     });
     assert!(save_state(&files_dir, &state));
 
@@ -1061,4 +1094,184 @@ fn initialize_without_capability_map_falls_back_to_tools() {
     }))
     .unwrap();
     assert!(initialize_advertises_tools(&empty));
+}
+
+// ===========================================================================
+// Lazy-load discovery (idea reference: OpenClaw #186776 `32f9477bf4`)
+// ===========================================================================
+
+#[tokio::test]
+async fn activate_server_does_not_eagerly_load_tools() {
+    use super::servers::activate_server;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+    // Pre-persist an inactive server whose URL points at an unreachable port.
+    // With lazy-load discovery, activation no longer issues `tools/list`, so
+    // even an unreachable endpoint should activate cleanly with `active=true`,
+    // an empty tool list, and `tools_loaded == false`.
+    let mut state = McpState::default();
+    state.servers.push(McpServer {
+        name: "remote".to_string(),
+        url: "https://127.0.0.1:1/mcp".to_string(),
+        transport: McpTransport::Http,
+        headers: HashMap::new(),
+        user_id: "user".to_string(),
+        active: false,
+        tools: Vec::new(),
+        tools_loaded: false,
+        tools_error: None,
+        last_tools_attempt_at: None,
+        session_id: None,
+        activation_error: None,
+        oauth: None,
+        oauth_pending: None,
+        oauth_tokens: None,
+    });
+    assert!(save_state(&files_dir, &state));
+
+    let result = activate_server(&files_dir, "remote", "user").await;
+    assert!(result.contains("\"name\":\"remote\""), "got: {result}");
+
+    let loaded = load_state(&files_dir);
+    let server = &loaded.servers[0];
+    assert!(server.active, "activation should mark the server active");
+    assert!(
+        server.tools.is_empty(),
+        "lazy-load activation must not eagerly fetch tools"
+    );
+    assert!(server.activation_error.is_none());
+}
+
+#[tokio::test]
+async fn list_tools_lazily_fetches_and_caches() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+    // Count the number of remote `tools/list` calls this stdio server actually
+    // serves. Each spawn of the stdio process appends one tick when it
+    // responds to `tools/list`; verifying the counter captures the
+    // "cached after first call" property of lazy-load.
+    let count_path = tmp.path().join("tools_list_calls.txt");
+    let count_path_arg = count_path.to_string_lossy().to_string();
+    let script = format!(
+        "while IFS= read -r line; do \
+           id=$(printf '%s' \"$line\" | sed -n 's/.*\"id\":\\([0-9][0-9]*\\).*/\\1/p'); \
+           case \"$line\" in \
+             *'\"method\":\"initialize\"'*) printf '{{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{{\"capabilities\":{{\"tools\":{{}}}}}}}}\\n' \"$id\";; \
+             *'\"method\":\"tools/list\"'*) echo 1 >> {count_path_arg}; printf '{{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{{\"tools\":[{{\"name\":\"lookup\",\"description\":\"Lookup\",\"inputSchema\":{{\"type\":\"object\"}}}}]}}}}\\n' \"$id\";; \
+             *) [ -n \"$id\" ] && printf '{{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{{}}}}\\n' \"$id\";; \
+           esac; \
+         done"
+    );
+
+    let mut state = McpState::default();
+    state.servers.push(McpServer {
+        name: "local-srv".to_string(),
+        url: String::new(),
+        transport: McpTransport::Stdio {
+            command: "sh".to_string(),
+            args: vec!["-c".to_string(), script],
+            env: HashMap::new(),
+        },
+        headers: HashMap::new(),
+        user_id: "user".to_string(),
+        active: true,
+        tools: Vec::new(),
+        tools_loaded: false,
+        tools_error: None,
+        last_tools_attempt_at: None,
+        session_id: None,
+        activation_error: None,
+        oauth: None,
+        oauth_pending: None,
+        oauth_tokens: None,
+    });
+    assert!(save_state(&files_dir, &state));
+
+    let first = list_tools(&files_dir, "local-srv", "user");
+    assert!(
+        first.contains("local-srv_lookup"),
+        "first call should lazily fetch and return the tool: {first}"
+    );
+
+    let loaded = load_state(&files_dir);
+    let server = &loaded.servers[0];
+    assert!(
+        server.tools_loaded,
+        "tools_loaded should be flipped to true after the fetch"
+    );
+    assert_eq!(server.tools.len(), 1);
+    assert!(server.tools_error.is_none());
+
+    let count_after_first = std::fs::read_to_string(&count_path).unwrap_or_default();
+    assert_eq!(
+        count_after_first.lines().count(),
+        1,
+        "expected exactly one remote tools/list call on first request"
+    );
+
+    // Second call must reuse the cache (no new spawn, no new fetch).
+    let second = list_tools(&files_dir, "local-srv", "user");
+    assert!(second.contains("local-srv_lookup"));
+    let count_after_second = std::fs::read_to_string(&count_path).unwrap_or_default();
+    assert_eq!(
+        count_after_second.lines().count(),
+        1,
+        "second call should reuse the cached tools without re-fetching"
+    );
+}
+
+#[test]
+fn load_state_normalizes_legacy_pre_populated_tools_as_loaded() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+    // Pre-lazy-load records serialized `tools` eagerly. After deserialization
+    // `tools_loaded` defaults to `false`; the store must normalize records
+    // whose `tools` are already populated so first read does not re-fetch.
+    let mut state = McpState::default();
+    state.servers.push(McpServer {
+        name: "legacy".to_string(),
+        url: "https://example.com/mcp".to_string(),
+        transport: McpTransport::Http,
+        headers: HashMap::new(),
+        user_id: "user".to_string(),
+        active: true,
+        tools: vec![McpTool {
+            name: "lookup".to_string(),
+            description: "Lookup".to_string(),
+            input_schema: serde_json::json!({"type": "object"}),
+            requires_approval: false,
+        }],
+        // Serialize before normalizing so the on-disk record reflects the
+        // pre-lazy-load shape. `tools_loaded` is `#[serde(skip_serializing)]`,
+        // so it is not written to disk even when set; on deserialization the
+        // field defaults to `false`, after which `load_state` normalizes a
+        // server whose `tools` are already populated to `tools_loaded == true`.
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
+        session_id: None,
+        activation_error: None,
+        oauth: None,
+        oauth_pending: None,
+        oauth_tokens: None,
+    });
+    assert!(save_state(&files_dir, &state));
+
+    // Confirm the on-disk record really is the pre-lazy-load shape (no
+    // `tools_loaded` field). Without this assertion the test would pass
+    // trivially even if the new field were serialized.
+    let on_disk = std::fs::read_to_string(super::store::store_path(&files_dir)).unwrap();
+    assert!(
+        !on_disk.contains("tools_loaded"),
+        "tools_loaded must be skipped on serialization, got: {on_disk}"
+    );
+
+    let loaded = load_state(&files_dir);
+    let server = &loaded.servers[0];
+    assert!(!server.tools.is_empty());
+    assert!(
+        server.tools_loaded,
+        "loaded records with non-empty tools should be treated as already-loaded"
+    );
 }
