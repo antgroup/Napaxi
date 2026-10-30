@@ -1,0 +1,24 @@
+crates/core/Cargo.toml
+  h_62469dfb80cfc4 36-38,125
+crates/core/src/capabilities/service_selection.rs
+  h_62469dfb80cfc4 44,92-104,117-160,163,167-168,170-178,180,310-347
+crates/core/src/infra/private_diagnostics.rs
+  h_62469dfb80cfc4 57-58,134-187,381-404
+crates/core/src/infra/stream.rs
+  h_62469dfb80cfc4 153-165,170-185
+docs/infra-integration.md
+  h_62469dfb80cfc4 631-636
+examples/flutter/lib/demo_client/napaxi_chat_client.dart
+  h_62469dfb80cfc4 1928,1957
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "96712e109815b0fee1aad1ce2581269b2f5c3c03",
+  "prompts": {},
+  "humans": {
+    "h_62469dfb80cfc4": {
+      "author": "夏果 <jiaozhiwei.jzw@antgroup.com>"
+    }
+  }
+}
