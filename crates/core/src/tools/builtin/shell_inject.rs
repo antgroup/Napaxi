@@ -13,6 +13,11 @@ pub(super) enum ShellSyntaxToken {
     /// The inner text is captured so the hard gate can recurse into it — the real
     /// shell evaluates this content, so static analysis must too.
     Substitution(String),
+    /// Bash arithmetic expansion `$((body))` or legacy `$[body]`. The shell
+    /// re-evaluates the body (and recursively any `$(...)` / `$[...]` inside it),
+    /// so the hard gate must treat it as a substitution — never a literal `$`.
+    /// Idea reference: OpenClaw #187653 (legacy `$[...]` arithmetic approval).
+    Arithmetic(String),
     /// An unquoted variable expansion (`$VAR` / `${...}`). Carries no value (we do
     /// not expand), only marks that word-splitting/substitution happens here — so
     /// `rm$IFS-rf$IFS/` lexes as `Word(rm) Expansion Word(-rf) Expansion Word(/)`.
@@ -111,7 +116,9 @@ fn detect_netcat_with_data_piping(command: &str) -> bool {
             }
             // A substitution/expansion in command position means the executable is
             // dynamic — not a statically recognizable netcat invocation.
-            ShellSyntaxToken::Substitution(_) | ShellSyntaxToken::Expansion => {
+            ShellSyntaxToken::Substitution(_)
+            | ShellSyntaxToken::Arithmetic(_)
+            | ShellSyntaxToken::Expansion => {
                 if expecting_command {
                     current_command_is_netcat = false;
                     expecting_command = false;
@@ -170,6 +177,7 @@ fn find_heredoc_delimiters(line: &str) -> Vec<String> {
             | ShellSyntaxToken::RedirectIn
             | ShellSyntaxToken::Segment
             | ShellSyntaxToken::Substitution(_)
+            | ShellSyntaxToken::Arithmetic(_)
             | ShellSyntaxToken::Expansion => after_heredoc = false,
             ShellSyntaxToken::Word(_) => {}
         }
@@ -227,6 +235,20 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
                 i += 1;
                 continue;
             }
+            if b == b'$' && i + 2 < bytes.len() && bytes[i + 1] == b'(' && bytes[i + 2] == b'(' {
+                push_shell_word(&mut tokens, &mut word);
+                let (body, next) = read_arithmetic_parens(bytes, i + 1);
+                tokens.push(ShellSyntaxToken::Arithmetic(body));
+                i = next;
+                continue;
+            }
+            if b == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+                push_shell_word(&mut tokens, &mut word);
+                let (body, next) = read_arithmetic_brackets(bytes, i + 1);
+                tokens.push(ShellSyntaxToken::Arithmetic(body));
+                i = next;
+                continue;
+            }
             if b == b'$' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
                 push_shell_word(&mut tokens, &mut word);
                 let (body, next) = read_balanced_parens(bytes, i + 1);
@@ -264,6 +286,23 @@ pub(super) fn shell_syntax_tokens(command: &str) -> Vec<ShellSyntaxToken> {
                 i += 2;
             }
             // `$(...)` command substitution and `${...}` / `$VAR` expansion.
+            // `$((...))` arithmetic expansion must be recognized FIRST: it shares
+            // the leading `(` with `$(...)` but the outer parens are part of the
+            // arithmetic form, not a command-substitution wrapper.
+            b'$' if i + 2 < bytes.len() && bytes[i + 1] == b'(' && bytes[i + 2] == b'(' => {
+                push_shell_word(&mut tokens, &mut word);
+                let (body, next) = read_arithmetic_parens(bytes, i + 1);
+                tokens.push(ShellSyntaxToken::Arithmetic(body));
+                i = next;
+            }
+            // Legacy `$[...]` arithmetic expansion. Bash re-evaluates the body,
+            // so the hard gate must recurse into it (idea ref: OpenClaw #187653).
+            b'$' if i + 1 < bytes.len() && bytes[i + 1] == b'[' => {
+                push_shell_word(&mut tokens, &mut word);
+                let (body, next) = read_arithmetic_brackets(bytes, i + 1);
+                tokens.push(ShellSyntaxToken::Arithmetic(body));
+                i = next;
+            }
             b'$' if i + 1 < bytes.len() && bytes[i + 1] == b'(' => {
                 push_shell_word(&mut tokens, &mut word);
                 let (body, next) = read_balanced_parens(bytes, i + 1);
@@ -352,7 +391,74 @@ fn push_shell_word(tokens: &mut Vec<ShellSyntaxToken>, word: &mut String) {
     }
 }
 
-/// Reads a `$(...)` / `<(...)` / `>(...)` body starting at the opening `(`
+/// Reads a `$((body))` arithmetic expansion starting at the first `(` after
+/// the `$` (`bytes[open]` must be `b'('` and `bytes[open + 1]` must be `b'('`).
+/// The closing token is `))`. The body excludes the outer `((` / `))` but
+/// keeps any nested `(...)` so the hard-gate recursion sees the real shell
+/// content. Idea reference: OpenClaw #187653.
+fn read_arithmetic_parens(bytes: &[u8], open: usize) -> (String, usize) {
+    debug_assert!(open + 1 < bytes.len() && bytes[open] == b'(' && bytes[open + 1] == b'(');
+    let mut body = String::new();
+    let mut depth: i32 = 0; // nesting depth inside the body itself
+    let mut i = open + 2;
+    while i < bytes.len() {
+        let b = bytes[i];
+        match b {
+            b'(' => {
+                depth += 1;
+                body.push('(');
+                i += 1;
+            }
+            b')' => {
+                if depth == 0 {
+                    // First `)` of the closing `))`.
+                    if i + 1 < bytes.len() && bytes[i + 1] == b')' {
+                        return (body, i + 2);
+                    }
+                    // Unbalanced; treat as end of body.
+                    return (body, i + 1);
+                }
+                depth -= 1;
+                body.push(')');
+                i += 1;
+            }
+            b'\\' if i + 1 < bytes.len() => {
+                body.push(bytes[i + 1] as char);
+                i += 2;
+            }
+            _ => {
+                body.push(b as char);
+                i += 1;
+            }
+        }
+    }
+    (body, i)
+}
+
+/// Reads a `$[body]` legacy arithmetic expansion starting at the `[` after the
+/// `$` (`bytes[open]` must be `b'['`). The closing token is the first
+/// unescaped `]`. Bash arithmetic does not nest `[...]`, so the first `]`
+/// closes the form (idea ref: OpenClaw #187653).
+fn read_arithmetic_brackets(bytes: &[u8], open: usize) -> (String, usize) {
+    let mut body = String::new();
+    let mut i = open + 1;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'\\' && i + 1 < bytes.len() {
+            body.push(bytes[i + 1] as char);
+            i += 2;
+            continue;
+        }
+        if b == b']' {
+            return (body, i + 1);
+        }
+        body.push(b as char);
+        i += 1;
+    }
+    (body, i)
+}
+
+/// Reads a `$(...)` / `<(...)` / `>(...)` body starting at the opening `(``
 /// (`bytes[open]` must be `b'('`). Returns the inner text (paren-balanced,
 /// excluding the outer parens) and the index just past the closing `)`. If the
 /// parens never balance, consumes to end-of-input.

@@ -92,3 +92,6 @@ as well as Napaxi's on-device redaction / no-leak posture.
 - OpenClaw #186481 `c7bd622b95` — deeply nested tool result depth cap
 - OpenClaw #186776 `32f9477bf4` — MCP tool discovery on demand
 - OpenClaw #186483 `04681a3efc` — memory read path slimming
+- OpenClaw #187653 `3f34977399` — exec `$[...]` legacy arithmetic expansion approval
+- OpenClaw #187499 `f980e01150` — recursive shell assignment approval
+- OpenClaw #176154 `f964859d9f` — MCP startup fail-fast (no silent success on missing tools)
