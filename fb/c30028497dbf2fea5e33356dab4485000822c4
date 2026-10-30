@@ -1,0 +1,100 @@
+crates/core/Cargo.toml
+  h_62469dfb80cfc4 36-38,125
+crates/core/src/capabilities/service_selection.rs
+  h_62469dfb80cfc4 44,86-125,225-249
+crates/core/src/infra/list.rs
+  h_62469dfb80cfc4 21
+crates/core/src/infra/search.rs
+  h_62469dfb80cfc4 5,7-8,10,50-133,136-166,169-174,188,191-201,203-231,280,311-327,329,331-365,367-406,408-480,482-483,508-585
+crates/core/src/infra/stream.rs
+  h_62469dfb80cfc4 70-72,137-159,161,163-170,172-174,177-180
+crates/core/src/infra/types.rs
+  h_62469dfb80cfc4 77
+crates/core/src/infra/workflow/runner.rs
+  h_62469dfb80cfc4 21,180-182,202,474-489
+crates/core/src/infra/workflow/tests.rs
+  h_62469dfb80cfc4 169-176,236-237,241-247,518-521,765,777,988,990-996,1088
+crates/core/src/tools/loop.rs
+  h_62469dfb80cfc4 288-297,330-332,354,357-365
+docs/infra-integration.md
+  h_62469dfb80cfc4 154-158,426,428-431,523-529,578-579
+docs/infra-multistep-service-flow.md
+  h_62469dfb80cfc4 98,180
+docs/infra-streaming.md
+  h_62469dfb80cfc4 38,209,211-215
+docs/mobile-capabilities.md
+  h_62469dfb80cfc4 478-480,553-554
+docs/wuzhen-demo-events.md
+  h_62469dfb80cfc4 14-21,35-40,71-73
+examples/flutter/android/app/src/main/res/xml/network_security_config.xml
+  h_62469dfb80cfc4 2-3
+examples/flutter/lib/app/strings.dart
+  h_62469dfb80cfc4 674,685-686,699-700,740,742,748,903,1040,1051,1062-1063,1102-1103,1108,1251
+examples/flutter/lib/demo_client/napaxi_chat_client.dart
+  h_62469dfb80cfc4 1718-1724,1729-1731,1757-1765,1928,1957
+examples/flutter/lib/demo_client/wuzhen_demo_phase_events.dart
+  h_62469dfb80cfc4 8-9,13-16,21,23,30,51-54,68,95,105-109,136,182-183,188,191-196,214-240,254
+examples/flutter/lib/models/demo_agent.dart
+  h_62469dfb80cfc4 23-24
+examples/flutter/lib/models/infra_chat_discovery.dart
+  h_62469dfb80cfc4 22-23,67-71,74-78,123-127,143,181,184,192-194,228
+examples/flutter/lib/models/infra_chat_workflow.dart
+  h_62469dfb80cfc4 25-46,54-57,112,126-129
+examples/flutter/lib/models/infra_stream_display.dart
+  h_62469dfb80cfc4 5-6,87-90,102-106,118-121,123,166,171,174,256-509,522-524,534-542,553-555
+examples/flutter/lib/screens/agent_hub.dart
+  h_62469dfb80cfc4 17-18,22-33,36-42,229,598-600,1644,3302,4234-4236
+examples/flutter/lib/screens/chat_browser_widgets.dart
+  h_62469dfb80cfc4 550,560
+examples/flutter/lib/screens/chat_screen.dart
+  h_62469dfb80cfc4 5,322,6289,8590,8606-8623
+examples/flutter/lib/screens/chat_screen_infra.dart
+  h_62469dfb80cfc4 4,394-399,401-405,417,445,461,468,473-475
+examples/flutter/lib/screens/chat_screen_infra_workflow.dart
+  h_62469dfb80cfc4 3-98,120,127-132,139,142,161,163,187-192,194-196
+examples/flutter/lib/screens/chat_top_bar_widgets.dart
+  h_62469dfb80cfc4 278,286
+examples/flutter/lib/screens/infra_network.dart
+  h_62469dfb80cfc4 18-63,158-167,396-399,704-733,747-769,771,774,776,778,780,851-854,984,1140-1143,1169-1170,1180-1181,1193,1322-1328,1347-1358
+examples/flutter/lib/widgets/chat_message.dart
+  h_62469dfb80cfc4 665-666
+examples/flutter/lib/widgets/chat_tool_trace.dart
+  h_62469dfb80cfc4 5697
+examples/flutter/lib/widgets/infra_chat_flow_cards.dart
+  h_62469dfb80cfc4 6,357,397-404,406,408-409,435,461,481-482,486-493,496,498-499,503-504,507-508,510-511,523-681,755-756,818-848,990-1012
+examples/flutter/lib/widgets/infra_chat_service_cards.dart
+  h_62469dfb80cfc4 90-94,97-98,106-110,112
+examples/flutter/lib/widgets/infra_invocation_notice.dart
+  h_62469dfb80cfc4 96-97,101-125,128-136,138,141-149,162-167,169-178,180-196,198-205,207-232,236-255,257,261-262,266-267,269-275,278-280,284-315,318-319,321-324,327-331,336-346,350-351,354-368,370-403,412-413,415,417,419,421-438,441-450,457-458,461-463,465-469,471-474,477-478,488-506,515,519-520,542,544-545,557,564,566,572-573,580-581,591-597,599-608,610-626,630,632
+examples/flutter/pubspec.yaml
+  h_62469dfb80cfc4 82
+examples/flutter/test/agent_network_routing_contract_test.dart
+  h_62469dfb80cfc4 430-511
+examples/flutter/test/infra_chat_flow_cards_test.dart
+  h_62469dfb80cfc4 14-16,37,39,45-49,212-222,237-245,249-250,258-259,468,480,487,491-599,659-660,662-695,709,711-725,753-754,766,768-774,777,781-784,787-792
+examples/flutter/test/infra_invocation_notice_test.dart
+  h_62469dfb80cfc4 21,47-87,92-96,98-99,101-104,106,109-114,151-179
+examples/flutter/test/infra_network_test.dart
+  h_62469dfb80cfc4 185-239,351-412,626
+examples/flutter/test/infra_stream_display_scenarios.dart
+  h_62469dfb80cfc4 58-155
+examples/flutter/test/infra_workflow_test.dart
+  h_62469dfb80cfc4 111-212
+examples/flutter/test/widget_test.dart
+  h_62469dfb80cfc4 225,228-239,1374,1394,1430-1439,3889,6923,6939,6987
+examples/flutter/test/wuzhen_demo_phase_events_scenarios.dart
+  h_62469dfb80cfc4 125,134-231
+packages/api_contract/fixtures/infra/workflow.json
+  h_62469dfb80cfc4 9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fbc30028497dbf2fea5e33356dab4485000822c4",
+  "prompts": {},
+  "humans": {
+    "h_62469dfb80cfc4": {
+      "author": "夏果 <jiaozhiwei.jzw@antgroup.com>"
+    }
+  }
+}
