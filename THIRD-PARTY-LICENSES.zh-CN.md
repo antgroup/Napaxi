@@ -30,3 +30,14 @@ PRoot、talloc 等 GPL/LGPL 组件要求分发方提供对应源码或源码获�
 - 不要删除 `NOTICE`、`THIRD-PARTY-LICENSES.md` 和各平台 `THIRD-PARTY.md`。
 - 在面向用户或客户的分发包中保留第三方许可证说明。
 - 如果替换、修改或升级第三方 binary，同步更新 hash、版本、来源和许可证。
+
+## 思路借鉴（无源码拷贝）
+
+Napaxi 部分端侧运行时改进（tool result 嵌套深度上限、MCP 工具懒加载、memory 读路径精简、exec 算术展开审批、递归 shell 赋值审批、MCP 启动 fail-fast）在 GPL-3.0-or-later 下自研实现时，仅以 OpenClaw（MIT 许可）commits 作为思路参考。本仓库未拷贝任何 OpenClaw 源码，实现相互独立，遵守 GPL/MIT 许可边界与 Napaxi 端侧不外泄的合规约束。
+
+- OpenClaw #186481 `c7bd622b95` — tool result 深嵌套深度上限
+- OpenClaw #186776 `32f9477bf4` — MCP 工具按需懒加载
+- OpenClaw #186483 `04681a3efc` — memory 读路径精简
+- OpenClaw #187653 `3f34977399` — exec `$[...]` 旧式算术展开需审批
+- OpenClaw #187499 `f980e01150` — 递归 shell 赋值需审批
+- OpenClaw #176154 `f964859d9f` — MCP 启动 fail-fast（缺工具不得静默成功）

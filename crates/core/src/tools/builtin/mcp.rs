@@ -11,7 +11,19 @@ pub fn mcp_tools_and_handler(
     files_dir: &str,
     account_id: &str,
 ) -> (Vec<ToolDescriptor>, Option<InternalToolHandler>) {
-    let descriptors = crate::mcp::tool_descriptors(files_dir, account_id);
+    // Use the strict variant so a turn whose MCP server failed its first
+    // `tools/list` surfaces that failure instead of silently proceeding with
+    // a partial tool inventory (idea ref: OpenClaw #176154). On failure the
+    // descriptor list is empty (the agent has no MCP tools to call) and the
+    // startup error is surfaced separately by the turn prepare path through
+    // `crate::mcp::mcp_startup_failure`.
+    let descriptors = match crate::mcp::tool_descriptors_strict(files_dir, account_id) {
+        Ok(descriptors) => descriptors,
+        Err(failure) => {
+            tracing::error!(server = %failure.server, reason = %failure.reason, "{}", failure);
+            Vec::new()
+        }
+    };
     let files_dir = files_dir.to_string();
     let account_id = account_id.to_string();
     let handler: InternalToolHandler = Arc::new(move |tool_name, params, _progress| {

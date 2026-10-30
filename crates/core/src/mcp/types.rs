@@ -41,13 +41,16 @@ pub struct McpServer {
     pub tools_loaded: bool,
     /// Cached error from the most recent lazy fetch attempt, surfaced to
     /// adapters without forcing a retry on every call. A back-off window
-    /// (see `last_tools_attempt_at`) limits retry frequency.
-    #[serde(default, skip_serializing)]
+    /// (see `last_tools_attempt_at`) limits retry frequency. Persisted so the
+    /// turn-prepare path can fail-fast across calls (idea ref: OpenClaw
+    /// #176154); absent from the JSON when `None` to keep pre-existing records
+    /// byte-compatible.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_error: Option<String>,
     /// RFC3339 timestamp of the last remote tools/list attempt. Used by the
-    /// lazy-load back-off so a failing server is not retried more than once
-    /// per minute.
-    #[serde(default, skip_serializing)]
+    /// lazy-load back-off so a failing server is not retried more than once per
+    /// minute. Persisted alongside `tools_error` (idea ref: OpenClaw #176154).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_tools_attempt_at: Option<String>,
     #[serde(default)]
     pub session_id: Option<String>,

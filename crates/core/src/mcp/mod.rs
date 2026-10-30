@@ -58,7 +58,10 @@ pub use oauth_flow::{finish_oauth, start_oauth};
 #[allow(unused_imports)]
 pub use servers::set_server_active;
 pub use servers::{activate_server, add_server, deactivate_server, list_servers, remove_server};
-pub use tools::{call_tool, list_tools, tool_descriptors};
+pub use tools::{
+    McpStartupFailure, call_tool, list_tools, mcp_startup_failure, tool_descriptors,
+    tool_descriptors_strict,
+};
 pub use types::{
     McpOAuthConfig, McpOAuthPending, McpOAuthStartOptions, McpOAuthTokens, McpServer, McpTool,
     McpTransport,
