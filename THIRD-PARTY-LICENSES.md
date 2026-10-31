@@ -95,3 +95,32 @@ as well as Napaxi's on-device redaction / no-leak posture.
 - OpenClaw #187653 `3f34977399` — exec `$[...]` legacy arithmetic expansion approval
 - OpenClaw #187499 `f980e01150` — recursive shell assignment approval
 - OpenClaw #176154 `f964859d9f` — MCP startup fail-fast (no silent success on missing tools)
+
+## 重新实现 / Reimplemented designs (from OpenClaw, MIT)
+
+The following Napaxi code paths re-implement design notes and boundary rules
+observed in OpenClaw (MIT).  No OpenClaw source code is redistributed or
+ported; the implementations are written from scratch under GPL-3.0-or-later.
+
+- **exec policy layering (#188833)**: agent-level partial override merged on
+  top of a global exec/security/approval policy.  Missing fields fall back to
+  the global baseline; explicit agent fields win; bypass strings are stripped
+  from both sources.  See `crates/core/src/capabilities/definitions.rs`
+  (`ExecSecurityPolicy`, `ExecPolicyOverride`, `ExecApprovalMode`,
+  `ExecSecurityLevel`) and `crates/core/src/capabilities/decisions.rs`
+  (`apply_exec_policy_layer`).
+- **bounded local skill companion read (#189165)**: companion files under a
+  placement-owner-pinned `resourceRoot` are read via a bounded relative-path
+  API that rejects `..`, absolute, `~`, drive-letter, symlink, hardlink,
+  non-UTF-8, and NUL inputs; a missing resource root degrades gracefully via
+  `tracing::debug` rather than surfacing an unhandled rejection.  See
+  `crates/core/src/skills/paths.rs` (`safe_companion_relative_path`,
+  `validate_companion_target`) and
+  `crates/features/skills/src/registry/discovery.rs`
+  (`companion_files_in_root`), where the pure-path rules are mirrored locally
+  because `crates/features/*` must not depend on `crates/core` per
+  `AGENTS.md`.
+
+OpenClaw's idle PostgreSQL-connection-upper-bound design (#188614) is
+recorded here as a design reference only — it is **not** re-implemented yet;
+evaluation is deferred to a follow-up work item (see `.napaxi-dev/impl.md`).)

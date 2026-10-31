@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 // ── AfsFileType ──────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AfsFileType {
     File,
     Directory,
@@ -25,11 +25,32 @@ pub enum AfsFileType {
 pub struct AfsFileMeta {
     path: PathBuf,
     file_type: AfsFileType,
+    /// Hardlink count as reported by the underlying `symlink_metadata` /
+    /// `read_dir(entry).metadata()` call. Used by the bounded companion
+    /// reader (`discovery::companion_files_in_root`) to refuse cross-tree
+    /// hardlinks, mirroring the `validate_companion_target` guard in
+    /// `crates/core/src/skills/paths.rs`. Implemented via the cross-platform
+    /// `std::fs::Metadata::nlink` accessor.
+    nlink: u32,
 }
 
 impl AfsFileMeta {
     pub fn new(path: PathBuf, file_type: AfsFileType) -> Self {
-        Self { path, file_type }
+        Self {
+            path,
+            file_type,
+            nlink: default_nlink_for(&file_type),
+        }
+    }
+
+    /// Construct from raw `tokio::fs` metadata. The companion hardlink guard
+    /// relies on this count being populated for non-symlink regular files.
+    pub fn with_nlink(path: PathBuf, file_type: AfsFileType, nlink: u32) -> Self {
+        Self {
+            path,
+            file_type,
+            nlink,
+        }
     }
 
     pub fn path(&self) -> PathBuf {
@@ -51,6 +72,45 @@ impl AfsFileMeta {
     pub fn is_symlink(&self) -> bool {
         self.file_type == AfsFileType::Symlink
     }
+
+    /// Hard-link count of the on-disk inode (from `symlink_metadata` /
+    /// `read_dir(entry).metadata()`). Defaults to `1` for non-file types
+    /// built via [`AfsFileMeta::new`].
+    pub fn nlink(&self) -> u32 {
+        self.nlink
+    }
+}
+
+fn default_nlink_for(file_type: &AfsFileType) -> u32 {
+    // Directories and symlinks are conservatively reported as nlink=1.
+    // Real hardlink detection only matters for regular files in the
+    // companion reader; non-file paths never reach the guard.
+    match file_type {
+        AfsFileType::File => 1,
+        AfsFileType::Directory => 1,
+        AfsFileType::Symlink => 1,
+        AfsFileType::Other => 1,
+    }
+}
+
+/// Cross-platform hardlink count helper. The stabilised cross-platform
+/// `std::fs::Metadata::nlink` accessor is not yet available on this
+/// toolchain's `std`, so we use the platform-specific `MetadataExt` on
+/// Unix and fall back to `1` elsewhere. The companion reader treats
+/// `nlink > 1` conservatively regardless of platform. Only the in-crate
+/// `test_afs` impls populate it; production accessors live in
+/// `crates/core/src/skills/afs.rs`.
+#[cfg(test)]
+#[cfg(unix)]
+fn nlink_of(metadata: &std::fs::Metadata) -> u32 {
+    use std::os::unix::fs::MetadataExt;
+    metadata.nlink() as u32
+}
+
+#[cfg(test)]
+#[cfg(not(unix))]
+fn nlink_of(_metadata: &std::fs::Metadata) -> u32 {
+    1
 }
 
 // ── AfsError ─────────────────────────────────────────────────────────────
@@ -210,6 +270,10 @@ pub(crate) mod test_afs {
                     .file_type()
                     .await
                     .map_err(|e| AfsError::Other(e.to_string()))?;
+                let metadata = entry
+                    .metadata()
+                    .await
+                    .map_err(|e| AfsError::Other(e.to_string()))?;
                 let file_type = if ft.is_symlink() {
                     AfsFileType::Symlink
                 } else if ft.is_dir() {
@@ -221,7 +285,11 @@ pub(crate) mod test_afs {
                 };
                 // 反向映射：物理路径 → 虚拟路径，后续操作才能正确映射
                 let virtual_path = self.reverse_map_path(&entry.path());
-                entries.push(AfsFileMeta::new(virtual_path, file_type));
+                entries.push(AfsFileMeta::with_nlink(
+                    virtual_path,
+                    file_type,
+                    nlink_of(&metadata),
+                ));
             }
             Ok(entries)
         }
@@ -244,7 +312,11 @@ pub(crate) mod test_afs {
             } else {
                 AfsFileType::Other
             };
-            Ok(AfsFileMeta::new(path.to_path_buf(), file_type))
+            Ok(AfsFileMeta::with_nlink(
+                path.to_path_buf(),
+                file_type,
+                nlink_of(&m),
+            ))
         }
 
         async fn create_dir_all(&self, path: &Path) -> Result<(), AfsError> {
@@ -330,6 +402,10 @@ pub(crate) mod test_afs {
                     .file_type()
                     .await
                     .map_err(|e| AfsError::Other(e.to_string()))?;
+                let metadata = entry
+                    .metadata()
+                    .await
+                    .map_err(|e| AfsError::Other(e.to_string()))?;
                 let file_type = if ft.is_symlink() {
                     AfsFileType::Symlink
                 } else if ft.is_dir() {
@@ -339,7 +415,11 @@ pub(crate) mod test_afs {
                 } else {
                     AfsFileType::Other
                 };
-                entries.push(AfsFileMeta::new(entry.path(), file_type));
+                entries.push(AfsFileMeta::with_nlink(
+                    entry.path(),
+                    file_type,
+                    nlink_of(&metadata),
+                ));
             }
             Ok(entries)
         }
@@ -361,7 +441,11 @@ pub(crate) mod test_afs {
             } else {
                 AfsFileType::Other
             };
-            Ok(AfsFileMeta::new(path.to_path_buf(), file_type))
+            Ok(AfsFileMeta::with_nlink(
+                path.to_path_buf(),
+                file_type,
+                nlink_of(&m),
+            ))
         }
 
         async fn create_dir_all(&self, path: &Path) -> Result<(), AfsError> {

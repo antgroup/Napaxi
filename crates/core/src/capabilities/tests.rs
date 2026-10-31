@@ -1333,3 +1333,120 @@ mod provider_admission_tests {
         assert!(matches!(route, LlmProviderRoute::Anthropic));
     }
 }
+
+mod exec_policy_layer_tests {
+    use super::super::{
+        ExecApprovalMode, ExecPolicyOverride, ExecSecurityLevel, ExecSecurityPolicy,
+        apply_exec_policy_layer,
+    };
+
+    fn agent_override(agent_id: &str) -> ExecPolicyOverride {
+        ExecPolicyOverride {
+            agent_id: agent_id.to_string(),
+            ..ExecPolicyOverride::default()
+        }
+    }
+
+    /// AC1.a — a missing override field falls back to the global baseline.
+    /// Here the agent override leaves `denied_tools` unset (`None`), so the
+    /// merged decision must inherit the global baseline (`["shell"]`).
+    #[test]
+    fn missing_override_field_falls_back_to_global() {
+        let global = ExecSecurityPolicy {
+            denied_tools: Some(vec!["shell".to_string()]),
+            ..ExecSecurityPolicy::default()
+        };
+        let agent = agent_override("agent-a");
+        let merged = apply_exec_policy_layer(&global, &agent);
+        assert_eq!(
+            merged.denied_tools.as_deref(),
+            Some(["shell".to_string()].as_slice())
+        );
+        // Other untouched fields stay unset on both sides.
+        assert!(merged.allowed_tools.is_none());
+        assert!(merged.approval_mode.is_none());
+        assert!(merged.security_level.is_none());
+    }
+
+    /// AC1.b — an explicit agent field wins over the global baseline. The
+    /// agent override sets `denied_tools = ["shell"]` while the global sets
+    /// `["shell", "git"]`; the merged result is the agent's value, not the
+    /// union — explicit wins, not augments.
+    #[test]
+    fn explicit_agent_field_overrides_global() {
+        let global = ExecSecurityPolicy {
+            denied_tools: Some(vec!["shell".to_string(), "git".to_string()]),
+            approval_mode: Some(ExecApprovalMode::Prompt),
+            ..ExecSecurityPolicy::default()
+        };
+        let agent = ExecPolicyOverride {
+            agent_id: "agent-b".to_string(),
+            denied_tools: Some(vec!["shell".to_string()]),
+            ..ExecPolicyOverride::default()
+        };
+        let merged = apply_exec_policy_layer(&global, &agent);
+        assert_eq!(
+            merged.denied_tools.as_deref(),
+            Some(["shell".to_string()].as_slice())
+        );
+        // A missing agent field still inherits the global one.
+        assert_eq!(merged.approval_mode, Some(ExecApprovalMode::Prompt));
+    }
+
+    /// AC1.c — `bypass_strings` injected by either the global baseline or an
+    /// agent override are stripped from the merged result, so a hostile
+    /// override cannot smuggle an escape path past the layering pass.
+    #[test]
+    fn bypass_strings_stripped_from_both_sources() {
+        let global = ExecSecurityPolicy {
+            denied_tools: Some(vec!["shell".to_string()]),
+            bypass_strings: Some(vec!["--allow-all".to_string()]),
+            ..ExecSecurityPolicy::default()
+        };
+        let agent = ExecPolicyOverride {
+            agent_id: "agent-c".to_string(),
+            allowed_tools: Some(vec!["file".to_string()]),
+            bypass_strings: Some(vec!["--no-sandbox".to_string()]),
+            ..ExecPolicyOverride::default()
+        };
+        let merged = apply_exec_policy_layer(&global, &agent);
+        assert!(merged.bypass_strings.is_none(), "bypass must be stripped");
+        assert_eq!(
+            merged.allowed_tools.as_deref(),
+            Some(["file".to_string()].as_slice())
+        );
+        assert_eq!(
+            merged.denied_tools.as_deref(),
+            Some(["shell".to_string()].as_slice())
+        );
+    }
+
+    /// Empty-on-empty corner case: layering two empty policies yields an
+    /// empty policy and never synthesizes a bypass slot.
+    #[test]
+    fn appends_no_bypass_when_neither_set() {
+        let global = ExecSecurityPolicy::default();
+        let agent = agent_override("agent-d");
+        let merged = apply_exec_policy_layer(&global, &agent);
+        assert!(merged.is_empty());
+        assert!(merged.bypass_strings.is_none());
+    }
+
+    /// Sanity-check that `security_level` follows the same fallback rule.
+    #[test]
+    fn security_level_and_approval_mode_layer_correctly() {
+        let global = ExecSecurityPolicy {
+            security_level: Some(ExecSecurityLevel::Strict),
+            ..ExecSecurityPolicy::default()
+        };
+        let agent = ExecPolicyOverride {
+            agent_id: "agent-e".to_string(),
+            approval_mode: Some(ExecApprovalMode::Auto),
+            security_level: Some(ExecSecurityLevel::Permissive),
+            ..ExecPolicyOverride::default()
+        };
+        let merged = apply_exec_policy_layer(&global, &agent);
+        assert_eq!(merged.approval_mode, Some(ExecApprovalMode::Auto));
+        assert_eq!(merged.security_level, Some(ExecSecurityLevel::Permissive));
+    }
+}
