@@ -1179,3 +1179,76 @@ fn tool_turn_limit_handles_extreme_inputs() {
     assert_eq!(tool_turn_limit(-2), UNBOUNDED_TOOL_TURN_LIMIT);
     assert_eq!(tool_turn_limit(i32::MIN), UNBOUNDED_TOOL_TURN_LIMIT);
 }
+
+#[test]
+fn mid_turn_overflow_marker_is_recognized_by_is_context_overflow_error() {
+    // The mid-turn hard precheck raises an error string starting with
+    // "mid-turn context overflow:"; the overflow-recovery router in
+    // `turn/orchestration` must recognize it via `is_context_overflow_error`.
+    let marker = format!(
+        "mid-turn context overflow: {} tokens over floor reserve",
+        42
+    );
+    assert!(marker.starts_with("mid-turn context overflow:"));
+    assert!(crate::llm::is_context_overflow_error(&marker));
+    // A provider error that merely contains "context overflow" stays a
+    // recognized overflow (the existing 413-style needle path stays intact).
+    assert!(crate::llm::is_context_overflow_error(
+        "context overflow: 413"
+    ));
+    // Backward compatibility: unrelated errors are not false-positives.
+    assert!(!crate::llm::is_context_overflow_error(
+        "unsupported tool call"
+    ));
+}
+
+#[test]
+fn enforce_mid_turn_hard_precheck_fits_returns_ok() {
+    // Large effective window (200_000) and a tiny message list should fit.
+    let config = PlatformLlmConfig {
+        provider: "anthropic".to_string(),
+        model: "claude-3-5-sonnet".to_string(),
+        ..PlatformLlmConfig::default()
+    };
+    let messages = vec![serde_json::json!({
+        "role": "user",
+        "content": "hi"
+    })];
+    // descriptor_tokens=0; prompt_tokens are tiny → fits → Ok(()).
+    assert!(enforce_mid_turn_hard_precheck(&config, &messages, 0).is_ok());
+}
+
+#[test]
+fn enforce_mid_turn_hard_precheck_overflow_returns_marker_error() {
+    // Force an overflow: tiny context window, large prompt.
+    use crate::types::ContextEngineConfig;
+    let config = PlatformLlmConfig {
+        provider: "anthropic".to_string(),
+        model: "claude-3-5-sonnet".to_string(),
+        context_engine: ContextEngineConfig {
+            enabled: true,
+            context_window_tokens: Some(2048),
+            // Soft compaction is intentionally disabled: trigger_ratio huge.
+            trigger_ratio: 1.0,
+            ..ContextEngineConfig::default()
+        },
+        ..PlatformLlmConfig::default()
+    };
+    // Build a message big enough that prompt_tokens + floor_reserve > 2048.
+    // floor_reserve = max(4096, max(4000, 2048*0.10=205)=4000) = 4096.
+    // budget = 2048 - 4096 = 0 (saturating_sub) → overflow by prompt_tokens.
+    let big = "x".repeat(20_000);
+    let messages = vec![serde_json::json!({
+        "role": "user",
+        "content": big
+    })];
+    let err = enforce_mid_turn_hard_precheck(&config, &messages, 0)
+        .expect_err("overflow should produce marker error");
+    assert!(
+        err.starts_with("mid-turn context overflow:"),
+        "marker prefix missing: {err}"
+    );
+    // Sanity: even with soft compaction trigger_ratio huge (1.0), the hard
+    // floor reserve still fires the overflow — that is the AC-2 invariant.
+    assert!(crate::llm::is_context_overflow_error(&err));
+}

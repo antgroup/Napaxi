@@ -29,6 +29,11 @@ prefixed, or touching the MCP OAuth flow, this is the module.
 - `oauth_flow.rs` — high-level `start_oauth` / `finish_oauth`.
 - `oauth.rs` — low-level OAuth metadata discovery, PKCE, and token exchange.
 
+> Invariant: the `finish_oauth` path must `exchange_oauth_code` successfully
+> before saving tokens / activating the server. Any refactor must preserve
+> the exchange-then-save-then-activate ordering (see the module doc comment
+> in `oauth_flow.rs`).
+
 ## Transport and Helpers
 
 - `transport.rs` — HTTP / SSE / stdio / unix request transports.

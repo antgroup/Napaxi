@@ -1,4 +1,14 @@
 //! OAuth start and finish flows for MCP servers.
+//!
+//! # Invariants
+//!
+//! - `finish_oauth` MUST NOT announce success before `exchange_oauth_code`
+//!   returns `Ok`. The flow is `exchange → save_state → activate_server`,
+//!   in that order; any refactor must preserve this ordering. Returning
+//!   a successful JSON result while remote token exchange is still in
+//!   flight (or has failed) would leak a "已完成" state to the user with
+//!   no usable credentials — the OpenClaw #189546 bug class we lock out
+//!   here.
 
 use super::headers::is_http_like_transport;
 use super::helpers::{oauth_start_json, result_json};

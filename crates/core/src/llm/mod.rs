@@ -35,6 +35,14 @@ use crate::types::PlatformLlmConfig;
 pub(crate) fn is_context_overflow_error(error: &str) -> bool {
     let lower = error.to_ascii_lowercase();
 
+    // Mid-turn hard precheck overflow marker raised by `tools/loop.rs`
+    // after soft compaction. Recognize it BEFORE the EXCLUDED denylist
+    // guardrail below — the marker string is unambiguous and the EXCLUDED
+    // terms ("unsupported", "not supported", etc.) will never appear here.
+    if lower.starts_with("mid-turn context overflow:") {
+        return true;
+    }
+
     const EXCLUDED: &[&str] = &[
         "unsupported",
         "unknown parameter",

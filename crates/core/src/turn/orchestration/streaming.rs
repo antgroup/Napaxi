@@ -334,15 +334,25 @@ pub(crate) async fn stream_turn_with_hooks<H, E, C>(
             emit(ChatEvent::Interrupted);
         }
         Err(e) => {
-            if crate::llm::is_context_overflow_error(&e)
-                && history_recorder.is_empty()
-                && !is_cancelled()
+            // Mid-turn overflow marker: the tool loop raised
+            // `"mid-turn context overflow: ..."` AFTER soft compaction
+            // already collapsed tool results. Route to the existing
+            // `reprepare_turn_after_context_overflow_with_hooks`
+            // recovery EVEN when `history_recorder` is non-empty (turn
+            // has already started) — the recovery path does not
+            // re-persist the user message, so we can safely re-prepare.
+            let is_mid_turn_overflow = crate::llm::is_context_overflow_error(&e)
+                && e.starts_with("mid-turn context overflow:");
+            if !is_cancelled()
+                && (is_mid_turn_overflow
+                    || (crate::llm::is_context_overflow_error(&e) && history_recorder.is_empty()))
             {
-                hooks.stage_warning(
-                    &context,
-                    TurnStage::ExecuteToolLoop,
-                    "Provider reported context overflow; compacting and retrying once",
-                );
+                let overflow_log = if is_mid_turn_overflow {
+                    "上下文窗口在 turn 中途被超出"
+                } else {
+                    "Provider reported context overflow; compacting and retrying once"
+                };
+                hooks.stage_warning(&context, TurnStage::ExecuteToolLoop, overflow_log);
                 emit(ChatEvent::Thinking {
                     content: "Compacting context and retrying the request...".to_string(),
                 });
