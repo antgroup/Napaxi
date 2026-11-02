@@ -132,6 +132,49 @@ pub enum StorageError {
 
     #[error("storage decode: {0}")]
     Decode(String),
+
+    /// Readiness gate failure: a namespace directory that should already
+    /// exist is missing or is not the expected kind of path. Idea reference:
+    /// OpenClaw #190832 — "准备 namespace 仅校验 readiness、禁止隐式修复".
+    /// Unlike [`StorageError::NotFound`], this variant distinguishes a
+    /// readiness check from a runtime lookup so the caller can decide
+    /// whether to retry, fail closed, or surface a repair prompt — but the
+    /// [`crate::storage::bridge::FileBridge::check_workspace_readiness`]
+    /// path itself never creates directories.
+    #[error("workspace not ready ({kind}) at {path}: {reason}")]
+    WorkspaceNotReady {
+        kind: WorkspaceNotReadyKind,
+        path: String,
+        reason: String,
+    },
+}
+
+/// Why a namespace readiness check failed. Carried by
+/// [`StorageError::WorkspaceNotReady`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkspaceNotReadyKind {
+    /// The expected directory does not exist.
+    NotFound,
+    /// The path exists but is not a directory.
+    NotADirectory,
+    /// The directory exists but the process cannot write to it.
+    PermissionDenied,
+}
+
+impl fmt::Display for WorkspaceNotReadyKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl WorkspaceNotReadyKind {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            WorkspaceNotReadyKind::NotFound => "not_found",
+            WorkspaceNotReadyKind::NotADirectory => "not_a_directory",
+            WorkspaceNotReadyKind::PermissionDenied => "permission_denied",
+        }
+    }
 }
 
 impl StorageError {
@@ -142,6 +185,7 @@ impl StorageError {
             StorageError::OutsideSandbox(_) => "storage_outside_sandbox",
             StorageError::Attachment(_) => "storage_attachment",
             StorageError::Decode(_) => "storage_decode",
+            StorageError::WorkspaceNotReady { .. } => "workspace_not_ready",
         }
     }
 }

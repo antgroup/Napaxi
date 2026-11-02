@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::pending::resolve_tool_execution;
-use super::prepare::prepare_tool_arguments;
+use super::prepare::{canonical_descriptor_for, prepare_tool_arguments};
 use super::rate_limit::ToolRateLimiter;
 use super::redact::{
     MAX_TOOL_OUTPUT_SIZE, REDACTED, redact_tool_arguments_json, sanitize_tool_output,
@@ -368,4 +368,122 @@ fn rate_limiter_allows_windowed_calls_and_blocks_excess() {
             .check_at("shell", limit, start + Duration::from_secs(61))
             .is_ok()
     );
+}
+
+// ---------------------------------------------------------------------------
+// Canonical schema second-pass coverage (idea reference: OpenClaw #185581)
+// ---------------------------------------------------------------------------
+
+/// Simulate the failure mode the canonical pass is designed to catch: the
+/// descriptor injected for this turn has loosened the schema (additional
+/// properties allowed, command missing but the loosened descriptor does not
+/// require it), but the canonical builtin descriptor stays authoritative and
+/// the local builtin tool's input must still satisfy it.
+#[test]
+fn prepare_tool_arguments_rejects_input_against_canonical_schema_when_drifted_descriptor_loosened()
+{
+    // Drifted per-turn descriptor: makes `command` optional and accepts extra.
+    let drifted = ToolDescriptor {
+        name: "shell".to_string(),
+        description: "drifted".to_string(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": {"type": "string"},
+                "rogue_field": {"type": "string"}
+            }
+        }),
+        effect: ToolEffect::Execute,
+    };
+
+    // Missing `command` — canonical schema requires it.
+    let err = prepare_tool_arguments(&drifted, serde_json::json!({"workdir": "/workspace"}))
+        .expect_err("canonical schema must reject missing required 'command' even if the drifted descriptor lacks the require");
+    assert!(
+        err.contains("canonical schema"),
+        "expected canonical-schema error, got: {err}"
+    );
+    assert!(err.contains("command"));
+
+    // Unknown field — canonical schema has no `rogue_field`; the drifted
+    // descriptor allows it through, but the canonical pass must reject.
+    let err = prepare_tool_arguments(
+        &drifted,
+        serde_json::json!({"command": "ls", "rogue_field": "evil"}),
+    )
+    .expect_err("canonical schema must reject unknown property added by a drifted descriptor");
+    assert!(err.contains("rogue_field"));
+    assert!(err.contains("not allowed"));
+}
+
+/// The strict canonical pass rejects unknown properties even when the local
+/// descriptor is loose; it must still accept inputs that fit the canonical
+/// schema.
+#[test]
+fn prepare_tool_arguments_allows_canonical_compatible_input() {
+    let descriptor = ToolDescriptor {
+        name: "shell".to_string(),
+        description: "shell".to_string(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": {"type": "string"},
+                "workdir": {"type": "string"},
+                "timeout": {"type": "integer"}
+            },
+            "required": ["command"]
+        }),
+        effect: ToolEffect::Execute,
+    };
+
+    // All three declared canonical properties — accepted.
+    let prepared = prepare_tool_arguments(
+        &descriptor,
+        serde_json::json!({"command": "ls -la /workspace", "workdir": "/workspace", "timeout": 5}),
+    )
+    .expect("canonical-compatible shell input should validate");
+    assert_eq!(prepared["command"], "ls -la /workspace");
+    assert_eq!(prepared["workdir"], "/workspace");
+    assert_eq!(prepared["timeout"], 5);
+}
+
+/// The canonical pass rejects an unknown property for a builtin even when the
+/// per-turn descriptor does not declare `additionalProperties: false` itself.
+#[test]
+fn prepare_tool_arguments_rejects_unknown_property_for_builtin() {
+    let loose = ToolDescriptor {
+        name: "shell".to_string(),
+        description: "shell".to_string(),
+        parameters: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "command": {"type": "string"}
+            },
+            "required": ["command"],
+            "additionalProperties": true
+        }),
+        effect: ToolEffect::Execute,
+    };
+
+    let err = prepare_tool_arguments(
+        &loose,
+        serde_json::json!({"command": "ls", "sneaky": true}),
+    )
+    .expect_err("canonical schema must reject unknown property even when the per-turn descriptor allows it");
+    assert!(err.contains("sneaky"));
+    assert!(err.contains("canonical schema"));
+}
+
+/// The canonical lookup only returns descriptors for local builtin names;
+/// host-custom tools and MCP server tools remain unaffected.
+#[test]
+fn canonical_descriptor_for_returns_builtins_only() {
+    assert!(canonical_descriptor_for("shell").is_some());
+    assert!(canonical_descriptor_for("memory_search").is_some());
+    assert!(canonical_descriptor_for("mcp_server_list").is_some());
+    assert!(canonical_descriptor_for("read_file").is_some());
+    // A host-custom tool name is not canonical.
+    assert!(canonical_descriptor_for("lookup").is_none());
+    // Old remote-shell alias (now ambiguous) has no canonical descriptor.
+    assert!(canonical_descriptor_for("remote_shell").is_none());
 }

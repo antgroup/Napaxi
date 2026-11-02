@@ -385,3 +385,116 @@ fn delete_thread_attachments_inner_treats_missing_file_as_ok() {
     assert!(delete_thread_attachments_inner(&files_dir, "absent").is_ok());
     let _ = fs::remove_dir_all(dir);
 }
+
+// ---------------------------------------------------------------------------
+// Namespace readiness gate (idea reference: OpenClaw #190832)
+// ---------------------------------------------------------------------------
+
+/// A `FileBridge` constructed over a missing namespace directory must report
+/// `WorkspaceNotReady` from the readiness gate, and crucially MUST NOT create
+/// any directories in the process (idea reference: OpenClaw #190832 — strict
+/// readiness, no implicit repair).
+#[test]
+fn check_workspace_readiness_rejects_missing_namespace_and_creates_nothing() {
+    use crate::error::WorkspaceNotReadyKind;
+    let dir = temp_dir("readiness_missing");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+
+    assert!(!Path::new(&bridge.workspace_dir()).exists());
+    assert!(!Path::new(&bridge.rootfs_dir()).exists());
+    assert!(!Path::new(bridge.skills_dir()).exists());
+
+    let err = bridge
+        .check_workspace_readiness()
+        .expect_err("missing namespace should fail readiness");
+    assert_eq!(err.code(), "workspace_not_ready");
+    match err {
+        crate::error::StorageError::WorkspaceNotReady { kind, .. } => {
+            assert_eq!(kind, WorkspaceNotReadyKind::NotFound);
+        }
+        other => panic!("expected WorkspaceNotReady, got: {other:?}"),
+    }
+
+    // The readiness gate must never implicitly repair the namespace.
+    assert!(
+        !Path::new(bridge.workspace_dir()).exists(),
+        "readiness gate must not create the workspace directory"
+    );
+    assert!(
+        !Path::new(bridge.rootfs_dir()).exists(),
+        "readiness gate must not create the rootfs directory"
+    );
+    assert!(
+        !Path::new(bridge.skills_dir()).exists(),
+        "readiness gate must not create the skills directory"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// A `FileBridge` constructed over an existing, writable namespace directory
+/// passes the readiness gate without mutating the namespace.
+#[test]
+fn check_workspace_readiness_passes_when_namespace_is_writable() {
+    let dir = temp_dir("readiness_ok");
+    let files_dir = dir.to_string_lossy().to_string();
+    fs::create_dir_all(dir.join("linux-env").join("workspace")).unwrap();
+    fs::create_dir_all(dir.join("linux-env").join("rootfs")).unwrap();
+    fs::create_dir_all(dir.join("prompt_skills")).unwrap();
+
+    let bridge = FileBridge::new(&files_dir);
+    bridge
+        .check_workspace_readiness()
+        .expect("writable namespace must be ready");
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// `ensure_workspace` retains its explicit-initialization semantics even with
+/// the new readiness gate: it creates the `workspace_dir` directory. The
+/// readiness gate stays read-only — it must not regress, double-create, or
+/// remove the workspace directory produced by `ensure_workspace`.
+#[test]
+fn ensure_workspace_still_explicit_initializes() {
+    let dir = temp_dir("ensure_explicit");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+    assert!(!Path::new(bridge.workspace_dir()).exists());
+
+    // ensure_workspace creates workspace_dir (and historically only that —
+    // rootfs and skills are populated lazily by other code paths). After it
+    // runs, the workspace dir must exist.
+    assert!(bridge.ensure_workspace());
+    assert!(
+        Path::new(bridge.workspace_dir()).exists(),
+        "ensure_workspace must create the workspace directory"
+    );
+    // No readiness-probe artifacts should be left on disk by any future
+    // readiness call over this directory.
+    let workspace_probe = bridge.workspace_dir().join(".napaxi_readiness_probe");
+    assert!(!Path::new(&workspace_probe).exists());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// The convenience wrapper returns `false` (logged) instead of panicking on a
+/// missing namespace. It also must not implicitly repair the directory.
+#[test]
+fn check_workspace_ready_or_err_returns_false_on_missing_without_repair() {
+    let dir = temp_dir("readiness_bool");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+
+    assert!(!bridge.check_workspace_ready_or_err());
+    assert!(
+        !Path::new(bridge.workspace_dir()).exists(),
+        "boolean readiness gate must not create the workspace directory"
+    );
+    assert!(
+        !Path::new(bridge.rootfs_dir()).exists(),
+        "boolean readiness gate must not create the rootfs directory"
+    );
+
+    let _ = fs::remove_dir_all(dir);
+}

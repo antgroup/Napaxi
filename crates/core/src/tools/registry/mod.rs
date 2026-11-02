@@ -26,7 +26,7 @@ mod tests;
 pub use bridge::request_host_tool_execution;
 pub(crate) use bridge::request_host_tool_execution_with_context;
 pub use pending::resolve_tool_execution;
-pub use prepare::{normalize_parameters_schema, prepare_tool_arguments};
+pub use prepare::{canonical_descriptor_for, normalize_parameters_schema, prepare_tool_arguments};
 pub use rate_limit::check_tool_rate_limit;
 pub use redact::{redact_sensitive_json, redact_tool_arguments_json, sanitize_tool_output};
 pub use registry::ToolRegistry;

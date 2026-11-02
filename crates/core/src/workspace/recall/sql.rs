@@ -5,6 +5,24 @@
 //! All functions in this module are `#[cfg(feature = "libsql")]` — callers
 //! must be similarly gated. The module is the only place that names
 //! libsql types or SQL statements.
+//!
+//! # Known implicit-repair surface (idea reference: OpenClaw #190832)
+//!
+//! [`ensure_schema`] runs `CREATE TABLE IF NOT EXISTS` DDL on the read path
+//! (every cold-start `ensure_index_async` and the per-source `refresh_*_async`
+//! passes that have not yet entered the `ensure_schema_cached` short-circuit).
+//! That is the libsql-PG equivalent of the bridge-side "implicit repair"
+//! branch this codebase is tightening (see `storage::bridge::FileBridge`):
+//! treating an already-initialized namespace as "may need fixing". The DDL is
+//! idempotent so the runtime cost is bounded, but the read path still mutates
+//! DB state on a cold start.
+//!
+//! This module intentionally keeps the behavior in this round. The follow-up
+//! tightening is to split `ensure_schema` into (a) an explicit "prepare
+//! namespace" step that runs once at session init and (b) a read-only "schema
+//! readiness check" that returns an error (or rebuilds only via an explicit
+//! path) when the schema does not match. See DIMA-2026110200120277702 / plan
+//! §2.2 for the route placeholder.
 
 use chrono::Utc;
 

@@ -122,6 +122,83 @@ pub fn require_agent_engine_enabled_for_config(
     Ok(())
 }
 
+/// Closed set of all local builtin tool names that the runtime advertises as
+/// first-party capabilities (idea reference: OpenClaw #190863). Used by the
+/// runtime entry to decide when an unrecognized name is a host/custom tool
+/// (admitted via the `napaxi.tool.custom_host` fallback) versus an ambiguous
+/// request that looks like a local builtin but does not resolve to a stable
+/// capability id (rejected). Define as a `&str` slice so the compiler pins the
+/// set at build time even though resolution itself is a `match` expression.
+#[allow(dead_code)] // consumed by capability tests; kept public for cross-crate assertions.
+pub const LOCAL_TOOL_NAMES: &[&str] = &[
+    // ask_human / human loop
+    "ask_human",
+    // memory
+    "memory_read",
+    "memory_write",
+    "memory_append",
+    "memory_search",
+    "session_recall",
+    "profile_read",
+    "profile_write",
+    // file
+    "read_file",
+    "apply_patch",
+    "write_file",
+    "append_file",
+    "delete_file",
+    "list_files",
+    "search_files",
+    "import_file",
+    // web
+    "web_search",
+    "web_fetch",
+    // http
+    "http_request",
+    // shell
+    "shell",
+    "shell_remote",
+    // git (host-carried, but capability-scoped to napaxi.tool.git)
+    "git",
+    "git_status",
+    "git_diff",
+    "git_apply",
+    "git_clone",
+    "git_list_branches",
+    "git_switch_branch",
+    "git_list_remotes",
+    "git_set_remote",
+    "git_fetch",
+    // image
+    "image_analyze",
+    "image_generate",
+    // skill
+    "skill_list",
+    "skill_search",
+    "skill_install",
+    "skill_remove",
+    "skill_info",
+    "review_skill",
+    "skill_load",
+    // group
+    "send_to_group_member",
+    "list_group_members",
+    // mcp management (local builtin; mcp_<server>_<tool> canonical form)
+    "mcp_server_list",
+    "mcp_server_add",
+    "mcp_server_activate",
+    "mcp_server_deactivate",
+    "mcp_server_remove",
+    "mcp_tool_list",
+];
+
+/// Names that previously aliased to a real capability but were never the
+/// canonical subject. They are reserved as ambiguous capability-scoped
+/// request paths so a host-custom descriptor with one of these names does
+/// not silently pick up the aliased capability and is rejected at the
+/// runtime entry (used by `tools::loop::runtime::assert_unambiguous_local_capability`).
+pub const AMBIGUOUS_LOCAL_TOOL_ALIASES: &[&str] = &["remote_shell"];
+
 pub fn tool_capability_id(tool_name: &str) -> Option<String> {
     if crate::platform_capabilities::is_platform_tool(tool_name) {
         return Some(platform_tool_capability_id(tool_name));
@@ -149,15 +226,44 @@ pub fn tool_capability_id(tool_name: &str) -> Option<String> {
         | "git_switch_branch" | "git_list_remotes" | "git_set_remote" | "git_fetch" => {
             Some("napaxi.tool.git".to_string())
         }
-        "shell_remote" | "remote_shell" => Some("napaxi.tool.shell_remote".to_string()),
+        // Canonical remote-shell subject. The earlier `remote_shell` alias is
+        // intentionally NOT accepted (idea reference: OpenClaw #190863): an
+        // ambiguous capability-scoped request path must fail closed at the
+        // entry so a host-custom `remote_shell` tool does not silently pick up
+        // `napaxi.tool.shell_remote` admission. Callers must use
+        // `shell_remote`.
+        "shell_remote" => Some("napaxi.tool.shell_remote".to_string()),
         "image_analyze" => Some("napaxi.tool.image_analysis".to_string()),
         "image_generate" => Some("napaxi.tool.image_generation".to_string()),
         "skill_list" | "skill_search" | "skill_install" | "skill_remove" | "skill_info"
         | "review_skill" | "skill_load" => Some("napaxi.tool.skill".to_string()),
         "send_to_group_member" | "list_group_members" => Some("napaxi.tool.group".to_string()),
-        name if name.starts_with("mcp_") => Some("napaxi.mcp.runtime".to_string()),
+        // MCP runtime builtin tools follow `mcp_<server>_<tool>` (e.g.
+        // `mcp_server_list`, `mcp_tool_list`). A bare `mcp_` prefix with fewer
+        // than two non-empty segments after `mcp_` is ambiguous and falls into
+        // the `_ => None` branch, where the runtime entry rejects it as an
+        // ambiguous mcp capability scope instead of admitting it via the
+        // `napaxi.tool.custom_host` fallback.
+        name if is_mcp_management_name(name) => Some("napaxi.mcp.runtime".to_string()),
         _ => None,
     }
+}
+
+/// Decide whether `name` looks like a canonical MCP management tool name
+/// (`mcp_<server>_<tool>` with exactly three underscore-separated segments,
+/// each non-empty). Used by [`tool_capability_id`] to scope the `mcp_` prefix
+/// down to its canonical shape so a host-custom tool named e.g. `mcp_alone`
+/// no longer picks up the `napaxi.mcp.runtime` capability.
+pub(crate) fn is_mcp_management_name(name: &str) -> bool {
+    let mut segments = name.split('_');
+    let first = segments.next();
+    let second = segments.next();
+    let third = segments.next();
+    let has_more = segments.next().is_some();
+    matches!(first, Some("mcp"))
+        && second.is_some_and(|s| !s.is_empty())
+        && third.is_some_and(|s| !s.is_empty())
+        && !has_more
 }
 
 pub fn tool_capability_id_json(tool_name: &str) -> String {
