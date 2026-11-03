@@ -71,6 +71,101 @@ pub fn tool_descriptors(
         .collect()
 }
 
+/// A first-time MCP server startup failure surfaced for fail-fast. The lazy
+/// tool loader caches `tools_error` plus `tools_loaded = false` when a remote
+/// `tools/list` call fails; a turn that starts in that state must not silently
+/// proceed as if the tools were available (idea ref: OpenClaw #176154).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpStartupFailure {
+    pub server: String,
+    pub reason: String,
+}
+
+impl std::fmt::Display for McpStartupFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MCP server '{}' startup failed: {}. Retry: mcp_server_activate({}) or check OAuth/transport.",
+            self.server, self.reason, self.server
+        )
+    }
+}
+
+/// Returns the first active MCP server in `state` for `user_id` whose
+/// `tools/list` failed (`tools_loaded = false` AND `tools_error = Some(..)`).
+/// Used by callers that already have a freshly-loaded `McpState` (after the
+/// lazy-load has populated `tools_error` in memory) to fail-fast rather than
+/// silently proceeding with a partial tool inventory (idea ref: OpenClaw
+/// #176154).
+pub(super) fn startup_failure_in_state(
+    state: &super::types::McpState,
+    user_id: &str,
+) -> Option<McpStartupFailure> {
+    state
+        .servers
+        .iter()
+        .filter(|server| server.user_id == user_id && server.active)
+        .find_map(|server| {
+            if !server.tools_loaded {
+                server.tools_error.clone().map(|reason| McpStartupFailure {
+                    server: server.name.clone(),
+                    reason,
+                })
+            } else {
+                None
+            }
+        })
+}
+
+/// Returns the first active MCP server for `account_id` whose `tools/list`
+/// failed. Triggers the lazy tool load (which populates `tools_error` /
+/// `tools_loaded` in memory) before inspecting state, so a freshly-failed
+/// startup IS detected even though the cached `tools_error` is not part of
+/// the on-disk JSON shape (idea ref: OpenClaw #176154).
+pub fn mcp_startup_failure(files_dir: &str, account_id: &str) -> Option<McpStartupFailure> {
+    let user_id = default_user(account_id);
+    let mut state = load_state(files_dir);
+    ensure_active_tools_loaded_blocking(files_dir, &mut state, &user_id, "");
+    startup_failure_in_state(&state, &user_id)
+}
+
+/// Strict variant of [`tool_descriptors`] that returns `Err` when an active
+/// MCP server for `account_id` has failed its first `tools/list` and is in the
+/// `tools_loaded = false` + `tools_error = Some(..)` state in the freshly
+/// lazy-loaded state. Used by the turn preparation path to fail-fast.
+pub fn tool_descriptors_strict(
+    files_dir: &str,
+    account_id: &str,
+) -> Result<Vec<crate::tool_registry::ToolDescriptor>, McpStartupFailure> {
+    let user_id = default_user(account_id);
+    let mut state = load_state(files_dir);
+    ensure_active_tools_loaded_blocking(files_dir, &mut state, &user_id, "");
+    if let Some(failure) = startup_failure_in_state(&state, &user_id) {
+        return Err(failure);
+    }
+    Ok(state
+        .servers
+        .iter()
+        .filter(|server| server.user_id == user_id && server.active)
+        .flat_map(|server| {
+            server
+                .tools
+                .iter()
+                .map(|tool| crate::tool_registry::ToolDescriptor {
+                    name: prefixed_tool_name(&server.name, &tool.name),
+                    description: if tool.description.trim().is_empty() {
+                        format!("MCP tool '{}' from server '{}'", tool.name, server.name)
+                    } else {
+                        format!("{} (MCP server: {})", tool.description, server.name)
+                    },
+                    parameters: tool.input_schema.clone(),
+                    effect: crate::tool_registry::ToolEffect::External,
+                })
+        })
+        .filter(|descriptor| crate::capabilities::admit_tool_descriptor(&descriptor.name).is_ok())
+        .collect())
+}
+
 pub async fn call_tool(
     files_dir: &str,
     tool_name: &str,

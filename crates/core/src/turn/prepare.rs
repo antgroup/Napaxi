@@ -196,6 +196,22 @@ where
         &raw_history,
         &preflight_descriptors,
     );
+
+    // MCP startup fail-fast: the lazy tool loader caches `tools_error` plus
+    // `tools_loaded = false` when an active MCP server's first `tools/list`
+    // request fails. Surfacing that failure as a turn-stopping error prevents
+    // the agent from continuing with a partial tool inventory — a silent
+    // success the OpenClaw #176154 fix specifically shuts down. The user can
+    // recover by retrying activation through `mcp_server_activate`.
+    if let Some(failure) = crate::mcp::mcp_startup_failure(
+        files_dir,
+        &crate::runtime::session_account_id(session_key_json),
+    ) {
+        let message = failure.to_string();
+        hooks.stage_failed(context, TurnStage::BuildHistory, &message);
+        return Err(chat_error(message));
+    }
+
     let mut context_events = Vec::new();
     if !prompt_plan.active_skills.is_empty() {
         context_events.push(ChatEvent::SkillActivated {

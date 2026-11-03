@@ -76,12 +76,14 @@ fn hard_gate_reason_depth(command: &str, depth: usize) -> Option<&'static str> {
     if let Some(reason) = detect_shell_injection(command) {
         return Some(reason);
     }
-    // The real shell evaluates command/process substitutions; so must we. Recurse
-    // into each `$(…)` / `` `…` `` / `<(…)` body so e.g. `echo $(rm -rf /)` is a
-    // hard-gate hit even though `echo` itself is harmless.
+    // The real shell evaluates command/process substitutions and arithmetic
+    // expansions; so must we. Recurse into each `$(…)` / `` `…` `` / `<(…)` /
+    // `$((…))` / `$[…]` body so e.g. `echo $(rm -rf /)` is a hard-gate hit even
+    // though `echo` itself is harmless (idea ref: OpenClaw #187653).
     for token in shell_syntax_tokens(&strip_heredoc_bodies(command)) {
-        let ShellSyntaxToken::Substitution(body) = token else {
-            continue;
+        let body = match token {
+            ShellSyntaxToken::Substitution(body) | ShellSyntaxToken::Arithmetic(body) => body,
+            _ => continue,
         };
         // Fail CLOSED past the recursion bound: the shell still evaluates the
         // inner command, so silently allowing a too-deep nest would let
@@ -166,7 +168,9 @@ fn git_shell_intent_depth(command: &str, depth: usize) -> Option<GitShellIntent>
                 }
                 segment.clear();
             }
-            ShellSyntaxToken::Substitution(body) if depth < MAX_SUBSTITUTION_DEPTH => {
+            ShellSyntaxToken::Substitution(body) | ShellSyntaxToken::Arithmetic(body)
+                if depth < MAX_SUBSTITUTION_DEPTH =>
+            {
                 if let Some(intent) = git_shell_intent_depth(&body, depth + 1) {
                     return Some(intent);
                 }
@@ -174,6 +178,7 @@ fn git_shell_intent_depth(command: &str, depth: usize) -> Option<GitShellIntent>
             ShellSyntaxToken::RedirectIn
             | ShellSyntaxToken::HereDoc
             | ShellSyntaxToken::Substitution(_)
+            | ShellSyntaxToken::Arithmetic(_)
             | ShellSyntaxToken::Expansion => {}
         }
     }
@@ -305,7 +310,11 @@ fn blocked_shell_command_reason(command: &str) -> Option<&'static str> {
             }
             // A `<(…)` / `$(…)` argument feeds dynamic content to the segment's
             // command; the body itself is recursed separately in `hard_gate_reason`.
-            ShellSyntaxToken::Substitution(_) => segment_has_substitution = true,
+            // Arithmetic expansion (`$((…))` / `$[…]`) likewise re-evaluates in
+            // the shell (idea ref: OpenClaw #187653).
+            ShellSyntaxToken::Substitution(_) | ShellSyntaxToken::Arithmetic(_) => {
+                segment_has_substitution = true
+            }
             // A heredoc (`sh <<EOF … EOF`) feeds its body to the command as input
             // — for an interpreter, that body IS the program. The body is stripped
             // before tokenizing, so it can't be inspected; treat it like a pipe.
@@ -572,6 +581,7 @@ fn blocked_long_running_service_reason(command: &str) -> Option<&'static str> {
             ShellSyntaxToken::RedirectIn
             | ShellSyntaxToken::HereDoc
             | ShellSyntaxToken::Substitution(_)
+            | ShellSyntaxToken::Arithmetic(_)
             | ShellSyntaxToken::Expansion => {}
         }
     }

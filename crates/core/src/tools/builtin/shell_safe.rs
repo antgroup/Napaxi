@@ -27,11 +27,15 @@ pub(super) fn is_known_safe_command(command: &str) -> bool {
             // Redirections and heredocs can write files or feed data, so a
             // command using them is not "plain read-only".
             ShellSyntaxToken::RedirectIn | ShellSyntaxToken::HereDoc => return false,
-            // Command/process substitution and variable expansion are evaluated
-            // by the real shell — their effect can't be statically bounded, so a
-            // command containing them is never known-safe (e.g. `echo $(rm -rf /)`,
-            // `cat $FILE`). The hard gate inspects the substitution body separately.
-            ShellSyntaxToken::Substitution(_) | ShellSyntaxToken::Expansion => return false,
+            // Command/process substitution and arithmetic/variable expansion are
+            // evaluated by the real shell — their effect can't be statically
+            // bounded, so a command containing them is never known-safe (e.g.
+            // `echo $(rm -rf /)`, `cat $FILE`, `echo $[1+1]`). The hard gate
+            // inspects the substitution/arithmetic body separately (idea ref:
+            // OpenClaw #187653).
+            ShellSyntaxToken::Substitution(_)
+            | ShellSyntaxToken::Arithmetic(_)
+            | ShellSyntaxToken::Expansion => return false,
         }
     }
     segments.push(current);

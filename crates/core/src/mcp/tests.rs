@@ -1275,3 +1275,182 @@ fn load_state_normalizes_legacy_pre_populated_tools_as_loaded() {
         "loaded records with non-empty tools should be treated as already-loaded"
     );
 }
+
+// ===========================================================================
+// OpenClaw #176154 — MCP startup fail-fast
+// ===========================================================================
+// `mcp_startup_failure` surfaces an active MCP server whose first
+// `tools/list` failed (tools_loaded=false + tools_error=Some). The turn
+// prepare path uses this to abort the turn instead of silently proceeding
+// with a partial tool inventory (idea ref: OpenClaw #176154).
+
+#[test]
+fn startup_failure_in_state_classifies_active_failed_server_only() {
+    // Pure in-memory classifier check: an active server with `tools_loaded=false`
+    // and `tools_error=Some` is classified as a startup failure (idea ref:
+    // OpenClaw #176154). This is the helper `tool_descriptors_strict` and
+    // `mcp_startup_failure` consult after the lazy tool load populates
+    // `tools_error` in the freshly-loaded in-memory state.
+    use super::tools::startup_failure_in_state;
+
+    let make = |name: &str, active: bool, loaded: bool, err: Option<&str>| McpServer {
+        name: name.to_string(),
+        url: "https://example.com/mcp".to_string(),
+        transport: McpTransport::Http,
+        headers: HashMap::new(),
+        user_id: "user".to_string(),
+        active,
+        tools: Vec::new(),
+        tools_loaded: loaded,
+        tools_error: err.map(str::to_string),
+        last_tools_attempt_at: None,
+        session_id: None,
+        activation_error: None,
+        oauth: None,
+        oauth_pending: None,
+        oauth_tokens: None,
+    };
+
+    // Healthy (loaded) — never fires, even with a stale error entry still set.
+    let mut state = McpState::default();
+    state
+        .servers
+        .push(make("healthy", true, true, Some("stale")));
+    assert!(startup_failure_in_state(&state, "user").is_none());
+
+    // Pending (not yet attempted, no error) — never fires; lazy load decides.
+    let mut state = McpState::default();
+    state.servers.push(make("pending", true, false, None));
+    assert!(startup_failure_in_state(&state, "user").is_none());
+
+    // Inactive — even with a cached failure it must not fire (turn does not
+    // depend on this server's tools).
+    let mut state = McpState::default();
+    state
+        .servers
+        .push(make("off", false, false, Some("offline")));
+    assert!(startup_failure_in_state(&state, "user").is_none());
+
+    // Active + not loaded + error — fires.
+    let mut state = McpState::default();
+    state
+        .servers
+        .push(make("broken", true, false, Some("boom")));
+    let failure = startup_failure_in_state(&state, "user").expect("active+broken fires");
+    assert_eq!(failure.server, "broken");
+    assert!(
+        failure.to_string().contains("mcp_server_activate(broken)"),
+        "Display carries the retry hint: {}",
+        failure
+    );
+
+    // State scoped to another account_id — never fires for the wrong user.
+    let mut state = McpState::default();
+    state
+        .servers
+        .push(make("other-user-broken", true, false, Some("boom")));
+    state.servers[0].user_id = "another".to_string();
+    assert!(
+        startup_failure_in_state(&state, "user").is_none(),
+        "fail-fast must stay scoped to account_id"
+    );
+}
+
+#[test]
+fn mcp_startup_failure_helper_surfaces_failed_active_server() {
+    use super::tools::{McpStartupFailure, mcp_startup_failure, tool_descriptors_strict};
+
+    // End-to-end: an active MCP server whose `tools/list` cannot complete
+    // (port 1 - immediate connection refused on loopback, the same unreachable
+    // endpoint already used by `add_server_persists_with_activation_error_…`)
+    // is surfaced by the strict tool descriptor path as `Err`, rather than the
+    // pre-fix behavior of silently returning a partial / empty descriptor list.
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+    let mut state = McpState::default();
+    state.servers.push(McpServer {
+        name: "broken".to_string(),
+        url: "https://127.0.0.1:1/mcp".to_string(),
+        transport: McpTransport::Http,
+        headers: HashMap::new(),
+        user_id: "user".to_string(),
+        active: true,
+        tools: Vec::new(),
+        tools_loaded: false,
+        tools_error: None,
+        last_tools_attempt_at: None,
+        session_id: None,
+        activation_error: None,
+        oauth: None,
+        oauth_pending: None,
+        oauth_tokens: None,
+    });
+    assert!(save_state(&files_dir, &state));
+
+    let strict = tool_descriptors_strict(&files_dir, "user").expect_err(
+        "tool_descriptors_strict returns Err when the active server fails its tools/list",
+    );
+    assert_eq!(strict.server, "broken");
+    let display = format!("{}", strict);
+    assert!(
+        display.contains("mcp_server_activate(broken)"),
+        "Display hints retry activation: {display}"
+    );
+    assert_eq!(
+        strict,
+        McpStartupFailure {
+            server: "broken".to_string(),
+            // The recorded error comes from the lazy-load failure path; we
+            // only assert it is non-empty here because the exact wording can
+            // evolve with the transport layer.
+            reason: strict.reason.clone(),
+        }
+    );
+
+    // Standalone helper mirrors the strict path so the turn-prepare path can
+    // spot the same failure without re-running the descriptor aggregation.
+    let standalone = mcp_startup_failure(&files_dir, "user")
+        .expect("mcp_startup_failure mirrors the strict path");
+    assert_eq!(standalone.server, "broken");
+}
+
+#[tokio::test]
+async fn mcp_tools_and_handler_returns_no_tools_when_startup_failed() {
+    use crate::builtin_tools::mcp_tools_and_handler;
+
+    // The agent-facing builtin tool surface (`mcp_tools_and_handler`) wires the
+    // strict descriptor path; on a first-time startup failure it must yield NO
+    // MCP descriptors to the tool loop rather than silently proceeding with a
+    // partial inventory (idea ref: OpenClaw #176154).
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+    let mut state = McpState::default();
+    state.servers.push(McpServer {
+        name: "broken".to_string(),
+        url: "https://127.0.0.1:1/mcp".to_string(),
+        transport: McpTransport::Http,
+        headers: HashMap::new(),
+        user_id: "user".to_string(),
+        active: true,
+        tools: Vec::new(),
+        tools_loaded: false,
+        tools_error: None,
+        last_tools_attempt_at: None,
+        session_id: None,
+        activation_error: None,
+        oauth: None,
+        oauth_pending: None,
+        oauth_tokens: None,
+    });
+    assert!(save_state(&files_dir, &state));
+
+    let (tools, handler) = mcp_tools_and_handler(&files_dir, "user");
+    assert!(
+        tools.is_empty(),
+        "fail-fast path returns no MCP descriptors, got: {tools:?}"
+    );
+    assert!(
+        handler.is_some(),
+        "handler is still populated for tool-call dispatch"
+    );
+}
