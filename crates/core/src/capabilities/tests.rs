@@ -32,14 +32,14 @@ mod registry {
     use std::collections::HashMap;
 
     use super::super::{
-        CapabilityActivation, CapabilityKind, CapabilityProfile, CapabilityRisk,
-        CapabilitySelection, GENERAL_SCENARIO_ID, LlmProviderRoute, MOBILE_DEVELOPMENT_SCENARIO_ID,
-        admit_tool_descriptor_for_config, agent_engine_capability_id, definitions,
-        install_scenario_pack, platform_tool_capability_id, remove_scenario_pack,
-        require_agent_engine_enabled_for_config, resolve_llm_provider, resolve_scenario,
-        resolve_scenario_for_files_dir, scenario_packs, scenario_packs_for_files_dir,
-        scenario_status, scenario_status_for_files_dir, selection_from_llm_config, status,
-        tool_capability_id,
+        AMBIGUOUS_LOCAL_TOOL_ALIASES, CapabilityActivation, CapabilityKind, CapabilityProfile,
+        CapabilityRisk, CapabilitySelection, GENERAL_SCENARIO_ID, LOCAL_TOOL_NAMES,
+        LlmProviderRoute, MOBILE_DEVELOPMENT_SCENARIO_ID, admit_tool_descriptor_for_config,
+        agent_engine_capability_id, definitions, install_scenario_pack,
+        platform_tool_capability_id, remove_scenario_pack, require_agent_engine_enabled_for_config,
+        resolve_llm_provider, resolve_scenario, resolve_scenario_for_files_dir, scenario_packs,
+        scenario_packs_for_files_dir, scenario_status, scenario_status_for_files_dir,
+        selection_from_llm_config, status, tool_capability_id,
     };
     use super::validate_definition_ids;
     use crate::types::PlatformLlmConfig;
@@ -426,6 +426,85 @@ mod registry {
             tool_capability_id("shell_remote").as_deref(),
             Some("napaxi.tool.shell_remote")
         );
+    }
+
+    /// The legacy `remote_shell` alias for `napaxi.tool.shell_remote` is no
+    /// longer an accepted capability-scoped request path (idea reference:
+    /// OpenClaw #190863). Resolution must return `None` so the runtime entry
+    /// rejects it instead of silently admitting via the `custom_host`
+    /// fallback. The canonical subject `shell_remote` stays mapped.
+    #[test]
+    fn tool_capability_id_rejects_remote_shell_alias() {
+        assert_eq!(
+            tool_capability_id("shell_remote").as_deref(),
+            Some("napaxi.tool.shell_remote")
+        );
+        assert_eq!(tool_capability_id("remote_shell"), None);
+    }
+
+    /// The `mcp_` prefix is now scoped to the canonical `mcp_<server>_<tool>`
+    /// shape (idea reference: OpenClaw #190863). A bare `mcp_` prefix, a single
+    /// segment after `mcp_`, or trailing empty segments fall back to `None`
+    /// (ambiguous) so the runtime entry rejects them; canonical management
+    /// tools keep mapping to `napaxi.mcp.runtime`.
+    #[test]
+    fn tool_capability_id_rejects_bare_mcp_prefix() {
+        // Canonical management tools still map.
+        assert_eq!(
+            tool_capability_id("mcp_server_list").as_deref(),
+            Some("napaxi.mcp.runtime")
+        );
+        assert_eq!(
+            tool_capability_id("mcp_tool_list").as_deref(),
+            Some("napaxi.mcp.runtime")
+        );
+        // Bare and ambiguous mcp_ prefixes are no longer auto-mapped.
+        assert_eq!(tool_capability_id("mcp"), None);
+        assert_eq!(tool_capability_id("mcp_"), None);
+        assert_eq!(tool_capability_id("mcp_alone"), None);
+        assert_eq!(tool_capability_id("mcp_a_b_c"), None);
+    }
+
+    /// `LOCAL_TOOL_NAMES` is the closed set of names the runtime treats as
+    /// local builtins. Coverage is checked against the canonical descriptor
+    /// returned by `tool_registry::canonical_descriptor_for` so the registry
+    /// and the capability registry stay in sync.
+    #[test]
+    fn local_tool_names_is_closed_consistent_with_canonical_resolver() {
+        // All known canonical builtin descriptors must resolve via
+        // `tool_capability_id` (otherwise they would fall back to custom_host
+        // and the runtime entry would reject them as ambiguous).
+        const EXPECTED_CANONICAL: &[&str] = &[
+            "shell",
+            "ask_human",
+            "web_search",
+            "web_fetch",
+            "http_request",
+        ];
+        for &name in EXPECTED_CANONICAL {
+            assert!(
+                tool_capability_id(name).is_some(),
+                "canonical builtin '{name}' should resolve to a capability id"
+            );
+            assert!(
+                LOCAL_TOOL_NAMES.contains(&name),
+                "local tool name list is missing canonical builtin '{name}'"
+            );
+        }
+        // `remote_shell` must NOT appear in LOCAL_TOOL_NAMES — it is the
+        // ambiguous alias, not a canonical subject.
+        assert!(!LOCAL_TOOL_NAMES.contains(&"remote_shell"));
+        assert!(AMBIGUOUS_LOCAL_TOOL_ALIASES.contains(&"remote_shell"));
+    }
+
+    #[test]
+    fn local_tool_names_provides_no_unknown_entries() {
+        // Spot check: every literal in LOCAL_TOOL_NAMES is non-empty and unique.
+        let mut seen = std::collections::HashSet::new();
+        for &name in LOCAL_TOOL_NAMES {
+            assert!(!name.is_empty(), "LOCAL_TOOL_NAMES has an empty entry");
+            assert!(seen.insert(name), "duplicate local tool name: {name}");
+        }
     }
 
     #[test]

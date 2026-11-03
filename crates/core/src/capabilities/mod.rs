@@ -37,11 +37,12 @@ pub use definitions::definitions;
 pub(crate) use definitions::platform_tool_capability_id;
 #[allow(unused_imports)]
 pub use resolve::{
-    agent_engine_capability_id, agent_engine_capability_id_json, definitions_json,
-    normalize_agent_engine_id, profile_from_json, provider_capability_id,
-    provider_capability_id_json, require_agent_engine_enabled_for_config, resolve_llm_provider,
-    resolve_llm_provider_for_config, selection_from_json, selection_from_llm_config, status,
-    status_json, tool_capability_id, tool_capability_id_json,
+    AMBIGUOUS_LOCAL_TOOL_ALIASES, LOCAL_TOOL_NAMES, agent_engine_capability_id,
+    agent_engine_capability_id_json, definitions_json, normalize_agent_engine_id,
+    profile_from_json, provider_capability_id, provider_capability_id_json,
+    require_agent_engine_enabled_for_config, resolve_llm_provider, resolve_llm_provider_for_config,
+    selection_from_json, selection_from_llm_config, status, status_json, tool_capability_id,
+    tool_capability_id_json,
 };
 pub use scenarios::{
     GENERAL_SCENARIO_ID, MOBILE_DEVELOPMENT_SCENARIO_ID, install_scenario_pack,

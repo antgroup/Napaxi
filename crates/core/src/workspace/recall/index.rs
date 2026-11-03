@@ -238,6 +238,14 @@ async fn search_docs_async(
 /// `search_memory_results`) skip the no-op DDL pass. On success the cache is
 /// marked so future callers in this process also skip. The cache is
 /// invalidated by `reset_db_file` / `rebuild_index_async`.
+///
+/// TODO(DIMA-2026110200120277702): this short-circuit only mutes repeated
+/// read-path DDL within a single process. The next step — split schema
+/// readiness from schema prepare so a read never writes DDL — is tracked in
+/// `crates/core/src/workspace/recall/sql.rs`'s "Known implicit-repair surface"
+/// doc and the plan §2.2. Leave the per-source `ensure_schema(&conn).await`
+/// call sites below as-is until that split lands: changing them in isolation
+/// risks breaking cold-start behavior on existing files_dir contents.
 async fn ensure_schema_cached(files_dir: &str, conn: &libsql::Connection) -> Result<(), String> {
     if super::schema_is_ensured(files_dir) {
         return Ok(());

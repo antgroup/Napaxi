@@ -1,5 +1,7 @@
 //! Schema-driven argument preparation and validation.
 
+use std::sync::OnceLock;
+
 use serde_json::Value;
 
 use super::types::ToolDescriptor;
@@ -9,7 +11,117 @@ pub fn prepare_tool_arguments(descriptor: &ToolDescriptor, params: Value) -> Res
     let params = normalize_tool_argument_aliases(descriptor, params);
     let prepared = coerce_value_for_schema(params, &schema);
     validate_value_for_schema(&prepared, &schema, "$")?;
+    // Canonical schema second pass (idea reference: OpenClaw #185581): even if
+    // the descriptor injected for this turn drifts from the compile-time
+    // builtin contract (loosened `additionalProperties`, missing required
+    // fields, etc.), the canonical schema stays authoritative for every local
+    // builtin tool name. The pass is read-only against the canonical
+    // `parameters` schema — it never replaces the descriptor the caller chose.
+    if let Some(canonical) = canonical_descriptor_for(&descriptor.name) {
+        let canonical_schema = normalize_parameters_schema(&canonical.parameters)?;
+        validate_canonical_schema(&prepared, &canonical_schema, &descriptor.name, "$")?;
+    }
     Ok(prepared)
+}
+
+/// Look up the compile-time canonical [`ToolDescriptor`] for a local builtin
+/// tool name. Returns `None` for host-custom tools, MCP server tools (which
+/// are named `<server>_<tool>` and never a local builtin), and any name the
+/// runtime does not register as a local builtin — those are not subject to the
+/// canonical second pass and keep validating against their own descriptor.
+pub fn canonical_descriptor_for(name: &str) -> Option<&'static ToolDescriptor> {
+    static CANONICAL: OnceLock<Vec<ToolDescriptor>> = OnceLock::new();
+    let descriptors = CANONICAL.get_or_init(canonical_descriptors);
+    descriptors
+        .iter()
+        .find(|descriptor| descriptor.name == name)
+}
+
+fn canonical_descriptors() -> Vec<ToolDescriptor> {
+    let mut descriptors = Vec::new();
+    descriptors.push(crate::builtin_tools::shell_tool_descriptor());
+    descriptors.extend(crate::builtin_tools::mcp_management_descriptors());
+    descriptors.extend(crate::skill_tools::descriptors());
+    descriptors.extend(crate::memory_tools::descriptors());
+    descriptors.extend(crate::file_tools::descriptors());
+    descriptors.push(crate::web_search_tool::descriptor());
+    descriptors.push(crate::web_fetch_tool::descriptor());
+    descriptors.push(crate::http_tool::descriptor());
+    descriptors.push(crate::human_loop::descriptor());
+    descriptors
+}
+
+/// Strict validation against a canonical builtin schema. Unlike
+/// [`validate_value_for_schema`], the canonical pass treats an object node
+/// that does not explicitly allow additional properties as
+/// `additionalProperties: false` — local builtin tools never silently accept
+/// unknown fields even if a host-injected descriptor drifted that border.
+fn validate_canonical_schema(
+    value: &Value,
+    schema: &Value,
+    tool_name: &str,
+    path: &str,
+) -> Result<(), String> {
+    if !matches_schema_type(value, schema) {
+        return Err(format!(
+            "tool '{tool_name}' input does not match canonical schema: {path} expected {}, got {}",
+            expected_types(schema).join("|"),
+            value_type(value)
+        ));
+    }
+
+    if let Some(enum_values) = schema.get("enum").and_then(Value::as_array)
+        && !enum_values.iter().any(|allowed| allowed == value)
+    {
+        return Err(format!(
+            "tool '{tool_name}' input does not match canonical schema: {path} must be one of {}",
+            Value::Array(enum_values.clone())
+        ));
+    }
+
+    if let Some(obj) = value.as_object() {
+        let properties = schema.get("properties").and_then(Value::as_object);
+        for required in required_set(schema) {
+            if !obj.contains_key(required.as_str()) {
+                return Err(format!(
+                    "tool '{tool_name}' input does not match canonical schema: {path}.{required} is required"
+                ));
+            }
+        }
+        for (key, child) in obj {
+            let child_path = format!("{path}.{key}");
+            if let Some(child_schema) = properties.and_then(|props| props.get(key)) {
+                validate_canonical_schema(child, child_schema, tool_name, &child_path)?;
+            } else {
+                match schema.get("additionalProperties") {
+                    Some(Value::Bool(true)) => {}
+                    Some(additional_schema) if additional_schema.is_object() => {
+                        validate_canonical_schema(
+                            child,
+                            additional_schema,
+                            tool_name,
+                            &child_path,
+                        )?;
+                    }
+                    _ => {
+                        return Err(format!(
+                            "tool '{tool_name}' input does not match canonical schema: {child_path} is not allowed"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(arr) = value.as_array()
+        && let Some(item_schema) = schema.get("items")
+    {
+        for (idx, child) in arr.iter().enumerate() {
+            validate_canonical_schema(child, item_schema, tool_name, &format!("{path}[{idx}]"))?;
+        }
+    }
+
+    Ok(())
 }
 
 fn normalize_tool_argument_aliases(descriptor: &ToolDescriptor, params: Value) -> Value {

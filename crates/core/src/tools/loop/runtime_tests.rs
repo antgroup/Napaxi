@@ -499,3 +499,76 @@ fn shell_installing_git_is_rejected_in_mobile_development_scenario() {
             .contains("Installing Git through shell")
     );
 }
+
+// ---------------------------------------------------------------------------
+// Ambiguous capability-scoped request path rejection
+// (idea reference: OpenClaw #190863)
+// ---------------------------------------------------------------------------
+
+/// A host-custom tool named `remote_shell` (the old `napaxi.tool.shell_remote`
+/// alias) must be rejected at the runtime entry even when `custom_host` is
+/// enabled — it is an ambiguous request path, not a custom tool.
+#[test]
+fn prepare_tool_invocation_rejects_remote_shell_alias() {
+    // Custom-host config to ensure the admit gate itself allows the subject.
+    let mut config = PlatformLlmConfig::default();
+    config.capability_profile = crate::capabilities::CapabilityProfile {
+        supported_capabilities: vec!["napaxi.tool.custom_host".to_string()],
+        ..crate::capabilities::CapabilityProfile::default()
+    };
+    config.capability_selection = crate::capabilities::CapabilitySelection {
+        enabled_capabilities: vec!["napaxi.tool.custom_host".to_string()],
+        ..crate::capabilities::CapabilitySelection::default()
+    };
+
+    let descriptors = [ToolDescriptor {
+        name: "remote_shell".to_string(),
+        description: "host-supplied alias".to_string(),
+        parameters: serde_json::json!({"type": "object"}),
+        effect: ToolEffect::Read,
+    }];
+
+    let err = prepare_tool_invocation(&config, &descriptors, "remote_shell", r#"{}"#).unwrap_err();
+    let output = err.into_model_output();
+    assert!(
+        output.contains("remote_shell"),
+        "expected remote_shell in rejection, got: {output}"
+    );
+    assert!(
+        output.contains("ambiguous"),
+        "expected 'ambiguous' in rejection, got: {output}"
+    );
+}
+
+/// A host-custom tool whose name starts with `mcp_` but does not match the
+/// canonical `mcp_<server>_<tool>` shape is rejected as an ambiguous mcp
+/// capability scope.
+#[test]
+fn prepare_tool_invocation_rejects_bare_mcp_prefix_custom_tool() {
+    let mut config = PlatformLlmConfig::default();
+    config.capability_profile = crate::capabilities::CapabilityProfile {
+        supported_capabilities: vec!["napaxi.tool.custom_host".to_string()],
+        ..crate::capabilities::CapabilityProfile::default()
+    };
+    config.capability_selection = crate::capabilities::CapabilitySelection {
+        enabled_capabilities: vec!["napaxi.tool.custom_host".to_string()],
+        ..crate::capabilities::CapabilitySelection::default()
+    };
+    let descriptors = [ToolDescriptor {
+        name: "mcp_alone".to_string(),
+        description: "host-supplied ambiguous mcp name".to_string(),
+        parameters: serde_json::json!({"type": "object"}),
+        effect: ToolEffect::Read,
+    }];
+
+    let err = prepare_tool_invocation(&config, &descriptors, "mcp_alone", r#"{}"#).unwrap_err();
+    let output = err.into_model_output();
+    assert!(
+        output.contains("mcp_alone"),
+        "expected mcp_alone in rejection, got: {output}"
+    );
+    assert!(
+        output.contains("ambiguous"),
+        "expected 'ambiguous' in rejection, got: {output}"
+    );
+}

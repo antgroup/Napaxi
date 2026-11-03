@@ -86,7 +86,7 @@ fn is_mcp_management_tool(name: &str) -> bool {
     )
 }
 
-fn mcp_management_descriptors() -> Vec<ToolDescriptor> {
+pub(crate) fn mcp_management_descriptors() -> Vec<ToolDescriptor> {
     vec![
         ToolDescriptor {
             name: "mcp_server_list".to_string(),

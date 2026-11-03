@@ -22,6 +22,14 @@ mod shell_util;
 mod tests;
 
 pub(crate) use shell_policy::{GitShellIntent, git_shell_intent};
+// Re-export the canonical descriptor builders for the local builtin tools so
+// the registry's canonical schema check (`tools::registry::prepare`) can bind
+// to the same compile-time descriptor set that the runtime advertises. These
+// are read-only `ToolDescriptor` views; the registry never instantiates a
+// runtime tool from them — it only borrows their `parameters` schema as the
+// authoritative contract a host-injected descriptor must not loosen.
+pub(crate) use mcp::mcp_management_descriptors;
+pub(crate) use shell::shell_tool_descriptor;
 
 use crate::tool_loop::InternalToolHandler;
 use crate::tool_registry::{ToolDescriptor, ToolRequestBridge};

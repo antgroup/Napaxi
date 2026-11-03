@@ -177,6 +177,17 @@ pub async fn call_tool(
     // unresolved capability ids fall back to the subject name.
     crate::capabilities::admit_tool_invocation(tool_name)?;
 
+    // Reject names that shadow a local builtin: MCP server tools are named
+    // `<server>_<tool>`, so a server/tool pair that produces a local builtin
+    // name would otherwise bypass the canonical schema second pass that
+    // `tools::loop::runtime::prepare_tool_invocation` enforces for builtins.
+    // Idea reference: OpenClaw #190863 ambiguous capability-scoped request path.
+    if crate::tool_registry::canonical_descriptor_for(tool_name).is_some() {
+        return Err(format!(
+            "MCP tool '{tool_name}' shadows a local builtin tool name and cannot be served by an MCP server"
+        ));
+    }
+
     let user_id = default_user(user_id);
     let mut state = load_state(files_dir);
     // Resolve the owning server by name prefix first; the lazy-load then fills

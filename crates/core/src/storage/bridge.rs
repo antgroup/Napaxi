@@ -7,7 +7,7 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-use crate::error::StorageError;
+use crate::error::{StorageError, WorkspaceNotReadyKind};
 
 pub(super) const ROOTFS_PREFIXES: &[&str] = &[
     "/tmp", "/root", "/home", "/var", "/usr", "/opt", "/etc", "/srv", "/run",
@@ -36,6 +36,14 @@ impl FileBridge {
         }
     }
 
+    /// Backward-compatible explicit namespace initialization. The first caller
+    /// after engine construction (`init_file_bridge*` / scoped init) uses this
+    /// to create the `linux-env/workspace` and (if so configured) supporting
+    /// directories on a cold start. Runtime paths must use
+    /// [`Self::check_workspace_readiness`] instead — that path is read-only and
+    /// never creates a directory, so the bridge cannot silently "repair" a
+    /// namespace that should already be ready (idea reference: OpenClaw #190832
+    /// strict readiness, no implicit repair).
     pub fn ensure_workspace(&self) -> bool {
         match self.ensure_workspace_inner() {
             Ok(()) => true,
@@ -54,6 +62,85 @@ impl FileBridge {
     pub(crate) fn ensure_workspace_inner(&self) -> Result<(), StorageError> {
         fs::create_dir_all(&self.workspace_dir)?;
         Ok(())
+    }
+
+    /// Read-only namespace readiness gate. Checks that `workspace_dir`,
+    /// `rootfs_dir`, and `skills_dir` exist, are directories, and are writable,
+    /// without creating any directory or file. Returns a structured
+    /// [`StorageError::WorkspaceNotReady`] on the first failure so the caller
+    /// can distinguish a readiness miss (do not auto-repair) from a runtime
+    /// IO error.
+    ///
+    /// Idea reference: OpenClaw #190832 — "准备 namespace 仅校验 readiness、
+    /// 禁止隐式修复". This method is the readiness half; the prepare/repair
+    /// half stays in [`Self::ensure_workspace`].
+    pub fn check_workspace_readiness(&self) -> Result<(), StorageError> {
+        self.check_namespace_ready(&self.workspace_dir)?;
+        self.check_namespace_ready(&self.rootfs_dir)?;
+        self.check_namespace_ready(&self.skills_dir)?;
+        Ok(())
+    }
+
+    /// Convenience wrapper around [`Self::check_workspace_readiness`] for
+    /// call sites that want a boolean and a structured log line — same
+    /// semantics as [`Self::ensure_workspace`] but read-only.
+    pub fn check_workspace_ready_or_err(&self) -> bool {
+        match self.check_workspace_readiness() {
+            Ok(()) => true,
+            Err(error) => {
+                tracing::warn!(
+                    error = %error,
+                    code = error.code(),
+                    "workspace readiness check failed"
+                );
+                false
+            }
+        }
+    }
+
+    fn check_namespace_ready(&self, path: &Path) -> Result<(), StorageError> {
+        match fs::metadata(path) {
+            Ok(metadata) => {
+                if !metadata.is_dir() {
+                    return Err(StorageError::WorkspaceNotReady {
+                        kind: WorkspaceNotReadyKind::NotADirectory,
+                        path: path.display().to_string(),
+                        reason: "path exists but is not a directory".to_string(),
+                    });
+                }
+                let probe = path.join(".napaxi_readiness_probe");
+                match fs::File::create(&probe) {
+                    Ok(_) => {
+                        let _ = fs::remove_file(&probe);
+                        Ok(())
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                        Err(StorageError::WorkspaceNotReady {
+                            kind: WorkspaceNotReadyKind::PermissionDenied,
+                            path: path.display().to_string(),
+                            reason: error.to_string(),
+                        })
+                    }
+                    Err(error) => Err(StorageError::WorkspaceNotReady {
+                        kind: WorkspaceNotReadyKind::PermissionDenied,
+                        path: path.display().to_string(),
+                        reason: format!("write probe failed: {error}"),
+                    }),
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Err(StorageError::WorkspaceNotReady {
+                    kind: WorkspaceNotReadyKind::NotFound,
+                    path: path.display().to_string(),
+                    reason: "namespace directory is missing".to_string(),
+                })
+            }
+            Err(error) => Err(StorageError::WorkspaceNotReady {
+                kind: WorkspaceNotReadyKind::NotFound,
+                path: path.display().to_string(),
+                reason: error.to_string(),
+            }),
+        }
     }
 
     pub fn workspace_dir(&self) -> &Path {

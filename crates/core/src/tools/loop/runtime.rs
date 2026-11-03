@@ -83,6 +83,8 @@ pub(super) fn prepare_tool_invocation<'a>(
     )
     .map_err(ToolRuntimePreparationError::ModelVisible)?;
 
+    assert_unambiguous_local_capability(name)?;
+
     check_tool_rate_limit(name).map_err(ToolRuntimePreparationError::ModelVisible)?;
 
     let params = prepare_tool_arguments(descriptor, params).map_err(|error| {
@@ -109,6 +111,36 @@ struct ToolIntentRoute {
     source_tool: &'static str,
     target_tool: &'static str,
     params: serde_json::Value,
+}
+
+/// Reject names whose capability scope is ambiguous and must not silently
+/// fall back to the `napaxi.tool.custom_host` admission path (idea reference:
+/// OpenClaw #190863). The denylist covers:
+///
+/// - [`AMBIGUOUS_LOCAL_TOOL_ALIASES`] — names that previously aliased to a
+///   real capability (e.g. `remote_shell`) but were never the canonical
+///   subject, so a host-custom descriptor registered with that name must not
+///   pick up the aliased capability.
+/// - Names that begin with the MCP management prefix `mcp_` but do not match
+///   the canonical `mcp_<server>_<tool>` shape (e.g. `mcp_alone` or a bare
+///   `mcp_`). Those used to match `napaxi.mcp.runtime` purely on the prefix.
+///
+/// Other unrecognized names keep the existing behavior: they fall back to the
+/// `napaxi.tool.custom_host` capability when the host has enabled it.
+fn assert_unambiguous_local_capability(name: &str) -> Result<(), ToolRuntimePreparationError> {
+    if crate::capabilities::AMBIGUOUS_LOCAL_TOOL_ALIASES.contains(&name) {
+        return Err(ToolRuntimePreparationError::ModelVisible(format!(
+            "tool '{name}' has ambiguous capability scope; rejected"
+        )));
+    }
+    if name.starts_with("mcp_")
+        && crate::capabilities::tool_capability_id(name).is_none_or(|id| id != "napaxi.mcp.runtime")
+    {
+        return Err(ToolRuntimePreparationError::ModelVisible(format!(
+            "tool '{name}' has ambiguous mcp capability scope; rejected"
+        )));
+    }
+    Ok(())
 }
 
 fn prepare_routed_tool_invocation<'a, F>(
