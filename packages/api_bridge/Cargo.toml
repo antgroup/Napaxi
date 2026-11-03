@@ -38,7 +38,7 @@ workspace = true
 napaxi_core = { package = "napaxi-core", path = "../../crates/core", default-features = false, features = ["libsql", "mobile-api"] }
 
 # flutter_rust_bridge FFI 绑定
-flutter_rust_bridge = "=2.12.0"
+flutter_rust_bridge = "=2.13.0"
 
 # 序列化 (ChatEvent → JSON → Dart)
 serde = { version = "1", features = ["derive"] }
