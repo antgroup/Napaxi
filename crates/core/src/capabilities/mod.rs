@@ -32,9 +32,12 @@ pub use types::{
     ScenarioPackStatus,
 };
 
-pub use definitions::definitions;
 #[cfg(test)]
 pub(crate) use definitions::platform_tool_capability_id;
+#[allow(unused_imports)]
+pub use definitions::{
+    ExecApprovalMode, ExecPolicyOverride, ExecSecurityLevel, ExecSecurityPolicy, definitions,
+};
 #[allow(unused_imports)]
 pub use resolve::{
     AMBIGUOUS_LOCAL_TOOL_ALIASES, LOCAL_TOOL_NAMES, agent_engine_capability_id,
@@ -63,8 +66,10 @@ pub(crate) use admission::{
 };
 #[cfg(test)]
 pub(crate) use decisions::ADMISSION_DECISION_BUFFER_CAP;
+#[allow(unused_imports)]
 pub use decisions::{
-    AdmissionDecisionRecord, clear_admission_decisions, recent_admission_decisions,
+    AdmissionDecisionRecord, apply_exec_policy_layer, clear_admission_decisions,
+    recent_admission_decisions,
 };
 pub(crate) use decisions::{AdmissionSink, new_admission_sink, sink_snapshot, with_admission_sink};
 pub use hooks::{CapabilityPolicyHook, PolicyHookGuard, register_policy_hook};

@@ -37,9 +37,10 @@ impl AfsAccessor for LocalAfsAccessor {
                 .metadata()
                 .await
                 .map_err(|e| AfsError::Other(e.to_string()))?;
-            out.push(AfsFileMeta::new(
+            out.push(AfsFileMeta::with_nlink(
                 entry.path(),
                 file_type_from_metadata(&metadata),
+                nlink_of(&metadata),
             ));
         }
         Ok(out)
@@ -53,9 +54,10 @@ impl AfsAccessor for LocalAfsAccessor {
                 AfsError::Other(e.to_string())
             }
         })?;
-        Ok(AfsFileMeta::new(
+        Ok(AfsFileMeta::with_nlink(
             path.to_path_buf(),
             file_type_from_metadata(&metadata),
+            nlink_of(&metadata),
         ))
     }
 
@@ -105,6 +107,21 @@ fn file_type_from_metadata(metadata: &std::fs::Metadata) -> AfsFileType {
     } else {
         AfsFileType::Other
     }
+}
+
+/// Cross-platform hardlink count. The cross-platform `std::fs::Metadata::nlink`
+/// accessor is not yet stabilized on this toolchain, so we use the Unix
+/// `MetadataExt::nlink` and fall back to `1` elsewhere. The companion reader
+/// treats `nlink > 1` conservatively regardless of platform.
+#[cfg(unix)]
+fn nlink_of(metadata: &std::fs::Metadata) -> u32 {
+    use std::os::unix::fs::MetadataExt;
+    metadata.nlink() as u32
+}
+
+#[cfg(not(unix))]
+fn nlink_of(_metadata: &std::fs::Metadata) -> u32 {
+    1
 }
 
 fn ensure_afs_provider() {

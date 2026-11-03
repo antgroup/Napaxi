@@ -153,3 +153,70 @@ pub fn clear_admission_decisions() {
         buf.clear();
     }
 }
+
+// ── Exec policy layering ─────────────────────────────────────────────────
+//
+// Re-implemented from OpenClaw (MIT) design notes (workitem #188833). The
+// merge semantics mirror `applyExecPolicyLayer`: an agent-level partial
+// override layered on top of a global exec/security/approval policy. No
+// OpenClaw source code is ported. See `THIRD-PARTY-LICENSES.md` and
+// [`super::definitions::ExecSecurityPolicy`].
+
+use super::definitions::{ExecPolicyOverride, ExecSecurityPolicy};
+
+impl ExecSecurityPolicy {
+    /// True when no field is explicitly set. Useful for tests that want to
+    /// express an agent override touching nothing, and for callers that
+    /// want to short-circuit a no-op layering pass.
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        self.allowed_tools.is_none()
+            && self.denied_tools.is_none()
+            && self.approval_mode.is_none()
+            && self.security_level.is_none()
+    }
+}
+
+/// Layer an agent-level partial override on top of a global
+/// exec/security/approval policy.
+///
+/// Merge semantics (per workitem #188833):
+/// - For each field, an explicit agent value wins; a missing (`None`) agent
+///   field falls back to the global baseline.
+/// - `bypass_strings` is stripped from **both** sources, so the merged
+///   decision never carries an escape path regardless of where it was
+///   injected.
+///
+/// The merged record is logged at `tracing::debug!` rather than routed
+/// through [`record_admission_decision`]; the latter is the admission gate
+/// trace channel and must not be polluted by policy-layer merging.
+#[allow(dead_code)]
+pub fn apply_exec_policy_layer(
+    global: &ExecSecurityPolicy,
+    agent: &ExecPolicyOverride,
+) -> ExecSecurityPolicy {
+    let merged = ExecSecurityPolicy {
+        allowed_tools: agent
+            .allowed_tools
+            .clone()
+            .or_else(|| global.allowed_tools.clone()),
+        denied_tools: agent
+            .denied_tools
+            .clone()
+            .or_else(|| global.denied_tools.clone()),
+        approval_mode: agent.approval_mode.or(global.approval_mode),
+        security_level: agent.security_level.or(global.security_level),
+        // Bypass strings are never honored — strip them from both sources
+        // so the merged record is provably escape-free at the call site.
+        bypass_strings: None,
+    };
+    tracing::debug!(
+        agent_id = %agent.agent_id,
+        allowed_tools = ?merged.allowed_tools,
+        denied_tools = ?merged.denied_tools,
+        approval_mode = ?merged.approval_mode,
+        security_level = ?merged.security_level,
+        "exec policy layered: agent override merged on top of global baseline"
+    );
+    merged
+}

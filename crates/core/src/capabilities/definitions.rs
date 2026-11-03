@@ -535,3 +535,80 @@ fn empty_schema() -> Value {
         "properties": {}
     })
 }
+
+// ── Exec policy layering ─────────────────────────────────────────────────
+//
+// Re-implemented from OpenClaw (MIT) design notes (workitem #188833). An
+// agent-level partial override is merged on top of a global
+// exec/security/approval policy: missing fields fall back to the global
+// baseline, explicit agent fields win, and `bypass_strings` are stripped
+// from both sources. No OpenClaw source code is ported; the Napaxi
+// implementation rewrites the boundary rules from scratch under
+// GPL-3.0-or-later. See `THIRD-PARTY-LICENSES.md` and
+// [`super::decisions::apply_exec_policy_layer`].
+
+use serde::{Deserialize, Serialize};
+
+/// Approval posture for an exec policy. Copied from the OpenClaw shape but
+/// written from scratch; no upstream symbols are re-exported.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ExecApprovalMode {
+    /// Each invocation prompts the user before running.
+    #[default]
+    Prompt,
+    /// Per-session approvals are cached and replayed until revoked.
+    SessionCached,
+    /// In-scope tools are auto-approved without prompting.
+    Auto,
+}
+
+/// Security posture of an exec policy baseline. Higher permissiveness does
+/// not bypass the admission hook chain; it only relaxes the policy layer
+/// applied on top of it.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ExecSecurityLevel {
+    /// Deny-by-default; prompt on edge cases.
+    #[default]
+    Strict,
+    /// Allow read-only; prompt on mutations.
+    Standard,
+    /// Allow in-scope mutations without prompting.
+    Permissive,
+}
+
+/// Global exec/security/approval policy baseline. Every field is optional so
+/// the same struct can express a sparse agent-level partial override (`None`
+/// means "inherit the global baseline"). `bypass_strings` exists purely so
+/// [`super::decisions::apply_exec_policy_layer`] can prove it was stripped —
+/// it is never honored at runtime and is `#[serde(skip_serializing)]` to
+/// prevent accidental exfiltration over the bridge.
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ExecSecurityPolicy {
+    pub allowed_tools: Option<Vec<String>>,
+    pub denied_tools: Option<Vec<String>>,
+    pub approval_mode: Option<ExecApprovalMode>,
+    pub security_level: Option<ExecSecurityLevel>,
+    /// Escape paths a hostile override might inject to soften the policy.
+    /// Always stripped by `apply_exec_policy_layer` regardless of source.
+    #[serde(skip_serializing)]
+    pub bypass_strings: Option<Vec<String>>,
+}
+
+/// Agent-level partial override on top of the global exec policy.
+/// [`super::decisions::apply_exec_policy_layer`] merges each field against
+/// [`ExecSecurityPolicy`]: `None` fields fall back to the global baseline,
+/// explicit fields win, and `bypass_strings` is stripped from both sources.
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ExecPolicyOverride {
+    pub agent_id: String,
+    pub allowed_tools: Option<Vec<String>>,
+    pub denied_tools: Option<Vec<String>>,
+    pub approval_mode: Option<ExecApprovalMode>,
+    pub security_level: Option<ExecSecurityLevel>,
+    #[serde(skip_serializing)]
+    pub bypass_strings: Option<Vec<String>>,
+}

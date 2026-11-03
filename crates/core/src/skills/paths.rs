@@ -222,6 +222,19 @@ pub(super) fn safe_skill_relative_path(relative_path: Option<&str>) -> Result<Pa
 }
 
 pub(super) fn safe_zip_path(name: &str) -> Option<PathBuf> {
+    // Reject NUL bytes defensively even though `&str` is already UTF-8. This
+    // keeps the helper usable if the entry point is later widened to `&[u8]`.
+    if name.as_bytes().contains(&0u8) {
+        return None;
+    }
+    // Reject `~`-prefixed and Windows drive-letter inputs (`c:foo`) at the
+    // string front. Unix `Path::components` parses `~` and `c:` as `Normal`
+    // segments, so without this guard a hostile relative path could escape a
+    // pinned `resourceRoot` via shell tilde expansion or a drive-prefixed
+    // absolute path. See `safe_companion_relative_path`.
+    if has_unsafe_prefix(name) {
+        return None;
+    }
     let path = Path::new(name);
     let mut out = PathBuf::new();
     for component in path.components() {
@@ -235,6 +248,134 @@ pub(super) fn safe_zip_path(name: &str) -> Option<PathBuf> {
     } else {
         Some(out)
     }
+}
+
+/// Returns true if `input` leads with a prefix that should never flow into a
+/// pinned-resource-root relative join: a leading `~`, a leading `/` or `\`
+/// (absolute), or a Windows drive letter (`[a-zA-Z]:`). This is the
+/// string-level guard shared by [`safe_zip_path`] and
+/// [`safe_companion_relative_path`].
+fn has_unsafe_prefix(input: &str) -> bool {
+    let trimmed = input.trim_start_matches(' ');
+    if trimmed.starts_with('~') {
+        return true;
+    }
+    if trimmed.starts_with('/') || trimmed.starts_with('\\') {
+        return true;
+    }
+    // Windows drive-letter prefix: a single ASCII letter followed by `:`.
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return true;
+    }
+    false
+}
+
+/// Pure string-level validation of a relative `relative_path` against a
+/// pinned `resource_root`. Re-implemented from OpenClaw (MIT) design notes
+/// (workitem #189165): bounded local skill companion reads. No OpenClaw
+/// source code is ported; the Napaxi implementation rewrites the boundary
+/// rules from scratch under GPL-3.0-or-later. See `THIRD-PARTY-LICENSES.md`.
+///
+/// Rejected inputs:
+/// - any NUL byte (defensive, even though `&str` is already UTF-8);
+/// - a leading `~` (shell tilde expansion)
+/// - a leading `/` or `\` (absolute path on Unix or Windows);
+/// - a leading `[a-zA-Z]:` (Windows drive-letter prefix);
+/// - any `..` / `.` / root / prefix `Path::components` segment — only
+///   `Component::Normal` is accepted.
+///
+/// Returns the joined `resource_root` + validated relative path on success.
+#[allow(dead_code)] // Foundational helper for upcoming companion reads; covered by tests.
+pub(super) fn safe_companion_relative_path(
+    resource_root: &Path,
+    relative_path: &str,
+) -> Result<PathBuf, String> {
+    if relative_path.as_bytes().contains(&0u8) {
+        return Err(format!(
+            "companion path contains NUL byte: {relative_path:?}"
+        ));
+    }
+    if has_unsafe_prefix(relative_path) {
+        return Err(format!(
+            "companion path has unsafe prefix (~, absolute, or drive-letter): {relative_path:?}"
+        ));
+    }
+    let safe = safe_zip_path(relative_path)
+        .ok_or_else(|| format!("unsafe companion path: {relative_path:?}"))?;
+    Ok(resource_root.join(safe))
+}
+
+/// Filesystem-level validation that `target` reads as a regular file inside
+/// the pinned `resource_root`. Defends against symlink escape and cross-tree
+/// hardlinks. Re-implemented from OpenClaw (MIT) design notes
+/// (workitem #189165); see `safe_companion_relative_path` for the license
+/// note.
+///
+/// Rejected targets:
+/// - any stat failure (the caller is expected to translate `NotFound` /
+///   "companion root missing" into a graceful `tracing::debug` empty result
+///   rather than surfacing an unhandled rejection);
+/// - symlinks (would let a companion read escape the resource root);
+/// - hardlinks (link count > 1) — same skill-root support file is normally
+///   singly-linked, so `nlink > 1` is treated conservatively as a cross-tree
+///   hardlink;
+/// - any canonicalized target that does not lie strictly inside the
+///   canonicalized `resource_root`.
+#[allow(dead_code)] // Foundational helper for upcoming companion reads; covered by tests.
+pub(super) fn validate_companion_target(resource_root: &Path, target: &Path) -> Result<(), String> {
+    let symlink_meta = std::fs::symlink_metadata(target)
+        .map_err(|e| format!("cannot stat companion target {}: {e}", target.display()))?;
+    if symlink_meta.file_type().is_symlink() {
+        return Err(format!(
+            "refusing companion via symlink: {}",
+            target.display()
+        ));
+    }
+    // Hardlink guard: same skill-root support files are normally singly
+    // linked, so `nlink > 1` is treated conservatively as a cross-tree
+    // hardlink. The cross-platform `Metadata::nlink` accessor is not yet
+    // stabilised on this toolchain, so we use platform-specific helpers
+    // (`os::unix::fs::MetadataExt` on Unix, `1` elsewhere).
+    if nlink_of(&symlink_meta) > 1 {
+        return Err(format!(
+            "refusing companion via hardlink (nlink > 1): {}",
+            target.display()
+        ));
+    }
+    let resolved_root = resource_root.canonicalize().map_err(|e| {
+        format!(
+            "canonicalize resource_root {}: {e}",
+            resource_root.display()
+        )
+    })?;
+    let resolved_target = target
+        .canonicalize()
+        .map_err(|e| format!("canonicalize companion target {}: {e}", target.display()))?;
+    if !resolved_target.starts_with(&resolved_root) {
+        return Err(format!(
+            "companion target escapes resource root: {}",
+            target.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Cross-platform hardlink count helper. The cross-platform
+/// `std::fs::Metadata::nlink` accessor is not yet stabilized on this
+/// toolchain, so we use the Unix `MetadataExt::nlink` and fall back to `1`
+/// elsewhere. The companion guard treats `nlink > 1` conservatively.
+#[cfg(unix)]
+#[allow(dead_code)]
+fn nlink_of(metadata: &std::fs::Metadata) -> u32 {
+    use std::os::unix::fs::MetadataExt;
+    metadata.nlink() as u32
+}
+
+#[cfg(not(unix))]
+#[allow(dead_code)]
+fn nlink_of(_metadata: &std::fs::Metadata) -> u32 {
+    1
 }
 
 #[cfg(test)]
@@ -316,5 +457,140 @@ mod tests {
         let err = validate_delete_target(&files_dir, &link).unwrap_err();
         assert!(err.contains("symlink"), "{err}");
         assert!(victim.join("important.txt").exists());
+    }
+}
+
+#[cfg(test)]
+mod companion_path_tests {
+    //! AC2 — bounded relative-path API for skill companion reads
+    //! (`safe_companion_relative_path` + `validate_companion_target`).
+    use super::{safe_companion_relative_path, validate_companion_target};
+    use std::path::{Path, PathBuf};
+
+    fn root() -> PathBuf {
+        tempfile::tempdir().unwrap().keep()
+    }
+
+    fn write_file(root: &Path, relative: &str, body: &str) -> PathBuf {
+        let path = root.join(relative);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn accepts_normal_relative_path() {
+        let root = root();
+        let resolved = safe_companion_relative_path(&root, "sub/file.txt").unwrap();
+        assert_eq!(resolved, root.join("sub").join("file.txt"));
+        // A nested-safe relative path also validates against the filesystem.
+        let target = write_file(&root, "sub/file.txt", "hello");
+        validate_companion_target(&root, &target).unwrap();
+        assert!(target.exists());
+    }
+
+    #[test]
+    fn rejects_dotdot() {
+        let root = root();
+        let err = safe_companion_relative_path(&root, "../escape").unwrap_err();
+        assert!(err.contains("unsafe companion path"), "{err}");
+    }
+
+    #[test]
+    fn rejects_absolute_unix() {
+        let root = root();
+        let err = safe_companion_relative_path(&root, "/etc/passwd").unwrap_err();
+        assert!(err.contains("unsafe prefix"), "{err}");
+    }
+
+    #[test]
+    fn rejects_absolute_backslash() {
+        let root = root();
+        let err = safe_companion_relative_path(&root, "\\windows\\escape").unwrap_err();
+        assert!(err.contains("unsafe prefix"), "{err}");
+    }
+
+    #[test]
+    fn rejects_leading_tilde() {
+        let root = root();
+        let err = safe_companion_relative_path(&root, "~/config/secrets").unwrap_err();
+        assert!(err.contains("unsafe prefix"), "{err}");
+    }
+
+    #[test]
+    fn rejects_drive_prefix() {
+        let root = root();
+        let err = safe_companion_relative_path(&root, "c:foo").unwrap_err();
+        assert!(err.contains("unsafe prefix"), "{err}");
+        // Uppercase drive letter must also be rejected.
+        let err = safe_companion_relative_path(&root, "C:/x").unwrap_err();
+        assert!(err.contains("unsafe prefix"), "{err}");
+    }
+
+    #[test]
+    fn rejects_nul_byte() {
+        let root = root();
+        let err = safe_companion_relative_path(&root, "a\0b").unwrap_err();
+        assert!(err.contains("NUL"), "{err}");
+    }
+
+    #[test]
+    fn headers_strip_to_unsafe_prefix_detection() {
+        // Leading whitespace must not mask the unsafe prefix.
+        let root = root();
+        let err = safe_companion_relative_path(&root, "  ~/x").unwrap_err();
+        assert!(err.contains("unsafe prefix"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validate_companion_target_rejects_symlink() {
+        let root = root();
+        let outside = write_file(
+            &tempfile::tempdir().unwrap().keep(),
+            "outside.txt",
+            "secret",
+        );
+        let link = root.join("linked.txt");
+        std::os::unix::fs::symlink(&outside, &link).unwrap();
+        let err = validate_companion_target(&root, &link).unwrap_err();
+        assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn validate_companion_target_rejects_hardlink() {
+        let root = root();
+        let original = write_file(&root, "original.txt", "body");
+        let link = root.join("linked.txt");
+        std::fs::hard_link(&original, &link).unwrap();
+        let err = validate_companion_target(&root, &link).unwrap_err();
+        assert!(err.contains("hardlink"), "{err}");
+    }
+
+    #[test]
+    fn validate_companion_target_missing_resource_root_degrades_gracefully() {
+        let missing = Path::new("/nonexistent/companion/root");
+        let target = missing.join("any.txt");
+        let err = validate_companion_target(missing, &target).unwrap_err();
+        // Either stat or canonicalize failure surfaces; both are expected to
+        // be handled by the caller as "directory missing → empty result".
+        assert!(
+            err.contains("cannot stat") || err.contains("canonicalize"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn validate_companion_target_rejects_out_of_root() {
+        let root = root();
+        let outside = write_file(&tempfile::tempdir().unwrap().keep(), "outside.txt", "out");
+        // We deliberately don't join the out-of-root target through
+        // `safe_companion_relative_path` (which would already refuse the
+        // path); we exercise the fs-level containment guard directly.
+        let err = validate_companion_target(&root, &outside).unwrap_err();
+        assert!(err.contains("escapes resource root"), "{err}");
     }
 }

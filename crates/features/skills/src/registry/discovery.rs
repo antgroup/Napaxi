@@ -5,6 +5,8 @@
 //! and the bundled-content loader. The struct definition, constructors,
 //! query accessors, and the load/validate free functions stay in `mod.rs`.
 
+use std::path::Component;
+
 use super::*;
 
 impl SkillRegistry {
@@ -332,14 +334,194 @@ impl SkillRegistry {
         self.discover_all(user_id).await
     }
 
-    /// Reload skills for a specific user only.
-    /// Retains skills owned by other users and global skills.
     pub async fn reload_for_user(&mut self, user_id: &str) -> Vec<String> {
         // Only remove this user's skills, preserve others and global
         {
             self.skills.write().retain(|s| s.owner_user_id != user_id);
         }
         self.discover_all(user_id).await
+    }
+}
+
+// ── Bounded companion reads ──────────────────────────────────────────────
+//
+// Re-implemented from OpenClaw (MIT) design notes (workitem #189165): read
+// companion files under a placement-owner-pinned `resource_root` via a
+// bounded relative-path API that rejects `..`, absolute, `~`, drive-letter,
+// symlink, hardlink, NUL, and non-UTF-8 inputs. No OpenClaw source code is
+// ported — the Napaxi implementation rewrites the boundary rules from
+// scratch under GPL-3.0-or-later. See `THIRD-PARTY-LICENSES.md`.
+//
+// Per AGENTS.md, `crates/features/* must not depend on crates/core`, so the
+// pure-path rules are mirrored locally here (kept deliberately short and
+// commented) instead of being imported from
+// `crates/core/src/skills/paths.rs`. The fs-level mirror (symlink +
+// hardlink + canonicalize containment) is implemented through the existing
+// AFS trait, which already exposes a per-file `nlink` count.
+
+/// Companion file size cap — mirrors `crates/core/src/skills/limits.rs`'s
+/// `MAX_EXTRA_FILE_SIZE` (1 MiB). Feature crates cannot import it from
+/// `crates/core`; this constant is kept in sync manually.
+const MAX_COMPANION_FILE_SIZE: u64 = 1024 * 1024;
+
+/// Pure-string validation of a relative `relative_path` against a pinned
+/// resource root. Mirrors `crates/core/src/skills/paths.rs`'s
+/// `safe_companion_relative_path` exactly — the two copies are intentional
+/// (feature crates cannot depend on `crates/core`); update both together.
+///
+/// Rejected inputs:
+/// - any NUL byte;
+/// - a leading `~`, leading `/`, leading `\`, or `[a-zA-Z]:` drive prefix;
+/// - any `..` / `.` / root / prefix `Component` (only `Normal` accepted).
+fn validate_companion_relative_path(relative_path: &str) -> Result<PathBuf, String> {
+    if relative_path.as_bytes().contains(&0u8) {
+        return Err(format!(
+            "companion path contains NUL byte: {relative_path:?}"
+        ));
+    }
+    if has_unsafe_companion_prefix(relative_path) {
+        return Err(format!(
+            "companion path has unsafe prefix (~, absolute, or drive-letter): {relative_path:?}"
+        ));
+    }
+    let path = Path::new(relative_path);
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => out.push(part),
+            _ => return Err(format!("unsafe companion path: {relative_path:?}")),
+        }
+    }
+    if out.as_os_str().is_empty() {
+        return Err(format!("unsafe companion path: {relative_path:?}"));
+    }
+    Ok(out)
+}
+
+/// String-level prefix guard, mirroring `has_unsafe_prefix` in
+/// `crates/core/src/skills/paths.rs`.
+fn has_unsafe_companion_prefix(input: &str) -> bool {
+    let trimmed = input.trim_start_matches(' ');
+    if trimmed.starts_with('~') {
+        return true;
+    }
+    if trimmed.starts_with('/') || trimmed.starts_with('\\') {
+        return true;
+    }
+    let bytes = trimmed.as_bytes();
+    if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+        return true;
+    }
+    false
+}
+
+impl SkillRegistry {
+    /// Read companion files for a skill under a pinned `resource_root`,
+    /// applying the same boundary rules as `crates/core/src/skills/paths.rs`'s
+    /// `safe_companion_relative_path` + `validate_companion_target`.
+    ///
+    /// A missing `resource_root` degrades gracefully: `AfsError::NotFound`
+    /// is logged at `tracing::debug` and an empty `Vec` is returned,
+    /// consistent with `discover_from_dir`'s existing NotFound handling.
+    /// Per-file symlink and hardlink (nlink > 1) entries are silently
+    /// skipped (not raised), matching the per-entry `symlink_metadata` skip
+    /// in `discover_from_dir`. The size cap is `MAX_COMPANION_FILE_SIZE` (mirrors
+    /// `crates/core/src/skills/limits.rs::MAX_EXTRA_FILE_SIZE`).
+    pub async fn companion_files_in_root(
+        &self,
+        user_id: &str,
+        resource_root: &Path,
+    ) -> Vec<(PathBuf, Vec<u8>)> {
+        let afs = match get_afs(user_id) {
+            Ok(afs) => afs,
+            Err(error) => {
+                tracing::debug!(
+                    "Companion read skipped — no AFS accessor for {}: {}",
+                    user_id,
+                    error
+                );
+                return Vec::new();
+            }
+        };
+
+        let entries = match afs.read_dir(resource_root).await {
+            Ok(entries) => entries,
+            Err(error) => {
+                if matches!(error, AfsError::NotFound(_)) {
+                    tracing::debug!(
+                        "Companion resource root does not exist: {:?}",
+                        resource_root
+                    );
+                } else {
+                    tracing::warn!(
+                        "Failed to read companion resource root {:?}: {}",
+                        resource_root,
+                        error
+                    );
+                }
+                return Vec::new();
+            }
+        };
+
+        let mut out = Vec::new();
+        for entry in entries.iter() {
+            let rel_name = match entry.file_name().and_then(|s| s.to_str()) {
+                Some(name) => name,
+                None => {
+                    tracing::debug!("Skipping non-UTF-8 companion entry in {:?}", resource_root);
+                    continue;
+                }
+            };
+            // String-level guard mirrors `safe_companion_relative_path`.
+            let validated = match validate_companion_relative_path(rel_name) {
+                Ok(rel) => rel,
+                Err(reason) => {
+                    tracing::debug!("Skipping companion entry: {reason}");
+                    continue;
+                }
+            };
+            let target = resource_root.join(&validated);
+
+            // fs-level guard mirrors `validate_companion_target`.
+            let meta = match afs.symlink_metadata(&target).await {
+                Ok(meta) => meta,
+                Err(error) => {
+                    tracing::debug!("Skipping companion {:?}: {}", target, error);
+                    continue;
+                }
+            };
+            if meta.is_symlink() {
+                tracing::debug!("Skipping companion symlink: {:?}", target);
+                continue;
+            }
+            if !meta.is_file() {
+                tracing::debug!("Skipping non-file companion: {:?}", target);
+                continue;
+            }
+            if meta.nlink() > 1 {
+                tracing::debug!("Skipping companion hardlink (nlink > 1): {:?}", target);
+                continue;
+            }
+
+            let bytes = match afs.read(&target).await {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    tracing::debug!("Skipping companion {:?} read: {}", target, error);
+                    continue;
+                }
+            };
+            if bytes.len() as u64 > MAX_COMPANION_FILE_SIZE {
+                tracing::debug!(
+                    "Skipping oversized companion: {:?} ({} bytes > {} cap)",
+                    target,
+                    bytes.len(),
+                    MAX_COMPANION_FILE_SIZE
+                );
+                continue;
+            }
+            out.push((validated, bytes));
+        }
+        out
     }
 
     /// Discover and load skills for a specific user into this registry.
