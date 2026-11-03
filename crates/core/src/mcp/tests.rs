@@ -403,6 +403,249 @@ async fn finish_oauth_rejects_state_mismatch_before_exchange() {
     assert!(result.contains("OAuth state mismatch"));
 }
 
+/// Bind then immediately drop a TCP listener on localhost to capture an
+/// ephemeral port that is now closed. Connecting to it (e.g. via
+/// `exchange_oauth_code`) fails fast with a connection-refused error,
+/// which is what `finish_oauth_returns_failure_when_exchange_fails` needs
+/// to drive the token-exchange error path without adding a new abstraction.
+fn closed_local_token_url() -> String {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    format!("http://127.0.0.1:{port}/token")
+}
+
+fn oauth_pending_server(token_url: &str) -> McpServer {
+    McpServer {
+        name: "remote".to_string(),
+        url: "https://example.com/mcp".to_string(),
+        transport: McpTransport::Http,
+        headers: HashMap::new(),
+        user_id: "user".to_string(),
+        active: false,
+        tools: Vec::new(),
+        session_id: None,
+        activation_error: None,
+        oauth: None,
+        oauth_pending: Some(McpOAuthPending {
+            state: "good-state".to_string(),
+            code_verifier: None,
+            redirect_uri: "napaxi://oauth/callback".to_string(),
+            authorization_url: "https://auth.example.com/authorize".to_string(),
+            token_url: token_url.to_string(),
+            client_id: "client-1".to_string(),
+            client_secret: None,
+            scopes: Vec::new(),
+            resource: None,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        }),
+        oauth_tokens: None,
+        tools_loaded: true,
+        tools_error: None,
+        last_tools_attempt_at: None,
+    }
+}
+
+// AC-3 regression: `finish_oauth` must NOT announce success before
+// `exchange_oauth_code` returns Ok. When exchange fails, the finish path
+// must surface "OAuth token exchange failed", must NOT write `oauth_tokens`,
+// must NOT clear `oauth_pending`, and `activate_server` must NOT have run
+// (server.active stays false and no `activation_error` is written by the
+// success path).
+#[tokio::test]
+async fn finish_oauth_returns_failure_when_exchange_fails() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+    let closed_port_url = closed_local_token_url();
+    let mut state = McpState::default();
+    state.servers.push(oauth_pending_server(&closed_port_url));
+    assert!(save_state(&files_dir, &state));
+
+    let result = finish_oauth(&files_dir, "remote", "user", "code", "good-state").await;
+    assert!(
+        result.contains("OAuth token exchange failed"),
+        "expected exchange-failure surface, got: {result}"
+    );
+
+    // The success path (save_state → activate_server) must NOT have run.
+    let loaded = load_state(&files_dir);
+    let server = loaded
+        .servers
+        .iter()
+        .find(|server| server.name == "remote")
+        .unwrap();
+    assert!(
+        server.oauth_tokens.is_none(),
+        "exchange failure must not write oauth_tokens"
+    );
+    assert!(
+        server.oauth_pending.is_some(),
+        "exchange failure must not clear oauth_pending"
+    );
+    assert!(
+        !server.active,
+        "server must not be activated when exchange fails"
+    );
+    // activate_server only writes activation_error on the OAuth-refresh
+    // failure path (for already-stored tokens) or clears it on success; the
+    // exchange-failure path must not touch it.
+    assert!(
+        server.activation_error.is_none(),
+        "exchange-failure path must not have written activation_error"
+    );
+
+    // The user-visible JSON must not claim success.
+    assert!(
+        !result.contains(r#""success":true"#),
+        "must not announce success: {result}"
+    );
+}
+
+// AC-3 regression: pre-exchange invariant — before exchange is attempted,
+// the server must NOT be marked active or carry oauth_tokens. This pins
+// the "exchange must precede save/activate" ordering at the source level.
+#[tokio::test]
+async fn finish_oauth_does_not_set_active_before_exchange() {
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+    let closed_port_url = closed_local_token_url();
+    let mut state = McpState::default();
+    state.servers.push(oauth_pending_server(&closed_port_url));
+    assert!(save_state(&files_dir, &state));
+
+    // Snapshot the pre-exchange state shape from the persisted catalog
+    // itself — the recovery test below depends on these pre-conditions.
+    let pre = load_state(&files_dir);
+    let pre_server = pre
+        .servers
+        .iter()
+        .find(|server| server.name == "remote")
+        .unwrap();
+    assert!(!pre_server.active);
+    assert!(pre_server.oauth_tokens.is_none());
+    assert!(pre_server.oauth_pending.is_some());
+
+    // Now drive finish_oauth with an exchange that fails (closed port).
+    let result = finish_oauth(&files_dir, "remote", "user", "code", "good-state").await;
+    assert!(result.contains("OAuth token exchange failed"));
+
+    let post = load_state(&files_dir);
+    let post_server = post
+        .servers
+        .iter()
+        .find(|server| server.name == "remote")
+        .unwrap();
+    // Post-exchange-failure shape must be identical to pre-exchange shape
+    // for the activation-sensitive fields — exchange failure must not
+    // leak activation forward.
+    assert!(
+        !post_server.active,
+        "active must stay false post-exchange-failure"
+    );
+    assert!(
+        post_server.oauth_tokens.is_none(),
+        "oauth_tokens must stay None post-exchange-failure"
+    );
+    assert!(
+        post_server.oauth_pending.is_some(),
+        "oauth_pending must stay Some post-exchange-failure"
+    );
+}
+
+// AC-3 regression: only the exchange-success path may write `oauth_tokens`,
+// clear `oauth_pending`, and call `activate_server`. We exercise the success
+// path with a tiny in-test HTTP server that returns a valid OAuth token
+// response, then assert the full save→activate ordering is visible.
+#[tokio::test]
+async fn finish_oauth_saves_tokens_only_after_exchange_success() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_string_lossy().to_string();
+
+    // Tiny HTTP server that responds to POST /token with a token JSON.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let token_url = format!(
+        "http://127.0.0.1:{}/token",
+        listener.local_addr().unwrap().port()
+    );
+    let server_task = tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                break;
+            };
+            tokio::spawn(async move {
+                // Read the request line + headers (best-effort).
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf).await;
+                let json = r#"{"access_token":"atk-1","token_type":"Bearer","refresh_token":"rtk-1","scope":"read","expires_in":3600}"#;
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\n\
+                     Content-Type: application/json\r\n\
+                     Content-Length: {len}\r\n\
+                     Connection: close\r\n\r\n\
+                     {body}",
+                    len = json.len(),
+                    body = json,
+                );
+                let _ = stream.write_all(response.as_bytes()).await;
+                let _ = stream.flush().await;
+            });
+        }
+    });
+
+    let mut state = McpState::default();
+    state.servers.push(oauth_pending_server(&token_url));
+    assert!(save_state(&files_dir, &state));
+
+    let result = finish_oauth(&files_dir, "remote", "user", "code", "good-state").await;
+    server_task.abort();
+
+    // The exchange must have succeeded and the session must reflect the
+    // full success path: token saved, pending cleared, activate_server run.
+    assert!(
+        result.contains(r#""name":"remote""#),
+        "expected name surface from activate_server success, got: {result}"
+    );
+    assert!(
+        !result.contains("OAuth token exchange failed"),
+        "success path must not surface exchange-failure string"
+    );
+    assert!(
+        !result.contains(r#""error":"NonEmptyError"#),
+        "success path should not carry an error string"
+    );
+    // (We don't assert on the success HTTP body beyond token presence — the
+    // remote `tools/list` lazy-load is deferred by activate_server.)
+
+    let loaded = load_state(&files_dir);
+    let server = loaded
+        .servers
+        .iter()
+        .find(|server| server.name == "remote")
+        .unwrap();
+    let tokens = server
+        .oauth_tokens
+        .as_ref()
+        .expect("exchange success must persist oauth_tokens");
+    assert_eq!(tokens.access_token, "atk-1");
+    assert_eq!(tokens.token_type, "Bearer");
+    assert_eq!(tokens.refresh_token.as_deref(), Some("rtk-1"));
+    assert!(
+        server.oauth_pending.is_none(),
+        "exchange success must clear oauth_pending"
+    );
+    // activate_server must have run: server.active flips to true.
+    assert!(
+        server.active,
+        "exchange success must trigger activate_server (active=true)"
+    );
+    assert!(
+        server.activation_error.is_none(),
+        "activate_server on success clears activation_error"
+    );
+}
+
 #[test]
 fn effective_headers_inject_oauth_token_without_overriding_custom_auth() {
     let mut server = McpServer {

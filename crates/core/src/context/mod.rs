@@ -30,7 +30,8 @@ use crate::types::{ChatEvent, PlatformLlmConfig};
 use budget::{
     ContextBudgetPlanner, build_preflight_snapshot, context_config_fingerprint,
     context_window_details, context_window_tokens, legacy_context_breakdown,
-    model_context_breakdown, normalized_config, response_reserve_info, response_reserve_tokens,
+    mid_turn_hard_precheck, model_context_breakdown, normalized_config, response_reserve_info,
+    response_reserve_tokens,
 };
 use compaction::{
     compact_history, has_compactable_middle, tail_messages, visible_history_from_state,
@@ -43,8 +44,28 @@ use state::{
 };
 
 pub(crate) use budget::estimate_json_tokens;
+pub(crate) use budget::estimate_messages_tokens;
 pub(crate) use compaction::{ToolMessageCompactionStats, compact_tool_messages};
 pub(crate) use state::delete_context_state;
+
+// Mid-turn hard context precheck surface — used by `tools/loop.rs` to guard
+// the LLM call after soft compaction, independent of soft compaction
+// enable/threshold switches. See `budget::mid_turn_hard_precheck`.
+pub(crate) use budget::MidTurnPrecheckStatus;
+
+/// Convenience: run the mid-turn hard precheck directly from a config +
+/// prompt/descriptor token estimate. Independent of soft compaction
+/// enable/threshold switches (see [`mid_turn_hard_precheck`]).
+pub(crate) fn mid_turn_hard_precheck_for_config(
+    config: &PlatformLlmConfig,
+    prompt_tokens: usize,
+    descriptor_tokens: usize,
+) -> MidTurnPrecheckStatus {
+    let settings = normalized_config(&config.context_engine);
+    let window = context_window_details(config, &settings);
+    let configured_reserve = response_reserve_tokens(config, &settings);
+    mid_turn_hard_precheck(window, prompt_tokens, configured_reserve, descriptor_tokens)
+}
 
 const LEGACY_TAIL_HISTORY_MESSAGES: usize = 40;
 

@@ -272,12 +272,24 @@ where
             events
         }
         Err(e) => {
-            if crate::llm::is_context_overflow_error(&e) && history_recorder.is_empty() {
-                hooks.stage_warning(
-                    &context,
-                    TurnStage::ExecuteToolLoop,
-                    "Provider reported context overflow; compacting and retrying once",
-                );
+            // Mid-turn overflow marker: the tool loop raised
+            // `"mid-turn context overflow: ..."` AFTER soft compaction
+            // already collapsed tool results. Route to the existing
+            // `reprepare_turn_after_context_overflow_with_hooks`
+            // recovery EVEN when `history_recorder` is non-empty (turn
+            // has already started) — the recovery path does not
+            // re-persist the user message, so we can safely re-prepare.
+            let is_mid_turn_overflow = crate::llm::is_context_overflow_error(&e)
+                && e.starts_with("mid-turn context overflow:");
+            if is_mid_turn_overflow
+                || (crate::llm::is_context_overflow_error(&e) && history_recorder.is_empty())
+            {
+                let overflow_log = if is_mid_turn_overflow {
+                    "上下文窗口在 turn 中途被超出"
+                } else {
+                    "Provider reported context overflow; compacting and retrying once"
+                };
+                hooks.stage_warning(&context, TurnStage::ExecuteToolLoop, overflow_log);
                 events.push(ChatEvent::Thinking {
                     content: "Compacting context and retrying the request...".to_string(),
                 });
@@ -459,5 +471,115 @@ where
                 events
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod mid_turn_recovery_tests {
+    //! AC-2 spy test: when the mid-turn hard precheck fires (history_recorder
+    //! non-empty), the recovery path routes to
+    //! `reprepare_turn_after_context_overflow_with_hooks`, which must NOT
+    //! re-run `TurnStage::PersistUserMessage` — i.e. the user message is
+    //! never persisted twice when mid-turn overflow recovery re-prepares.
+
+    use super::*;
+    use crate::turn::{PromptPlanSummary, TurnOutcomeSummary};
+
+    #[derive(Default)]
+    struct StageSpy {
+        started: Vec<TurnStage>,
+        completed: Vec<TurnStage>,
+    }
+
+    impl TurnLifecycleHooks for StageSpy {
+        fn stage_started(&mut self, _ctx: &TurnLifecycleContext, stage: TurnStage) {
+            self.started.push(stage);
+        }
+        fn stage_completed(&mut self, _ctx: &TurnLifecycleContext, stage: TurnStage) {
+            self.completed.push(stage);
+        }
+        fn prompt_prepared(&mut self, _ctx: &TurnLifecycleContext, _summary: &PromptPlanSummary) {}
+        fn turn_completed(&mut self, _ctx: &TurnLifecycleContext, _summary: &TurnOutcomeSummary) {}
+    }
+
+    #[tokio::test]
+    async fn reprepare_after_overflow_does_not_persist_user_message_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let files_dir = dir.path().to_string_lossy().to_string();
+        let session_key_json =
+            crate::session::create_session(&files_dir, "napaxi", "app", "user", None);
+
+        // Use a tiny context window so reprepare's internal
+        // `build_context_for_turn_with_event_sink` runs a compaction pass
+        // rather than skipping as a no-op. enabled=true keeps the context
+        // engine active.
+        use crate::types::{ContextEngineConfig, PlatformLlmConfig};
+        let config = PlatformLlmConfig {
+            provider: "openai".to_string(),
+            api_key: "test".to_string(),
+            model: "test-model".to_string(),
+            max_tokens: 128,
+            context_engine: ContextEngineConfig {
+                enabled: true,
+                context_window_tokens: Some(1024),
+                protect_head_messages: 1,
+                protect_tail_messages: 1,
+                compaction_strategy: "local_summary".to_string(),
+                ..ContextEngineConfig::default()
+            },
+            ..PlatformLlmConfig::default()
+        };
+        // Seed history long enough that the compaction pass actually fires.
+        for index in 0..8 {
+            assert!(crate::session::append_message(
+                &files_dir,
+                &session_key_json,
+                if index % 2 == 0 { "user" } else { "assistant" },
+                &"long context ".repeat(40),
+            ));
+        }
+        let config_json = serde_json::to_string(&config).unwrap();
+
+        let mut context = TurnLifecycleContext::new(TurnMode::Collected, "napaxi", false);
+        let mut hooks = StageSpy::default();
+
+        let outcome = reprepare_turn_after_context_overflow_with_hooks(
+            &files_dir,
+            &files_dir,
+            &config_json,
+            "napaxi",
+            &session_key_json,
+            "continue the conversation",
+            "[]",
+            None,
+            &[],
+            false,
+            None,
+            &mut context,
+            &mut hooks,
+        )
+        .await;
+
+        // The recovery path must succeed; if it fails, surface the event so
+        // the test does not silently pass while skipping the assertion.
+        let prepared = outcome.unwrap_or_else(|event| {
+            panic!("reprepare_turn_after_context_overflow_with_hooks failed: {event:?}");
+        });
+
+        // The user message stage must NOT be revisited during recovery.
+        assert!(
+            !hooks.started.contains(&TurnStage::PersistUserMessage),
+            "reprepare_after_context_overflow must not re-run PersistUserMessage; \
+             started stages = {:?}",
+            hooks.started
+        );
+        assert!(
+            !hooks.completed.contains(&TurnStage::PersistUserMessage),
+            "reprepare_after_context_overflow must not complete PersistUserMessage; \
+             completed stages = {:?}",
+            hooks.completed
+        );
+        // The recovery path should still have produced a usable prepared turn.
+        assert!(!prepared.raw_history.is_empty());
     }
 }

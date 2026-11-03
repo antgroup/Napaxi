@@ -206,6 +206,39 @@ fn compact_messages_for_context(
     );
 }
 
+/// Mid-turn context overflow marker returned to `run_tool_loop` /
+/// `run_tool_loop_streaming` callers when the hard precheck fires. The
+/// `"mid-turn context overflow:"` prefix is matched by
+/// [`crate::llm::is_context_overflow_error`] so the existing overflow
+/// recovery path in `turn/orchestration` re-prepares the turn.
+fn mid_turn_overflow_error(overflow_tokens: usize) -> String {
+    format!("mid-turn context overflow: {overflow_tokens} tokens over floor reserve")
+}
+
+/// Hard context precheck: after soft compaction has collapsed tool results,
+/// make sure the prompt + floor reserve still fits the effective window
+/// before we hand the messages to the provider. Independent of
+/// `ContextEngineConfig::enabled` / soft `trigger_ratio`. See
+/// `crate::context::mid_turn_hard_precheck`.
+///
+/// Returns `Ok(())` when it fits, or `Err(<mid-turn marker>)` when it does
+/// not — the error string starts with `"mid-turn context overflow:"`.
+fn enforce_mid_turn_hard_precheck(
+    config: &PlatformLlmConfig,
+    messages: &[serde_json::Value],
+    descriptor_tokens: usize,
+) -> Result<(), String> {
+    use crate::context::{MidTurnPrecheckStatus, mid_turn_hard_precheck_for_config};
+    let prompt_tokens =
+        crate::context::estimate_messages_tokens(messages).saturating_add(descriptor_tokens);
+    match mid_turn_hard_precheck_for_config(config, prompt_tokens, descriptor_tokens) {
+        MidTurnPrecheckStatus::Fits { .. } => Ok(()),
+        MidTurnPrecheckStatus::Overflow { overflow_tokens } => {
+            Err(mid_turn_overflow_error(overflow_tokens))
+        }
+    }
+}
+
 pub async fn run_tool_loop<F>(
     config: &PlatformLlmConfig,
     history: &[SessionMessage],
@@ -275,6 +308,7 @@ where
             descriptor_tokens,
             tool_execution_context.as_ref(),
         );
+        enforce_mid_turn_hard_precheck(config, &messages, descriptor_tokens)?;
         let active_descriptors =
             descriptors_for_skill_protocol(&config.system_prompt, &messages, &descriptors);
         let turn = llm::complete_turn_with_raw_messages(config, &messages, &active_descriptors)
@@ -477,6 +511,7 @@ where
             descriptor_tokens,
             tool_execution_context.as_ref(),
         );
+        enforce_mid_turn_hard_precheck(config, &messages, descriptor_tokens)?;
         let active_descriptors =
             descriptors_for_skill_protocol(&config.system_prompt, &messages, &descriptors);
         let mut tool_call_stream_state = StreamingToolCallState::default();

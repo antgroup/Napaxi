@@ -29,6 +29,75 @@ pub(super) const CONTEXT_GUARD_WARN_MIN_TOKENS: usize = 8_000;
 pub(super) const CONTEXT_GUARD_HARD_MIN_RATIO: f64 = 0.10;
 pub(super) const CONTEXT_GUARD_WARN_MIN_RATIO: f64 = 0.20;
 
+/// Floor reserve applied during the mid-turn hard precheck so that overflow
+/// can still be detected even when the soft compaction enable/threshold
+/// switches are turned off. Independent of `ContextEngineConfig::enabled`
+/// and `trigger_ratio` by design — mirrors the OpenClaw #189810 fix idea
+/// (Napaxi-native implementation, no code ported).
+pub(super) const DEFAULT_AGENT_COMPACTION_RESERVE_TOKENS_FLOOR: usize = 4_096;
+
+/// Outcome of the mid-turn hard context precheck run before each LLM call in
+/// `run_tool_loop` / `run_tool_loop_streaming`, after soft compaction has
+/// already collapsed tool-result messages.
+///
+/// This check is INDEPENDENT of `ContextEngineConfig::enabled` and the soft
+/// `trigger_ratio` threshold: even when soft compaction is disabled, the
+/// floor reserve enforced here guarantees we never enter an LLM call that
+/// cannot possibly fit the response reserve. On `Overflow` the loop returns
+/// a `"mid-turn context overflow: ..."` marker error which the turn
+/// orchestration routes to
+/// [`reprepare_turn_after_context_overflow_with_hooks`](crate::turn::reprepare_turn_after_context_overflow_with_hooks)
+/// — even mid-turn (when `history_recorder` is non-empty).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MidTurnPrecheckStatus {
+    /// The prompt still fits within `window - reserve`. Carries the
+    /// remaining prompt-budget token count for observability.
+    Fits {
+        remaining_prompt_budget_tokens: isize,
+    },
+    /// The prompt plus the floor reserve exceeds the effective window.
+    /// Carries the number of tokens by which the prompt budget is over
+    /// the floor reserve.
+    Overflow { overflow_tokens: usize },
+}
+
+/// Mid-turn hard context precheck — see [`MidTurnPrecheckStatus`].
+///
+/// `effective_floor` reuses the same floor math as `context_guard` so the
+/// mid-turn check never raises the bar above the turn-start admission line.
+/// `reserve` is `max(effective_floor, configured_reserve)`, ensuring the
+/// configured `response_reserve_tokens` (when larger than the floor) still
+/// wins, while never dropping below the floor — independent of
+/// `settings.enabled` / `trigger_ratio`.
+pub(super) fn mid_turn_hard_precheck(
+    window: ContextWindowInfo,
+    prompt_tokens: usize,
+    configured_reserve: usize,
+    _descriptor_tokens: usize,
+) -> MidTurnPrecheckStatus {
+    if window.effective_tokens == 0 {
+        return MidTurnPrecheckStatus::Overflow {
+            overflow_tokens: prompt_tokens,
+        };
+    }
+    let budget = window.effective_tokens;
+    let hard_floor = CONTEXT_GUARD_HARD_MIN_TOKENS
+        .max(((budget as f64) * CONTEXT_GUARD_HARD_MIN_RATIO).round() as usize);
+    let floor_reserve = DEFAULT_AGENT_COMPACTION_RESERVE_TOKENS_FLOOR.max(hard_floor);
+    let reserve = floor_reserve.max(configured_reserve);
+    let prompt_budget = budget.saturating_sub(reserve);
+    let remaining_prompt_budget_tokens = prompt_budget as isize - prompt_tokens as isize;
+    if remaining_prompt_budget_tokens < 0 {
+        MidTurnPrecheckStatus::Overflow {
+            overflow_tokens: prompt_tokens.saturating_sub(prompt_budget),
+        }
+    } else {
+        MidTurnPrecheckStatus::Fits {
+            remaining_prompt_budget_tokens,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) struct ContextWindowInfo {
     pub(super) native_tokens: usize,
@@ -187,7 +256,7 @@ pub(super) fn approx_tokens(text: &str) -> usize {
     estimate_string_tokens(text, ESTIMATED_CHARS_PER_TOKEN)
 }
 
-pub(super) fn estimate_messages_tokens(messages: &[serde_json::Value]) -> usize {
+pub(crate) fn estimate_messages_tokens(messages: &[serde_json::Value]) -> usize {
     messages
         .iter()
         .map(|message| estimate_message_token_pressure(message).total_tokens)
@@ -814,3 +883,7 @@ mod property_tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "budget_mid_turn_precheck_tests.rs"]
+mod mid_turn_precheck_tests;
