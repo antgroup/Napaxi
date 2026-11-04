@@ -1,0 +1,780 @@
+crates/core/src/evolution/executor.rs
+  s_5e218b25c57df4::t_071ba246388996 103-120
+crates/core/src/capabilities/resolve.rs
+  s_5e218b25c57df4::t_071ba246388996 125-201,229-235,241-247,252-266
+  s_5e218b25c57df4::t_9476714e1ce083 267-268
+packages/api_contract/methods.yaml
+  s_5e218b25c57df4::t_071ba246388996 94-119,354-356,376-381
+crates/core/src/llm/messages.rs
+  s_5e218b25c57df4::t_071ba246388996 41-51,157-160,176-181,209-214,222,227,231-235
+crates/core/src/tools/builtin/shell_safe.rs
+  s_5e218b25c57df4::t_071ba246388996 30-38
+packages/api_contract/README.md
+  s_5e218b25c57df4::t_071ba246388996 33-34
+crates/core/src/session/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 19,41-43
+packages/api_bridge/c_api/agent_engine_dispatch.rs
+  s_5e218b25c57df4::t_071ba246388996 1-25
+.gitattributes
+  s_5e218b25c57df4::t_071ba246388996 19-22
+docs/module-mcp.md
+  s_5e218b25c57df4::t_071ba246388996 32-36
+crates/core/src/llm/gemini.rs
+  s_5e218b25c57df4::t_071ba246388996 25-43,71,231
+docs/project-session-workspaces.md
+  s_5e218b25c57df4::t_071ba246388996 1-66
+crates/features/evolution/src/traits.rs
+  s_5e218b25c57df4::t_071ba246388996 377-392
+packages/ios/Sources/Napaxi/Resources/README.md
+  s_5e218b25c57df4::t_071ba246388996 1-3,5-8,11-15
+crates/core/src/agent_engine/codex/events.rs
+  s_5e218b25c57df4::t_071ba246388996 584-600,610-613,627,698-702,708-713,716,723-743
+  s_5e218b25c57df4::t_45e881e36567f0 744
+crates/core/src/workspace/recall/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 35-74,282
+examples/flutter/lib/demo_client/napaxi_chat_client.dart
+  s_5e218b25c57df4::t_071ba246388996 733-756,820-839,849-855,951,1285,1289,1589,1608-1612,1615-1619,1635,1735-1824,1829-1889,1897,1899,4011,4013,4015,4029-4040,4162-4209,4220-4225,4239-4246,4252,4258-4265,4270,4406-4410,4731,4735-4743,6916-6918,6920,11589-11597
+  s_5e218b25c57df4::t_ef6a354329c4ea 11598
+examples/flutter/lib/panels/session_history.dart
+  s_5e218b25c57df4::t_071ba246388996 360,414,701,731-732,1039-1046,1219,1221,1230,1232,1359-1389,1391-1400,1402-1429,1431,1433,1436-1443,1445-1472,1474-1491,1740-1741,1963,1966,1980-1982,2226,2428-2432,2637-2641,2748-2764,2802-4157,4159-4164,4166-4222,4224-4230,4232-4351,4353-4394,4396-4568
+  s_5e218b25c57df4::t_3403bf90087aa3 1497-1498
+packages/flutter/android/src/main/kotlin/com/napaxi/flutter/NapaxiFlutterPlugin.kt
+  s_5e218b25c57df4::t_071ba246388996 33,54,57-58,94,155,165,172-176,180,339,761-772,872-875,2126,2128-2129,2185,2188-2191,2196,2205-2217,2223-2226,2272-2290,2297-2299,2342-2346,2479-2490,2530-2680,2723-2726,2729
+.github/workflows/supply-chain.yml
+  s_5e218b25c57df4::t_071ba246388996 37,39,53,55
+packages/ios/Sources/Napaxi/GeneratedBridgeAliases.swift
+  s_5e218b25c57df4::t_071ba246388996 8-121,138-144,265-269,271-272
+  s_5e218b25c57df4::t_52dd48e5781713 270,273
+crates/core/src/evolution/store.rs
+  s_5e218b25c57df4::t_071ba246388996 1,4-5,15-55,152,161-192
+crates/core/src/tools/loop/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 1182-1254
+crates/core/src/skills/bundled_seeds/android-apk-build/templates/NapaxiActionActivity.java.template
+  s_5e218b25c57df4::t_071ba246388996 1-50
+.github/workflows/native.yml
+  s_5e218b25c57df4::t_071ba246388996 57,64,83,117,124
+packages/api_bridge/generated/frb_generated.rs
+  s_5e218b25c57df4::t_071ba246388996 41,418-458,2532-2569,3871-3955,4025-4064,4995-5038,6276-6318,7659-7695,8613-8623,8679-8685,8691,8697-8699,8705,8711,8717-8718,8724,8730,8736-8738,8741,8744,8750-8756,8759,8762-8763,8766-8767,8773,8779-8789,8795-8796,8802,8808,8814,8817-8818,8821-8826,8832-8833,8839-8845,8848,8854,8860,8866,8872,8875,8881,8887,8893,8899-8902,8908-8910,8916,8919-8920,8926-8927,8933,8936,8939-8940,8943-8944,8947-8948,8951-8952,8958,8961,8967,8970,8976,8982,8985,8988,8994,9031,9036-9037,9042-9044,9049,9054-9056,9061,9066,9069-9072,9077,9080-9081,9086,9091,9096-9097,9100-9106,9111,9116,9119-9123,9128-9133,9138,9143-9145,9148-9153,9158,9163-9164,9167,9170,9175,9180,9185-9186,9191,9194-9195,9198,9203,9208,9211-9212,9217,9222,9227-9232,9237-9238,9243,9248-9249,9254,9259,9262,9267,9272,9277,9282,9285-9286,9291,9294-9295,9298,9303-9304,9309,9314,9317,9322,9327-9328,9331,9336,9339-9342,9347-9348,9353,9358-9363,9366-9367,9372,9375-9376,9379-9380,9383-9386,9389-9390,9463-9469,9471
+  s_5e218b25c57df4::t_ac786b46e7b345 9470,9472
+crates/core/src/skills/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 724-795,1624-1675
+  s_5e218b25c57df4::t_289a200debb5ce 1676
+docs/mobile-capabilities.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 82-83,87-92
+  s_5e218b25c57df4::t_b1722eee876caf 93
+examples/provider_app/android_generated_notes/app/src/main/res/values/styles.xml
+  s_5e218b25c57df4::t_071ba246388996 1-8
+packages/flutter/lib/models/agent_app.dart
+  s_5e218b25c57df4::t_071ba246388996 9-11,23-25,42-44,56-79,107-109,130-132,139-162,175-177,201-203,229-231,255-295,364-382,406-432,438,446-453,458-469
+  s_5e218b25c57df4::t_d155f0c5dd6a86 470
+tools/scripts/bake_android_rootfs.sh
+  s_5e218b25c57df4::t_071ba246388996 5-6,36-38,61-62,76,132,146,149,159-160,233-269,514
+crates/core/src/mcp/types.rs
+  s_5e218b25c57df4::t_071ba246388996 32-54
+crates/core/src/storage/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 32
+crates/core/src/api/agent_app.rs
+  s_5e218b25c57df4::t_071ba246388996 13-15,18-25,66,143-146,148-150,157-160,162
+examples/integration/android/app/src/main/kotlin/com/napaxi/examples/androidintegration/MainActivity.kt
+  s_5e218b25c57df4::t_071ba246388996 6-7,9,49,51-53,62,79,142,149,231-233,316-383,387-391,509-674,1042,1072-1076,1080-1081,1273-1275
+crates/core/src/tools/registry/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 9,372-489
+examples/provider_app/android_smart_home/app/src/main/kotlin/demo/smarthome/provider/SmartHomePackage.kt
+  s_5e218b25c57df4::t_071ba246388996 59-97,144-146,171-176
+crates/core/src/turn/attachments.rs
+  s_5e218b25c57df4::t_071ba246388996 117,125-131,134-149,187-189,466-500
+  s_5e218b25c57df4::t_29df56614dbe99 501-502
+packages/api_bridge/Cargo.toml
+  s_5e218b25c57df4::t_071ba246388996 41
+tools/scripts/check-ios-flutter-parity.js
+  s_5e218b25c57df4::t_071ba246388996 236
+packages/android/src/test/kotlin/com/napaxi/android/ModelsTest.kt
+  s_5e218b25c57df4::t_071ba246388996 596-606,2083-2084,2086,2095-2096,2098,2116-2117,2119,2153-2155,2196-2206,2225-2227,2235-2237,2241-2242,2263-2265,2305-2307,2325-2326,2335-2337,2348-2350,2368-2369
+  s_5e218b25c57df4::t_090e5f248dbba3 595
+crates/core/src/tools/builtin/shell_policy.rs
+  s_5e218b25c57df4::t_071ba246388996 79-82,84-86,171-173,181,313-317,584
+docs/agent-app-actions.md
+  s_5e218b25c57df4::t_071ba246388996 46-47,62-66
+packages/flutter/test/browser_controller_test.dart
+  s_5e218b25c57df4::t_071ba246388996 12-19,25,31-38,46-90,94-142,170-177,199-206,214-234,243-258,266-270,272-299,304-311,402-411,437,444-446,507,515
+examples/integration/ios/app/README.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 3,10,25-28,31
+crates/core/src/lib.rs
+  s_5e218b25c57df4::t_071ba246388996 85-88,218,220-221
+packages/flutter/ios/Vendor/IosQemu/Sources/QEMU/qemu_runner.h
+  s_5e218b25c57df4::t_071ba246388996 1-63
+crates/core/src/agent_definitions.rs
+  s_5e218b25c57df4::t_071ba246388996 41-91,171,701-731
+  s_5e218b25c57df4::t_6364bad8e3cbbb 732
+crates/core/src/mcp/oauth.rs
+  s_5e218b25c57df4::t_071ba246388996 15-40
+docs/architecture.md
+  s_5e218b25c57df4::t_071ba246388996 12,134-141,166
+THIRD-PARTY-LICENSES.md
+  s_5e218b25c57df4::t_071ba246388996 20-21,24-29,42,82-126
+packages/ios/Sources/Napaxi/Engine.swift
+  s_5e218b25c57df4::t_071ba246388996 268,421-425,460-461,468,472-476,638-651,656,676-677,684,693-694,700,712-713,724,741-742,749-750,759-760,770,782-783,790-791,1565-1566,1574,1580-1583
+crates/core/src/mcp/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 61-64
+examples/provider_app/android_generated_tasks/app/src/main/java/demo/generated/tasks/NapaxiActionActivity.java
+  s_5e218b25c57df4::t_071ba246388996 1-70
+crates/core/src/turn/orchestration/streaming.rs
+  s_5e218b25c57df4::t_071ba246388996 61,90,93-94,337-348,350-355,385
+packages/android/src/test/kotlin/com/napaxi/android/AndroidBridgeContractTest.kt
+  s_5e218b25c57df4::t_071ba246388996 11-37,98,130-132,138,158-161,198-223,495-497,503
+crates/core/src/storage/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 388-500
+crates/core/src/tools/loop/runtime_tests.rs
+  s_5e218b25c57df4::t_071ba246388996 502-574
+packages/ios/Sources/Napaxi/AgentAppModels.swift
+  s_5e218b25c57df4::t_071ba246388996 14-16,28-30,49-51,66-68,81-89,104-106,135-137,164-166,198-200,221-223,254-256,271-273,311-313,331-333,352-354,496-509,514,542-555
+crates/core/src/mcp/store.rs
+  s_5e218b25c57df4::t_071ba246388996 32,36-45
+  s_5e218b25c57df4::t_184a26c12893ed 46-47
+packages/ios/Tests/NapaxiTests/ModelTests.swift
+  s_5e218b25c57df4::t_071ba246388996 937-942,944-957,961-964,966-969,972,976,984-988
+crates/core/src/agent_engine/codex/protocol_tests.rs
+  s_5e218b25c57df4::t_071ba246388996 1-514
+crates/features/skills/src/afs_traits.rs
+  s_5e218b25c57df4::t_071ba246388996 13,28-34,39-53,75-113,273-276,288-292,315-319,405-408,418-422,444-448
+packages/ios/Tests/NapaxiTests/ProjectContractTests.swift
+  s_5e218b25c57df4::t_071ba246388996 1-35
+examples/provider_app/android_smart_desk/app/src/main/kotlin/demo/smartdesk/provider/SmartDeskPackage.kt
+  s_5e218b25c57df4::t_071ba246388996 32-34,45-47,59-61,63-64,75-77,92-99,110-112,114-119
+packages/flutter/test/agent_provider_install_api_test.dart
+  s_5e218b25c57df4::t_071ba246388996 8,11-19,24-27,33-62,75-116,143-169,191-239,266-717,735-753
+crates/core/src/session/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 67-92,255-258,270-307,518-761
+  s_5e218b25c57df4::t_076d7204496f90 762
+crates/core/src/platform/ios_qemu_env.rs
+  s_5e218b25c57df4::t_071ba246388996 1-895
+packages/android/src/main/kotlin/com/napaxi/android/AgentProviders.kt
+  s_5e218b25c57df4::t_071ba246388996 24-38,46-48,72-74,111-119,134-204,209-210,213-217,224-232,246-293,409-412,417-440,447-449,467,474-544,581-582,586-594,596,608-620,649-674,679-681,692,888,1071,1075-1077,1080-1088,1113-1114,1120-1121,1130-1131,1134-1135,1138-1152
+crates/core/src/capabilities/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 35-42,80-89,106-121,431-509,1336-1451
+  s_5e218b25c57df4::t_00285fbfd63e15 1452
+packages/ios/Sources/Napaxi/NapaxiIosQemuSandboxSupport.swift
+  s_5e218b25c57df4::t_071ba246388996 1-77
+packages/flutter/test/project_contract_fixture_test.dart
+  s_5e218b25c57df4::t_071ba246388996 1-22
+docs/agent-app-actions.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 34-39
+packages/ios/Sources/Napaxi/ProjectModels.swift
+  s_5e218b25c57df4::t_071ba246388996 1-53
+crates/core/src/agent_engine/codex/history_mapping.rs
+  s_5e218b25c57df4::t_071ba246388996 181,742-758,768-771
+crates/core/src/api/platform.rs
+  s_5e218b25c57df4::t_071ba246388996 7-9
+packages/ios/Vendor/IosQemu/Sources/QEMU/qemu_runner.h
+  s_5e218b25c57df4::t_071ba246388996 1-63
+THIRD-PARTY-LICENSES.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 12,15,19,21,23,33-43
+packages/flutter/lib/platform_context.dart
+  s_5e218b25c57df4::t_071ba246388996 55-56
+examples/provider_app/android_generated_tasks/app/src/main/assets/agent-app.json
+  s_5e218b25c57df4::t_071ba246388996 1-82
+examples/flutter/lib/screens/chat_screen.dart
+  s_5e218b25c57df4::t_a36e2ad1468763 1199-1202,3912-3914,4131-4133,5823,5830,5834-5838,5866,9003-9005,9084-9086,9126-9128,9146-9148,9219-9221,9259-9261
+  s_5e218b25c57df4::t_060c44ae6f52b7 5051,8909-8910
+  s_5e218b25c57df4::t_071ba246388996 7-8,424-432,808-809,816,909,911-912,922-923,928,944,952,1306,1340,1342,1353-1434,2744-2748,2753,2755,2762-2766,2771,2773,2992-3005,3038-3039,3069-3077,3190,3212-3225,3265-3272,3521-3526,3546-3596,3903-3905,3951,3965-4023,4025-4027,4365,4368-4370,4381-4645,4713-4720,4733,4741-4779,4781,5392,5403,5408,5410-5416,5453-5473,5885-5894,5903,5952,5960,5968,5982,6225,6237,6301,6334-6339,6343,6362-6366,6374-6378,6384-6396,6406,6408-6410,6414-6417,6420-6430,6432,6447,6477-6495,6658-6661,6664,6667,6671-6677,6679,6685-6686,6700-6702,6705-6708,6711-6714,6722,6731-6748,6754-6770,6772,6774-6787,7472,7474-7481,7776-7784,7841,7849-7853,7874-7877,7880,7905-7908,7918-7946,7981-8049,8911,8928-8942,8954-8956,8976-8985,9976,9980,10000,10004,10009,10011,10030-10039,10050,10067-10069,10170-10176,10192,10250-10284,10300-10316,10321,10324,10412,10444-10449,10629-10630,10786,10834-10838,10856,10863-10864
+  s_5e218b25c57df4::t_281708ba41d891 8050
+  s_5e218b25c57df4::t_5fe68560f14998 8912
+packages/android/src/test/kotlin/com/napaxi/android/AgentProviderHostProtocolTest.kt
+  s_5e218b25c57df4::t_071ba246388996 13-21,139-141,172-174,181-182
+  s_5e218b25c57df4::t_709f6dbc60d9ca 12
+examples/flutter/lib/screens/chat_top_bar_widgets.dart
+  s_5e218b25c57df4::t_071ba246388996 38-52,122,125-130,142-147,150,153-157,168,171-176,183-192,353-412
+  s_5e218b25c57df4::t_cf05c4e8307f55 413-414
+crates/core/src/tools/builtin/shell.rs
+  s_5e218b25c57df4::t_071ba246388996 178
+examples/README.md
+  s_5e218b25c57df4::t_071ba246388996 51
+crates/core/src/capabilities/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 38-41,43-48,69,71-72
+docs/agent-provider-protocol.md
+  s_5e218b25c57df4::t_071ba246388996 24-86,102-103,105,119-129,182-201,245-282
+  s_5e218b25c57df4::t_92237d6faed897 283
+.gitignore
+  s_5e218b25c57df4::t_071ba246388996 95-97
+examples/provider_app/android_virtual_wallet/app/src/main/kotlin/demo/wallet/provider/WalletPackage.kt
+  s_5e218b25c57df4::t_071ba246388996 40-42,54-56,68-70,90-95
+examples/flutter/lib/widgets/chat_input.dart
+  s_5e218b25c57df4::t_071ba246388996 223,251,260,290-292,296,330-400,406-408,414-421,433-441,449-459,468-484,546,550-552,558,562-571,688,713-732,737-750,752-763,766-772,774-814,817-895,901,1022-1118,1335,1370,1545-1547,1554-1555,1576-1577,1579-1585,2011-2180,2322,2417,2438-2441,2446-2461,2471-2501,2561-2601
+  s_5e218b25c57df4::t_edcb8f24af69ed 2602
+packages/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-tty.h
+  s_5e218b25c57df4::t_071ba246388996 1-93
+packages/flutter/pubspec.yaml
+  s_5e218b25c57df4::t_071ba246388996 20-21
+crates/core/src/workspace/recall/index.rs
+  s_5e218b25c57df4::t_071ba246388996 233-257,261-284,293,338-344,373
+packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderActionRegistry.java
+  s_5e218b25c57df4::t_071ba246388996 1-143
+packages/ios/Sources/Napaxi/NativeBridge.swift
+  s_5e218b25c57df4::t_071ba246388996 239-243,247-249,251-252
+packages/ios/Vendor/IosQemu/Sources/QEMU/qemu_bridge.c
+  s_5e218b25c57df4::t_071ba246388996 1-189
+crates/core/src/evolution/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 228
+examples/provider_app/android_generated_notes/app/src/main/java/demo/generated/notes/MainActivity.java
+  s_5e218b25c57df4::t_071ba246388996 1-77
+crates/core/src/turn/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 239-330,374,433,516,577,623,661,676-756,780,847,967-968,1058-1059,1477-1547
+  s_5e218b25c57df4::t_6d0dac3747b2fc 1548
+packages/agent_provider/ios/Sources/AgentProvider/AgentProvider.swift
+  s_5e218b25c57df4::t_071ba246388996 205-207,210
+examples/integration/android/README.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 9,30-53,56-58
+  s_5e218b25c57df4::t_b7185280cdcf2d 59
+packages/api_bridge/bridge/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 10,318-322,640,647
+crates/core/src/tools/browser.rs
+  s_5e218b25c57df4::t_071ba246388996 14,27,84-97,311,369-378
+packages/flutter/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-inprocess.h
+  s_5e218b25c57df4::t_071ba246388996 1-172
+packages/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-fd.h
+  s_5e218b25c57df4::t_071ba246388996 1-168
+examples/flutter/test/chat_session_run_state_test.dart
+  s_5e218b25c57df4::t_071ba246388996 1-94
+packages/flutter/ios/Vendor/IosQemu/Sources/QEMU/qemu_runner.c
+  s_5e218b25c57df4::t_071ba246388996 1-2576
+crates/core/src/context/budget_mid_turn_precheck_tests.rs
+  s_5e218b25c57df4::t_071ba246388996 1-122
+examples/provider_app/android_generated_notes/app/src/main/res/values/colors.xml
+  s_5e218b25c57df4::t_071ba246388996 1-6
+packages/ios/Tests/NapaxiTests/SessionModelTests.swift
+  s_5e218b25c57df4::t_071ba246388996 231-242
+crates/core/src/skills/bundled.rs
+  s_5e218b25c57df4::t_071ba246388996 13-122,145-155,173,183-223,233,256-380,383,388-394,397-398,402-403
+packages/ios/Vendor/IosQemu/Sources/QEMU/qemu_bridge.h
+  s_5e218b25c57df4::t_071ba246388996 1-62
+crates/core/src/workspace/prompt.rs
+  s_5e218b25c57df4::t_071ba246388996 32,36,38-44,69,81-86,89
+examples/flutter/lib/models/llm_models.dart
+  s_5e218b25c57df4::t_fd02145fcbbeda 7-8
+examples/integration/ios/host/Sources/NapaxiIOSIntegrationSmoke/SmokeHost.swift
+  s_5e218b25c57df4::t_071ba246388996 32-33,37-39,43-44,48-52,56-58,61-63,65-69
+packages/flutter/lib/napaxi_flutter.dart
+  s_5e218b25c57df4::t_071ba246388996 37,55,59
+crates/core/src/agent_engine/codex/history_rollout.rs
+  s_5e218b25c57df4::t_071ba246388996 3,5,8,24,33
+packages/ios/Tests/NapaxiTests/ToolRequestRouterTests.swift
+  s_5e218b25c57df4::t_071ba246388996 216-239
+crates/core/src/api/agent_engine.rs
+  s_5e218b25c57df4::t_071ba246388996 8-19,33-45
+  s_5e218b25c57df4::t_18709da570ff6c 46-47
+AGENTS.md
+  s_5e218b25c57df4::t_071ba246388996 36
+crates/core/src/tools/builtin/mcp.rs
+  s_5e218b25c57df4::t_071ba246388996 14-26,89
+.github/workflows/rust.yml
+  s_5e218b25c57df4::t_071ba246388996 27,31,51,53
+crates/core/src/skills/afs.rs
+  s_5e218b25c57df4::t_071ba246388996 40,43,57,60,112-126,155-157,179-185
+  s_5e218b25c57df4::t_14deb6e031459f 186
+packages/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-inprocess.h
+  s_5e218b25c57df4::t_071ba246388996 1-172
+packages/ios/Sources/Napaxi/AgentProviderAPI.swift
+  s_5e218b25c57df4::t_071ba246388996 7-54,111-121,130-140,160-233,303-306,312,352,357,365-375,383-389
+crates/core/src/runtime/tool_context.rs
+  s_5e218b25c57df4::t_071ba246388996 72-109,117-118,126,129,167,173,175-195,201-202
+examples/flutter/test/local_bot_gateway_test.dart
+  s_5e218b25c57df4::t_fd02145fcbbeda 115
+packages/agent_provider/ios/Sources/AgentProvider/Models.swift
+  s_5e218b25c57df4::t_071ba246388996 88-90,101-104,115-117
+examples/provider_app/android_generated_notes/app/src/main/res/values/strings.xml
+  s_5e218b25c57df4::t_071ba246388996 1-3
+crates/core/src/agents/agent_app/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 29,43-44,62-100,105-197,213,215-234,238,260,270-276,286-312,315,319-334,336-338,340,345,347-354,368-391,402,583-585,653-689,710-730,732-738,924-931
+examples/flutter/test/a2a_slash_contract_test.dart
+  s_5e218b25c57df4::t_071ba246388996 140
+examples/provider_app/android_generated_tasks/app/src/main/res/values/strings.xml
+  s_5e218b25c57df4::t_071ba246388996 1-3
+crates/core/src/capabilities/definitions.rs
+  s_5e218b25c57df4::t_071ba246388996 35-51,276-287,483,538-614
+packages/flutter/lib/api/agent_provider_install_api.dart
+  s_5e218b25c57df4::t_071ba246388996 5,8,18-19,23,38-63,68-145,157-158,177,200-281,291-313,318,321-323,337-345,390-393,395-399,404,408-427,450-454,459,463-482,503-508
+packages/ios/README.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 5,21,64,66,68
+docs/sdk-integration.md
+  s_5e218b25c57df4::t_071ba246388996 34-41,43-47,97,101-104,109,111-114
+packages/ios/Tests/NapaxiTests/AgentProviderHostTests.swift
+  s_5e218b25c57df4::t_071ba246388996 15-23,42-58,132-135,149-153
+crates/core/src/skills/bundled_seeds/android-apk-build/templates/agent-app.json.template
+  s_5e218b25c57df4::t_071ba246388996 1-12
+packages/agent_provider/android/src/main/kotlin/agent/provider/sdk/TrustedHost.kt
+  s_5e218b25c57df4::t_071ba246388996 60-61,64-66,158,170-176
+crates/core/Cargo.toml
+  s_5e218b25c57df4::t_071ba246388996 93,104,117-119,127
+examples/flutter/lib/widgets/chat_message.dart
+  s_5e218b25c57df4::t_071ba246388996 34,47,161,163-165,432-436,440,446-447,506,515,531-549,553-562,566-570
+  s_5e218b25c57df4::t_070f519b86223b 571-572
+packages/ios/Vendor/IosQemu/Sources/QEMU/qemu_runner.c
+  s_5e218b25c57df4::t_071ba246388996 1-2576
+README.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 294
+packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderLite.java
+  s_5e218b25c57df4::t_071ba246388996 1-681
+crates/core/src/session/mutation.rs
+  s_5e218b25c57df4::t_071ba246388996 229-231
+crates/core/src/tools/registry/prepare.rs
+  s_5e218b25c57df4::t_071ba246388996 3-4,14-23,27-125
+  s_5e218b25c57df4::t_f720ee7858011d 126
+crates/core/src/skills/paths.rs
+  s_5e218b25c57df4::t_071ba246388996 225-237,253-380,462-596
+crates/core/src/evolution/review.rs
+  s_5e218b25c57df4::t_071ba246388996 15,166-199,240,244-248,660-713
+  s_5e218b25c57df4::t_fd2f9d080c7ead 714-715
+examples/flutter/lib/models/chat_models.dart
+  s_5e218b25c57df4::t_071ba246388996 276,315-318,331,341,384,818-842
+  s_5e218b25c57df4::t_6eb3f89361fafa 843
+tools/scripts/README.md
+  s_5e218b25c57df4::t_071ba246388996 52
+crates/core/src/mcp/tools.rs
+  s_5e218b25c57df4::t_071ba246388996 4-6,14-20,24-25,41-44,74-168,180-190,193-197,202-203,208-216,301-519
+  s_5e218b25c57df4::t_a0645ab9d24485 520
+crates/core/src/tools/web_search.rs
+  s_5e218b25c57df4::t_071ba246388996 9,17,32-37,45-49,53,83-86,110-111,113,117-130,135-136,142-172,176-212,214-264,267-300,302-325,327-328,331-332,335-348,350-376,379-397,399,402-412,414,417-421,424-473,476-489,491-508,510-511,514-515,543-545,568-624,626-628,632-769,771-835
+packages/flutter/lib/generated/frb_generated.dart
+  s_5e218b25c57df4::t_071ba246388996 21,86,157-163,475-479,661-675,686-691,837-844,1025-1032,1246-1251,1727-1765,1782,1809,1841,1878,1910,1940,1970,2007,2048,2086,2120,2157,2191,2225,2261,2295,2328,2365,2397,2427,2462,2505,2551,2581,2611,2644,2676,2706,2739,2778,2817,2852,2884,2921,2953,2987,3013,3040,3070,3096,3128,3160,3190,3220,3247,3277,3307,3340,3372,3401,3426,3453,3482,3519,3562,3599,3634,3655-3689,3701,3733,3762,3794,3829,3864,3899,3927,3956,3997,4048,4080,4115,4143,4166,4197,4231,4265,4295,4325,4358,4387,4415,4446,4474,4501,4535,4566,4593,4626,4656-4660,4686-4690,4718,4752,4782,4815,4848,4869,4871-4875,4877-4879,4882-4887,4890-4892,4898-4899,4905,4907-4915,4919,4921-4990,5003,5023-5059,5078,5116,5151,5187,5227,5263,5301,5335,5369,5403,5437,5474,5511,5552,5588,5624,5665,5701,5742,5777,5814,5850,5891,5912-5964,5983,6021,6050,6080,6116,6147,6178,6211,6247,6277,6311,6345,6378,6414,6447,6482,6521,6560,6595,6633,6669,6706,6751,6806,6842,6876,6912,6953,6997,7041,7076,7110,7144,7165-7205,7218,7255,7289,7323,7358,7392,7428,7465,7501,7539,7576,7613,7651,7687,7723,7759,7796,7827,7860,7896,7937,7982,8018,8053,8091,8129,8159,8197,8238,8293,8350,8401,8462,8526,8567-8602,8619,8657,8688,8724,8761,8795,8831,8865,8900,8931,8965,8999,9036,9070,9104,9140,9179,9220,9251,9284,9314,9347,9387,9432-9437,9462-9467,9526-9531,9562-9572,9640-9648,9681-9690,9692
+  s_5e218b25c57df4::t_b87afb098d3865 9691,9693
+packages/flutter/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-task.h
+  s_5e218b25c57df4::t_071ba246388996 1-162
+packages/android/src/main/kotlin/com/napaxi/android/Apis.kt
+  s_5e218b25c57df4::t_071ba246388996 21-22,31-40,155-268,386,389,1808-1816
+  s_5e218b25c57df4::t_ad1a367f7107a8 1817
+packages/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-task.h
+  s_5e218b25c57df4::t_071ba246388996 1-162
+crates/core/src/workspace/recall/sql.rs
+  s_5e218b25c57df4::t_071ba246388996 8-25,31-42,61-62
+packages/agent_provider/android/src/main/kotlin/agent/provider/sdk/Models.kt
+  s_5e218b25c57df4::t_071ba246388996 64-66,76-84,102-106,532-534
+packages/api_bridge/include/napaxi_api_bridge.h
+  s_5e218b25c57df4::t_071ba246388996 74-75
+crates/core/src/context/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 33-34,47,51-68
+  s_5e218b25c57df4::t_33acf81f8337b8 69
+crates/core/src/llm/sse.rs
+  s_5e218b25c57df4::t_071ba246388996 102-106,189,230,282-286,377-381,477-484,506-510
+crates/core/src/tools/registry/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 29
+packages/api_bridge/c_api/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 294,296,302,304,476,529,534,773,777-779,931-957
+  s_5e218b25c57df4::t_fbe3cb89b00381 958-959
+packages/agent_provider/android/src/test/kotlin/agent/provider/sdk/AgentProviderTest.kt
+  s_5e218b25c57df4::t_071ba246388996 65-67,648-650
+crates/core/src/runtime/sessions.rs
+  s_5e218b25c57df4::t_3403bf90087aa3 98
+  s_5e218b25c57df4::t_071ba246388996 31-44,49,95,110-120
+.github/workflows/coverage.yml
+  s_5e218b25c57df4::t_071ba246388996 26,30
+crates/core/src/skills/bundled_seeds/android-apk-build/SKILL.md
+  s_5e218b25c57df4::t_071ba246388996 1-385
+crates/core/src/api/capability.rs
+  s_5e218b25c57df4::t_071ba246388996 491-494
+examples/provider_app/android_generated_notes/app/src/main/res/drawable/ic_launcher.xml
+  s_5e218b25c57df4::t_071ba246388996 1-8
+packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderDiagnostics.java
+  s_5e218b25c57df4::t_071ba246388996 1-559
+packages/api_bridge/c_api/dispatch.rs
+  s_5e218b25c57df4::t_071ba246388996 1,30-40,185-194,341-342,349-350
+crates/core/src/agent_engine/codex/history.rs
+  s_5e218b25c57df4::t_071ba246388996 1-4,10-15,18,21,23,29,35,71,80,98,121,151,155,185,191,219,226-242,244,249-251,254-255,266,272,290,320,323,325,336,339,348,351,355,364,375,378
+docs/sdk-adapter-parity.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 51-57
+crates/core/src/agents/agent_app/persistence.rs
+  s_5e218b25c57df4::t_071ba246388996 9,17,27-46,53,59-70,74-89,163-179
+  s_5e218b25c57df4::t_315422b31ef8b0 180
+crates/core/src/agents/agent_app/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 37,43-45,50-463,542-544,582-584,648-668
+  s_5e218b25c57df4::t_a22726a816ebca 669
+examples/flutter/pubspec.yaml
+  s_5e218b25c57df4::t_071ba246388996 19,33,37,45,47-48
+packages/api_bridge/android_jni.rs
+  s_5e218b25c57df4::t_071ba246388996 48
+packages/flutter/lib/models/agent_provider_install.dart
+  s_5e218b25c57df4::t_071ba246388996 5-29,39-41,55-57,69-70,73-74,79-81,91-118,181-199,229-231
+packages/ios/Sources/Napaxi/Browser.swift
+  s_5e218b25c57df4::t_071ba246388996 393,441-448
+  s_5e218b25c57df4::t_f2f3126a4ea104 449-452
+crates/core/src/mcp/servers.rs
+  s_5e218b25c57df4::t_071ba246388996 40-47,55-61,71-74,76-78,85,137-139,141-147,151,167-174
+examples/flutter/tool/blueshield_chat_smoke.dart
+  s_5e218b25c57df4::t_fd02145fcbbeda 14
+packages/api_contract/fixtures/project/session_placement.json
+  s_5e218b25c57df4::t_071ba246388996 1-10
+crates/core/src/turn/orchestration/collected.rs
+  s_5e218b25c57df4::t_071ba246388996 53,67,70-71,275-292,316,476-584
+  s_5e218b25c57df4::t_b6c5e695441c3f 585
+crates/core/src/api/tools.rs
+  s_5e218b25c57df4::t_071ba246388996 379-384
+  s_5e218b25c57df4::t_3e010663e5c73c 378
+crates/core/src/platform/android_linux_env.rs
+  s_5e218b25c57df4::t_071ba246388996 27,126,143,408
+crates/core/src/skills/lifecycle.rs
+  s_5e218b25c57df4::t_071ba246388996 11,41-46,58-60,158-161,176-179,205-211,213-220,222-223,321,323,325,328-334
+examples/flutter/lib/panels/workbench_drawer.dart
+  s_5e218b25c57df4::t_071ba246388996 109
+packages/flutter/test/apk_installer_test.dart
+  s_5e218b25c57df4::t_071ba246388996 5-38
+crates/core/src/agent_engine/codex/dynamic_tools.rs
+  s_5e218b25c57df4::t_071ba246388996 1-504
+examples/flutter/lib/screens/chat_attachment_widgets.dart
+  s_5e218b25c57df4::t_071ba246388996 69,133-134,255
+examples/provider_app/android_generated_tasks/app/src/main/AndroidManifest.xml
+  s_5e218b25c57df4::t_071ba246388996 1-42
+tools/scripts/check-packages-architecture.sh
+  s_5e218b25c57df4::t_071ba246388996 33,40-41
+crates/core/src/api/project.rs
+  s_5e218b25c57df4::t_071ba246388996 1-301
+crates/core/src/mcp/oauth_flow.rs
+  s_5e218b25c57df4::t_071ba246388996 2-11
+crates/core/src/storage/filesystem.rs
+  s_5e218b25c57df4::t_071ba246388996 100
+crates/core/src/agent_engine/codex/configure.rs
+  s_5e218b25c57df4::t_071ba246388996 1-231
+crates/core/src/api/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 33
+crates/core/src/agent_engine/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 1-459
+packages/flutter/test/session_run_test.dart
+  s_5e218b25c57df4::t_071ba246388996 6-15,74
+examples/provider_app/android_generated_notes/app/src/main/java/demo/generated/notes/NapaxiActionActivity.java
+  s_5e218b25c57df4::t_071ba246388996 1-80
+packages/api_contract/fixtures/project/project_record.json
+  s_5e218b25c57df4::t_071ba246388996 1-11
+examples/integration/android/README.md
+  s_5e218b25c57df4::t_071ba246388996 11-12,38-72,80-90
+  s_5e218b25c57df4::t_f730c5f2791f49 91
+crates/core/src/llm/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 38-45
+crates/core/src/tools/builtin/shell_util.rs
+  s_5e218b25c57df4::t_071ba246388996 4-7,12-19
+crates/core/src/tools/loop/runtime.rs
+  s_5e218b25c57df4::t_071ba246388996 86-87,116-143
+  s_5e218b25c57df4::t_cb09887cf1df95 144-145
+crates/core/src/agent_engine/codex/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 4-6,8,10-15,19,21,24,141,146-149,153-158,516,534,560-619
+crates/core/src/turn/prompt.rs
+  s_5e218b25c57df4::t_071ba246388996 20,152,156
+crates/features/skills/src/registry/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 1829-2044
+examples/integration/ios/app/README.md
+  s_5e218b25c57df4::t_071ba246388996 19-21,35,37-42,45-46
+examples/provider_app/android_generated_tasks/app/src/main/res/drawable/ic_launcher.xml
+  s_5e218b25c57df4::t_071ba246388996 1-8
+packages/agent_provider/android/src/main/kotlin/agent/provider/sdk/AgentProviderContract.kt
+  s_5e218b25c57df4::t_071ba246388996 6,18-21,53-66
+packages/android/src/test/kotlin/com/napaxi/android/ToolingTest.kt
+  s_5e218b25c57df4::t_071ba246388996 150-151
+.github/workflows/checks.yml
+  s_5e218b25c57df4::t_071ba246388996 24,29
+packages/flutter/lib/apk_installer.dart
+  s_5e218b25c57df4::t_071ba246388996 32-35
+packages/ios/Sources/Napaxi/CoreAPIs.swift
+  s_5e218b25c57df4::t_071ba246388996 27-30,83-84,86-91,99-100,107-108,977-985,1307-1398
+  s_5e218b25c57df4::t_0b78546a83731d 1399-1400
+packages/ios/Tests/NapaxiTests/BrowserTests.swift
+  s_5e218b25c57df4::t_071ba246388996 585
+README.md
+  s_5e218b25c57df4::t_071ba246388996 344-346
+packages/agent_provider/android_lite/README.md
+  s_5e218b25c57df4::t_071ba246388996 1-25
+tools/scripts/build.sh
+  s_5e218b25c57df4::t_071ba246388996 110-152,155,157-163,166-173,175-186,190-202,418-486,526-552,554,581-583,601-603,669,684-685,837-852,868-873,914,916,920-921,943,946-959,970,974,998,1013-1015,1047,1177,1197
+packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderDiagnosticsInitializer.java
+  s_5e218b25c57df4::t_071ba246388996 1-25
+crates/core/src/mcp/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 63-65,94-96,148-150,183-185,224-226,241-243,309-311,338-340,396-398,406-648,910-912,958-960,992-1041,1391-1749
+CHANGELOG.md
+  s_5e218b25c57df4::t_071ba246388996 86,190
+crates/core/src/capabilities/decisions.rs
+  s_5e218b25c57df4::t_071ba246388996 156-222
+packages/flutter/lib/api/project_api.dart
+  s_5e218b25c57df4::t_071ba246388996 1-122
+crates/core/src/turn/history.rs
+  s_5e218b25c57df4::t_071ba246388996 70,85,99-107,158-160,166-184,186-189
+docs/mobile-capabilities.md
+  s_5e218b25c57df4::t_071ba246388996 164-166,177-193,243-253,268-315,364,366-367,404-412
+  s_5e218b25c57df4::t_ff6d8cf63bf2b0 413
+packages/android/src/test/kotlin/com/napaxi/android/ProjectContractTest.kt
+  s_5e218b25c57df4::t_071ba246388996 1-34
+packages/flutter/lib/api/agent_app_api.dart
+  s_5e218b25c57df4::t_071ba246388996 43-53
+examples/flutter/test/test_support.dart
+  s_5e218b25c57df4::t_071ba246388996 65-67,79-86,114-116,129-130,136,322-411,642-691,702,724-728,787,988,2043
+packages/flutter/lib/api/chat_api.dart
+  s_5e218b25c57df4::t_071ba246388996 3,16,22,31,39
+crates/core/src/agent_engine/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 16,145-150,173-180,240,243-244,251,271-292,518-525,531,539-542,563-570,576,584-587,663
+packages/flutter/test/agent_app_model_test.dart
+  s_5e218b25c57df4::t_071ba246388996 18-19,21,25,27,34-36,45-50,53-55,81
+examples/provider_app/android_generated_tasks/app/src/main/res/values/colors.xml
+  s_5e218b25c57df4::t_071ba246388996 1-6
+crates/core/src/agents/agent_app/types.rs
+  s_5e218b25c57df4::t_071ba246388996 8,10,31-39,52-60,99-104,151-155,164-193,266-267
+  s_5e218b25c57df4::t_2b89cc6798a8a0 268-269
+crates/core/src/llm/openai_compatible.rs
+  s_5e218b25c57df4::t_071ba246388996 23-37,129,141,383
+examples/flutter/lib/demo_client/cli_engine_bridge.dart
+  s_5e218b25c57df4::t_071ba246388996 251,300-301,2740,2743,2749,2869
+crates/core/src/platform/ios_qemu_env/pty.rs
+  s_5e218b25c57df4::t_071ba246388996 1-247
+crates/core/src/session/history.rs
+  s_5e218b25c57df4::t_071ba246388996 15-33,77-118,122-162,246-259,314,329-345,366,467-772
+packages/api_bridge/c_api/tools_dispatch.rs
+  s_5e218b25c57df4::t_071ba246388996 5-9,12-16,19-23
+examples/flutter/lib/main.dart
+  s_5e218b25c57df4::t_071ba246388996 5
+packages/flutter/ios/Classes/NapaxiFlutterPlugin.swift
+  s_5e218b25c57df4::t_071ba246388996 6-9,44,900,905,907,911-912,914-917
+packages/ios/Sources/Napaxi/PlatformTools.swift
+  s_5e218b25c57df4::t_071ba246388996 176-180,182,434-435,439,448-449,458-459,463
+packages/ios/Sources/Napaxi/ToolRequestRouter.swift
+  s_5e218b25c57df4::t_071ba246388996 99,102,105,172
+crates/core/src/skills/install.rs
+  s_5e218b25c57df4::t_071ba246388996 54-56
+packages/flutter/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-tty.h
+  s_5e218b25c57df4::t_071ba246388996 1-93
+packages/flutter/lib/models/agent_app_diagnostics.dart
+  s_5e218b25c57df4::t_071ba246388996 1-135
+NOTICE
+  s_5e218b25c57df4::t_071ba246388996 25-27,32
+crates/core/src/tools/loop.rs
+  s_5e218b25c57df4::t_071ba246388996 209-241,311,514
+examples/flutter/lib/screens/config_screen.dart
+  s_5e218b25c57df4::t_071ba246388996 660-661,1614-1618
+examples/provider_app/android_generated_tasks/app/src/main/java/demo/generated/tasks/MainActivity.java
+  s_5e218b25c57df4::t_071ba246388996 1-75
+CONTRIBUTING.md
+  s_5e218b25c57df4::t_071ba246388996 74
+packages/flutter/test/engine_core_session_run_test.dart
+  s_5e218b25c57df4::t_071ba246388996 22-25,34-38,82-107,128-154,171
+packages/flutter/lib/api/engine_core.dart
+  s_5e218b25c57df4::t_071ba246388996 14-15,25,56,82,97,221-226,241-242,270-271,275,299-304,306-313,315-320,322-329,331-336,338-343,345-350,352-357,359-364,366-377,379-383,385-389,391-396,460-461,468-470,623-626,777,781-782,787,809,821-822,829
+packages/flutter/lib/generated/bridge/agent_app.dart
+  s_5e218b25c57df4::t_071ba246388996 20-21
+packages/flutter/ios/Vendor/IosQemu/Vendor/QEMU/include/ios-fd.h
+  s_5e218b25c57df4::t_071ba246388996 1-168
+packages/ios/Sources/Napaxi/Models.swift
+  s_5e218b25c57df4::t_071ba246388996 2599-2603
+packages/flutter/android/jniLibs/THIRD-PARTY.md
+  s_5e218b25c57df4::t_071ba246388996 22,37
+packages/ios/Tests/NapaxiTests/FlutterAliasTests.swift
+  s_5e218b25c57df4::t_071ba246388996 195,359
+crates/core/src/skills/export.rs
+  s_5e218b25c57df4::t_071ba246388996 38,43,50,68,85-91,98-134
+packages/ios/Package.swift
+  s_5e218b25c57df4::t_071ba246388996 6-22,38-56,61,66-67
+crates/core/src/llm/anthropic.rs
+  s_5e218b25c57df4::t_071ba246388996 25-33,89,235
+packages/agent_provider/ios/Tests/AgentProviderTests/AgentProviderTests.swift
+  s_5e218b25c57df4::t_071ba246388996 14-16,59,83,142-145
+examples/provider_app/android_generated_tasks/README.md
+  s_5e218b25c57df4::t_071ba246388996 1-9
+packages/flutter/README.md
+  s_5e218b25c57df4::t_071ba246388996 474
+crates/core/src/session/store.rs
+  s_5e218b25c57df4::t_071ba246388996 39-43
+examples/flutter/lib/panels/projects_panel.dart
+  s_5e218b25c57df4::t_071ba246388996 1025,1033,1040,1053,1076,1215-1227,1288-1309
+tools/scripts/bake_ios_rootfs.sh
+  s_5e218b25c57df4::t_071ba246388996 1-260
+packages/flutter/lib/generated/bridge/project.dart
+  s_5e218b25c57df4::t_071ba246388996 1-91
+crates/core/src/platform_capabilities.rs
+  s_5e218b25c57df4::t_071ba246388996 46-51,53,403
+packages/flutter/ios/Vendor/IosQemu/Sources/QEMU/qemu_bridge.c
+  s_5e218b25c57df4::t_071ba246388996 1-189
+packages/flutter/lib/browser_tool_host.dart
+  s_5e218b25c57df4::t_071ba246388996 111-127,180
+packages/flutter/lib/generated/frb_generated.web.dart
+  s_5e218b25c57df4::t_071ba246388996 24,34-43,45-46,48-49,51-52,54-55,57-58,60-61,63-64,66-67,69-70,72-73,75-76,78-79,81-82,84-85,87-88,90-93,95-96,98-99,101-102,104-105,107-108,110-111,113-114,116-117,119-120,122-123,125-126,128-129,131-132,134-138,140-144,146-147,149-150,152-156,158-159,161-162,164-168,170-171,173-177,179-180,182-183,185-186,188-189,191-193,198-199,201-202,204-206
+packages/ios/Sources/Napaxi/BrowserRuntime.swift
+  s_5e218b25c57df4::t_071ba246388996 98-99,331-353,822,878-936,1303,1401-1588,1590-1593,1595,1611-1612,1616,1688-1701,1718-1725,1731,1741-1746,1831-1833,1836-1887,1889
+examples/flutter/lib/widgets/chat_tool_trace.dart
+  s_5e218b25c57df4::t_071ba246388996 7,51-54,159,338,343,355-360,405-416,484-495,875-876,916,921,1142-1144,1155-1158,1236,1239,1254-1265,3763-3786,3815-3819,3916-3918
+packages/flutter/lib/generated/frb_generated.io.dart
+  s_5e218b25c57df4::t_071ba246388996 21,32-38,40-41,43-44,46-47,49-50,52-53,55-56,58-59,61-62,64-65,67-68,70-71,73-74,76-77,79-80,82-83,85-86,88-91,93-94,96-97,99-100,102-103,105-106,108-109,111-112,114-115,117-118,120-121,123-124,126-127,129-130,132-136,138-142,144-145,147-148,150-154,156-157,159-160,162-166,168-169,171-175,177-178,180-181,183-184,186-187,189-191,193,195-197,199-201,203-206
+.github/workflows/docs-publish.yml
+  s_5e218b25c57df4::t_071ba246388996 32,34,105
+packages/ios/Sources/Napaxi/FlutterAliases.swift
+  s_5e218b25c57df4::t_071ba246388996 17,204
+examples/provider_app/android_generated_tasks/app/src/main/res/values/styles.xml
+  s_5e218b25c57df4::t_071ba246388996 1-8
+crates/core/src/agent_engine/codex/state.rs
+  s_5e218b25c57df4::t_071ba246388996 4,9,13-17,23-24,27,37,41,45,53,57,63,68,77,84,127,187,229,234,281,310,319,356-357
+packages/api_bridge/c_api/project_dispatch.rs
+  s_5e218b25c57df4::t_071ba246388996 1-70
+crates/core/src/tools/web_fetch.rs
+  s_5e218b25c57df4::t_071ba246388996 3-5,11-17,41,43-67,78-158
+crates/core/src/project/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 1-969
+packages/flutter/lib/models/session.dart
+  s_5e218b25c57df4::t_071ba246388996 16-19,118-120,307-314,367-369,375,380,383,389-390,404-405,410,420-422,559,564,575-577,643-644,655-656,665-670,731-732,821-822
+crates/core/src/agent_engine/codex/protocol.rs
+  s_5e218b25c57df4::t_071ba246388996 1,6,8-9,24,29,58-59,64,70,76-80,83,87-165,259,279-280,288-308,310-319,330-384,395-449,456-594,632-635,679-680
+crates/features/skills/src/registry/discovery.rs
+  s_5e218b25c57df4::t_071ba246388996 8-9,344-525
+packages/api_contract/capability_matrix.yaml
+  s_5e218b25c57df4::t_071ba246388996 13-17
+packages/android/src/main/kotlin/com/napaxi/android/Models.kt
+  s_5e218b25c57df4::t_071ba246388996 394-461,4774-4776,4805-4807,4838-4840,4876-4878,4893-4895,4916-4918,4946-4948,4954-4962,4975-4979,4991-4999,5120-5144
+examples/integration/ios/app/NapaxiIOSIntegrationApp/MainViewController.swift
+  s_5e218b25c57df4::t_071ba246388996 31-34,41-42,50-54,69-74,84,89-90,93-97,101,105-107,109-113,118,124-125,130-131,137-156
+  s_5e218b25c57df4::t_a5b7c235348001 157-158
+examples/flutter/lib/panels/files_panel.dart
+  s_5e218b25c57df4::t_071ba246388996 7-8,15-16,128-134,206,220,227,235-245,340,348,373-378,446,533,638,992,1005,1046,1051,1056,1071,1090,1277,1280,1283,1302-1304,1311-1313,1321,1325,1405-1414
+examples/provider_app/android_generated_notes/app/src/main/AndroidManifest.xml
+  s_5e218b25c57df4::t_071ba246388996 1-42
+crates/core/src/agent_engine/codex/env.rs
+  s_5e218b25c57df4::t_071ba246388996 1-134
+examples/flutter/lib/panels/skills_panel.dart
+  s_5e218b25c57df4::t_071ba246388996 371,376
+packages/api_contract/fixtures/browser/tool_descriptors.json
+  s_5e218b25c57df4::t_071ba246388996 52-64,257
+  s_5e218b25c57df4::t_7227a5f247a8dc 51
+crates/core/src/storage/bridge.rs
+  s_5e218b25c57df4::t_071ba246388996 10,30,39-46,67-144
+  s_5e218b25c57df4::t_a08a6c6800429f 145
+packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderInstallActivity.java
+  s_5e218b25c57df4::t_071ba246388996 1-14
+packages/flutter/ios/napaxi_flutter.podspec
+  s_5e218b25c57df4::t_071ba246388996 8,20-25,28,32,39-41,46-48
+packages/ios/Sources/Napaxi/AgentProviderHost.swift
+  s_5e218b25c57df4::t_071ba246388996 5-24,32-34,48-50,63-65,87-89,105-107,126-128,155-157,637,648-657,679-692
+packages/ios/Tests/NapaxiTests/PlatformToolContractTests.swift
+  s_5e218b25c57df4::t_071ba246388996 53-62
+crates/features/skills/src/registry/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 460-468,470,472-479
+packages/flutter/lib/models/project.dart
+  s_5e218b25c57df4::t_071ba246388996 1-84
+docs/agent-provider-protocol.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 13-67,81-84,94-102,133-136,170-200
+  s_5e218b25c57df4::t_30e6273d765b14 201
+packages/ios/README.md
+  s_5e218b25c57df4::t_071ba246388996 6,17,375-383
+docs/sdk-integration.zh-CN.md
+  s_5e218b25c57df4::t_071ba246388996 42,77,79
+tools/scripts/check-api-contract.js
+  s_5e218b25c57df4::t_071ba246388996 447-507,510,512,514,522
+docs/ai-coding-guidelines.md
+  s_5e218b25c57df4::t_071ba246388996 44
+crates/core/src/error.rs
+  s_5e218b25c57df4::t_071ba246388996 135-177,188,242-246
+crates/core/src/tools/builtin/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 25-32,66-67,70-72,81
+examples/flutter/lib/panels/environment_panel.dart
+  s_5e218b25c57df4::t_071ba246388996 127,134-149,811-821,1340,1347-1351,1358,1377-1380
+packages/flutter/ios/Classes/force_link.c
+  s_5e218b25c57df4::t_071ba246388996 1-2,20-21,41-42
+crates/core/src/context/budget.rs
+  s_5e218b25c57df4::t_071ba246388996 32-100,259,886-889
+crates/features/evolution/Cargo.toml
+  s_5e218b25c57df4::t_071ba246388996 44,46
+examples/provider_app/android_generated_notes/app/src/main/assets/agent-app.json
+  s_5e218b25c57df4::t_071ba246388996 1-107
+crates/core/src/turn/prepare.rs
+  s_5e218b25c57df4::t_071ba246388996 4,25-26,64,83,110-115,133,199-214,232-233,248,276-281,299,357-358
+crates/core/src/tools/builtin/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 580-949
+examples/provider_app/ios_virtual_wallet/VirtualWalletProvider/WalletPackage.swift
+  s_5e218b25c57df4::t_071ba246388996 54-60,80-86,106-112
+examples/flutter/test/widget_test.dart
+  s_5e218b25c57df4::t_623f558835138a 115,118,121
+  s_5e218b25c57df4::t_071ba246388996 3,762,911-914,1077,1147,1166,1180,1201,1219-1235,1245-1326,1403,1426,1479,1512-1515,1630,1649-1651,1656-1665,1667-1669,1672,1674,1676-1677,1683-1695,1697-1703,1705-1796,2092-2095,2165-2166,2168-2170,2176,2184,2240-2241,2261-2269,2287-2300,2333-2338,2405-2408,3376,3381,3383,3427,3436,3460-3937,3939-3941,3943-3950,3952-3967,3969-3973,3984-3985,3996,4169,4205,4287-4289,4974,5342,5379-5383,5776-5817,6432-6434,6508-6510,6572-6577,6579-6580,6588-6595,6602,6608,6646-6655,6729-6731,6796-6797,7019,7275-7276,7374-7377,7404,7407,7435,7437,7451,7486,7505,7662-7663,7666,7669,7671,7675-7676,7678,7680,7682-7689,7691,7694-7695,7697,7701,7704,7931-7934,7977-7980,8213,8219,8308-8313,8321-8328,8352-8356,8403-8408,8475,8478,8481,8487,8521-8524,8613-8626,9437,9457-9509,9511-9580
+  s_5e218b25c57df4::t_a36e2ad1468763 3974-3980,3982-3983,3986-3995
+  s_5e218b25c57df4::t_6e8820899078cd 9510
+  s_5e218b25c57df4::t_475a32bc675273 9581
+examples/provider_app/android_generated_notes/README.md
+  s_5e218b25c57df4::t_071ba246388996 1-23
+crates/core/src/runtime/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 55-57,70
+packages/android/src/main/kotlin/com/napaxi/android/NapaxiEngine.kt
+  s_5e218b25c57df4::t_071ba246388996 41,559,572,599,602-609,620,665,753,761,1565-1572
+  s_5e218b25c57df4::t_02bba3d65d813e 1573-1577
+crates/core/src/agent_engine/codex/process.rs
+  s_5e218b25c57df4::t_071ba246388996 1,4,7,9-14,17,19-23,25,27-30,32,34-35,38,40,42,44,47,49,61,65,67,79-85,122,130-131,135-140,142-143,151-153,251,255,271-273,304-306,310-314,395-423,425,451-452,464,503,523,532,539-540,547-550,552,555-570,572-573,581-582,592-595,599-601,610,624-625,645,652-668,670,673,681,690,706-712,736,761,765,779,793,800,827,847,854,859,880-896
+packages/agent_provider/android_lite/src/main/java/agent/provider/lite/AgentProviderDiagnosticsActivity.java
+  s_5e218b25c57df4::t_071ba246388996 1-65
+packages/flutter/lib/engine.dart
+  s_5e218b25c57df4::t_071ba246388996 19,48,169,208,253,328-331,335-336,356-357,413,421-424,431-432,439-444,449-450,457-460,466-467,473-478,682,687,704,713
+crates/core/src/evolution/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 1-782
+packages/flutter/lib/browser_controller.dart
+  s_5e218b25c57df4::t_071ba246388996 61-65,92-96,165-179,212,247,316-319,339-342,346-349,353-367,371-376,485-493,500-507,555-557,569-586,611-614,667-668,672-673,713-715,744-756,837-838,951-952,1026-1034,1140,1145-1204,1212-1213,1221-1222,1251-1252,1798,1827-2014,2017-2020,2022,2055-2056,2065-2066,2245-2258,2281-2288,2294,2306-2311,2436,2440-2491,2493
+crates/core/src/llm/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 15,44-59,403-439,458-463,531,540-541,545,554-571,635-641,717,732-746,775,821,830-840,906-916,939-950
+  s_5e218b25c57df4::t_4621b2b7035ffb 951
+crates/core/src/tools/builtin/shell_inject.rs
+  s_5e218b25c57df4::t_071ba246388996 16-20,119-121,180,238-251,289-305,394-461
+crates/core/src/session/lifecycle.rs
+  s_5e218b25c57df4::t_071ba246388996 13,37-47
+packages/android/src/main/kotlin/com/napaxi/android/Tooling.kt
+  s_5e218b25c57df4::t_071ba246388996 43,99,110
+packages/api_bridge/bridge/project.rs
+  s_5e218b25c57df4::t_071ba246388996 1-88
+examples/provider_app/android_generated_notes/app/src/main/java/demo/generated/notes/NoteStore.java
+  s_5e218b25c57df4::t_071ba246388996 1-99
+packages/api_contract/project.json
+  s_5e218b25c57df4::t_071ba246388996 1-53
+crates/core/src/tools/builtin/handlers.rs
+  s_5e218b25c57df4::t_071ba246388996 8-11,112,115,122,124-125,135-175,177,180,187,189-190,229-274
+  s_5e218b25c57df4::t_b7091f87abd5dc 275
+crates/core/src/workspace/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 22-25,187-229,385-395
+  s_5e218b25c57df4::t_e0580b2bd7bb10 396
+examples/flutter/ios/Runner.xcodeproj/project.pbxproj
+  s_5e218b25c57df4::t_071ba246388996 503,690,713
+crates/core/src/skills/bundled_seeds/android-apk-build/scripts/build_apk.sh
+  s_5e218b25c57df4::t_071ba246388996 1-370
+packages/flutter/ios/Vendor/IosQemu/Sources/QEMU/qemu_bridge.h
+  s_5e218b25c57df4::t_071ba246388996 1-62
+packages/flutter/test/agent_engine_test.dart
+  s_5e218b25c57df4::t_071ba246388996 5,8-17,19-59
+packages/ios/Tests/NapaxiTests/AgentAppModelTests.swift
+  s_5e218b25c57df4::t_071ba246388996 30-32,44,121-122,124,137-139,152-154,158-160,172-174,182-184,210-211,219-221,328-337,343-344
+crates/core/src/runtime/messaging.rs
+  s_5e218b25c57df4::t_071ba246388996 10-11,29-42,51-62,68-71,83-84,197-213,225-239,245-248,260-261
+examples/integration/android/app/build.gradle.kts
+  s_5e218b25c57df4::t_071ba246388996 18-26
+crates/core/src/evolution/queue.rs
+  s_5e218b25c57df4::t_071ba246388996 11-14,277-280,300-303,319-321
+examples/provider_app/android_generated_tasks/app/src/main/java/demo/generated/tasks/TaskStore.java
+  s_5e218b25c57df4::t_071ba246388996 1-88
+crates/core/src/runtime/tests.rs
+  s_5e218b25c57df4::t_071ba246388996 242,298,703-704,718-728
+docs/sdk-adapter-parity.md
+  s_5e218b25c57df4::t_071ba246388996 55-90,96-99,104-116
+crates/core/src/workspace/mod.rs
+  s_5e218b25c57df4::t_071ba246388996 50
+examples/flutter/test/codex_external_host_contract_test.dart
+  s_5e218b25c57df4::t_071ba246388996 86
+crates/core/src/tools/web_search/parser.rs
+  s_5e218b25c57df4::t_071ba246388996 1-523
+examples/flutter/pubspec.lock
+  s_5e218b25c57df4::t_a75497880321ab 176,179,415,418,591,594,607,610,894,897,1003,1006,1043,1046,1104,1139,1142,1147,1150,1155,1158,1163,1166,1171,1174
+packages/flutter/ios/Resources/alpine-rootfs.bin
+  s_5e218b25c57df4::t_af6823e0f7a2c3 2-3
+packages/flutter/pubspec.lock
+  s_5e218b25c57df4::t_e20fd71c33ace5 24,27,253,256,306,309,614,617,630,633,790,793,798,801,806,809,814,817,822,825,830,833,846,849,854,857,1027,1030,1035,1038,1043,1046,1067,1070,1139,1142
+packages/ios/Sources/Napaxi/Resources/alpine-rootfs.bin
+  s_5e218b25c57df4::t_a4c344541f60a1 1-3
+vendor/libsql-patched/NAPAXI-PATCH.md
+  s_5e218b25c57df4::t_9d1af39439d6c2 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4cc03f0de25e71ae684ee00cd52b919f2877e253",
+  "prompts": {},
+  "sessions": {
+    "s_5e218b25c57df4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa69a-9d9a-73f3-a219-87a858852727",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "m294955408 <wenyu.mwt@antgroup.com>"
+    }
+  }
+}
