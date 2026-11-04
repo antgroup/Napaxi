@@ -1,0 +1,20 @@
+examples/flutter/lib/widgets/infra_chat_flow_cards.dart
+  h_62469dfb80cfc4 22-37,93,305,318,332-335,344-347
+examples/flutter/lib/widgets/infra_interpreted_service_result.dart
+  h_62469dfb80cfc4 11,15-19,61,78,109,116,142
+examples/flutter/lib/widgets/infra_raw_service_result.dart
+  h_62469dfb80cfc4 19,29,37-39,64,67,82,85
+examples/flutter/test/infra_chat_flow_cards_test.dart
+  h_62469dfb80cfc4 11-12,28,40,205-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "193a86d66d7fc454d959216b2cfb1407729379c0",
+  "prompts": {},
+  "humans": {
+    "h_62469dfb80cfc4": {
+      "author": "夏果 <jiaozhiwei.jzw@antgroup.com>"
+    }
+  }
+}
