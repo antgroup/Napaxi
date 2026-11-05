@@ -1,0 +1,33 @@
+examples/flutter/tool/blueshield_chat_smoke.dart
+  s_5e218b25c57df4::t_40af09c0524c0d 14
+examples/flutter/lib/models/llm_models.dart
+  s_5e218b25c57df4::t_40af09c0524c0d 4,8-35,142,586,610-617,637-639
+examples/flutter/lib/screens/chat_screen.dart
+  s_5e218b25c57df4::t_40af09c0524c0d 5051
+examples/flutter/test/widget_test.dart
+  s_5e218b25c57df4::t_924da469353505 145-179,186-189,194-196,199-202,207-220,222-224,226-227,235-250,252-256
+  s_5e218b25c57df4::t_7c657c98c44bd9 115-120,130-134,180-185,190-193,197-198,203-206,225
+  s_5e218b25c57df4::t_0b323506ce5ff8 121-129
+  s_5e218b25c57df4::t_6207d6a75a7146 221,251
+  s_5e218b25c57df4::t_96fb0dc35153e8 228-234
+  s_5e218b25c57df4::t_82d31764105038 257
+examples/flutter/test/local_bot_gateway_test.dart
+  s_5e218b25c57df4::t_ac9f731a1d9102 38,97,117
+  s_5e218b25c57df4::t_34e347faa1b521 39-75,78-87,89,91-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1953f576f5f92c90acdd206fca2ddb1f5504f048",
+  "prompts": {},
+  "sessions": {
+    "s_5e218b25c57df4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa69a-9d9a-73f3-a219-87a858852727",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "m294955408 <wenyu.mwt@antgroup.com>"
+    }
+  }
+}
