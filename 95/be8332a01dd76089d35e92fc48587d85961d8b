@@ -1,0 +1,19 @@
+examples/flutter/pubspec.yaml
+  s_5e218b25c57df4::t_244fd588883de3 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "95be8332a01dd76089d35e92fc48587d85961d8b",
+  "prompts": {},
+  "sessions": {
+    "s_5e218b25c57df4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019fa69a-9d9a-73f3-a219-87a858852727",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "m294955408 <wenyu.mwt@antgroup.com>"
+    }
+  }
+}
