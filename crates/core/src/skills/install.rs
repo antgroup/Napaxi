@@ -300,7 +300,11 @@ pub(super) fn extract_skill_from_zip_bytes(data: &[u8]) -> Result<SkillPackage, 
 
     for index in 0..archive.len() {
         let mut file = archive.by_index(index).map_err(|e| e.to_string())?;
-        let name = file.name().to_string();
+        let name = file
+            .enclosed_name()
+            .map(|p| p.to_string_lossy().into_owned())
+            .or_else(|| file.name().ok().map(|n| n.into_owned()))
+            .unwrap_or_default();
         if file.is_dir() || name.trim().is_empty() {
             continue;
         }

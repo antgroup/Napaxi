@@ -389,7 +389,10 @@ and audio recording. Android-only or system-restricted tools such as
 For Flutter public API parity, `NapaxiApkInstaller.isSupported` is always false
 on iOS and `installApk(...)` returns a failed `NapaxiApkInstallResult`. The
 result model exposes Flutter-style `fromMap(...)` and `toMap()` helpers for
-shared host code.
+shared host code. iOS reports `installState = "unsupported_ios"`,
+`canceled = false`, and `failedReason = "APK installation is not supported on
+iOS"` so the new wire fields matched against Flutter/Android parity do not see
+a silent gap on iOS.
 
 Host tool requests use the same core dispatch tool names as Flutter. Implement
 `NapaxiStructuredToolApprovalHandler` to receive `__napaxi_approval__` requests

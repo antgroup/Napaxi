@@ -9115,16 +9115,55 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     await _writeJsonFile(profileFile, profile);
     await _writeAndroidManifestFromProfile(repo.directory, profile);
 
-    const command = 'chmod +x build.sh && bash build.sh';
+    final appName = (profile['appName'] as String? ?? 'app').toString();
+    // Call the bundled `android-apk-build` skill script directly. Per SKILL.md
+    // / AGENTS.md, the demo must NOT write or invoke a project-local build.sh.
+    // The script lives in the mounted skill tree at /skills/android-apk-build/
+    // scripts/build_apk.sh inside the Linux sandbox.
+    const bundledScript = '/skills/android-apk-build/scripts/build_apk.sh';
+    final command =
+        'bash "$bundledScript" --project-dir /workspace --app-name "$appName"';
     final build = await _runAndroidProjectShell(
       repo.directory,
       command,
       timeout: const Duration(minutes: 6),
     );
-    final apkPath = '${repo.directory.path}/build/app.apk';
+    final artifactFile = File('${repo.directory.path}/.mobile/artifact.json');
+    Map<String, dynamic>? artifact;
+    String? artifactApkPath;
+    String? artifactSha256;
+    if (await artifactFile.exists()) {
+      try {
+        artifact = Map<String, dynamic>.from(
+          jsonDecode(await artifactFile.readAsString()) as Map,
+        );
+        if (artifact['gate'] == 'ok') {
+          artifactApkPath = artifact['apk_abs_path'] as String?;
+          artifactSha256 = artifact['sha256'] as String?;
+        }
+      } catch (_) {
+        artifact = null;
+      }
+    }
+    final apkPath = artifactApkPath ?? '${repo.directory.path}/build/$appName.apk';
     final apkFile = File(apkPath);
-    final buildSuccess = build['exitCode'] == 0 && await apkFile.exists();
+    bool buildSuccess = build['exitCode'] == 0 && await apkFile.exists();
+    // The build is only "successful" when artifact.json exists with gate=ok
+    // AND its sha256 still matches the file on disk.
+    if (buildSuccess) {
+      final verification = await sdk.NapaxiApkInstaller.verifyArtifact(
+        repo.directory.path,
+      );
+      if (!verification.verified ||
+          verification.apkPath == null ||
+          File(verification.apkPath!).path != apkFile.path) {
+        buildSuccess = false;
+      }
+    }
     if (!buildSuccess) {
+      // Failure path: drop stale APK files and stale registration so a later
+      // install attempt cannot pick up an old/leftover product.
+      await _androidCleanupStaleApks(repo.directory);
       await _writeJsonFile(profileFile, originalProfile);
       if (originalManifest == null) {
         if (await manifestFile.exists()) await manifestFile.delete();
@@ -9134,7 +9173,10 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     }
     Map<String, dynamic>? installResult;
     if (buildSuccess && (params['install'] as bool? ?? false)) {
-      final install = await sdk.NapaxiApkInstaller.installApk(apkPath);
+      final install = await sdk.NapaxiApkInstaller.installApk(
+        apkPath,
+        expectedArtifactSha256: artifactSha256,
+      );
       installResult = install.toMap();
     }
     if (buildSuccess) {
@@ -9142,6 +9184,12 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
         repo.directory,
         profile: profile,
         apkPath: apkPath,
+        artifactSha256: artifactSha256,
+        artifactSize: artifact?['size'] as int?,
+        arscUncompressed: artifact?['arsc_uncompressed'] as bool? ?? false,
+        arscAligned: artifact?['arsc_aligned'] as bool? ?? false,
+        signedV1: artifact?['signed_v1'] as bool? ?? false,
+        installState: installResult?['installState'] as String?,
         installed: installResult,
       );
     }
@@ -9155,12 +9203,29 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
       'versionCode': versionCode,
       'versionName': versionName,
       'apkPath': apkPath,
+      if (artifactSha256 != null) 'artifactSha256': artifactSha256,
+      if (artifact != null) 'artifact': artifact,
     };
     if (installResult != null) response['install'] = installResult;
     if (!buildSuccess) {
       response['error'] = build['error'] ?? 'Android APK build failed';
     }
     return jsonEncode(response);
+  }
+
+  Future<void> _androidCleanupStaleApks(Directory projectDir) async {
+    final buildDir = Directory('${projectDir.path}/build');
+    if (await buildDir.exists()) {
+      await for (final entity in buildDir.list()) {
+        if (entity is File && entity.path.endsWith('.apk')) {
+          await entity.delete();
+        }
+      }
+    }
+    final artifact = File('${projectDir.path}/.mobile/artifact.json');
+    if (await artifact.exists()) {
+      await artifact.delete();
+    }
   }
 
   Future<List<DemoRepositoryInfo>> listGitRepositories() async {
@@ -10069,9 +10134,10 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
         canvas: template == 'canvas',
       ),
     );
-    await File(
-      '${projectDir.path}/build.sh',
-    ).writeAsString(_androidBuildScript());
+    // The Napaxi `android-apk-build` skill owns the build pipeline via its
+    // bundled `scripts/build_apk.sh`. AI must NOT write a project-local
+    // `build.sh` (see SKILL.md "Non-negotiable output contract"). Building is
+    // invoked by the demo client through the bundled script directly.
     await File(
       '${projectDir.path}/.gitignore',
     ).writeAsString(_androidGitignore());
@@ -10079,7 +10145,8 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
       '# $appName\n\nAndroid project managed by the mobile development scenario.\n\n'
       '- Build profile: `.mobile/build-profile.json`\n'
       '- Local reusable debug signing key: `.mobile/debug.keystore`\n'
-      '- Build command: `bash build.sh`\n',
+      '- Build is driven by the bundled `android-apk-build` skill '
+      '(script `scripts/build_apk.sh`); there is no project-local build.sh.\n',
     );
   }
 
@@ -10188,6 +10255,12 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     Directory projectDir, {
     required Map<String, dynamic> profile,
     required String apkPath,
+    String? artifactSha256,
+    int? artifactSize,
+    bool arscUncompressed = false,
+    bool arscAligned = false,
+    bool signedV1 = false,
+    String? installState,
     Map<String, dynamic>? installed,
   }) async {
     final historyFile = File('${projectDir.path}/.mobile/build-history.json');
@@ -10203,6 +10276,12 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
       'versionName': profile['versionName'],
       'apkPath': apkPath,
       'signing': profile['signing'],
+      if (artifactSha256 != null) 'artifactSha256': artifactSha256,
+      if (artifactSize != null) 'artifactSize': artifactSize,
+      'arscUncompressed': arscUncompressed,
+      'arscAligned': arscAligned,
+      'signedV1': signedV1,
+      if (installState != null) 'installState': installState,
     };
     if (installed != null) entry['install'] = installed;
     history.add(entry);
@@ -10356,68 +10435,6 @@ public class MainActivity extends Activity {
     setContentView(root);
   }
 }
-''';
-  }
-
-  String _androidBuildScript() {
-    return '''#!/bin/bash
-set -e
-
-SDK=/opt/android/sdk
-BT=\$SDK/build-tools/33.0.2
-ANDROID_JAR=\$SDK/platforms/android-33/android.jar
-SYSROOT=/opt/x86root/sysroot
-QX="qemu-x86_64 -L \$SYSROOT"
-
-rm -rf build
-mkdir -p build/classes build/dex build/res-flat build/gen
-
-echo "[1/6] aapt2 compile resources..."
-\$QX \$BT/aapt2 compile --dir res -o build/res-flat
-
-echo "[2/6] aapt2 link..."
-FLAT=\$(find build/res-flat -name "*.flat" | tr '\\n' ' ')
-\$QX \$BT/aapt2 link \\
-    -I "\$ANDROID_JAR" \\
-    --manifest AndroidManifest.xml \\
-    --java build/gen \\
-    -o build/base.apk \\
-    \$FLAT
-
-echo "[3/6] javac..."
-SOURCES=\$(find src build/gen -name "*.java")
-javac -source 1.8 -target 1.8 \\
-    -bootclasspath "\$ANDROID_JAR" \\
-    -cp "\$ANDROID_JAR" \\
-    -d build/classes \\
-    \$SOURCES
-
-echo "[4/6] d8 dex..."
-CLASSFILES=\$(find build/classes -name "*.class")
-\$BT/d8 --lib "\$ANDROID_JAR" --output build/dex \$CLASSFILES
-
-echo "[5/6] package dex..."
-cp build/base.apk build/unsigned.apk
-( cd build/dex && zip -j ../unsigned.apk classes.dex )
-
-echo "[6/6] sign..."
-\$QX \$BT/zipalign -f -p 4 build/unsigned.apk build/aligned.apk
-
-KS=.mobile/debug.keystore
-if [ ! -f "\$KS" ]; then
-  keytool -genkeypair \\
-    -keystore "\$KS" -storepass android -keypass android \\
-    -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \\
-    -dname "CN=Android Debug,O=Android,C=US" >/dev/null
-fi
-
-\$BT/apksigner sign \\
-    --ks "\$KS" --ks-pass pass:android --key-pass pass:android \\
-    --out build/app.apk \\
-    build/aligned.apk
-
-\$BT/apksigner verify build/app.apk
-echo "build/app.apk"
 ''';
   }
 

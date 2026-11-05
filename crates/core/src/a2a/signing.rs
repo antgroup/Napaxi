@@ -1,7 +1,7 @@
 //! Signing helpers for trusted mobile A2A peer envelopes.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
-use rand::RngCore;
+use rand::Rng;
 use ring::aead;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -53,7 +53,7 @@ pub(super) fn encrypt_peer_message_payload(message: &mut A2APeerMessage, shared_
     }
     let plaintext = canonical_json(&message.payload).into_bytes();
     let mut nonce = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce);
+    rand::rng().fill_bytes(&mut nonce);
     let aad = peer_message_encryption_aad(message);
     let Some(ciphertext) = aes_256_gcm_seal(shared_secret, &nonce, aad.as_bytes(), &plaintext)
     else {

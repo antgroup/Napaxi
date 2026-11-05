@@ -329,6 +329,8 @@ public class AndroidPlatformToolExecutor(
                 .put("success", false)
                 .put("installerOpened", false)
                 .put("permissionRequired", false)
+                .put("installState", "failed")
+                .put("canceled", false)
                 .put("error", "apk_path is required.")
                 .put("code", "missing_apk_path")
                 .toString()
@@ -340,6 +342,7 @@ public class AndroidPlatformToolExecutor(
                 .put("success", false)
                 .put("installerOpened", false)
                 .put("permissionRequired", false)
+                .put("installState", "failed")
                 .put("apkPath", resolvedPath)
                 .put("error", "APK file does not exist: $rawPath")
                 .put("code", "apk_not_found")
@@ -348,6 +351,29 @@ public class AndroidPlatformToolExecutor(
                 }
                 .toString()
         }
+
+        // Gated artifact re-verification (caller can pass expectedArtifactSha256 OR
+        // we look for the artifact.json next to the apk under .mobile/).
+        val expectedSha = params.optNullableString("expected_sha256")
+            ?: params.optNullableString("expectedArtifactSha256")
+            ?: readArtifactSha256(resolvedPath)
+        if (!expectedSha.isNullOrBlank()) {
+            val actual = sha256OfFileOrNull(resolvedPath)
+            if (actual == null || actual != expectedSha) {
+                return JSONObject()
+                    .put("success", false)
+                    .put("installerOpened", false)
+                    .put("permissionRequired", false)
+                    .put("installState", "failed")
+                    .put("apkPath", resolvedPath)
+                    .put("artifactSha256", actual ?: "")
+                    .put("error", "Artifact sha256 mismatch with registered product.")
+                    .put("code", "artifact_sha_mismatch")
+                    .put("failedReason", "artifact_sha_mismatch")
+                    .toString()
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
             context.startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
@@ -358,6 +384,7 @@ public class AndroidPlatformToolExecutor(
                 .put("success", false)
                 .put("installerOpened", false)
                 .put("permissionRequired", true)
+                .put("installState", "awaiting_confirmation")
                 .put("apkPath", resolvedPath)
                 .put(
                     "error",
@@ -366,7 +393,41 @@ public class AndroidPlatformToolExecutor(
                 .put("code", "REQUEST_INSTALL_PACKAGES")
                 .toString()
         }
+
+        // Same-package / same-version already installed?
+        val packageName = params.optNullableString("package_name")
+            ?: readArtifactField(resolvedPath, "packageName")
+        val versionCode = params.optNullableString("version_code")
+            ?: params.optNullableString("versionCode")
+            ?: readArtifactField(resolvedPath, "versionCode")
+        if (!packageName.isNullOrBlank() && !versionCode.isNullOrBlank()) {
+            runCatching {
+                val installed = context.packageManager.getPackageInfo(packageName, 0)
+                val installedVersion = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    installed.longVersionCode
+                } else {
+                    @Suppress("DEPRECATION") installed.versionCode.toLong()
+                }
+                if (installedVersion == versionCode.toLongOrNull()) {
+                    return JSONObject()
+                        .put("success", false)
+                        .put("installerOpened", false)
+                        .put("permissionRequired", false)
+                        .put("installState", "already_installed_same_version")
+                        .put("code", "already_installed_same_version")
+                        .put("apkPath", resolvedPath)
+                        .put("packageName", packageName)
+                        .put("versionCode", installedVersion)
+                        .put("error", "Same package and versionCode is already installed; install not performed.")
+                        .toString()
+                }
+            }
+        }
+
         val uri = NapaxiFileProvider.uriForFile(context, apk)
+        // The native SDK Executor is fire-and-forget table here; we open the
+        // installer with awaiting_confirmation. The Flutter plugin owns the
+        // PackageInstaller callback path for completing/canceling/failed mapping.
         context.startActivity(
             Intent(Intent.ACTION_VIEW)
                 .setDataAndType(uri, "application/vnd.android.package-archive")
@@ -374,12 +435,51 @@ public class AndroidPlatformToolExecutor(
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
         )
         return JSONObject()
-            .put("success", true)
+            .put("success", false)
             .put("installerOpened", true)
             .put("permissionRequired", false)
+            .put("installState", "awaiting_confirmation")
+            .put("code", "installer_opened")
             .put("apkPath", resolvedPath)
+            .put("canceled", false)
             .toString()
     }
+
+    private fun sha256OfFileOrNull(path: String): String? = try {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        File(path).inputStream().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        md.digest().joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun artifactJsonFor(apkPath: String): File? {
+        val apk = File(apkPath).absoluteFile
+        val projectRoot = apk.parentFile?.parentFile ?: return null // build/<apk>.apk -> <project>
+        return File(projectRoot, ".mobile/artifact.json").takeIf { it.exists() }
+    }
+
+    private fun readArtifactSha256(apkPath: String): String? =
+        runCatching {
+            artifactJsonFor(apkPath)?.let { f ->
+                val obj = JSONObject(f.readText())
+                if (obj.optString("gate") == "ok") obj.optString("sha256").takeIf { it.isNotBlank() } else null
+            }
+        }.getOrNull()
+
+    private fun readArtifactField(apkPath: String, field: String): String? =
+        runCatching {
+            artifactJsonFor(apkPath)?.let { f ->
+                JSONObject(f.readText()).optString(field).takeIf { it.isNotBlank() }
+            }
+        }.getOrNull()
 
     private fun getLocation(): String {
         if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
