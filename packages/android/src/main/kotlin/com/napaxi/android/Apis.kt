@@ -2165,12 +2165,27 @@ public class ApkInstallerApi internal constructor(
     private val context: Context,
 ) {
     public suspend fun install(path: String): String =
-        withContext(Dispatchers.IO) {
-            AndroidPlatformToolExecutor(context).execute("install_apk", JSONObject().put("path", path).toString())
-        }
+        installInternal(path, null)
 
     public suspend fun installResult(path: String): NapaxiApkInstallResult =
         NapaxiApkInstallResult.fromJson(install(path))
+
+    public suspend fun installResult(
+        path: String,
+        expectedArtifactSha256: String?,
+    ): NapaxiApkInstallResult =
+        NapaxiApkInstallResult.fromJson(installInternal(path, expectedArtifactSha256))
+
+    private suspend fun installInternal(
+        path: String,
+        expectedArtifactSha256: String?,
+    ): String = withContext(Dispatchers.IO) {
+        val params = JSONObject().put("path", path)
+        if (!expectedArtifactSha256.isNullOrBlank()) {
+            params.put("expected_sha256", expectedArtifactSha256)
+        }
+        AndroidPlatformToolExecutor(context).execute("install_apk", params.toString())
+    }
 }
 
 public object NapaxiApkInstaller {
@@ -2179,18 +2194,41 @@ public object NapaxiApkInstaller {
 
     @JvmStatic
     public fun installApk(context: Context, apkPath: String): NapaxiApkInstallResult =
-        NapaxiApkInstallResult.fromJson(installApkJson(context, apkPath))
+        installApk(context, apkPath, null)
+
+    @JvmStatic
+    public fun installApk(
+        context: Context,
+        apkPath: String,
+        expectedArtifactSha256: String?,
+    ): NapaxiApkInstallResult =
+        NapaxiApkInstallResult.fromJson(installApkJson(context, apkPath, expectedArtifactSha256))
 
     @JvmStatic
     public fun installApkJson(context: Context, apkPath: String): String =
+        installApkJson(context, apkPath, null)
+
+    @JvmStatic
+    public fun installApkJson(
+        context: Context,
+        apkPath: String,
+        expectedArtifactSha256: String?,
+    ): String =
         if (!isSupported) {
             JSONObject()
                 .put("success", false)
+                .put("installState", "unsupported_ios")
+                .put("canceled", false)
+                .put("failedReason", "APK installation is not supported on Android.")
                 .put("error", "APK installation is only supported on Android.")
                 .toString()
         } else {
+            val params = JSONObject().put("path", apkPath)
+            if (!expectedArtifactSha256.isNullOrBlank()) {
+                params.put("expected_sha256", expectedArtifactSha256)
+            }
             AndroidPlatformToolExecutor(context.applicationContext)
-                .execute("install_apk", JSONObject().put("path", apkPath).toString())
+                .execute("install_apk", params.toString())
         }
 }
 

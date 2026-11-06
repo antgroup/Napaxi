@@ -103,6 +103,20 @@
             android:name="com.napaxi.flutter.NapaxiAutomationWakeReceiver"
             android:exported="false" />
 
+        <!-- Receiver for the Android PackageInstaller session completion
+             callback. The plugin builds a PendingIntent for this receiver and
+             hands it to PackageInstaller.Session#commit; the broadcast carries
+             the install status (success/canceled/failed/pending) which the
+             plugin surfaces to Flutter. Exported=false: only this app sends
+             the broadcast. -->
+        <receiver
+            android:name="com.napaxi.flutter.PendingInstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.napaxi.flutter.PACKAGE_INSTALL_RESULT" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.napaxi_flutter.fileprovider"

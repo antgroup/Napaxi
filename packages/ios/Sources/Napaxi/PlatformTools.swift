@@ -528,7 +528,11 @@ public final class NapaxiDefaultPlatformToolExecutor: NapaxiPlatformToolExecutor
     private static var unsupportedInstallApkResult: NapaxiJSONValue {
         .object([
             "success": .bool(false),
+            "installState": .string("unsupported_ios"),
+            "canceled": .bool(false),
+            "failedReason": .string("APK installation is not supported on iOS."),
             "error": .string("install_apk is only supported on Android."),
+            "code": .string("unsupported_ios"),
         ])
     }
 

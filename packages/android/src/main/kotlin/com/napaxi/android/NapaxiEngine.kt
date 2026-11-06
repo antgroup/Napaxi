@@ -529,6 +529,12 @@ public class NapaxiEngine private constructor(
     public suspend fun installApkResult(path: String): NapaxiApkInstallResult =
         apkInstaller.installResult(path)
 
+    public suspend fun installApkResult(
+        path: String,
+        expectedArtifactSha256: String?,
+    ): NapaxiApkInstallResult =
+        apkInstaller.installResult(path, expectedArtifactSha256)
+
     public fun createSession(
         agentId: String = DEFAULT_AGENT_ID,
         channelType: String = "app",

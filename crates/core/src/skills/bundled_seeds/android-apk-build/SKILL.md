@@ -1,6 +1,6 @@
 ---
 name: android-apk-build
-version: "1.5.0"
+version: "1.6.0"
 display_name: Android APK Build
 description: Build small native Android APKs inside Napaxi's phone sandbox. Use this skill whenever the user asks to write, create, generate, package, sign, install, or build an Android app/APK, including casual requests like “写一个 app”, “做个安卓应用”, “打包成 apk”, “生成能安装的应用”, “把网页/HTML 封装成 app”, or “build a simple app”, even if they do not explicitly mention this skill. This skill fixes the aarch64 Alpine + qemu-x86_64 toolchain confusion by forcing one Java-only Android template, compileSdk/targetSdk 33, minSdk 26, exactly one universal pure-Java APK, no leftover intermediate APKs, a valid deterministic vector launcher icon, stable debug signing across rebuilds/updates, and a bundled immutable build script that AI must only run with parameters; Android framework WebView/local HTML assets are allowed only when the user is asking for an installable Android app/APK wrapper; when using HTML, bundle all local resources into the APK assets and reference them with relative paths instead of fixed device/workspace paths; do not turn ordinary HTML/webpage/front-end requests into APKs by default, and do not improvise Gradle/Kotlin/Compose/AndroidX/NDK, iOS, Flutter, React Native, split APKs, multiple variants, or legacy Android targets.
 activation:
@@ -56,6 +56,66 @@ Before writing code, mentally pin these constants and do not reinterpret them fr
 - The final APK path must be `build/<APP_NAME>.apk` and it must be the only final APK emitted by the workflow. The bundled build script must not emit intermediate `*.apk` files; temporary packaging files stay under `build/apk-work/` with non-APK names and the script removes that work directory before exit. Do not present or copy multiple installable APK variants.
 - Keep the signing certificate stable across app updates. Generate the debug keystore only if it does not already exist, store it at `<project>/debug.keystore`, and never delete it during `rm -rf build`. Reusing this keystore lets Android install a newer APK over the previous one with the same package name.
 - Do not place the keystore inside `build/`, because `build/` is cleaned on every run and would change the signature on every rebuild.
+
+## Artifact compliance gate (non-negotiable)
+
+The bundled script enforces these compliance gates on the final APK. **Any failure
+deletes all produced APKs and writes nothing usable to `artifact.json`**, so the
+install entry point must refuse to install:
+
+- `aapt2 link` is invoked with `--no-compress arsc`: `resources.arsc` must be
+  stored uncompressed (ZIP `STORED`, compress_method 0). Compressed `arsc` fails
+  Android R+ installs with `INSTALL_PARSE_FAILED_RESOURCES_ARSC_COMPRESSED`.
+- A post-zipalign scan of the central directory asserts the `resources.arsc`
+  local file header offset is 4-byte aligned (Android's `libandroidfw` requires
+  page-aligned arsc memory-mapping on R+).
+- ZIP integrity is checked (`zipfile.testzip()`); truncated or corrupted APKs
+  are rejected before signing.
+- `apksigner verify --verbose` must report v1, v2, or v3 true.
+- After signing, the script re-reads `classes.dex` and `resources.arsc` from
+  the signed APK and compares their sha256 to the pre-sign digests. Any change
+  means the APK was mutated outside apksigner and the build fails.
+- On any gate failure the script removes every `*.apk` under `build/` and writes
+  `artifact.json` with `"gate":"failed"` (or leaves it absent).
+
+### `artifact.json` (final-product registry)
+
+After every successful build the script writes `<project>/.mobile/artifact.json`
+with:
+
+```json
+{
+  "gate": "ok",
+  "apk_abs_path": "<absolute path to build/<APP_NAME>.apk>",
+  "sha256": "...",
+  "size": 12345,
+  "packageName": "com.napaxi.generated.something",
+  "versionCode": "2",
+  "versionName": "1.1",
+  "arsc_uncompressed": true,
+  "arsc_aligned": true,
+  "signed_v1": true,
+  "signed_v2": true,
+  "zip_ok": true,
+  "built_at_iso": "2026-11-05T00:00:00Z",
+  "builder": "napaxi-bundled-android-apk-build"
+}
+```
+
+This file is the **only** proof that the APK beside it is a final, gated
+product. Install entry points must bind to `artifact.json` (sha256 + size), not
+just to path or mtime:
+
+- Missing `artifact.json`, missing `sha256`, or sha256 mismatch with the file
+  on disk means the APK is treated as an intermediate/unverified build and the
+  install action must be hidden.
+- A leftover or stale `build/*.apk` after a failed build is *not* installable:
+  the failure path deletes those files and writes `"gate":"failed"` (or nothing).
+- Only `<project>/build/<APP_NAME>.apk` plus this registry is a final product.
+  `build/app.apk` discovered without a matching registry is not installable.
+
+Do not consume the APK for install based solely on `path.exists()` or
+`exitCode == 0`; require both the gate output and the registry digest to match.
 - When modifying an existing app, edit that existing project in place. Preserve its manifest package name, Java package/directory, `provider_id`, `agent_id`, and `<project>/debug.keystore`; increment `android:versionCode`; then add, remove, or update actions in `agent-app.json` and their handlers. Never change package/provider/agent identity merely to make an update install or to expose a new capability. A new identity is only for a genuinely separate app requested by the user.
 - Provider-enabled apps must declare `<meta-data android:name="agent.provider.TRUSTED_REFRESH_SUPPORTED" android:value="true" />` under `<application>`. This lets a Napaxi Host with the same trusted package and signing identity refresh the provider manifest after an in-place update. It does not bypass signature or provider/agent identity checks.
 - Use the bundled script resource `scripts/build_apk.sh`. Do not write, copy, patch, or regenerate a project-local `build.sh`; AI is only allowed to pass parameters to the bundled script.
@@ -366,7 +426,7 @@ public class MainActivity extends Activity {
 1. Create the fixed project layout, `assets/agent-app.json`, a shared domain service, a validated `NapaxiActionActivity`, and the fixed diagnostics manifest entries. Do not create, edit, or copy `build.sh`; the build script lives in this skill at `scripts/build_apk.sh`.
 2. Keep the app simple and framework-only. Build UI programmatically in Java, with basic XML resources, or with a Java `WebView` loading `file:///android_asset/www/index.html` only when the user asks for a web/HTML-style installable Android app or APK wrapper. Put every local HTML/CSS/JS/image/font/data asset under `app/src/main/assets/www/` and use relative links inside the HTML bundle; never reference fixed workspace/device paths.
 3. Run `bash /skills/android-apk-build/scripts/build_apk.sh --project-dir <project> --app-name <APP_NAME>` (or the same `scripts/build_apk.sh` path from the active skill directory if `/skills` is mounted differently). If and only if the user explicitly opted out, omit all Provider files/manifest entries and add `--without-agent-provider`. A legacy project that predates Provider-by-default can still rebuild without that flag when it has no Provider declaration.
-4. If build succeeds, report exactly one APK path and summarize the generated Provider id and exact action ids/tool names. Note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that the bundled script cleaned and verified the absence of intermediate APK files. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
+4. If build succeeds, report exactly one APK path and summarize the generated Provider id and exact action ids/tool names. Note it is a debug-signed, universal pure-Java APK targeting SDK 33 with min SDK 26 and that the bundled script cleaned and verified the absence of intermediate APK files. Report the file `sha256` and `size` from `<project>/.mobile/artifact.json`, and confirm `artifact.json` has been written so the install entry can bind to it. Also mention the stable keystore path (`<project>/debug.keystore`) so the next update can reuse the same signing certificate, and confirm the launcher icon resource is `@drawable/ic_launcher`.
 5. If the user asks to install, use the available APK install flow/tool if present; otherwise provide the APK path.
 
 ## Common mistakes to avoid
@@ -383,3 +443,5 @@ public class MainActivity extends Activity {
 - Do not fetch Gradle, Maven, AndroidX, Compose, Cordova, Capacitor, Ionic, Flutter, React Native, npm packages, or iOS tooling to “improve compatibility”. That makes builds slower, requires unsupported tools, or leaves this phone sandbox workflow.
 - Do not omit `agent-app.json` from a newly generated app unless the user explicitly opts out. Do not copy the Lite SDK into the app project, invent a second protocol implementation, bypass `AgentProviderActionRegistry`, or expose high-risk actions without Provider-owned confirmation UI.
 - Do not produce multiple APKs for arm64/x86 unless the app actually contains native code, which this skill forbids by default.
+- Do not treat a leftover `build/*.apk` from a previous successful run as the current build's product. After a failed build, the script deletes every `*.apk` under `build/`; the install entry must key off `<project>/.mobile/artifact.json` (sha256 + size against the file), not `File.exists()` alone.
+- Do not perform the install path's success decision on `exitCode == 0 && apk.exists()` alone. The gate output is the registry: only an `artifact.json` with `gate=ok` whose `sha256` matches the file on disk is installable.

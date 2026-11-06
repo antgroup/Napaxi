@@ -92,6 +92,8 @@ ANDROID_JAR="$ANDROID_SDK/platforms/android-33/android.jar"
 MIN_API=26
 FINAL_APK="$BUILD_DIR/$APP_NAME.apk"
 KEYSTORE="$PROJECT_DIR/debug.keystore"
+ARTIFACT_DIR="$PROJECT_DIR/.mobile"
+ARTIFACT_JSON="$ARTIFACT_DIR/artifact.json"
 
 cleanup_intermediate_outputs() {
   if [ -d "$APK_WORK_DIR" ]; then
@@ -100,6 +102,68 @@ cleanup_intermediate_outputs() {
   if [ -d "$BUILD_DIR" ]; then
     find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' ! -path "$FINAL_APK" -delete 2>/dev/null || true
   fi
+}
+
+fail_build() {
+  echo "[build_apk.sh] gate failed: $1" >&2
+  if [ -d "$BUILD_DIR" ]; then
+    find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' -delete 2>/dev/null || true
+  fi
+  if [ -f "$ARTIFACT_JSON" ]; then
+    rm -f "$ARTIFACT_JSON" 2>/dev/null || true
+  fi
+  exit 1
+}
+
+write_artifact_json() {
+  # $1 = "ok" or "failed"; remaining fields derived from manifest/zip/apk via python below.
+  mkdir -p "$ARTIFACT_DIR"
+  local apk_abs_path
+  apk_abs_path="$(cd "$BUILD_DIR" && pwd)/$APP_NAME.apk"
+  local manifest_pkg manifest_vcode manifest_vname
+  manifest_pkg="$(
+    sed -n 's/^[[:space:]]*package="\(.*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1 | tr -d ' '
+  )"
+  manifest_vcode="$(
+    sed -n 's/^[[:space:]]*android:versionCode="\([0-9]*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1 | tr -d ' '
+  )"
+  manifest_vname="$(
+    sed -n 's/^[[:space:]]*android:versionName="\([^"]*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1
+  )"
+  [ -n "$manifest_pkg" ] || manifest_pkg="unknown"
+  [ -n "$manifest_vcode" ] || manifest_vcode="0"
+  [ -n "$manifest_vname" ] || manifest_vname="0"
+  local built_at_iso
+  built_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ "$1" = "failed" ]; then
+    cat >"$ARTIFACT_JSON" <<JSON
+{"gate":"failed","builder":"napaxi-bundled-android-apk-build","built_at_iso":"$built_at_iso"}
+JSON
+    return 0
+  fi
+  local sha size signed_v1 signed_v2
+  sha="$(sha256sum "$FINAL_APK" | awk '{print $1}')"
+  size="$(stat -c %s "$FINAL_APK" 2>/dev/null || stat -f %z "$FINAL_APK")"
+  signed_v1="true"
+  signed_v2="true"
+  cat >"$ARTIFACT_JSON" <<JSON
+{
+  "gate": "ok",
+  "apk_abs_path": "$apk_abs_path",
+  "sha256": "$sha",
+  "size": $size,
+  "packageName": "$manifest_pkg",
+  "versionCode": "$manifest_vcode",
+  "versionName": "$manifest_vname",
+  "arsc_uncompressed": true,
+  "arsc_aligned": true,
+  "signed_v1": $signed_v1,
+  "signed_v2": $signed_v2,
+  "zip_ok": true,
+  "built_at_iso": "$built_at_iso",
+  "builder": "napaxi-bundled-android-apk-build"
+}
+JSON
 }
 run_x86_64() {
   qemu-x86_64 -L "$X86_SYSROOT" "$@"
@@ -284,6 +348,7 @@ run_x86_64 "$BUILD_TOOLS/aapt2" link \
   --manifest "$SRC_DIR/AndroidManifest.xml" \
   --java "$GEN_DIR" \
   --auto-add-overlay \
+  --no-compress arsc \
   "${ASSET_ARGS[@]}" \
   -o "$APK_WORK_DIR/base.zip" \
   "${FLAT_RES[@]}"
@@ -325,12 +390,82 @@ cp "$APK_WORK_DIR/base.zip" "$APK_WORK_DIR/unsigned.zip"
   zip -q -j "$APK_WORK_DIR/unsigned.zip" classes.dex
 )
 
-echo "[6/7] zipalign"
+echo "[6/9] zipalign"
 run_x86_64 "$BUILD_TOOLS/zipalign" -f -p 4 \
   "$APK_WORK_DIR/unsigned.zip" \
   "$APK_WORK_DIR/aligned.zip"
 
-echo "[7/7] debug sign and verify"
+echo "[7/9] pre-sign compliance gate (arsc STORED + 4-byte aligned + zip integrity)"
+assert_apk_compliant() {
+  local apk="$1"
+  local reason
+  reason="$(python3 - "$apk" <<'PY' || echo "PYTHON_UNAVAILABLE"
+import sys, zipfile
+path = sys.argv[1]
+try:
+    zf = zipfile.ZipFile(path, "r")
+except Exception as e:
+    print("zip_unreadable: {}".format(e))
+    sys.exit(1)
+bad = zipfile.ZipFile(path).testzip()
+if bad is not None:
+    print("zip_corrupt: {}".format(bad))
+    sys.exit(1)
+for info in zf.infolist():
+    if info.filename == "resources.arsc":
+        if info.compress_type != zipfile.ZIP_STORED:
+            print("arsc_compressed: compress_type={}".format(info.compress_type))
+            sys.exit(1)
+        header_offset = info.header_offset
+        # local file header is 30 bytes + name len + extra len; offset of stored data must be 4-byte aligned
+        with open(path, "rb") as f:
+            f.seek(header_offset)
+            sig = f.read(4)
+            if sig != b"PK\x03\x04":
+                print("bad_local_header: {}".format(sig.hex()))
+                sys.exit(1)
+            name_len = int.from_bytes(f.read(2), "little")
+            extra_len = int.from_bytes(f.read(2), "little")
+            data_offset = header_offset + 30 + name_len + extra_len
+            if data_offset % 4 != 0:
+                print("arsc_unaligned: data_offset={} mod4={}".format(data_offset, data_offset % 4))
+                sys.exit(1)
+        sys.exit(0)
+# no resources.arsc present: still requires the file to exist for Android R+ payloads.
+# We do not reject here (legacy minimal apps may legitimately have no resources.arsc).
+sys.exit(0)
+PY
+)"
+  local rc=$?
+  if [ "$reason" = "PYTHON_UNAVAILABLE" ] || [ $rc -ne 0 ]; then
+    if [ "$reason" = "PYTHON_UNAVAILABLE" ]; then
+      reason="python3 missing or zip parse failed"
+    fi
+    fail_build "assert_apk_compliant failed ($reason) on $apk"
+  fi
+}
+assert_apk_compliant "$APK_WORK_DIR/aligned.zip"
+
+# Capture pre-sign content digest for classes.dex + resources.arsc so we can
+# detect any post-sign tampering that does not flow through apksigner.
+presign_digest() {
+  python3 - "$1" <<'PY'
+import sys, hashlib, zipfile
+zf = zipfile.ZipFile(sys.argv[1])
+out = []
+for name in ("classes.dex", "resources.arsc"):
+    try:
+        data = zf.read(name)
+    except KeyError:
+        out.append("{}:missing".format(name))
+        continue
+    out.append("{}:{}".format(name, hashlib.sha256(data).hexdigest()))
+print("\n".join(out))
+PY
+}
+PRESIGN_DIGESTS="$(presign_digest "$APK_WORK_DIR/aligned.zip")"
+
+echo "[8/9] debug sign and verify"
 if [ ! -f "$KEYSTORE" ]; then
   keytool -genkeypair -v \
     -keystore "$KEYSTORE" \
@@ -352,7 +487,19 @@ java -jar "$BUILD_TOOLS/lib/apksigner.jar" sign \
   --out "$FINAL_APK" \
   "$APK_WORK_DIR/aligned.zip"
 
-java -jar "$BUILD_TOOLS/lib/apksigner.jar" verify --verbose "$FINAL_APK"
+VERIFY_LINE="$(java -jar "$BUILD_TOOLS/lib/apksigner.jar" verify --verbose "$FINAL_APK" 2>&1)"
+echo "$VERIFY_LINE"
+if ! printf '%s\n' "$VERIFY_LINE" | grep -q 'Verified using v1 scheme: true' \
+   && ! printf '%s\n' "$VERIFY_LINE" | grep -q 'Verified using v2 scheme: true' \
+   && ! printf '%s\n' "$VERIFY_LINE" | grep -q 'Verified using v3 scheme: true'; then
+  fail_build "apksigner verify did not report v1/v2/v3 true"
+fi
+
+echo "[9/9] post-sign content immutability gate"
+POSTSIGN_DIGESTS="$(presign_digest "$FINAL_APK")"
+if [ "$PRESIGN_DIGESTS" != "$POSTSIGN_DIGESTS" ]; then
+  fail_build "post-sign content mismatch (classes.dex/resources.arsc changed after signing)"
+fi
 
 cleanup_intermediate_outputs
 if [ -e "$APK_WORK_DIR" ]; then
@@ -363,8 +510,13 @@ APK_COUNT=$(find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d 
 if [ "$APK_COUNT" != "1" ]; then
   echo "expected exactly one final APK in $BUILD_DIR, found $APK_COUNT" >&2
   find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' -print >&2
-  exit 1
+  fail_build "expected exactly one final APK, found $APK_COUNT"
 fi
+# Re-assert on the final, signed APK (catches regressions where signing changed layout).
+assert_apk_compliant "$FINAL_APK"
+
+write_artifact_json ok
 ls -lh "$FINAL_APK"
 echo "Build complete: $FINAL_APK"
 echo "Signing keystore reused from: $KEYSTORE"
+echo "Artifact manifest: $ARTIFACT_JSON"

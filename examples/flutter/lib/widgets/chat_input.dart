@@ -2524,6 +2524,8 @@ ChatAttachment? _resolveAttachmentForOpen(
         type: attachment.type,
         sandboxPath: attachment.sandboxPath,
         mimeTypeOverride: attachment.mimeTypeOverride,
+        artifactSha256: attachment.artifactSha256,
+        artifactVerified: attachment.artifactVerified,
       );
     }
   }
@@ -2576,28 +2578,97 @@ Future<void> _installApkAttachment(
     );
     return;
   }
-
-  final result = await sdk.NapaxiApkInstaller.installApk(attachment.path);
-  if (!context.mounted) return;
-  final messenger = ScaffoldMessenger.of(context);
-  messenger.hideCurrentSnackBar();
-  if (result.success || result.installerOpened) {
-    messenger.showSnackBar(
+  // Admission gate: never install an unverified/intermediate APK. The build
+  // skill must have produced <project>/.mobile/artifact.json with gate=ok and
+  // the file on disk must still match its recorded sha256. Re-derive the
+  // registration on demand: artifact.json lives next to build/<apk>.apk.
+  final projectRoot = _androidProjectRootFromApkPath(attachment.path);
+  String? expectedSha;
+  if (projectRoot != null) {
+    final verification = await sdk.NapaxiApkInstaller.verifyArtifact(
+      projectRoot,
+    );
+    if (!verification.verified ||
+        verification.apkPath == null ||
+        File(verification.apkPath!).path != File(attachment.path).path) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isChinese
+                ? '这是中间产物或未校验的 APK，无法安装。请等待 Agent App 构建完成并通过产物校验。'
+                : 'This is an intermediate or unverified APK and cannot be installed. Wait for the Agent App build to finish and pass the artifact gate.',
+          ),
+        ),
+      );
+      return;
+    }
+    expectedSha = verification.expectedSha256;
+  } else if (attachment.isInstallableApk) {
+    expectedSha = attachment.artifactSha256;
+  } else {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(isChinese ? '已打开系统安装器' : 'System installer opened.'),
+        content: Text(
+          isChinese
+              ? '这是中间产物或未校验的 APK，无法安装。请等待 Agent App 构建完成并通过产物校验。'
+              : 'This is an intermediate or unverified APK and cannot be installed. Wait for the Agent App build to finish and pass the artifact gate.',
+        ),
       ),
     );
     return;
   }
-  messenger.showSnackBar(
-    SnackBar(
-      content: Text(
-        result.error?.trim().isNotEmpty == true
-            ? result.error!
-            : (isChinese ? '无法安装 APK' : 'Could not install APK.'),
-      ),
-    ),
+
+  final result = await sdk.NapaxiApkInstaller.installApk(
+    attachment.path,
+    expectedArtifactSha256: expectedSha,
   );
+  if (!context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.hideCurrentSnackBar();
+  final message = _installStateMessage(result, isChinese);
+  messenger.showSnackBar(SnackBar(content: Text(message)));
+}
+
+String? _androidProjectRootFromApkPath(String apkPath) {
+  final file = File(apkPath).absolute;
+  final parent = file.parent;
+  if (parent.path.endsWith('/build') || parent.path.endsWith('\\build')) {
+    final projectRoot = parent.parent;
+    return projectRoot.existsSync() ? projectRoot.path : null;
+  }
+  return null;
+}
+
+String _installStateMessage(sdk.NapaxiApkInstallResult result, bool isChinese) {
+  String tr(String zh, String en) => isChinese ? zh : en;
+  switch (result.installState) {
+    case sdk.NapaxiApkInstallState.installed:
+      return tr('安装成功', 'Install succeeded.');
+    case sdk.NapaxiApkInstallState.awaitingConfirmation:
+      return tr(
+        '已打开系统安装器，等待你确认安装。',
+        'System installer opened; waiting for you to confirm the install.',
+      );
+    case sdk.NapaxiApkInstallState.canceled:
+      return tr('已取消安装。', 'Install canceled.');
+    case sdk.NapaxiApkInstallState.failed:
+      return result.error?.trim().isNotEmpty == true
+          ? result.error!
+          : tr('安装失败。', 'Install failed.');
+    case sdk.NapaxiApkInstallState.alreadyInstalledSameVersion:
+      return tr(
+        '当前版本已经安装，未重复执行安装。',
+        'The same version is already installed; install was not performed.',
+      );
+    case sdk.NapaxiApkInstallState.generated:
+    case sdk.NapaxiApkInstallState.verifiedInstallable:
+      return tr('产物已生成，等待发起安装。', 'Product generated; install has not started.');
+    case sdk.NapaxiApkInstallState.unknown:
+    case sdk.NapaxiApkInstallState.unsupportedIos:
+      return tr('安装结果未知，请在系统安装器中确认。', 'Install result unknown; verify in the system installer.');
+  }
 }
 
 Future<void> _showWebAttachmentPreview(

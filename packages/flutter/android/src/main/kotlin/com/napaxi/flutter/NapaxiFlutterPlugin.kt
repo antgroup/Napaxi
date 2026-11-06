@@ -7,13 +7,17 @@ import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ContentUris
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
+import android.content.IntentSender
 import android.content.res.AssetManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -85,6 +89,10 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
     private var pendingMicrophonePermissionResult: Result? = null
     private var pendingApkInstallPath: String? = null
     private var pendingApkInstallResult: Result? = null
+    private var pendingApkInstallExpectedSha256: String? = null
+    private var pendingApkInstallVersionCode: Long? = null
+    private var pendingApkInstallPackageName: String? = null
+    private var pendingApkSessionId: Int? = null
     private var pendingProviderInstallResult: Result? = null
     private var pendingProviderInstall: Map<String, String>? = null
     private var pendingAgentTrigger: Map<String, String>? = null
@@ -304,6 +312,25 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 "payload" to JSONObject(wake).toString(),
             ))
         }
+
+        // Install recovery: re-arm the static PendingInstallReceiver and read
+        // any pending awaiting_confirmation state from SharedPreferences so
+        // a process restart never reports success for an unfinished install.
+        PendingInstallReceiver.pendingInstallHandler = this
+        val prefs = apkPersistedPrefs(binding.applicationContext)
+        if (prefs.getString("state", null) == "awaiting_confirmation") {
+            resumePendingInstall(binding.applicationContext, ResultNoop)
+        }
+    }
+
+    // A no-op Result sink used when recovering a pending install on engine
+    // attach without a live Flutter caller. The recoverable state is also
+    // surfaced on the event channel via [emitPendingInstallSummary].
+    private object ResultNoop : Result {
+        private fun ignored() = Unit
+        override fun success(result: Any?) = ignored()
+        override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) = ignored()
+        override fun notImplemented() = ignored()
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -328,8 +355,13 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         pendingMediaLibraryPermissionCall = null
         pendingMediaLibraryPermissionResult = null
         pendingMicrophonePermissionResult = null
-        pendingApkInstallPath = null
-        pendingApkInstallResult = null
+        // NOTE: pendingApkInstall* is intentionally NOT cleared here. A
+        // process restart must preserve any in-flight awaiting_confirmation
+        // state. Pending install state additionally lives in SharedPreferences
+        // so a full engine kill and recreate can still recover the install.
+        if (PendingInstallReceiver.pendingInstallHandler === this) {
+            PendingInstallReceiver.pendingInstallHandler = null
+        }
         pendingProviderInstallResult = null
         pendingProviderInstall = null
         pendingAgentTrigger = null
@@ -664,6 +696,8 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             }
             METHOD_INSTALL_APK -> {
                 val apkPath = call.argument<String>("apkPath") ?: ""
+                val expectedSha = call.argument<String>("expectedArtifactSha256")
+                pendingApkInstallExpectedSha256 = expectedSha
                 installApk(ctx, apkPath, result)
             }
             METHOD_OPEN_FILE -> {
@@ -874,6 +908,8 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             return true
         }
         if (requestCode != REQUEST_INSTALL_UNKNOWN_APPS) return false
+        // Permission flow returned; keep the expected sha/version/packageName
+        // pending in case we still need to drive the install forward.
         val apkPath = pendingApkInstallPath
         val pendingResult = pendingApkInstallResult
         pendingApkInstallPath = null
@@ -884,10 +920,15 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !ctx.packageManager.canRequestPackageInstalls()) {
-            pendingResult.success(mapOf(
-                "success" to false,
-                "permissionRequired" to true,
-                "error" to "Install unknown apps permission was not granted."
+            clearPendingAndPersist(ctx)
+            pendingResult.success(apkInstallStateMap(
+                installState = "failed",
+                success = false,
+                apkPath = apkPath,
+                permissionRequired = true,
+                error = "Install unknown apps permission was not granted.",
+                code = "REQUEST_INSTALL_PACKAGES",
+                failedReason = "install_unknown_apps_denied",
             ))
             return true
         }
@@ -2081,31 +2122,204 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         )
     }
 
-    private fun installApk(ctx: Context, apkPath: String, result: Result) {
-        if (apkPath.isBlank()) {
-            result.success(mapOf(
-                "success" to false,
-                "error" to "apkPath is required"
+    private fun apkInstallStateMap(
+        installState: String,
+        success: Boolean,
+        apkPath: String? = null,
+        error: String? = null,
+        code: String? = null,
+        canceled: Boolean = false,
+        failedReason: String? = null,
+        artifactSha256: String? = null,
+        versionCode: Long? = null,
+        versionName: String? = null,
+        packageName: String? = null,
+        installerOpened: Boolean = false,
+        permissionRequired: Boolean = false,
+    ): Map<String, Any> = mutableMapOf<String, Any>(
+        "success" to success,
+        "installerOpened" to installerOpened,
+        "permissionRequired" to permissionRequired,
+        "installState" to installState,
+        "canceled" to canceled,
+    ).apply {
+        apkPath?.let { put("apkPath", it) }
+        error?.let { put("error", it) }
+        code?.let { put("code", it) }
+        failedReason?.let { put("failedReason", it) }
+        artifactSha256?.let { put("artifactSha256", it) }
+        versionCode?.let { put("versionCode", it) }
+        versionName?.let { put("versionName", it) }
+        packageName?.let { put("packageName", it) }
+    }.toMap()
+
+    private fun sha256OfFile(path: String): String? = try {
+        val md = MessageDigest.getInstance("SHA-256")
+        File(path).inputStream().use { input ->
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n <= 0) break
+                md.update(buf, 0, n)
+            }
+        }
+        md.digest().joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun apkPersistedPrefs(ctx: Context) =
+        ctx.getSharedPreferences("napaxi.apk_install", Context.MODE_PRIVATE)
+
+    private fun persistPendingInstall(
+        ctx: Context,
+        apkPath: String,
+        expectedSha256: String?,
+        sessionId: Int?,
+        versionCode: Long?,
+        packageName: String?,
+    ) {
+        apkPersistedPrefs(ctx).edit()
+            .putString("apkPath", apkPath)
+            .putString("expectedSha256", expectedSha256 ?: "")
+            .putString("state", "awaiting_confirmation")
+            .apply {
+                sessionId?.let { putInt("sessionId", it) } ?: remove("sessionId")
+                versionCode?.let { putLong("versionCode", it) } ?: remove("versionCode")
+                packageName?.let { putString("packageName", it) } ?: remove("packageName")
+            }
+            .apply()
+    }
+
+    private fun clearPersistedInstall(ctx: Context) {
+        apkPersistedPrefs(ctx).edit().clear().apply()
+    }
+
+    private fun resumePendingInstall(ctx: Context, result: Result) {
+        val prefs = apkPersistedPrefs(ctx)
+        val apkPath = prefs.getString("apkPath", null)
+        val expectedSha = prefs.getString("expectedSha256", null)
+        if (apkPath.isNullOrBlank()) {
+            // Nothing to resume.
+            return
+        }
+        // Process restart while a session was awaiting user confirmation. We must
+        // NOT report success; we re-emit awaiting_confirmation so the Flutter UI
+        // can re-show the pending state. If the backing file vanished, emit failed.
+        if (!File(apkPath).exists()) {
+            clearPersistedInstall(ctx)
+            result.success(apkInstallStateMap(
+                installState = "failed",
+                success = false,
+                apkPath = apkPath,
+                error = "Pending APK artifact disappeared after process restart.",
+                code = "pending_artifact_missing",
+                failedReason = "pending_artifact_missing",
             ))
+            return
+        }
+        if (expectedSha.isNullOrEmpty() || sha256OfFile(apkPath) == expectedSha) {
+            result.success(apkInstallStateMap(
+                installState = "awaiting_confirmation",
+                success = false,
+                apkPath = apkPath,
+                artifactSha256 = expectedSha,
+                installerOpened = true,
+                code = "installer_opened",
+            ))
+        } else {
+            clearPersistedInstall(ctx)
+            result.success(apkInstallStateMap(
+                installState = "failed",
+                success = false,
+                apkPath = apkPath,
+                error = "Pending APK artifact sha256 changed after restart.",
+                code = "pending_artifact_sha_mismatch",
+                failedReason = "pending_artifact_sha_mismatch",
+            ))
+        }
+    }
+
+    private fun parseApkPackageInfo(ctx: Context, apkPath: String): Triple<String?, Long?, String?>? {
+        return try {
+            val pm = ctx.packageManager
+            val info = pm.getPackageArchiveInfo(apkPath, 0) ?: return null
+            val packageName = info.packageName
+            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionCode
+            } else {
+                @Suppress("DEPRECATION")
+                info.versionCode?.toLong()
+            }
+            Triple(packageName, versionCode, info.versionName)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun installApk(ctx: Context, apkPath: String, result: Result) {
+        val expectedSha = currentApkInstallExpectedSha256
+
+        if (apkPath.isBlank()) {
+            result.success(apkInstallStateMap(
+                installState = "failed",
+                success = false,
+                error = "apkPath is required",
+                code = "missing_apk_path",
+            ))
+            // Pending args don't carry apkPath; reset any pending attempt.
+            if (expectedSha != null) clearFailedPendingArgs()
             return
         }
 
         val apkFile = File(apkPath)
         if (!apkFile.exists() || !apkFile.isFile) {
-            result.success(mapOf(
-                "success" to false,
-                "error" to "APK file does not exist: $apkPath"
+            result.success(apkInstallStateMap(
+                installState = "failed",
+                success = false,
+                apkPath = apkPath,
+                error = "APK file does not exist: $apkPath",
+                code = "apk_not_found",
+                failedReason = "apk_not_found",
             ))
+            clearFailedPendingArgs()
             return
         }
 
+        // Verify gated artifact, when caller supplied an expected digest.
+        if (expectedSha != null) {
+            val actual = sha256OfFile(apkPath)
+            if (actual == null || actual != expectedSha) {
+                result.success(apkInstallStateMap(
+                    installState = "failed",
+                    success = false,
+                    apkPath = apkPath,
+                    artifactSha256 = actual,
+                    error = "Artifact sha256 mismatch with registered product.",
+                    code = "artifact_sha_mismatch",
+                    failedReason = "artifact_sha_mismatch",
+                ))
+                clearFailedPendingArgs()
+                return
+            }
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            !ctx.packageManager.canRequestPackageInstalls()) {
+            !ctx.packageManager.canRequestPackageInstalls()
+        ) {
             openInstallPermissionSettings(ctx, apkPath, result)
             return
         }
 
         openPackageInstaller(ctx, apkPath, result)
+    }
+
+    private fun currentApkInstallExpectedSha256: String? = pendingApkInstallExpectedSha256
+
+    private fun clearFailedPendingArgs() {
+        pendingApkInstallExpectedSha256 = null
+        pendingApkInstallVersionCode = null
+        pendingApkInstallPackageName = null
     }
 
     private fun openPackageInstaller(ctx: Context, apkPath: String, result: Result) {
@@ -2116,24 +2330,206 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 "${ctx.packageName}.napaxi_flutter.fileprovider",
                 apkFile
             )
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            val packageInfo = parseApkPackageInfo(ctx, apkPath)
+            val packageName = packageInfo?.first
+            val versionCode = packageInfo?.second
+            val versionName = packageInfo?.third
+
+            // Prefer PackageInstaller session API which returns a definitive
+            // installed/canceled/failed result. Fall back to ACTION_VIEW only
+            // on outright exceptions where the session cannot be created.
+            try {
+                val packageInstaller = ctx.packageManager.packageInstaller
+                val params = PackageInstaller.SessionParams(
+                    PackageInstaller.SessionParams.MODE_FULL_INSTALL
+                )
+                val sessionId = packageInstaller.createSession(params)
+                val session = packageInstaller.openSession(sessionId)
+                apkFile.inputStream().use { input ->
+                    session.openWrite("package.apk", 0, apkFile.length()).use { output ->
+                        input.copyTo(output)
+                        session.fsync(output)
+                    }
+                }
+                val intentSender = PendingInstallReceiver.pendingIntentSender(ctx, sessionId)
+                session.commit(intentSender)
+                pendingApkInstallPath = apkPath
+                pendingApkInstallResult = result
+                pendingApkInstallExpectedSha256 = currentApkInstallExpectedSha256
+                pendingApkInstallVersionCode = versionCode
+                pendingApkInstallPackageName = packageName
+                pendingApkSessionId = sessionId
+                persistPendingInstall(
+                    ctx = ctx,
+                    apkPath = apkPath,
+                    expectedSha256 = currentApkInstallExpectedSha256,
+                    sessionId = sessionId,
+                    versionCode = versionCode,
+                    packageName = packageName,
+                )
+                return
+            } catch (sessionFailure: Throwable) {
+                // Fallback: open system installer UI. We MUST NOT report success.
+                Log.w("NapaxiFlutterPlugin", "PackageInstaller session unavailable, falling back to ACTION_VIEW", sessionFailure)
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                ctx.startActivity(intent)
+                pendingApkInstallPath = apkPath
+                pendingApkInstallResult = result
+                pendingApkInstallExpectedSha256 = currentApkInstallExpectedSha256
+                pendingApkInstallVersionCode = versionCode
+                pendingApkInstallPackageName = packageName
+                persistPendingInstall(
+                    ctx = ctx,
+                    apkPath = apkPath,
+                    expectedSha256 = currentApkInstallExpectedSha256,
+                    sessionId = null,
+                    versionCode = versionCode,
+                    packageName = packageName,
+                )
+                result.success(apkInstallStateMap(
+                    installState = "awaiting_confirmation",
+                    success = false,
+                    apkPath = apkPath,
+                    installerOpened = true,
+                    code = "installer_opened",
+                    versionCode = versionCode,
+                    versionName = versionName,
+                    packageName = packageName,
+                ))
+                return
             }
-            ctx.startActivity(intent)
-            result.success(mapOf(
-                "success" to false,
-                "installerOpened" to true,
-                "apkPath" to apkPath,
-                "code" to "installer_opened"
-            ))
         } catch (e: Exception) {
-            result.success(mapOf(
-                "success" to false,
-                "error" to (e.message ?: "Failed to open package installer")
+            result.success(apkInstallStateMap(
+                installState = "failed",
+                success = false,
+                error = e.message ?: "Failed to open package installer",
+                code = "open_installer_failed",
+                failedReason = e.message,
             ))
+            clearFailedPendingArgs()
         }
+    }
+
+    private fun reportInstallStatus(
+        ctx: Context,
+        status: Int,
+        sessionId: Int,
+        message: String?,
+    ) {
+        val apkPath = pendingApkInstallPath
+        val result = pendingApkInstallResult
+        val expectedSha = pendingApkInstallExpectedSha256
+        val pendingVersionCode = pendingApkInstallVersionCode
+        val pendingPackageName = pendingApkInstallPackageName
+        clearPendingAndPersist(ctx)
+
+        if (result == null) return
+
+        when (status) {
+            PackageInstaller.STATUS_SUCCESS -> {
+                // Detect same-package/same-version already installed: compare
+                // requested versionCode to the installed one. This avoids
+                // mistaking a no-op "success" of the OS for a fresh install.
+                val samVerCode = pendingPackageName?.let { pn ->
+                    runCatching {
+                        val installed = ctx.packageManager.getPackageInfo(pn, 0)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            installed.longVersionCode
+                        } else {
+                            @Suppress("DEPRECATION")
+                            installed.versionCode?.toLong()
+                        }
+                    }.getOrNull()
+                }
+                if (pendingVersionCode != null && samVerCode != null && samVerCode == pendingVersionCode) {
+                    result.success(apkInstallStateMap(
+                        installState = "already_installed_same_version",
+                        success = false,
+                        apkPath = apkPath,
+                        artifactSha256 = expectedSha,
+                        versionCode = pendingVersionCode,
+                        packageName = pendingPackageName,
+                        code = "already_installed_same_version",
+                        error = "Same package and versionCode is already installed; install not performed.",
+                    ))
+                } else {
+                    result.success(apkInstallStateMap(
+                        installState = "installed",
+                        success = true,
+                        apkPath = apkPath,
+                        artifactSha256 = expectedSha,
+                        versionCode = pendingVersionCode,
+                        packageName = pendingPackageName,
+                    ))
+                }
+            }
+            PackageInstaller.STATUS_USER_CANCELED -> {
+                result.success(apkInstallStateMap(
+                    installState = "canceled",
+                    success = false,
+                    apkPath = apkPath,
+                    canceled = true,
+                    code = "user_canceled",
+                    error = "User canceled the install.",
+                ))
+            }
+            PackageInstaller.STATUS_FAILURE_BLOCKED,
+            PackageInstaller.STATUS_FAILURE_ABORTED,
+            PackageInstaller.STATUS_FAILURE_INVALID,
+            PackageInstaller.STATUS_FAILURE_CONFLICT -> {
+                // Signature/version conflict: explicitly recommend uninstalling
+                // the old app or upgrading the signing certificate. NEVER call
+                // PackageManager.deletePackage here (preserve user data).
+                val reason = when (status) {
+                    PackageInstaller.STATUS_FAILURE_BLOCKED -> "signature_or_version_blocked"
+                    PackageInstaller.STATUS_FAILURE_CONFLICT -> "version_conflict"
+                    PackageInstaller.STATUS_FAILURE_INVALID -> "invalid_apk_or_signature"
+                    else -> "aborted"
+                }
+                result.success(apkInstallStateMap(
+                    installState = "failed",
+                    success = false,
+                    apkPath = apkPath,
+                    code = reason,
+                    error = "Install blocked (status=$status). Uninstall the existing app or upgrade its signing certificate; the old app was NOT removed automatically.",
+                    failedReason = reason,
+                ))
+            }
+            PackageInstaller.STATUS_PENDING -> {
+                result.success(apkInstallStateMap(
+                    installState = "awaiting_confirmation",
+                    success = false,
+                    apkPath = apkPath,
+                    installerOpened = true,
+                    code = "pending_user_confirmation",
+                    error = "Install is waiting for the user to confirm.",
+                ))
+            }
+            else -> {
+                result.success(apkInstallStateMap(
+                    installState = "failed",
+                    success = false,
+                    apkPath = apkPath,
+                    code = "install_failed_$status",
+                    error = message ?: "Install failed (status=$status).",
+                    failedReason = "install_failed_$status",
+                ))
+            }
+        }
+    }
+
+    private fun clearPendingAndPersist(ctx: Context) {
+        pendingApkInstallPath = null
+        pendingApkInstallResult = null
+        pendingApkInstallExpectedSha256 = null
+        pendingApkInstallVersionCode = null
+        pendingApkInstallPackageName = null
+        pendingApkSessionId = null
+        clearPersistedInstall(ctx)
     }
 
     private fun openFile(ctx: Context, path: String, mimeType: String, result: Result) {
@@ -2751,17 +3147,69 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         if (activity == null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(intent)
-            result.success(mapOf(
-                "success" to false,
-                "permissionRequired" to true,
-                "error" to "Install unknown apps permission is required. The Android permission screen has been opened."
+            result.success(apkInstallStateMap(
+                installState = "awaiting_confirmation",
+                success = false,
+                apkPath = apkPath,
+                permissionRequired = true,
+                installerOpened = true,
+                error = "Install unknown apps permission is required. The Android permission screen has been opened.",
+                code = "REQUEST_INSTALL_PACKAGES",
             ))
             return
         }
 
         pendingApkInstallPath = apkPath
         pendingApkInstallResult = result
+        // Persist so a process restart after the user grants permission can re-show
+        // the awaiting_confirmation UI rather than silently reporting failure.
+        persistPendingInstall(
+            ctx = ctx,
+            apkPath = apkPath,
+            expectedSha256 = pendingApkInstallExpectedSha256,
+            sessionId = null,
+            versionCode = pendingApkInstallVersionCode,
+            packageName = pendingApkInstallPackageName,
+        )
         activity.startActivityForResult(intent, REQUEST_INSTALL_UNKNOWN_APPS)
+    }
+}
+
+/**
+ * Receives the [PackageInstaller] session outcome (success/canceled/failed).
+ *
+ * The plugin registers itself as the global pending install handler; this
+ * receiver forwards status to it. Keeping it as a static receiver lets the
+ * install complete even if the Flutter engine was killed and recreated
+ * (process restart recovery: the new engine instance will see the pending
+ * state in SharedPreferences and re-present [awaiting_confirmation]).
+ */
+class PendingInstallReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -999)
+        val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+        val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+        val plugin = NapaxiFlutterPlugin.pendingInstallHandler
+        plugin?.reportInstallStatus(context, status, sessionId, message)
+    }
+
+    companion object {
+        @Volatile
+        var pendingInstallHandler: NapaxiFlutterPlugin? = null
+
+        fun pendingIntentSender(ctx: Context, sessionId: Int): IntentSender {
+            val intent = Intent(ctx, PendingInstallReceiver::class.java).apply {
+                action = "com.napaxi.flutter.PACKAGE_INSTALL_RESULT"
+                putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId)
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            return PendingIntent.getBroadcast(
+                ctx,
+                sessionId,
+                intent,
+                flags,
+            ).intentSender
+        }
     }
 }
 
