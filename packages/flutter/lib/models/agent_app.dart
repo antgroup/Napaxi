@@ -94,6 +94,16 @@ class AgentAppPackage {
   final String createdAt;
   final String updatedAt;
 
+  /// Public business contract version this Provider App exposes.
+  /// Version 1 (the default when the field is absent) keeps the historical
+  /// `id`+`json` action shape; version 2 declares structured
+  /// `parameters`/`result_schema` objects per action. Adapters must preserve
+  /// this field end-to-end so refresh parity checks
+  /// (`tools/scripts/check-manifest-action-alignment.js`) can compare the
+  /// installed APK manifest, the host-saved binding, and the tool definition
+  /// exposed to the model on the same contract version.
+  final int contractVersion;
+
   const AgentAppPackage({
     required this.providerId,
     required this.agentId,
@@ -109,6 +119,7 @@ class AgentAppPackage {
     this.useCount = 0,
     this.createdAt = '',
     this.updatedAt = '',
+    this.contractVersion = 1,
   });
 
   factory AgentAppPackage.fromMap(Map<dynamic, dynamic> map) {
@@ -132,6 +143,7 @@ class AgentAppPackage {
       useCount: (map['use_count'] as num?)?.toInt() ?? 0,
       createdAt: map['created_at'] as String? ?? '',
       updatedAt: map['updated_at'] as String? ?? '',
+      contractVersion: (map['contract_version'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -150,6 +162,7 @@ class AgentAppPackage {
     if (useCount > 0) 'use_count': useCount,
     if (createdAt.isNotEmpty) 'created_at': createdAt,
     if (updatedAt.isNotEmpty) 'updated_at': updatedAt,
+    if (contractVersion != 1) 'contract_version': contractVersion,
   };
 
   /// Whether the host may expose this app's actions without an explicit @.
@@ -393,6 +406,19 @@ class AgentAppActionResult {
   final String completedAt;
   final String? signature;
 
+  /// Contract v2: identifies the life-cycle stage that produced a failure
+  /// (`proposal_created`, `dispatched`, `host_response`, `parsed`,
+  /// `persisted`). Empty for successful results. The Rust core
+  /// `submit_result` path sets this when the dispatcher returns an error or
+  /// when contract validation rejects the result before persistence.
+  final String failureStage;
+
+  /// Contract v2: field-path-level validation errors when `submitResult`
+  /// rejects the result because it differs from the manifest's declared
+  /// `result_schema`. Empty for non-validation failures. Adapters MUST
+  /// surface this verbatim rather than collapsing it into `error`.
+  final List<AgentAppFieldError> fieldErrors;
+
   const AgentAppActionResult({
     required this.requestId,
     required this.status,
@@ -401,6 +427,8 @@ class AgentAppActionResult {
     this.providerTraceId,
     required this.completedAt,
     this.signature,
+    this.failureStage = '',
+    this.fieldErrors = const <AgentAppFieldError>[],
   });
 
   /// Stable provider error code when the result uses either the v3 structured
@@ -439,6 +467,11 @@ class AgentAppActionResult {
       providerTraceId: map['provider_trace_id'] as String?,
       completedAt: map['completed_at'] as String? ?? '',
       signature: map['signature'] as String?,
+      failureStage: map['failure_stage'] as String? ?? '',
+      fieldErrors: (map['field_errors'] as List? ?? const [])
+          .whereType<Map>()
+          .map(AgentAppFieldError.fromMap)
+          .toList(growable: false),
     );
   }
 
@@ -450,9 +483,45 @@ class AgentAppActionResult {
     if (providerTraceId != null) 'provider_trace_id': providerTraceId,
     'completed_at': completedAt,
     if (signature != null) 'signature': signature,
+    if (failureStage.isNotEmpty) 'failure_stage': failureStage,
+    if (fieldErrors.isNotEmpty)
+      'field_errors': fieldErrors.map((e) => e.toJson()).toList(),
   };
 
   String toJsonString() => jsonEncode(toJson());
+}
+
+/// A single contract-v2 validation error: JSON Pointer-style `path` into the
+/// action result, the `expected` type or shape, the `found` type, and a
+/// single-line `suggestion`.
+class AgentAppFieldError {
+  final String path;
+  final String expected;
+  final String found;
+  final String suggestion;
+
+  const AgentAppFieldError({
+    required this.path,
+    required this.expected,
+    required this.found,
+    this.suggestion = '',
+  });
+
+  factory AgentAppFieldError.fromMap(Map<dynamic, dynamic> map) {
+    return AgentAppFieldError(
+      path: map['path'] as String? ?? '',
+      expected: map['expected'] as String? ?? '',
+      found: map['found'] as String? ?? '',
+      suggestion: map['suggestion'] as String? ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'path': path,
+    'expected': expected,
+    'found': found,
+    if (suggestion.isNotEmpty) 'suggestion': suggestion,
+  };
 }
 
 String? _actionErrorString(Object? value) {

@@ -326,11 +326,35 @@ private fun triggerSignaturePayload(request: AgentTriggerRequest): String {
     ).joinToString("\n")
 }
 
-private fun canonicalJson(value: Any?): String =
+// Canonical JSON for signing, shared with Rust core (`crypto::canonical_json`,
+// which uses `serde_json::to_string`) and iOS (`AgentProvider.canonicalJson`,
+// which uses `JSONSerialization.data(withJSONObject:)` with
+// `.withoutEscapingSlashes`). Object keys are sorted ascending, arrays keep
+// their order, and no insignificant whitespace is inserted.
+//
+// IMPORTANT: do NOT use `JSONObject.quote` here. `org.json`'s `JSONObject.quote`
+// escapes the forward slash '/' to '\/' (see android.util.JsonWriter /
+// org.json.JSONObject), which disagrees with `serde_json` and `JSONSerialization`
+// and produces a different `arguments_sha256` from the Host on the Provider
+// side. This was the root cause of the 2026-11-03 13:42:12 TradeJournal
+// incident: an analysis containing `10/22`, `元/吨` and a URL signed by Rust
+// was rejected by Android with `signature_invalid` because Android hashed
+// `10\/22` instead of `10/22`.
+//
+// String escaping matches RFC 8259: '"' and '\\' are escaped with a leading
+// backslash, U+0000..U+001F are escaped with `\u00XX` (with `\b`, `\t`, `\n`,
+// `\f`, `\r` using their short forms), and '/' is left untouched. UTF-8 is
+// preserved (no `\u00XX` for non-ASCII BMP / astral characters).
+//
+// Cross-port parity is enforced by `packages/agent_provider/shared/signing_fixtures.json`,
+// consumed by `SigningParityTest.kt` (Android), `SigningParityTests.swift`
+// (iOS) and the Rust `signing_fixtures` test in `crates/core/src/agents/agent_app/tests.rs`.
+internal fun canonicalJson(value: Any?): String =
     when (value) {
         null, JSONObject.NULL -> "null"
-        is Boolean, is Number -> value.toString()
-        is String -> JSONObject.quote(value)
+        is Boolean -> value.toString()
+        is Number -> canonicalNumber(value)
+        is String -> jsonQuoted(value)
         is JSONArray -> {
             val parts = List(value.length()) { index -> canonicalJson(value.get(index)) }
             parts.joinToString(prefix = "[", postfix = "]", separator = ",")
@@ -338,16 +362,50 @@ private fun canonicalJson(value: Any?): String =
         is JSONObject -> {
             val keys = value.keys().asSequence().toList().sorted()
             keys.joinToString(prefix = "{", postfix = "}", separator = ",") { key ->
-                "${JSONObject.quote(key)}:${canonicalJson(value.get(key))}"
+                "${jsonQuoted(key)}:${canonicalJson(value.get(key))}"
             }
         }
-        else -> JSONObject.quote(value.toString())
+        else -> jsonQuoted(value.toString())
     }
 
-private fun sha256Base64NoPad(bytes: ByteArray): String =
+internal fun jsonQuoted(value: String): String {
+    val builder = StringBuilder(value.length + 2)
+    builder.append('"')
+    for (ch in value) {
+        when (ch) {
+            '"' -> builder.append("\\\"")
+            '\\' -> builder.append("\\\\")
+            '\b' -> builder.append("\\b")
+            '\f' -> builder.append("\\f")
+            '\n' -> builder.append("\\n")
+            '\r' -> builder.append("\\r")
+            '\t' -> builder.append("\\t")
+            // U+0000..U+001F (excluding the named escapes above) use \u00XX.
+            else -> if (ch.code < 0x20) {
+                builder.append("\\u00").append(String.format("%02x", ch.code))
+            } else {
+                // Forward slash MUST stay unescaped; do not use JSONObject.quote
+                // (it emits '\/'). See header comment and signing_fixtures.json.
+                builder.append(ch)
+            }
+        }
+    }
+    builder.append('"')
+    return builder.toString()
+}
+
+// Canonical number formatting matches `serde_json::Number::to_string` for the
+// common cases we serialize: integers stay integral, doubles use the shortest
+// round-trip representation (`kotlin` already does this via `toString()`). NaN
+// and infinity are not produced by the signing path; if a malformed value
+// appears we fall back to the untrusted `toString()` so that signing remains
+// total rather than crashing the provider process.
+private fun canonicalNumber(value: Number): String = value.toString()
+
+internal fun sha256Base64NoPad(bytes: ByteArray): String =
     Base64.getEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(bytes))
 
-private fun hmacSha256Base64NoPad(secret: ByteArray, payload: ByteArray): String {
+internal fun hmacSha256Base64NoPad(secret: ByteArray, payload: ByteArray): String {
     val mac = Mac.getInstance("HmacSHA256")
     mac.init(SecretKeySpec(secret, "HmacSHA256"))
     return Base64.getEncoder().withoutPadding().encodeToString(mac.doFinal(payload))

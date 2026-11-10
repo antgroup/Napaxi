@@ -459,6 +459,8 @@ async fn execute_action(
             provider_trace_id: None,
             completed_at: now(),
             signature: None,
+            failure_stage: "host_response".to_string(),
+            field_errors: Vec::new(),
         },
     };
     let stored = submit_result(
@@ -854,6 +856,8 @@ fn parse_action_result(request_id: &str, raw: &str) -> ActionResult {
         provider_trace_id: None,
         completed_at: now(),
         signature: None,
+        failure_stage: String::new(),
+        field_errors: Vec::new(),
     }
 }
 
@@ -865,6 +869,8 @@ fn action_result_tool_output(result: &ActionResult) -> String {
         "error": result.error,
         "provider_trace_id": result.provider_trace_id,
         "completed_at": result.completed_at,
+        "failure_stage": result.failure_stage,
+        "field_errors": result.field_errors,
     }))
     .unwrap_or_else(|_| "{}".to_string())
 }
