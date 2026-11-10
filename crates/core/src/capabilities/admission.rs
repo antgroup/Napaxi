@@ -51,6 +51,42 @@ pub(crate) fn admit_provider(provider: &str) -> Result<(), String> {
     .map_err(|e| e.to_string())
 }
 
+/// Per-provider/model exec ceiling gate (AC-2, DIMA-2026110600120401874).
+///
+/// Runs the existing provider-level admission chain, then layers the model
+/// deny registry on top: a prior reviewer决策 that downgraded a specific
+/// `(provider, model)` pair to [`super::definitions::ExecCeiling::Deny`]
+/// (recorded via [`super::decisions::deny_model`]) short-circuits this
+/// admission with the standard `capability_denied` error shape — but other
+/// models on the same provider stay admitted.
+///
+/// The ceiling resolution itself (taking a global
+/// [`super::definitions::ExecSecurityPolicy`] + agent override) is a PURE
+/// function exposed by [`super::decisions::apply_exec_ceiling`]; the host
+/// capability hook bridge is the place where the resolved ceiling is
+/// recorded back via [`super::decisions::deny_model`]. This admission gate
+/// only consults the registry, so it stays decoupled from the policy
+/// storage layer (which doesn't yet exist process-wide in core).
+#[allow(dead_code)] // first wiring; consumed by tests + future host exec bridge.
+pub(crate) fn admit_provider_with_model(provider: &str, model: &str) -> Result<(), String> {
+    admit_provider(provider)?;
+    if super::decisions::is_model_denied(provider, model) {
+        let capability_id = provider_capability_id(provider)
+            .map(str::to_string)
+            .unwrap_or_else(|| provider.to_string());
+        record_admission_decision(AdmissionDecisionRecord::deny(
+            &capability_id,
+            CapabilityAdmissionKind::Provider,
+            provider,
+            &format!("exec ceiling: model {model} denied by reviewer"),
+        ));
+        return Err(format!(
+            "capability denied by policy: {capability_id} (exec ceiling: model {model} denied by reviewer)"
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn admit_agent_engine(engine_id: &str) -> Result<(), String> {
     admit_typed(CapabilityAdmission {
         kind: CapabilityAdmissionKind::AgentEngine,

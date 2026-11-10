@@ -1214,8 +1214,11 @@ fn enforce_mid_turn_hard_precheck_fits_returns_ok() {
         "role": "user",
         "content": "hi"
     })];
-    // descriptor_tokens=0; prompt_tokens are tiny → fits → Ok(()).
-    assert!(enforce_mid_turn_hard_precheck(&config, &messages, 0).is_ok());
+    // descriptor_tokens=0; prompt_tokens are tiny → fits → Ok(()). No
+    // tool_execution_context here → the authoritative-source plumbing
+    // silently falls back to the pure estimate (no last_prompt_snapshot
+    // lookup).
+    assert!(enforce_mid_turn_hard_precheck(&config, &messages, 0, None).is_ok());
 }
 
 #[test]
@@ -1242,7 +1245,7 @@ fn enforce_mid_turn_hard_precheck_overflow_returns_marker_error() {
         "role": "user",
         "content": big
     })];
-    let err = enforce_mid_turn_hard_precheck(&config, &messages, 0)
+    let err = enforce_mid_turn_hard_precheck(&config, &messages, 0, None)
         .expect_err("overflow should produce marker error");
     assert!(
         err.starts_with("mid-turn context overflow:"),
@@ -1251,4 +1254,107 @@ fn enforce_mid_turn_hard_precheck_overflow_returns_marker_error() {
     // Sanity: even with soft compaction trigger_ratio huge (1.0), the hard
     // floor reserve still fires the overflow — that is the AC-2 invariant.
     assert!(crate::llm::is_context_overflow_error(&err));
+}
+
+/// AC-1 (DIMA-2026110600120401874): when a fresh `last_prompt_snapshot`
+/// persists a real per-provider `prompt_tokens` higher than the local
+/// estimate (estimator under-counts), the mid-turn hard precheck must take
+/// `max(estimate, real)` and surface `Overflow` even though the pure
+/// estimate alone would have cleared.
+///
+/// Test seam: we hand-build a [`ToolExecutionContext`] whose
+/// `session_key_json` resolves to a thread with a persisted
+/// `LastPromptSnapshot` (`prompt_tokens` far above the estimate baseline).
+/// `config_fingerprint` and `message_count` are aligned to the current
+/// messages so [`crate::context::fresh_last_prompt_tokens`] returns the
+/// snapshot — proving the authoritative-source plumbing is wired end to
+/// end through [`enforce_mid_turn_hard_precheck`].
+#[test]
+fn enforce_mid_turn_hard_precheck_uses_real_usage_when_fresh() {
+    use crate::context::{context_status_for_config, record_last_prompt_snapshot};
+    use crate::llm::LlmUsage;
+    use crate::tool_registry::ToolExecutionContext;
+    use crate::types::ContextEngineConfig;
+
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_str().unwrap().to_string();
+
+    // Window big enough that the ESTIMATE comfortably fits the floor reserve
+    // (so the only way the precheck fires is via the real snapshot).
+    let mut config = PlatformLlmConfig {
+        provider: "anthropic".to_string(),
+        model: "claude-3-5-sonnet".to_string(),
+        context_engine: ContextEngineConfig {
+            enabled: true,
+            context_window_tokens: Some(200_000),
+            trigger_ratio: 1.0,
+            ..ContextEngineConfig::default()
+        },
+        ..PlatformLlmConfig::default()
+    };
+
+    // Tiny message → tiny estimate, comfortably inside the window.
+    let messages = vec![serde_json::json!({
+        "role": "user",
+        "content": "hi"
+    })];
+
+    // Persist a real per-provider snapshot claiming a prompt_tokens far
+    // above the configured floor reserve (4_096 floor * 200_000/0.10=4_096),
+    // so the real usage alone pushes the precheck into Overflow. The
+    // snapshot's config_fingerprint is produced from the same config by
+    // record_last_prompt_snapshot, and message_count = messages.len() so
+    // freshness holds.
+    let real_prompt_tokens = 196_000_usize;
+    let usage = LlmUsage {
+        input_tokens: Some(real_prompt_tokens),
+        output_tokens: Some(0),
+        cache_read_tokens: Some(0),
+        cache_write_tokens: Some(0),
+        reasoning_tokens: None,
+        total_tokens: Some(real_prompt_tokens),
+    };
+    record_last_prompt_snapshot(
+        &files_dir,
+        "thread-ac-1",
+        &config,
+        Some(&usage),
+        messages.len(),
+    );
+    // Sanity: provider snapshot is the authoritative source for display.
+    let status = serde_json::from_str::<serde_json::Value>(&context_status_for_config(
+        &files_dir,
+        "thread-ac-1",
+        Some(&config),
+    ))
+    .unwrap();
+    assert_eq!(
+        status["last_prompt_tokens"].as_u64(),
+        Some(real_prompt_tokens as u64),
+        "snapshot must persist real prompt_tokens before the precheck runs"
+    );
+
+    let session_key_json = serde_json::json!({ "thread_id": "thread-ac-1" }).to_string();
+    let exec_context = ToolExecutionContext {
+        files_dir: files_dir.clone(),
+        workspace_files_dir: files_dir.clone(),
+        agent_id: String::new(),
+        session_key_json: Some(session_key_json),
+    };
+
+    let err = enforce_mid_turn_hard_precheck(&config, &messages, 0, Some(&exec_context))
+        .expect_err("fresh real prompt_tokens above floor reserve must trigger Overflow");
+    assert!(
+        err.starts_with("mid-turn context overflow:"),
+        "expected overflow marker when real prompt_tokens shadows estimate, got: {err}"
+    );
+
+    // Freshness regression: rotate model so config_fingerprint no longer
+    // matches → the precheck must fall back to the pure estimate and the
+    // overflow disappears (the estimate itself fits the window).
+    config.model = "claude-3-5-haiku".to_string();
+    assert!(
+        enforce_mid_turn_hard_precheck(&config, &messages, 0, Some(&exec_context)).is_ok(),
+        "stale fingerprint (model swap) must drop the snapshot and fall back to estimate"
+    );
 }

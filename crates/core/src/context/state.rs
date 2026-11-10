@@ -85,6 +85,17 @@ pub(super) struct LastPromptSnapshot {
     #[serde(default)]
     pub(super) total_tokens: Option<usize>,
     pub(super) updated_at: String,
+    /// Number of raw-history messages that produced this snapshot. Used by
+    /// [`super::fresh_last_prompt_tokens`] to detect that the current
+    /// message list has shrunk below the snapshot baseline (e.g. after a
+    /// manual history reset) — in that case the snapshot is no longer
+    /// representative and the mid-turn hard precheck must fall back to the
+    /// pure estimate. `#[serde(default)]` keeps older persisted snapshots
+    /// readable (`message_count = 0` ⇒ freshness shrinks-check is skipped,
+    /// only the `config_fingerprint` is consulted — safe by being on the
+    /// strict side of `max(estimate, real)`).
+    #[serde(default)]
+    pub(super) message_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

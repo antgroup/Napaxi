@@ -5,6 +5,21 @@
 //! - [`budget`]: token estimation, model window inference, route routing.
 //! - [`compaction`]: history compaction + tool-output reduction.
 //! - [`display`]: context status display + snapshot-freshness helpers.
+//!
+//! # Prompt usage authoritative-source plumbing (AC-1, DIMA-2026110600120401874)
+//!
+//! The authoritative `prompt_tokens` are the per-provider real values
+//! returned by the LLM call (`LlmUsage::prompt_tokens`), persisted to
+//! `LastPromptSnapshot`. The three gates consume them differently:
+//! - **Display** (`display::display_context_usage`): already prefers the
+//!   provider snapshot when fresh (the "source=provider" row); no change.
+//! - **Turn-start preflight** (`record_preflight_snapshot`): stays on the
+//!   estimate — no real usage exists yet at preflight time.
+//! - **Mid-turn hard precheck** (`enforce_mid_turn_hard_precheck` in
+//!   `tools/loop.rs`, calling `mid_turn_hard_precheck_for_config` here):
+//!   now reads [`fresh_last_prompt_tokens`] and takes
+//!   `max(estimate, real)`; on any freshness miss it silently falls back
+//!   to the pure estimate. See [`budget`] for the audit rationale.
 
 use std::time::Duration;
 
@@ -846,6 +861,7 @@ pub(crate) fn record_last_prompt_snapshot(
     thread_id: &str,
     config: &PlatformLlmConfig,
     usage: Option<&LlmUsage>,
+    message_count: usize,
 ) {
     let Some(usage) = usage else {
         return;
@@ -878,8 +894,61 @@ pub(crate) fn record_last_prompt_snapshot(
         reasoning_tokens: usage.reasoning_tokens.unwrap_or(0),
         total_tokens: usage.total_tokens,
         updated_at: Utc::now().to_rfc3339(),
+        message_count,
     });
     let _ = save_state(files_dir, &state);
+}
+
+/// Authoritative-source plumbing (AC-1, DIMA-2026110600120401874): resolve
+/// the last real per-provider prompt usage for the session backing
+/// `session_key_json`, validated against the current `config` so a stale
+/// snapshot from a different model/window/reserve never feeds the live
+/// mid-turn hard precheck.
+///
+/// Returns the snapshot's `prompt_tokens` only when ALL of:
+/// - the session resolves to a thread with persisted [`ContextState`],
+/// - that state carries a [`LastPromptSnapshot`],
+/// - the snapshot's `config_fingerprint` matches the current effective
+///   config (same provider/model/window/reserve — modulo provider
+///   metadata, which `resolver::config_with_provider_metadata` normalizes
+///   in), AND
+/// - the current `messages` list has not shrunk below the snapshot's
+///   `message_count` (a shrink means the snapshot is from a different /
+///   reset history and is no longer representative). When the persisted
+///   snapshot predates the `message_count` field (older code path), the
+///   shrink check is skipped and only the fingerprint gates the snapshot.
+///
+/// On any miss the caller falls back to the pure estimate — never returns
+/// a value looser than the estimate. The mid-turn hard precheck then takes
+/// `max(estimate, real)` ([`crate::context::mid_turn_hard_precheck_for_config`])
+/// so introducing the authoritative source can only tighten the check,
+/// never loosen it.
+pub(crate) fn fresh_last_prompt_tokens(
+    files_dir: &str,
+    session_key_json: Option<&str>,
+    config: &PlatformLlmConfig,
+    messages: &[serde_json::Value],
+) -> Option<usize> {
+    let session_key_json = session_key_json?;
+    let thread_id = session_thread_id(session_key_json)?;
+    let state = load_state(files_dir, &thread_id)?;
+    let snapshot = state.last_prompt_snapshot.as_ref()?;
+    let effective_config = resolver::config_with_provider_metadata(config, &state);
+    let effective_settings = normalized_config(&effective_config.context_engine);
+    let fingerprint = context_config_fingerprint(&effective_config, &effective_settings);
+    if snapshot.config_fingerprint != fingerprint {
+        return None;
+    }
+    // If the persisted snapshot records the producing message count, the
+    // current message list must not have shrunk below it. A grow between
+    // snapshot and now is the normal mid-turn direction (tool results are
+    // appended), and `max(estimate, real)` keeps the result on the strict
+    // side; a shrink would let a stale large `real` shadow a tighter
+    // estimate, so we drop the snapshot in that case.
+    if snapshot.message_count > 0 && messages.len() < snapshot.message_count {
+        return None;
+    }
+    Some(snapshot.prompt_tokens)
 }
 
 pub(crate) fn record_tool_compaction_snapshot_for_session(

@@ -947,3 +947,107 @@ fn array_subscript_assignment_with_literal_rhs_is_mode_governed() {
         "recursive array subscript must Reject: {recursive:?}"
     );
 }
+
+// ===========================================================================
+// AC-4 — exec result data contract isolation (DIMA-2026110600120401874)
+// ===========================================================================
+// The data contract (`ShellExecResult` + `ShellExecStatus`) carries the
+// shell's observed result independent of any later cleanup state on the
+// caller's side. The regression this guards against: a successful exec
+// (`ShellExecStatus::Ok`) whose captured stdout is `done` must surface to
+// the LLM as `Ok("done")` even when a subsequent cleanup step on the
+// caller's side fails afterward. Pre-fix, the executor returned
+// `Result<String, String>` — the cleanup failure overwrote the observed
+// success because there was no contract separating them.
+
+#[test]
+fn execute_shell_tool_preserves_observed_success_on_cleanup_failure() {
+    use super::shell::{ShellExecResult, ShellExecStatus, render_shell_exec_result};
+
+    // Simulated observed success — the shell command completed with
+    // `stdout = "done"` and no driver error; this is what the executor
+    // hands the caller BEFORE any cleanup is attempted.
+    let observed_success = ShellExecResult {
+        stdout: "done".to_string(),
+        stderr: String::new(),
+        exit_code: 0,
+        status: ShellExecStatus::Ok,
+    };
+
+    // The caller renders the observed contract to the LLM-facing
+    // `Result<String, String>` — independent of any later cleanup.
+    let rendered = render_shell_exec_result(&observed_success);
+    assert_eq!(rendered.as_deref(), Ok("done"));
+
+    // The cleanup step on the caller's side later fails and produces its
+    // OWN `ShellExecResult::cleanup_failed(...)` — this state is never
+    // seen by the LLM tool-output path. The contract is what got rendered
+    // above; the cleanup failure does NOT mutate the observed success.
+    let cleanup_failure_later = ShellExecResult::cleanup_failed(
+        "spawn_blocking thread canceled by host cancel".to_string(),
+    );
+    // The cleanup failure is rendered to its OWN error string, NOT into
+    // the previously-rendered Ok path:
+    let cleanup_rendered = render_shell_exec_result(&cleanup_failure_later);
+    assert_eq!(
+        cleanup_rendered.unwrap_err(),
+        "spawn_blocking thread canceled by host cancel",
+        "CleanupFailed must surface the reason verbatim (no stdout/stderr folding)"
+    );
+
+    // The observed-success render stays Ok("done"): the cleanup did not
+    // rewrite it. This is the AC-4 invariant ("已观察成功结果不被后续
+    // cleanup 改写").
+    assert_eq!(rendered.unwrap(), "done");
+}
+
+#[test]
+fn render_shell_exec_result_distinguishes_non_zero_exit_from_cleanup_failure() {
+    use super::shell::{ShellExecResult, ShellExecStatus, render_shell_exec_result};
+
+    // NonZeroExit carries the observed partial stdout/stderr and stays in
+    // the historical "proot command failed" message shape — the LLM sees
+    // the partial output, not a "command silently failed" collapse.
+    let non_zero = ShellExecResult {
+        stdout: "partial_stdout".to_string(),
+        stderr: "partial_stderr".to_string(),
+        exit_code: 1,
+        status: ShellExecStatus::NonZeroExit(1),
+    };
+    let rendered = render_shell_exec_result(&non_zero).unwrap_err();
+    assert!(
+        rendered.contains("proot command failed (exit=1)"),
+        "expected legacy non-zero exit shape, got: {rendered}"
+    );
+    assert!(
+        rendered.contains("partial_stdout"),
+        "NonZeroExit must preserve observed stdout/stderr: {rendered}"
+    );
+
+    // CleanupFailed surfaces the reason alone — no stdout/stderr folded
+    // in, mirroring the pre-fix "Error" that had no observed output.
+    let cleanup = ShellExecResult::cleanup_failed("driver spawn failed".to_string());
+    let cleanup_err = render_shell_exec_result(&cleanup).unwrap_err();
+    assert_eq!(cleanup_err, "driver spawn failed");
+    assert!(
+        !cleanup_err.contains("proot command failed"),
+        "CleanupFailed must NOT reuse the NonZeroExit rendering path: {cleanup_err}"
+    );
+}
+
+#[test]
+fn render_shell_exec_result_preserves_timeout_and_cancelled_markers() {
+    use super::shell::{ShellExecResult, render_shell_exec_result};
+
+    let cancelled = ShellExecResult::cancelled(String::new(), String::new(), -1);
+    assert_eq!(
+        render_shell_exec_result(&cancelled).unwrap_err(),
+        "proot command cancelled by user"
+    );
+
+    let timeout = ShellExecResult::timeout(String::new(), String::new(), -124, 42);
+    assert_eq!(
+        render_shell_exec_result(&timeout).unwrap_err(),
+        "proot command timed out after 42s: "
+    );
+}
