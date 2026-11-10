@@ -1,0 +1,61 @@
+crates/core/src/skills/bundled_seeds/android-apk-build/SKILL.md
+  s_5a338495106ea3::t_a0909390d1d4c3 3,59-118,429,446-447
+crates/core/src/skills/bundled_seeds/android-apk-build/scripts/build_apk.sh
+  s_5a338495106ea3::t_7e8a05df122c71 95-96,106-167,351,393,398-468,490-502,513,515-518,522
+crates/core/src/skills/install.rs
+  s_5a338495106ea3::t_969e6e953dfffd 303-307
+crates/core/src/skills/tests.rs
+  s_5a338495106ea3::t_3e2abc76a6f592 1730-1731,1740-1838
+crates/core/src/tools/skill.rs
+  s_5a338495106ea3::t_d8bdc5aa567d1f 352
+examples/flutter/lib/app/update_service.dart
+  s_5a338495106ea3::t_a7c6d516e3d1fb 106-108,115-125,332-337,343-345
+examples/flutter/lib/demo_client/napaxi_chat_client.dart
+  s_5a338495106ea3::t_5ff2ce787c5d0e 9118-9125,9131-9148,9150-9162,9164-9166,9176-9179,9187-9192,9206-9207,9216-9230,10137-10140,10148-10149,10258-10263,10279-10284
+examples/flutter/lib/models/chat_models.dart
+  s_5a338495106ea3::t_8787b8705951ab 285-286,294-295,323-328
+examples/flutter/lib/widgets/chat_input.dart
+  s_5a338495106ea3::t_5b1802ee32dbbe 2527-2528,2581-2611,2613-2617,2622-2625,2627-2671
+packages/android/src/main/kotlin/com/napaxi/android/Apis.kt
+  s_5a338495106ea3::t_3cd8ee68e5e3f2 2168,2172-2188,2197-2205,2209-2216,2220-2222,2226-2229,2231
+packages/android/src/main/kotlin/com/napaxi/android/Models.kt
+  s_5a338495106ea3::t_4755fe955fb594 969-976,983-984,989-994,1017-1035,1039-1047
+packages/android/src/main/kotlin/com/napaxi/android/NapaxiEngine.kt
+  s_5a338495106ea3::t_43e450a3f93873 532-537
+packages/android/src/main/kotlin/com/napaxi/android/PlatformTools.kt
+  s_5a338495106ea3::t_a4c7b84d067d97 332-333,345,354-376,387,396-426,428-430,438,441-442,444,448-483
+packages/flutter/android/AndroidManifest.xml
+  s_5a338495106ea3::t_c84cbfab11cd03 106-119
+packages/flutter/android/src/main/kotlin/com/napaxi/flutter/NapaxiFlutterPlugin.kt
+  s_5a338495106ea3::t_f26b27e78c298d 10-11,17,20,92-95,315-333,358-364,699-700,911-912,923-931,2125-2259,2261-2262,2264-2268,2270-2271,2277-2283,2285,2289-2306,2308-2309,2317-2324,2333-2403,2406-2411,2413-2521,2525-2534,3150-3157,3164-3173,3178-3215
+packages/flutter/lib/apk_installer.dart
+  s_5a338495106ea3::t_bf1812bde15908 1,4,7-172,177-181,191-198,210-219,244-265,272,276-282,298-398,401-404,407-410,412,415-416,422-426,434-435
+packages/flutter/lib/platform_tools/tools/install_app_tool.dart
+  s_5a338495106ea3::t_9f238baafe1a54 6,10-18,30,37-41,43,51,59-62,64-73,79
+packages/ios/README.md
+  s_5a338495106ea3::t_e1f7afa730204f 392-395
+packages/ios/Sources/Napaxi/ApkInstaller.swift
+  s_5a338495106ea3::t_0f5a7278f5f1ac 10-21,29-37,45-52,66-76,87-94,102-103,114-131,148-152
+packages/ios/Sources/Napaxi/PlatformTools.swift
+  s_5a338495106ea3::t_b90fa26781140b 531-533,535
+tools/scripts/build.sh
+  s_5a338495106ea3::t_8d52489860abba 25,51,1332-1337,1417-1419,1424
+tools/scripts/check-manifest-action-alignment.js
+  s_5a338495106ea3::t_4913fdd41eb251 1-180
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e51f3c321f8cfbb415041657f8ced3c0e5aa6510",
+  "prompts": {},
+  "sessions": {
+    "s_5a338495106ea3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1c532-38c3-7e80-849d-1a6bb743b087",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "m294955408 <wenyu.mwt@antgroup.com>"
+    }
+  }
+}
