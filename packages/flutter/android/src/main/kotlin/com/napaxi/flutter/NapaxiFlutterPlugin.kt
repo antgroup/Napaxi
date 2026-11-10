@@ -92,6 +92,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
     private var pendingApkInstallExpectedSha256: String? = null
     private var pendingApkInstallVersionCode: Long? = null
     private var pendingApkInstallPackageName: String? = null
+    private var pendingApkInstallBuildId: String? = null
     private var pendingApkSessionId: Int? = null
     private var pendingProviderInstallResult: Result? = null
     private var pendingProviderInstall: Map<String, String>? = null
@@ -697,7 +698,9 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
             METHOD_INSTALL_APK -> {
                 val apkPath = call.argument<String>("apkPath") ?: ""
                 val expectedSha = call.argument<String>("expectedArtifactSha256")
+                val callBuildId = call.argument<String>("buildId")
                 pendingApkInstallExpectedSha256 = expectedSha
+                pendingApkInstallBuildId = callBuildId
                 installApk(ctx, apkPath, result)
             }
             METHOD_OPEN_FILE -> {
@@ -2136,6 +2139,9 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         packageName: String? = null,
         installerOpened: Boolean = false,
         permissionRequired: Boolean = false,
+        buildId: String? = null,
+        failureStage: String? = null,
+        installerStatusCode: Int? = null,
     ): Map<String, Any> = mutableMapOf<String, Any>(
         "success" to success,
         "installerOpened" to installerOpened,
@@ -2151,6 +2157,9 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         versionCode?.let { put("versionCode", it) }
         versionName?.let { put("versionName", it) }
         packageName?.let { put("packageName", it) }
+        buildId?.let { put("buildId", it) }
+        failureStage?.let { put("failureStage", it) }
+        installerStatusCode?.let { put("installerStatusCode", it) }
     }.toMap()
 
     private fun sha256OfFile(path: String): String? = try {
@@ -2178,6 +2187,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         sessionId: Int?,
         versionCode: Long?,
         packageName: String?,
+        buildId: String? = null,
     ) {
         apkPersistedPrefs(ctx).edit()
             .putString("apkPath", apkPath)
@@ -2187,6 +2197,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 sessionId?.let { putInt("sessionId", it) } ?: remove("sessionId")
                 versionCode?.let { putLong("versionCode", it) } ?: remove("versionCode")
                 packageName?.let { putString("packageName", it) } ?: remove("packageName")
+                buildId?.let { putString("buildId", it) } ?: remove("buildId")
             }
             .apply()
     }
@@ -2199,6 +2210,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         val prefs = apkPersistedPrefs(ctx)
         val apkPath = prefs.getString("apkPath", null)
         val expectedSha = prefs.getString("expectedSha256", null)
+        val buildId = prefs.getString("buildId", null)
         if (apkPath.isNullOrBlank()) {
             // Nothing to resume.
             return
@@ -2215,6 +2227,8 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 error = "Pending APK artifact disappeared after process restart.",
                 code = "pending_artifact_missing",
                 failedReason = "pending_artifact_missing",
+                buildId = buildId,
+                failureStage = "post_install",
             ))
             return
         }
@@ -2226,6 +2240,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 artifactSha256 = expectedSha,
                 installerOpened = true,
                 code = "installer_opened",
+                buildId = buildId,
             ))
         } else {
             clearPersistedInstall(ctx)
@@ -2236,6 +2251,8 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 error = "Pending APK artifact sha256 changed after restart.",
                 code = "pending_artifact_sha_mismatch",
                 failedReason = "pending_artifact_sha_mismatch",
+                buildId = buildId,
+                failureStage = "post_install",
             ))
         }
     }
@@ -2316,10 +2333,14 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
 
     private fun currentApkInstallExpectedSha256: String? = pendingApkInstallExpectedSha256
 
+    private val currentApkInstallBuildId: String?
+        get() = pendingApkInstallBuildId
+
     private fun clearFailedPendingArgs() {
         pendingApkInstallExpectedSha256 = null
         pendingApkInstallVersionCode = null
         pendingApkInstallPackageName = null
+        pendingApkInstallBuildId = null
     }
 
     private fun openPackageInstaller(ctx: Context, apkPath: String, result: Result) {
@@ -2358,6 +2379,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 pendingApkInstallExpectedSha256 = currentApkInstallExpectedSha256
                 pendingApkInstallVersionCode = versionCode
                 pendingApkInstallPackageName = packageName
+                pendingApkInstallBuildId = null
                 pendingApkSessionId = sessionId
                 persistPendingInstall(
                     ctx = ctx,
@@ -2366,6 +2388,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     sessionId = sessionId,
                     versionCode = versionCode,
                     packageName = packageName,
+                    buildId = currentApkInstallBuildId,
                 )
                 return
             } catch (sessionFailure: Throwable) {
@@ -2389,6 +2412,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     sessionId = null,
                     versionCode = versionCode,
                     packageName = packageName,
+                    buildId = currentApkInstallBuildId,
                 )
                 result.success(apkInstallStateMap(
                     installState = "awaiting_confirmation",
@@ -2399,6 +2423,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     versionCode = versionCode,
                     versionName = versionName,
                     packageName = packageName,
+                    buildId = currentApkInstallBuildId,
                 ))
                 return
             }
@@ -2409,6 +2434,8 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 error = e.message ?: "Failed to open package installer",
                 code = "open_installer_failed",
                 failedReason = e.message,
+                buildId = currentApkInstallBuildId,
+                failureStage = "open_installer",
             ))
             clearFailedPendingArgs()
         }
@@ -2425,6 +2452,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         val expectedSha = pendingApkInstallExpectedSha256
         val pendingVersionCode = pendingApkInstallVersionCode
         val pendingPackageName = pendingApkInstallPackageName
+        val pendingBuildId = pendingApkInstallBuildId
         clearPendingAndPersist(ctx)
 
         if (result == null) return
@@ -2434,7 +2462,12 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 // Detect same-package/same-version already installed: compare
                 // requested versionCode to the installed one. This avoids
                 // mistaking a no-op "success" of the OS for a fresh install.
-                val samVerCode = pendingPackageName?.let { pn ->
+                // DIMA 2026110400120316848 sample J/N: distinguish three
+                // outcomes on STATUS_SUCCESS:
+                //   candidate == installed  -> already_installed_same_version
+                //   candidate >  installed  -> update_succeeded (upgrade)
+                //   otherwise               -> installed (fresh install)
+                val installedVerCode = pendingPackageName?.let { pn ->
                     runCatching {
                         val installed = ctx.packageManager.getPackageInfo(pn, 0)
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -2445,7 +2478,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                         }
                     }.getOrNull()
                 }
-                if (pendingVersionCode != null && samVerCode != null && samVerCode == pendingVersionCode) {
+                if (pendingVersionCode != null && installedVerCode != null && pendingVersionCode == installedVerCode) {
                     result.success(apkInstallStateMap(
                         installState = "already_installed_same_version",
                         success = false,
@@ -2455,6 +2488,24 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                         packageName = pendingPackageName,
                         code = "already_installed_same_version",
                         error = "Same package and versionCode is already installed; install not performed.",
+                        buildId = pendingBuildId,
+                        failureStage = "post_install",
+                    ))
+                } else if (pendingVersionCode != null && installedVerCode != null &&
+                    pendingVersionCode > installedVerCode &&
+                    pendingPackageName != null
+                ) {
+                    // Sample J: candidate strictly greater than installed →
+                    // successful in-place update with retained user data.
+                    result.success(apkInstallStateMap(
+                        installState = "update_succeeded",
+                        success = true,
+                        apkPath = apkPath,
+                        artifactSha256 = expectedSha,
+                        versionCode = pendingVersionCode,
+                        packageName = pendingPackageName,
+                        buildId = pendingBuildId,
+                        failureStage = "post_install",
                     ))
                 } else {
                     result.success(apkInstallStateMap(
@@ -2464,6 +2515,8 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                         artifactSha256 = expectedSha,
                         versionCode = pendingVersionCode,
                         packageName = pendingPackageName,
+                        buildId = pendingBuildId,
+                        failureStage = "post_install",
                     ))
                 }
             }
@@ -2475,6 +2528,9 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     canceled = true,
                     code = "user_canceled",
                     error = "User canceled the install.",
+                    buildId = pendingBuildId,
+                    failureStage = "post_install",
+                    installerStatusCode = status,
                 ))
             }
             PackageInstaller.STATUS_FAILURE_BLOCKED,
@@ -2497,6 +2553,9 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     code = reason,
                     error = "Install blocked (status=$status). Uninstall the existing app or upgrade its signing certificate; the old app was NOT removed automatically.",
                     failedReason = reason,
+                    buildId = pendingBuildId,
+                    failureStage = "post_install",
+                    installerStatusCode = status,
                 ))
             }
             PackageInstaller.STATUS_PENDING -> {
@@ -2507,6 +2566,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     installerOpened = true,
                     code = "pending_user_confirmation",
                     error = "Install is waiting for the user to confirm.",
+                    buildId = pendingBuildId,
                 ))
             }
             else -> {
@@ -2517,6 +2577,9 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     code = "install_failed_$status",
                     error = message ?: "Install failed (status=$status).",
                     failedReason = "install_failed_$status",
+                    buildId = pendingBuildId,
+                    failureStage = "post_install",
+                    installerStatusCode = status,
                 ))
             }
         }
@@ -2528,6 +2591,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         pendingApkInstallExpectedSha256 = null
         pendingApkInstallVersionCode = null
         pendingApkInstallPackageName = null
+        pendingApkInstallBuildId = null
         pendingApkSessionId = null
         clearPersistedInstall(ctx)
     }

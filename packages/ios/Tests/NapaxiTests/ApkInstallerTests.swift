@@ -53,4 +53,39 @@ final class ApkInstallerTests: XCTestCase {
         ]), result)
         XCTAssertEqual(NapaxiApkInstallResult.fromMap([:]), NapaxiApkInstallResult(success: false))
     }
+
+    func testApkInstallResultCarriesBuildIdAndFailureStageAndInstallerStatusCode() {
+        let result = NapaxiApkInstallResult(
+            success: false,
+            installerOpened: false,
+            permissionRequired: false,
+            apkPath: "/tmp/app.apk",
+            error: "Install blocked.",
+            code: "signature_or_version_blocked",
+            installState: "failed",
+            canceled: false,
+            failedReason: "signature_or_version_blocked",
+            buildId: "abcdef0123456789",
+            failureStage: "post_install",
+            installerStatusCode: 7
+        )
+        let map = result.toMap()
+        XCTAssertEqual(map["buildId"], .string("abcdef0123456789"))
+        XCTAssertEqual(map["failureStage"], .string("post_install"))
+        XCTAssertEqual(map["installerStatusCode"], .number(Double(7)))
+
+        let parsed = NapaxiApkInstallResult.fromMap(map)
+        XCTAssertEqual(parsed, result)
+    }
+
+    func testVerifyArtifactAlwaysReturnsUnsupportedOnIOS() {
+        // DIMA 2026110400120316848: iOS cannot install APKs; verifyArtifact
+        // returns an explicit `unsupported_ios` state instead of a silent gap
+        // so cross-adapter parity checks see a deliberate "not supported"
+        // answer rather than a missing surface.
+        let verification = NapaxiApkInstaller.verifyArtifact("/tmp/project")
+        XCTAssertFalse(verification.verified)
+        XCTAssertEqual(verification.state, "unsupported_ios")
+        XCTAssertEqual(verification.reason, "APK install verification is not supported on iOS")
+    }
 }

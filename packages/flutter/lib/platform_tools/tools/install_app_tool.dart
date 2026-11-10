@@ -41,6 +41,7 @@ class InstallAppTool {
       });
     }
     final expectedSha256 = params['expected_sha256'] as String?;
+    final buildId = params['build_id'] as String?;
 
     final resolvedApkPath = context.resolveSandboxOrLocalPath(apkPath);
     final apkFile = File(resolvedApkPath);
@@ -59,6 +60,7 @@ class InstallAppTool {
         {
           'apkPath': resolvedApkPath,
           if (expectedSha256 != null) 'expectedArtifactSha256': expectedSha256,
+          if (buildId != null) 'buildId': buildId,
         },
       );
       // Ensure installState is present in the outgoing wire shape so demo side
@@ -70,6 +72,9 @@ class InstallAppTool {
         );
         withState['installState'] = fallback.wireName;
       }
+      if (withState['buildId'] == null && buildId != null && buildId.isNotEmpty) {
+        withState['buildId'] = buildId;
+      }
       return jsonEncode(withState);
     } on PlatformException catch (e) {
       return jsonEncode({
@@ -77,6 +82,7 @@ class InstallAppTool {
         'error': e.message ?? e.code,
         'code': e.code,
         'installState': NapaxiApkInstallState.failed.wireName,
+        if (buildId != null && buildId.isNotEmpty) 'buildId': buildId,
       });
     }
   }

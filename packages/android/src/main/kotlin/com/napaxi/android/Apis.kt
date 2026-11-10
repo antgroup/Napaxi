@@ -2202,17 +2202,44 @@ public object NapaxiApkInstaller {
         apkPath: String,
         expectedArtifactSha256: String?,
     ): NapaxiApkInstallResult =
-        NapaxiApkInstallResult.fromJson(installApkJson(context, apkPath, expectedArtifactSha256))
+        installApk(context, apkPath, expectedArtifactSha256, null)
+
+    @JvmStatic
+    public fun installApk(
+        context: Context,
+        apkPath: String,
+        expectedArtifactSha256: String?,
+        buildId: String?,
+    ): NapaxiApkInstallResult {
+        val result = NapaxiApkInstallResult.fromJson(
+            installApkJson(context, apkPath, expectedArtifactSha256, buildId)
+        )
+        // Backfill buildId from caller when native layer did not echo it, so
+        // attribution is preserved across plugin versions (samples D, E, H).
+        return if (buildId != null && result.buildId == null) {
+            result.copy(buildId = buildId)
+        } else {
+            result
+        }
+    }
 
     @JvmStatic
     public fun installApkJson(context: Context, apkPath: String): String =
-        installApkJson(context, apkPath, null)
+        installApkJson(context, apkPath, null, null)
 
     @JvmStatic
     public fun installApkJson(
         context: Context,
         apkPath: String,
         expectedArtifactSha256: String?,
+    ): String = installApkJson(context, apkPath, expectedArtifactSha256, null)
+
+    @JvmStatic
+    public fun installApkJson(
+        context: Context,
+        apkPath: String,
+        expectedArtifactSha256: String?,
+        buildId: String?,
     ): String =
         if (!isSupported) {
             JSONObject()
@@ -2221,15 +2248,270 @@ public object NapaxiApkInstaller {
                 .put("canceled", false)
                 .put("failedReason", "APK installation is not supported on Android.")
                 .put("error", "APK installation is only supported on Android.")
+                .apply { if (!buildId.isNullOrBlank()) put("buildId", buildId) }
                 .toString()
         } else {
             val params = JSONObject().put("path", apkPath)
             if (!expectedArtifactSha256.isNullOrBlank()) {
                 params.put("expected_sha256", expectedArtifactSha256)
             }
+            if (!buildId.isNullOrBlank()) {
+                params.put("build_id", buildId)
+            }
             AndroidPlatformToolExecutor(context.applicationContext)
                 .execute("install_apk", params.toString())
         }
+
+    /**
+     * Verify that `<androidProjectRoot>/.mobile/artifact.json` describes a
+     * `gate=ok` build whose `sha256` (and optional `size`) still match the APK
+     * on disk. Returns a [NapaxiArtifactVerificationResult] so callers can
+     * decide whether to show an install entry: opening the system installer
+     * without this gate is a security/trust bug (samples A, E, F, G, H).
+     *
+     * Mirrors
+     * `packages/flutter/lib/apk_installer.dart::NapaxiApkInstaller.verifyArtifact`.
+     */
+    @JvmStatic
+    public fun verifyArtifact(androidProjectRoot: String): NapaxiArtifactVerificationResult =
+        NapaxiArtifactVerificationResult.fromProjectRoot(androidProjectRoot)
+
+    /**
+     * Verify a project root by the path to its `artifact.json`. Equivalent to
+     * [verifyArtifact] when the registry file lives at a non-default path.
+     */
+    @JvmStatic
+    public fun verifyArtifactJson(androidProjectRoot: String): String =
+        NapaxiArtifactVerificationResult.fromProjectRoot(androidProjectRoot).toJson()
+}
+
+/**
+ * Outcome of [NapaxiApkInstaller.verifyArtifact]. Mirrors
+ * `packages/flutter/lib/apk_installer.dart::NapaxiArtifactVerification`. The
+ * install entry layer must NOT open the system installer when [verified] is
+ * false; instead it surfaces `state` (gate_failed / failed) and `reason`.
+ */
+public data class NapaxiArtifactVerificationResult(
+    val verified: Boolean,
+    val state: String,
+    val apkPath: String? = null,
+    val expectedSha256: String? = null,
+    val actualSha256: String? = null,
+    val size: Long? = null,
+    val packageName: String? = null,
+    val versionCode: String? = null,
+    val versionName: String? = null,
+    val buildId: String? = null,
+    val targetSdk: Int? = null,
+    val reason: String? = null,
+    val rawJson: String = "",
+) {
+    public fun toJsonObject(): JSONObject = JSONObject()
+        .put("verified", verified)
+        .put("state", state)
+        .apply {
+            apkPath?.let { put("apkPath", it) }
+            expectedSha256?.let { put("expectedSha256", it) }
+            actualSha256?.let { put("actualSha256", it) }
+            size?.let { put("size", it) }
+            packageName?.let { put("packageName", it) }
+            versionCode?.let { put("versionCode", it) }
+            versionName?.let { put("versionName", it) }
+            buildId?.let { put("buildId", it) }
+            targetSdk?.let { put("targetSdk", it) }
+            reason?.let { put("reason", it) }
+        }
+
+    public fun toJson(): String = toJsonObject().toString()
+    public fun toJsonString(): String = toJson()
+
+    public companion object {
+        public fun fromJson(rawJson: String): NapaxiArtifactVerificationResult =
+            fromJsonObject(JSONObject(rawJson.ifBlank { "{}" }), rawJson)
+
+        public fun fromJsonObject(obj: JSONObject, rawJson: String = obj.toString()): NapaxiArtifactVerificationResult =
+            NapaxiArtifactVerificationResult(
+                verified = obj.optBoolean("verified", false),
+                state = obj.optString("state", "failed"),
+                apkPath = obj.optNullableString("apkPath") ?: obj.optNullableString("apk_path"),
+                expectedSha256 = obj.optNullableString("expectedSha256") ?: obj.optNullableString("expected_sha256"),
+                actualSha256 = obj.optNullableString("actualSha256") ?: obj.optNullableString("actual_sha256"),
+                size = obj.optNullableLong("size"),
+                packageName = obj.optNullableString("packageName") ?: obj.optNullableString("package_name"),
+                versionCode = obj.optNullableString("versionCode") ?: obj.optNullableString("version_code"),
+                versionName = obj.optNullableString("versionName") ?: obj.optNullableString("version_name"),
+                buildId = obj.optNullableString("buildId") ?: obj.optNullableString("build_id"),
+                targetSdk = obj.optNullableInt("target_sdk") ?: obj.optNullableInt("targetSdk"),
+                reason = obj.optNullableString("reason"),
+                rawJson = rawJson,
+            )
+
+        public fun fromProjectRoot(androidProjectRoot: String): NapaxiArtifactVerificationResult {
+            val jsonFile = File(androidProjectRoot, ".mobile/artifact.json")
+            if (!jsonFile.exists()) {
+                return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "gate_failed",
+                    reason = "no_artifact_json",
+                )
+            }
+            val rawJson = runCatching { jsonFile.readText() }.getOrNull()
+                ?: return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "gate_failed",
+                    reason = "artifact_json_unreadable",
+                )
+            val obj = runCatching { JSONObject(rawJson) }.getOrNull()
+                ?: return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "gate_failed",
+                    reason = "artifact_json_unreadable",
+                    rawJson = rawJson,
+                )
+            val gate = obj.optString("gate", "")
+            val buildId = obj.optNullableString("build_id")
+            val targetSdk = obj.optNullableInt("target_sdk")
+            if (gate != "ok") {
+                val stage = obj.optNullableString("failure_stage")
+                val reasonText = obj.optNullableString("failure_reason")
+                val reasonStr = buildString {
+                    append("gate_not_ok:")
+                    append(gate)
+                    if (!stage.isNullOrBlank()) append(":stage=").append(stage)
+                    if (!reasonText.isNullOrBlank()) append(":reason=").append(reasonText)
+                }
+                return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "gate_failed",
+                    buildId = buildId,
+                    targetSdk = targetSdk,
+                    reason = reasonStr,
+                    rawJson = rawJson,
+                )
+            }
+            val apkPath = obj.optNullableString("apk_abs_path")
+            val expectedSha = obj.optNullableString("sha256")
+            val expectedSize = obj.optNullableLong("size")
+            val pkgName = obj.optNullableString("packageName")
+            val vCode = obj.optNullableString("versionCode")
+            val vName = obj.optNullableString("versionName")
+            if (apkPath.isNullOrBlank() || expectedSha.isNullOrBlank() || expectedSize == null) {
+                return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "gate_failed",
+                    buildId = buildId,
+                    targetSdk = targetSdk,
+                    reason = "artifact_missing_path_or_sha",
+                    apkPath = apkPath,
+                    expectedSha256 = expectedSha,
+                    size = expectedSize,
+                    packageName = pkgName,
+                    versionCode = vCode,
+                    versionName = vName,
+                    rawJson = rawJson,
+                )
+            }
+            val apkFile = File(apkPath)
+            if (!apkFile.exists()) {
+                return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "failed",
+                    buildId = buildId,
+                    targetSdk = targetSdk,
+                    reason = "apk_file_missing",
+                    apkPath = apkPath,
+                    expectedSha256 = expectedSha,
+                    size = expectedSize,
+                    packageName = pkgName,
+                    versionCode = vCode,
+                    versionName = vName,
+                    rawJson = rawJson,
+                )
+            }
+            val actualSha = sha256OfFileOrNull(apkPath)
+                ?: return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "failed",
+                    buildId = buildId,
+                    targetSdk = targetSdk,
+                    reason = "sha_compute_failed",
+                    apkPath = apkPath,
+                    expectedSha256 = expectedSha,
+                    size = expectedSize,
+                    packageName = pkgName,
+                    versionCode = vCode,
+                    versionName = vName,
+                    rawJson = rawJson,
+                )
+            if (actualSha != expectedSha) {
+                return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "failed",
+                    buildId = buildId,
+                    targetSdk = targetSdk,
+                    reason = "sha256_mismatch",
+                    apkPath = apkPath,
+                    expectedSha256 = expectedSha,
+                    actualSha256 = actualSha,
+                    size = expectedSize,
+                    packageName = pkgName,
+                    versionCode = vCode,
+                    versionName = vName,
+                    rawJson = rawJson,
+                )
+            }
+            val actualSize = apkFile.length()
+            if (actualSize != expectedSize) {
+                return NapaxiArtifactVerificationResult(
+                    verified = false,
+                    state = "failed",
+                    buildId = buildId,
+                    targetSdk = targetSdk,
+                    reason = "size_mismatch:expected=$expectedSize,actual=$actualSize",
+                    apkPath = apkPath,
+                    expectedSha256 = expectedSha,
+                    actualSha256 = actualSha,
+                    size = actualSize,
+                    packageName = pkgName,
+                    versionCode = vCode,
+                    versionName = vName,
+                    rawJson = rawJson,
+                )
+            }
+            return NapaxiArtifactVerificationResult(
+                verified = true,
+                state = "verified_installable",
+                apkPath = apkPath,
+                expectedSha256 = expectedSha,
+                actualSha256 = actualSha,
+                size = expectedSize,
+                packageName = pkgName,
+                versionCode = vCode,
+                versionName = vName,
+                buildId = buildId,
+                targetSdk = targetSdk,
+                rawJson = rawJson,
+            )
+        }
+
+        private fun sha256OfFileOrNull(path: String): String? = try {
+            val md = java.security.MessageDigest.getInstance("SHA-256")
+            File(path).inputStream().use { input ->
+                val buf = ByteArray(64 * 1024)
+                while (true) {
+                    val n = input.read(buf)
+                    if (n <= 0) break
+                    md.update(buf, 0, n)
+                }
+            }
+            md.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            null
+        }
+
+        public fun fromMap(map: Map<String, *>): NapaxiArtifactVerificationResult =
+            fromJsonObject(JSONObject(map))
+    }
 }
 
 private fun JSONObject.scope(accountId: String, agentId: String): JSONObject =

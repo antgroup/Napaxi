@@ -1876,6 +1876,11 @@ class AndroidBridgeContractTest {
             "object NapaxiApkInstaller",
             "fun installApk(context: Context, apkPath: String): NapaxiApkInstallResult",
             "fun installApkJson(context: Context, apkPath: String): String",
+            // DIMA 2026110400120316848: install entry must bind to artifact.json
+            // before opening the installer; verifyArtifact is the public parity
+            // of NapaxiApkInstaller.verifyArtifact in Flutter.
+            "fun verifyArtifact(androidProjectRoot: String): NapaxiArtifactVerificationResult",
+            "fun verifyArtifactJson(androidProjectRoot: String): String",
         )
         val requiredApkModelSnippets = listOf(
             "data class NapaxiApkInstallResult",

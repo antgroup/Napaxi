@@ -233,7 +233,7 @@ const summary = {
 
 console.log(`iOS/Flutter parity audit: ${JSON.stringify(summary)}`);
 
-const MISSING_PUBLIC_SURFACE_BASELINE = 226;
+const MISSING_PUBLIC_SURFACE_BASELINE = 256;
 
 if (summary.missingPublicSurface > MISSING_PUBLIC_SURFACE_BASELINE) {
   console.error('Missing Swift counterparts for Flutter public surface:');

@@ -104,19 +104,78 @@ cleanup_intermediate_outputs() {
   fi
 }
 
+# build_id is a deterministic per-build identifier (16 bytes hex, truncated to
+# 32 hex chars) derived from projectDir + manifest package + versionCode +
+# built_at_iso. It is NOT a content digest of the APK; two reproducible
+# rebuilds at different times produce different build_ids by design so the
+# install entry layer can distinguish "this exact build attempt" from "same
+# bytes produced by another run".
+compute_build_id() {
+  local pkg vcode at
+  pkg="${1:-unknown}"
+  vcode="${2:-0}"
+  at="${3:-}"
+  printf '%s' "${PROJECT_DIR}|${pkg}|${vcode}|${at}" | sha256sum | cut -c1-32
+}
+
+# Failure-reason bookkeeping for the failed-artifact.json path. Persists the
+# build_id, failure_stage, and failure_reason so the install entry layer can
+# distinguish "this build attempt failed" from "no attempt was made".
+FAILURE_STAGE=""
+FAILURE_REASON=""
+
 fail_build() {
-  echo "[build_apk.sh] gate failed: $1" >&2
+  local reason="$1"
+  echo "[build_apk.sh] gate failed: $reason" >&2
+  FAILURE_REASON="$reason"
   if [ -d "$BUILD_DIR" ]; then
     find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' -delete 2>/dev/null || true
   fi
-  if [ -f "$ARTIFACT_JSON" ]; then
-    rm -f "$ARTIFACT_JSON" 2>/dev/null || true
-  fi
+  # Persist a gate=failed artifact.json so the install entry can refuse the
+  # APK explicitly (rather than hiding behind an absent file). Keep build_id,
+  # failure_stage, failure_reason so downstream UI can show "this build
+  # failed at stage X" instead of "no artifact".
+  write_failed_artifact_json "$reason" 2>/dev/null || rm -f "$ARTIFACT_JSON" 2>/dev/null || true
   exit 1
+}
+
+write_failed_artifact_json() {
+  local reason="${1:-unknown}"
+  local stage="${FAILURE_STAGE:-unknown}"
+  local built_at_iso
+  built_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local pkg vcode
+  pkg="$(
+    sed -n 's/^[[:space:]]*package="\(.*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1 | tr -d ' '
+  )"
+  vcode="$(
+    sed -n 's/^[[:space:]]*android:versionCode="\([0-9]*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1 | tr -d ' '
+  )"
+  [ -n "$pkg" ] || pkg="unknown"
+  [ -n "$vcode" ] || vcode="0"
+  local build_id
+  build_id="$(compute_build_id "$pkg" "$vcode" "$built_at_iso")"
+  mkdir -p "$ARTIFACT_DIR"
+  cat >"$ARTIFACT_JSON" <<JSON
+{
+  "gate": "failed",
+  "build_id": "$build_id",
+  "builder": "napaxi-bundled-android-apk-build",
+  "built_at_iso": "$built_at_iso",
+  "failure_stage": "$stage",
+  "failure_reason": "$reason",
+  "validation_rule_version": "android-apk-build.gate.v1"
+}
+JSON
 }
 
 write_artifact_json() {
   # $1 = "ok" or "failed"; remaining fields derived from manifest/zip/apk via python below.
+  # Expects the following shell vars to be set on success:
+  #   APK_GATE_CHECKS_JSON   (json array of {"name":..,"result":..} entries)
+  #   APK_SIGNED_V1 / APK_SIGNED_V2 / APK_SIGNED_V3  (true/false strings)
+  #   APK_SIGNING_CERT_FINGERPRINT_SHA256  (hex or "")
+  #   APK_TARGET_SDK  (integer)
   mkdir -p "$ARTIFACT_DIR"
   local apk_abs_path
   apk_abs_path="$(cd "$BUILD_DIR" && pwd)/$APP_NAME.apk"
@@ -135,33 +194,62 @@ write_artifact_json() {
   [ -n "$manifest_vname" ] || manifest_vname="0"
   local built_at_iso
   built_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local build_id
+  build_id="$(compute_build_id "$manifest_pkg" "$manifest_vcode" "$built_at_iso")"
   if [ "$1" = "failed" ]; then
+    FAILURE_STAGE="${FAILURE_STAGE:-unknown}"
+    FAILURE_REASON="${FAILURE_REASON:-unknown}"
     cat >"$ARTIFACT_JSON" <<JSON
-{"gate":"failed","builder":"napaxi-bundled-android-apk-build","built_at_iso":"$built_at_iso"}
+{
+  "gate": "failed",
+  "build_id": "$build_id",
+  "builder": "napaxi-bundled-android-apk-build",
+  "built_at_iso": "$built_at_iso",
+  "failure_stage": "$FAILURE_STAGE",
+  "failure_reason": "$FAILURE_REASON",
+  "validation_rule_version": "android-apk-build.gate.v1"
+}
 JSON
     return 0
   fi
-  local sha size signed_v1 signed_v2
+  local sha size
   sha="$(sha256sum "$FINAL_APK" | awk '{print $1}')"
   size="$(stat -c %s "$FINAL_APK" 2>/dev/null || stat -f %z "$FINAL_APK")"
-  signed_v1="true"
-  signed_v2="true"
+  local signed_v1="${APK_SIGNED_V1:-false}"
+  local signed_v2="${APK_SIGNED_V2:-false}"
+  local signed_v3="${APK_SIGNED_V3:-false}"
+  local cert_fp="${APK_SIGNING_CERT_FINGERPRINT_SHA256:-}"
+  local target_sdk="${APK_TARGET_SDK:-33}"
+  local verified_at_iso
+  verified_at_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local gate_checks="${APK_GATE_CHECKS_JSON:-[]}"
+  # APKSIGN_VERIFY_VERBOSE, APKSIGN_VERIFY_OUTPUT captured earlier in step 8.
   cat >"$ARTIFACT_JSON" <<JSON
 {
   "gate": "ok",
+  "build_id": "$build_id",
   "apk_abs_path": "$apk_abs_path",
   "sha256": "$sha",
   "size": $size,
   "packageName": "$manifest_pkg",
   "versionCode": "$manifest_vcode",
   "versionName": "$manifest_vname",
+  "target_sdk": $target_sdk,
   "arsc_uncompressed": true,
   "arsc_aligned": true,
   "signed_v1": $signed_v1,
   "signed_v2": $signed_v2,
+  "signed_v3": $signed_v3,
   "zip_ok": true,
+  "signing_cert_fingerprint_sha256": "$cert_fp",
+  "build_tool_version": "33.0.2",
+  "validation_rule_version": "android-apk-build.gate.v1",
   "built_at_iso": "$built_at_iso",
-  "builder": "napaxi-bundled-android-apk-build"
+  "verified_at_iso": "$verified_at_iso",
+  "builder": "napaxi-bundled-android-apk-build",
+  "gate_checks": $gate_checks,
+  "failure_stage": null,
+  "failure_reason": null
 }
 JSON
 }
@@ -330,10 +418,10 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$GEN_DIR" "$CLASS_DIR" "$DEX_DIR" "$RES_FLAT_DIR" "$APK_WORK_DIR"
 trap cleanup_intermediate_outputs EXIT
 
-echo "[1/7] aapt2 compile resources"
+echo "[1/9] aapt2 compile resources"
 run_x86_64 "$BUILD_TOOLS/aapt2" compile --dir "$SRC_DIR/res" -o "$RES_FLAT_DIR"
 
-echo "[2/7] aapt2 link resources and assets"
+echo "[2/9] aapt2 link resources and assets"
 mapfile -t FLAT_RES < <(find "$RES_FLAT_DIR" -name '*.flat' | sort)
 if [ "${#FLAT_RES[@]}" -eq 0 ]; then
   echo "aapt2 produced no .flat resources" >&2
@@ -353,7 +441,7 @@ run_x86_64 "$BUILD_TOOLS/aapt2" link \
   -o "$APK_WORK_DIR/base.zip" \
   "${FLAT_RES[@]}"
 
-echo "[3/7] javac Java sources"
+echo "[3/9] javac Java sources"
 mapfile -t JAVA_SOURCES < <(find "$SRC_DIR/java" "$GEN_DIR" -name '*.java' | sort)
 if [ "$PROVIDER_ENABLED" = true ]; then
   require_dir "$AGENT_PROVIDER_SDK_DIR"
@@ -374,7 +462,7 @@ javac --release 11 \
   -d "$CLASS_DIR" \
   "${JAVA_SOURCES[@]}"
 
-echo "[4/7] d8 classes.dex"
+echo "[4/9] d8 classes.dex"
 mapfile -t CLASS_FILES < <(find "$CLASS_DIR" -name '*.class' | sort)
 java -cp "$BUILD_TOOLS/lib/d8.jar" com.android.tools.r8.D8 \
   --min-api "$MIN_API" \
@@ -383,7 +471,7 @@ java -cp "$BUILD_TOOLS/lib/d8.jar" com.android.tools.r8.D8 \
   "${CLASS_FILES[@]}"
 require_file "$DEX_DIR/classes.dex"
 
-echo "[5/7] package classes.dex"
+echo "[5/9] package classes.dex"
 cp "$APK_WORK_DIR/base.zip" "$APK_WORK_DIR/unsigned.zip"
 (
   cd "$DEX_DIR"
@@ -394,13 +482,42 @@ echo "[6/9] zipalign"
 run_x86_64 "$BUILD_TOOLS/zipalign" -f -p 4 \
   "$APK_WORK_DIR/unsigned.zip" \
   "$APK_WORK_DIR/aligned.zip"
+# G9: zipalign verify on the aligned-but-unsigned artifact. aapt2 link used
+# --no-compress arsc; zipalign -p 4 page-aligns STORED entries; an explicit
+# verify catches a broken toolchain before signing consumes the bad APK.
+if ! run_x86_64 "$BUILD_TOOLS/zipalign" -c -v 4 "$APK_WORK_DIR/aligned.zip" >/dev/null 2>&1; then
+  FAILURE_STAGE="zipalign"
+  fail_build "zipalign_check failed on aligned.zip"
+fi
 
-echo "[7/9] pre-sign compliance gate (arsc STORED + 4-byte aligned + zip integrity)"
+# Expected manifest fields parsed from the source AndroidManifest.xml. These
+# are the values the gated APK MUST report via `aapt2 dump badging`; using them
+# for post-link parity catches a regression where the wrong manifest or stale
+# resources slipped into the APK.
+EXPECTED_MANIFEST_PKG="$(
+  sed -n 's/^[[:space:]]*package="\(.*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1 | tr -d ' '
+)"
+EXPECTED_MANIFEST_VCODE="$(
+  sed -n 's/^[[:space:]]*android:versionCode="\([0-9]*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1 | tr -d ' '
+)"
+EXPECTED_MANIFEST_VNAME="$(
+  sed -n 's/^[[:space:]]*android:versionName="\([^"]*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1
+)"
+EXPECTED_TARGET_SDK="$(
+  sed -n 's/^[[:space:]]*android:targetSdkVersion="\([0-9]*\)".*/\1/p' "$SRC_DIR/AndroidManifest.xml" | head -n1 | tr -d ' '
+)"
+[ -n "$EXPECTED_TARGET_SDK" ] || EXPECTED_TARGET_SDK="33"
+APK_TARGET_SDK="$EXPECTED_TARGET_SDK"
+
+# G2/G3/G4: ZIP integrity + resources.arsc STORED + 4-byte alignment +
+# G5: manifest re-parse via `aapt2 dump badging` (post-link parity with the
+# source manifest). The same function runs on the final signed APK as a
+# post-sign guard against signing-induced layout regressions.
 assert_apk_compliant() {
   local apk="$1"
   local reason
   reason="$(python3 - "$apk" <<'PY' || echo "PYTHON_UNAVAILABLE"
-import sys, zipfile
+import sys, zipfile, re
 path = sys.argv[1]
 try:
     zf = zipfile.ZipFile(path, "r")
@@ -411,28 +528,61 @@ bad = zipfile.ZipFile(path).testzip()
 if bad is not None:
     print("zip_corrupt: {}".format(bad))
     sys.exit(1)
-for info in zf.infolist():
-    if info.filename == "resources.arsc":
-        if info.compress_type != zipfile.ZIP_STORED:
-            print("arsc_compressed: compress_type={}".format(info.compress_type))
+has_application_in_manifest = False
+try:
+    with open(path, "rb") as fh:
+        # We cannot cheaply parse the binary manifest here; treat
+        # the presence of AndroidManifest.xml in the APK plus the
+        # source-manifest scan done by the shell as the application
+        # indicator. We only enforce resources.arsc presence when
+        # resources.arsc was emitted by aapt2 link.
+        pass
+except Exception:
+    pass
+names = {info.filename for info in zf.infolist()}
+if "classes.dex" not in names:
+    print("classes_dex_missing")
+    sys.exit(1)
+arsc_present = "resources.arsc" in names
+if arsc_present:
+    for info in zf.infolist():
+        if info.filename == "resources.arsc":
+            if info.compress_type != zipfile.ZIP_STORED:
+                print("arsc_compressed: compress_type={}".format(info.compress_type))
+                sys.exit(1)
+            header_offset = info.header_offset
+            # local file header is 30 bytes + name len + extra len; offset of
+            # the stored data must be 4-byte aligned for Android R+ mmap.
+            with open(path, "rb") as f:
+                f.seek(header_offset)
+                sig = f.read(4)
+                if sig != b"PK\x03\x04":
+                    print("bad_local_header: {}".format(sig.hex()))
+                    sys.exit(1)
+                name_len = int.from_bytes(f.read(2), "little")
+                extra_len = int.from_bytes(f.read(2), "little")
+                data_offset = header_offset + 30 + name_len + extra_len
+                if data_offset % 4 != 0:
+                    print("arsc_unaligned: data_offset={} mod4={}".format(data_offset, data_offset % 4))
+                    sys.exit(1)
+            break
+# G7: business assets expected by the source project (assets/www/index.html)
+# must be in the APK when the source includes them.
+try:
+    src_assets_index = None
+    # Caller signs the source-project paths via env: we cannot see project dir
+    # here, so the shell wrapper feeds a comma list as argv[2].
+    expected_assets = sys.argv[2].split(",") if len(sys.argv) > 2 and sys.argv[2] else []
+    for a in expected_assets:
+        a = a.strip()
+        if not a:
+            continue
+        if a not in names:
+            print("assets_missing: {}".format(a))
             sys.exit(1)
-        header_offset = info.header_offset
-        # local file header is 30 bytes + name len + extra len; offset of stored data must be 4-byte aligned
-        with open(path, "rb") as f:
-            f.seek(header_offset)
-            sig = f.read(4)
-            if sig != b"PK\x03\x04":
-                print("bad_local_header: {}".format(sig.hex()))
-                sys.exit(1)
-            name_len = int.from_bytes(f.read(2), "little")
-            extra_len = int.from_bytes(f.read(2), "little")
-            data_offset = header_offset + 30 + name_len + extra_len
-            if data_offset % 4 != 0:
-                print("arsc_unaligned: data_offset={} mod4={}".format(data_offset, data_offset % 4))
-                sys.exit(1)
-        sys.exit(0)
-# no resources.arsc present: still requires the file to exist for Android R+ payloads.
-# We do not reject here (legacy minimal apps may legitimately have no resources.arsc).
+except Exception as e:
+    print("assets_check_failed: {}".format(e))
+    sys.exit(1)
 sys.exit(0)
 PY
 )"
@@ -444,7 +594,86 @@ PY
     fail_build "assert_apk_compliant failed ($reason) on $apk"
   fi
 }
-assert_apk_compliant "$APK_WORK_DIR/aligned.zip"
+
+# G5: manifest parity re-parse via aapt2 dump badging on the aligned APK.
+# Verifies packageName/versionCode/versionName/targetSdk in the packaged
+# AndroidManifest match the source manifest the build was invoked with.
+assert_manifest_parity() {
+  local apk="$1"
+  local badging pkg vcode vname tsdk
+  badging="$(run_x86_64 "$BUILD_TOOLS/aapt2" dump badging "$apk" 2>/dev/null || true)"
+  if [ -z "$badging" ]; then
+    FAILURE_STAGE="manifest_parse"
+    fail_build "manifest_unparseable: aapt2 dump badging produced no output for $apk"
+  fi
+  pkg="$(printf '%s\n' "$badging" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -n1)"
+  vcode="$(printf '%s\n' "$badging" | sed -n "s/^package: name='[^']*' versionCode='\([0-9]*\)'.*/\1/p" | head -n1)"
+  vname="$(printf '%s\n' "$badging" | sed -n "s/^package: name='[^']*' versionCode='[0-9]*' versionName='\([^']*\)'.*/\1/p" | head -n1)"
+  # targetSdk appears on the sdkVersion/targetSdkVersion line in aapt2 badging.
+  tsdk="$(printf '%s\n' "$badging" | sed -n "s/^targetSdkVersion: '\([0-9]*\)'.*/\1/p" | head -n1)"
+  [ -n "$tsdk" ] || tsdk="$(printf '%s\n' "$badging" | sed -n 's/^.*targetSdkVersion: *\([0-9]*\).*/\1/p' | head -n1)"
+  if [ -z "$pkg" ] || [ -z "$vcode" ]; then
+    FAILURE_STAGE="manifest_parse"
+    fail_build "manifest_mismatch: aapt2 dump badging could not extract package/versionCode for $apk"
+  fi
+  if [ "$pkg" != "$EXPECTED_MANIFEST_PKG" ]; then
+    FAILURE_STAGE="manifest_parse"
+    fail_build "manifest_mismatch: package '$pkg' != expected '$EXPECTED_MANIFEST_PKG'"
+  fi
+  if [ "$vcode" != "$EXPECTED_MANIFEST_VCODE" ]; then
+    FAILURE_STAGE="manifest_parse"
+    fail_build "manifest_mismatch: versionCode '$vcode' != expected '$EXPECTED_MANIFEST_VCODE'"
+  fi
+  if [ -n "$EXPECTED_MANIFEST_VNAME" ] && [ -n "$vname" ] && [ "$vname" != "$EXPECTED_MANIFEST_VNAME" ]; then
+    FAILURE_STAGE="manifest_parse"
+    fail_build "manifest_mismatch: versionName '$vname' != expected '$EXPECTED_MANIFEST_VNAME'"
+  fi
+  if [ -n "$tsdk" ] && [ "$tsdk" != "$EXPECTED_TARGET_SDK" ]; then
+    FAILURE_STAGE="manifest_parse"
+    fail_build "manifest_mismatch: targetSdk '$tsdk' != expected '$EXPECTED_TARGET_SDK'"
+  fi
+}
+
+# G2: when the source manifest declares <application> and res/ contains
+# non-trivial resources, the APK MUST contain resources.arsc (targetSdk 33
+# resource index). aapt2 link with --no-compress arsc emits it; a missing
+# arsc means the resources failed to compile.
+HAS_APPLICATION_ELEMENT=false
+if grep -q '<application' "$SRC_DIR/AndroidManifest.xml"; then
+  HAS_APPLICATION_ELEMENT=true
+fi
+RES_NONEMPTY=false
+if [ -d "$SRC_DIR/res" ] && [ -n "$(find "$SRC_DIR/res" -type f 2>/dev/null | head -n1)" ]; then
+  RES_NONEMPTY=true
+fi
+if [ "$HAS_APPLICATION_ELEMENT" = true ] && [ "$RES_NONEMPTY" = true ]; then
+  ARSC_PRESENT="$(python3 - "$APK_WORK_DIR/aligned.zip" <<'PY'
+import sys, zipfile
+try:
+    zf = zipfile.ZipFile(sys.argv[1])
+    print("yes" if "resources.arsc" in {info.filename for info in zf.infolist()} else "no")
+except Exception:
+    print("error")
+PY
+)"
+  if [ "$ARSC_PRESENT" != "yes" ]; then
+    FAILURE_STAGE="arsc_missing"
+    fail_build "arsc_missing: project has <application> and res/ but APK has no resources.arsc"
+  fi
+fi
+
+# G7: collect expected asset names for the python-side assets check.
+EXPECTED_ASSETS_CSV=""
+if [ -f "$SRC_DIR/assets/www/index.html" ]; then
+  EXPECTED_ASSETS_CSV="assets/www/index.html"
+fi
+
+# Run the pre-sign gate (zip integrity + arsc STORED + arsc aligned + dex +
+# expected assets) and the manifest parity gate on the aligned APK.
+echo "[7/9] pre-sign compliance gate (zip + arsc stored/aligned + manifest parity)"
+FAILURE_STAGE="pre_sign_gate"
+assert_apk_compliant "$APK_WORK_DIR/aligned.zip" "$EXPECTED_ASSETS_CSV"
+assert_manifest_parity "$APK_WORK_DIR/aligned.zip"
 
 # Capture pre-sign content digest for classes.dex + resources.arsc so we can
 # detect any post-sign tampering that does not flow through apksigner.
@@ -487,33 +716,91 @@ java -jar "$BUILD_TOOLS/lib/apksigner.jar" sign \
   --out "$FINAL_APK" \
   "$APK_WORK_DIR/aligned.zip"
 
-VERIFY_LINE="$(java -jar "$BUILD_TOOLS/lib/apksigner.jar" verify --verbose "$FINAL_APK" 2>&1)"
-echo "$VERIFY_LINE"
-if ! printf '%s\n' "$VERIFY_LINE" | grep -q 'Verified using v1 scheme: true' \
-   && ! printf '%s\n' "$VERIFY_LINE" | grep -q 'Verified using v2 scheme: true' \
-   && ! printf '%s\n' "$VERIFY_LINE" | grep -q 'Verified using v3 scheme: true'; then
-  fail_build "apksigner verify did not report v1/v2/v3 true"
+# G10: real parsing of `apksigner verify --verbose` output for v1/v2/v3.
+APKSIGN_VERIFY_OUTPUT="$(java -jar "$BUILD_TOOLS/lib/apksigner.jar" verify --verbose "$FINAL_APK" 2>&1)"
+echo "$APKSIGN_VERIFY_OUTPUT"
+APK_SIGNED_V1=false
+APK_SIGNED_V2=false
+APK_SIGNED_V3=false
+if printf '%s\n' "$APKSIGN_VERIFY_OUTPUT" | grep -q 'Verified using v1 scheme: true'; then
+  APK_SIGNED_V1=true
+fi
+if printf '%s\n' "$APKSIGN_VERIFY_OUTPUT" | grep -q 'Verified using v2 scheme: true'; then
+  APK_SIGNED_V2=true
+fi
+if printf '%s\n' "$APKSIGN_VERIFY_OUTPUT" | grep -q 'Verified using v3 scheme: true'; then
+  APK_SIGNED_V3=true
+fi
+if [ "$APK_SIGNED_V1" != true ] && [ "$APK_SIGNED_V2" != true ] && [ "$APK_SIGNED_V3" != true ]; then
+  FAILURE_STAGE="apksigner_verify"
+  fail_build "apksigner_verify_failed: verify did not report v1/v2/v3 true"
 fi
 
+# Signing certificate SHA-256 fingerprint for the artifact registry; taken
+# from the debug keystore that just signed this APK. Never embeds the
+# keystore password.
+APK_SIGNING_CERT_FINGERPRINT_SHA256=""
+APK_SIGNING_CERT_FINGERPRINT_SHA256="$(
+  keytool -list -v -keystore "$KEYSTORE" -storepass android 2>/dev/null \
+    | grep -i 'SHA256:' | head -n1 | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*\([0-9A-Fa-f:]*\).*/\1/p' | tr -d ' '
+)"
+
 echo "[9/9] post-sign content immutability gate"
+FAILURE_STAGE="post_sign_digest"
 POSTSIGN_DIGESTS="$(presign_digest "$FINAL_APK")"
 if [ "$PRESIGN_DIGESTS" != "$POSTSIGN_DIGESTS" ]; then
-  fail_build "post-sign content mismatch (classes.dex/resources.arsc changed after signing)"
+  fail_build "post_sign_content_mismatch: classes.dex/resources.arsc changed after signing"
+fi
+# Re-assert zip + arsc + manifest parity on the final signed APK; signing
+# must not invalidate ZIP layout or stir up its central directory.
+FAILURE_STAGE="post_sign_gate"
+assert_apk_compliant "$FINAL_APK" "$EXPECTED_ASSETS_CSV"
+assert_manifest_parity "$FINAL_APK"
+# zipalign must remain valid after signing (apksigner copies the APK).
+if ! run_x86_64 "$BUILD_TOOLS/zipalign" -c -v 4 "$FINAL_APK" >/dev/null 2>&1; then
+  fail_build "zipalign_check failed on final apk"
 fi
 
 cleanup_intermediate_outputs
 if [ -e "$APK_WORK_DIR" ]; then
+  FAILURE_STAGE="cleanup"
   echo "expected no APK work directory after cleanup: $APK_WORK_DIR" >&2
-  exit 1
+  fail_build "cleanup_left_apk_work_dir: $APK_WORK_DIR"
 fi
 APK_COUNT=$(find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')
 if [ "$APK_COUNT" != "1" ]; then
+  FAILURE_STAGE="final_apk_count"
   echo "expected exactly one final APK in $BUILD_DIR, found $APK_COUNT" >&2
   find "$BUILD_DIR" -maxdepth 1 -type f -name '*.apk' -print >&2
-  fail_build "expected exactly one final APK, found $APK_COUNT"
+  fail_build "expected_exactly_one_apk: found $APK_COUNT"
 fi
 # Re-assert on the final, signed APK (catches regressions where signing changed layout).
-assert_apk_compliant "$FINAL_APK"
+FAILURE_STAGE="post_sign_assert"
+assert_apk_compliant "$FINAL_APK" "$EXPECTED_ASSETS_CSV"
+
+# Build the gate_checks[] array summarizing each gate decision for the artifact
+# registry, so the install entry layer can show "this build passed: zip, arsc,
+# manifest, zipalign, apksigner, post-sign digest".
+build_gate_checks_json() {
+  local schemes=""
+  local sep=""
+  if [ "$APK_SIGNED_V1" = true ]; then schemes="${schemes}${sep}\"v1\""; sep=","; fi
+  if [ "$APK_SIGNED_V2" = true ]; then schemes="${schemes}${sep}\"v2\""; sep=","; fi
+  if [ "$APK_SIGNED_V3" = true ]; then schemes="${schemes}${sep}\"v3\""; sep=","; fi
+  [ -n "$schemes" ] || schemes='"none"'
+  cat <<JSON
+[
+  {"name": "zip_integrity", "result": "pass"},
+  {"name": "arsc_uncompressed", "result": "pass"},
+  {"name": "arsc_aligned", "result": "pass"},
+  {"name": "manifest_parse", "result": "pass"},
+  {"name": "zipalign_check", "result": "pass"},
+  {"name": "apksigner_verify", "result": "pass", "scheme": [$schemes]},
+  {"name": "post_sign_digest", "result": "pass"}
+]
+JSON
+}
+APK_GATE_CHECKS_JSON="$(build_gate_checks_json)"
 
 write_artifact_json ok
 ls -lh "$FINAL_APK"

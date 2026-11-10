@@ -974,6 +974,9 @@ public data class NapaxiApkInstallResult(
     val packageName: String? = null,
     val canceled: Boolean = false,
     val failedReason: String? = null,
+    val buildId: String? = null,
+    val failureStage: String? = null,
+    val installerStatusCode: Int? = null,
     val rawJson: String = "",
 ) {
     public fun toJsonObject(): JSONObject = JSONObject()
@@ -992,6 +995,9 @@ public data class NapaxiApkInstallResult(
             versionName?.let { put("versionName", it) }
             packageName?.let { put("packageName", it) }
             failedReason?.let { put("failedReason", it) }
+            buildId?.let { put("buildId", it) }
+            failureStage?.let { put("failureStage", it) }
+            installerStatusCode?.let { put("installerStatusCode", it) }
         }
 
     public fun toJson(): String = toJsonObject().toString()
@@ -1033,14 +1039,22 @@ public data class NapaxiApkInstallResult(
                 canceled = obj.optNullableBoolean("canceled") ?: false,
                 failedReason = obj.optNullableString("failedReason")
                     ?: obj.optNullableString("failed_reason"),
+                buildId = obj.optNullableString("buildId")
+                    ?: obj.optNullableString("build_id"),
+                failureStage = obj.optNullableString("failureStage")
+                    ?: obj.optNullableString("failure_stage"),
+                installerStatusCode = obj.optNullableInt("installerStatusCode")
+                    ?: obj.optNullableInt("installer_status_code"),
                 rawJson = rawJson,
             )
 
         private fun codeOrNull(obj: JSONObject): String? =
             obj.optNullableString("code")?.takeIf {
-                it == "generated" || it == "verified_installable" ||
-                    it == "awaiting_confirmation" || it == "installed" ||
+                it == "generated" || it == "verifying" ||
+                    it == "verified_installable" || it == "awaiting_confirmation" ||
+                    it == "installed" || it == "update_succeeded" ||
                     it == "canceled" || it == "failed" ||
+                    it == "build_failed" || it == "gate_failed" ||
                     it == "already_installed_same_version" || it == "unknown" ||
                     it == "unsupported_ios"
             }

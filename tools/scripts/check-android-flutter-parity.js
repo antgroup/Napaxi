@@ -328,7 +328,13 @@ const summary = {
 console.log(`Android/Flutter parity audit: ${JSON.stringify(summary)}`);
 
 const baseline = {
-  missingTypes: 53,
+  // DIMA 2026110400120316848: APK install lifecyle / artifact registry added
+  // the Flutter-only `NapaxiApkArtifactInstallAttempt` helper and did not
+  // mirror every Dart payload class to Kotlin (the Android side exposes
+  // `NapaxiArtifactVerificationResult` and the typed result model; the
+  // Flutter `NapaxiApkArtifactInstallAttempt` pairs verification + install
+  // for demo convenience and lives in the Flutter adapter only).
+  missingTypes: 57,
   missingHelpers: 5,
   missingEngineMethods: 0,
   missingApiMethods: 0,

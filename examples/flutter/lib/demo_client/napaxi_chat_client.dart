@@ -9132,6 +9132,7 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     Map<String, dynamic>? artifact;
     String? artifactApkPath;
     String? artifactSha256;
+    String? artifactBuildId;
     if (await artifactFile.exists()) {
       try {
         artifact = Map<String, dynamic>.from(
@@ -9140,6 +9141,7 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
         if (artifact['gate'] == 'ok') {
           artifactApkPath = artifact['apk_abs_path'] as String?;
           artifactSha256 = artifact['sha256'] as String?;
+          artifactBuildId = artifact['build_id'] as String?;
         }
       } catch (_) {
         artifact = null;
@@ -9149,21 +9151,49 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     final apkFile = File(apkPath);
     bool buildSuccess = build['exitCode'] == 0 && await apkFile.exists();
     // The build is only "successful" when artifact.json exists with gate=ok
-    // AND its sha256 still matches the file on disk.
+    // AND its sha256 still matches the file on disk. The build script itself
+    // writes `gate=ok` only after the post-sign gate passes; on failure it
+    // wrote `gate=failed` with build_id + failure_stage (or no file at all).
+    // DIMA 2026110400120316848: also surface `gatePassed` and `artifactVerified`
+    // so the demo UI can show the per-attempt gating outcome without
+    // re-inferring it. Without artifactVerified the install attachment would
+    // be treated as an intermediate .apk and the install button hidden.
+    bool gatePassed = false;
     if (buildSuccess) {
       final verification = await sdk.NapaxiApkInstaller.verifyArtifact(
         repo.directory.path,
       );
-      if (!verification.verified ||
-          verification.apkPath == null ||
-          File(verification.apkPath!).path != apkFile.path) {
-        buildSuccess = false;
-      }
+      buildSuccess = verification.verified &&
+          verification.apkPath != null &&
+          File(verification.apkPath!).path == apkFile.path;
+      gatePassed = buildSuccess;
     }
     if (!buildSuccess) {
-      // Failure path: drop stale APK files and stale registration so a later
-      // install attempt cannot pick up an old/leftover product.
-      await _androidCleanupStaleApks(repo.directory);
+      // Failure path: drop stale APK files only. Per DIMA 2026110400120316848
+      // the build script ALREADY writes a gate=failed artifact.json with
+      // build_id + failure_stage on a failed build; preserve it so the UI can
+      // show "this build attempt failed at stage X" rather than deleting it
+      // and falling back to "no artifact". Install entries will keep refusing
+      // the APK (gate != ok) but the failure context survives.
+      final buildDir = Directory('${repo.directory.path}/build');
+      if (await buildDir.exists()) {
+        await for (final entity in buildDir.list()) {
+          if (entity is File && entity.path.endsWith('.apk')) {
+            await entity.delete();
+          }
+        }
+      }
+      // If the build script never wrote an artifact.json (e.g. crash during
+      // a very early stage), write a minimal gate=failed record here so the
+      // install entry does not fall back to a missing-file state. This is the
+      // demo's safety net; the script's own fail_build is the authoritative
+      // path.
+      if (!await artifactFile.exists()) {
+        await _writeAndroidFailedArtifact(
+          repo.directory,
+          reason: build['error']?.toString() ?? 'Android APK build failed',
+        );
+      }
       await _writeJsonFile(profileFile, originalProfile);
       if (originalManifest == null) {
         if (await manifestFile.exists()) await manifestFile.delete();
@@ -9176,6 +9206,7 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
       final install = await sdk.NapaxiApkInstaller.installApk(
         apkPath,
         expectedArtifactSha256: artifactSha256,
+        buildId: artifactBuildId,
       );
       installResult = install.toMap();
     }
@@ -9203,7 +9234,13 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
       'versionCode': versionCode,
       'versionName': versionName,
       'apkPath': apkPath,
+      'gatePassed': gatePassed,
+      // artifactVerified is the install-entry claim: the product registered
+      // in artifact.json still matches the file on disk. Required for
+      // chat_models.isInstallableApk to expose the install button.
+      'artifactVerified': buildSuccess,
       if (artifactSha256 != null) 'artifactSha256': artifactSha256,
+      if (artifactBuildId != null) 'buildId': artifactBuildId,
       if (artifact != null) 'artifact': artifact,
     };
     if (installResult != null) response['install'] = installResult;
@@ -9226,6 +9263,32 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     if (await artifact.exists()) {
       await artifact.delete();
     }
+  }
+
+  /// Safety net for the demo: when build_apk.sh fails so early that it never
+  /// wrote its own `gate=failed` artifact.json, write one here so the install
+  /// entry has authoritative "this build attempt failed" context and does not
+  /// fall back to a missing-file state. The build script's own `fail_build` is
+  /// the authoritative source of failure_stage; this is the demo tail guard.
+  Future<void> _writeAndroidFailedArtifact(
+    Directory repo, {
+    required String reason,
+  }) async {
+    final mobileDir = Directory('${repo.path}/.mobile');
+    if (!await mobileDir.exists()) {
+      await mobileDir.create(recursive: true);
+    }
+    final file = File('${mobileDir.path}/artifact.json');
+    final at = DateTime.now().toUtc().toIso8601String();
+    await _writeJsonFile(file, {
+      'gate': 'failed',
+      'build_id': null,
+      'builder': 'napaxi-demo-android-apk-build-fallback',
+      'built_at_iso': at,
+      'failure_stage': 'demo_or_build_exit',
+      'failure_reason': reason,
+      'validation_rule_version': 'android-apk-build.gate.v1',
+    });
   }
 
   Future<List<DemoRepositoryInfo>> listGitRepositories() async {
