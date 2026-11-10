@@ -3,7 +3,7 @@ use std::net::IpAddr;
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -136,7 +136,7 @@ pub(super) fn merge_oauth_options(
 
 pub(super) fn random_urlsafe(bytes_len: usize) -> String {
     let mut bytes = vec![0u8; bytes_len];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
 }
 

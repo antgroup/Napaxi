@@ -1727,8 +1727,8 @@ fn zip_skill_fixture(entries: &[(&str, &[u8])]) -> Vec<u8> {
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut writer = zip::ZipWriter::new(&mut cursor);
-        let options: zip::write::FileOptions<'_, ()> =
-            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        let options: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
         for (name, content) in entries {
             writer.start_file(*name, options).unwrap();
             writer.write_all(content).unwrap();
