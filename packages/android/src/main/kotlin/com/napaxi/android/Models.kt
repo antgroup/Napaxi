@@ -966,16 +966,32 @@ public data class NapaxiApkInstallResult(
     val apkPath: String? = null,
     val error: String? = null,
     val code: String? = null,
+    val installState: String = "unknown",
+    val artifactSha256: String? = null,
+    val artifactSize: Long? = null,
+    val versionCode: Long? = null,
+    val versionName: String? = null,
+    val packageName: String? = null,
+    val canceled: Boolean = false,
+    val failedReason: String? = null,
     val rawJson: String = "",
 ) {
     public fun toJsonObject(): JSONObject = JSONObject()
         .put("success", success)
         .put("installerOpened", installerOpened)
         .put("permissionRequired", permissionRequired)
+        .put("installState", installState)
+        .put("canceled", canceled)
         .apply {
             apkPath?.let { put("apkPath", it) }
             error?.let { put("error", it) }
             code?.let { put("code", it) }
+            artifactSha256?.let { put("artifactSha256", it) }
+            artifactSize?.let { put("artifactSize", it) }
+            versionCode?.let { put("versionCode", it) }
+            versionName?.let { put("versionName", it) }
+            packageName?.let { put("packageName", it) }
+            failedReason?.let { put("failedReason", it) }
         }
 
     public fun toJson(): String = toJsonObject().toString()
@@ -998,9 +1014,36 @@ public data class NapaxiApkInstallResult(
                     ?: obj.optNullableString("apk_path")
                     ?: obj.optNullableString("path"),
                 error = obj.optNullableString("error"),
-                code = obj.optNullableString("code"),
+                code = obj.optNullableString("code")
+                    ?: obj.optNullableString("install_state"),
+                installState = obj.optNullableString("installState")
+                    ?: obj.optNullableString("install_state")
+                    ?: codeOrNull(obj)
+                    ?: "unknown",
+                artifactSha256 = obj.optNullableString("artifactSha256")
+                    ?: obj.optNullableString("artifact_sha256"),
+                artifactSize = obj.optNullableLong("artifactSize")
+                    ?: obj.optNullableLong("artifact_size"),
+                versionCode = obj.optNullableLong("versionCode")
+                    ?: obj.optNullableLong("version_code"),
+                versionName = obj.optNullableString("versionName")
+                    ?: obj.optNullableString("version_name"),
+                packageName = obj.optNullableString("packageName")
+                    ?: obj.optNullableString("package_name"),
+                canceled = obj.optNullableBoolean("canceled") ?: false,
+                failedReason = obj.optNullableString("failedReason")
+                    ?: obj.optNullableString("failed_reason"),
                 rawJson = rawJson,
             )
+
+        private fun codeOrNull(obj: JSONObject): String? =
+            obj.optNullableString("code")?.takeIf {
+                it == "generated" || it == "verified_installable" ||
+                    it == "awaiting_confirmation" || it == "installed" ||
+                    it == "canceled" || it == "failed" ||
+                    it == "already_installed_same_version" || it == "unknown" ||
+                    it == "unsupported_ios"
+            }
 
         public fun fromMap(map: Map<String, *>): NapaxiApkInstallResult =
             fromJsonObject(JSONObject(map))
