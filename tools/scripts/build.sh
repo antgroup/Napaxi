@@ -22,6 +22,7 @@
 #   ./tools/scripts/build.sh release check-packages-architecture
 #   ./tools/scripts/build.sh release check-test-stability
 #   ./tools/scripts/build.sh release check-api-contract
+#   ./tools/scripts/build.sh release check-manifest-action-alignment
 #   ./tools/scripts/build.sh release clean
 
 set -euo pipefail
@@ -47,7 +48,7 @@ case "$BUILD_MODE" in
         CARGO_PROFILE="dev"
         PROFILE_DIR="debug"
         ;;
-    android|ios|ios-all|all|codegen|check-boundary|check-android-parity|check-ios-parity|check-ios|check-android-integration|check-android-integration-device|check-android-host|check-android-device|check-ios-native|check-ios-integration|check-ios-app|check-ios-device|check-ios-app-device|check-hygiene|check-packages-architecture|check-test-stability|check-api-contract|clean)
+    android|ios|ios-all|all|codegen|check-boundary|check-android-parity|check-ios-parity|check-ios|check-android-integration|check-android-integration-device|check-android-host|check-android-device|check-ios-native|check-ios-integration|check-ios-app|check-ios-device|check-ios-app-device|check-hygiene|check-packages-architecture|check-test-stability|check-api-contract|check-manifest-action-alignment|clean)
         TARGET_PLATFORM="$BUILD_MODE"
         BUILD_MODE="release"
         CARGO_PROFILE="release"
@@ -1328,6 +1329,12 @@ check_api_contract() {
     node "$SCRIPT_DIR/check-api-contract.js"
 }
 
+check_manifest_action_alignment() {
+    info "Checking Provider App manifest-action-handler alignment"
+    require_command node
+    node "$SCRIPT_DIR/check-manifest-action-alignment.js" "$@"
+}
+
 clean_outputs() {
     info "Cleaning Napaxi SDK platform outputs"
     rm -rf "$ROOT_DIR/target/napaxi-flutter-android" "$ROOT_DIR/target/napaxi-flutter-ios"
@@ -1407,10 +1414,13 @@ case "$TARGET_PLATFORM" in
     check-api-contract)
         check_api_contract
         ;;
+    check-manifest-action-alignment)
+        check_manifest_action_alignment
+        ;;
     clean)
         clean_outputs
         ;;
     *)
-        err "Unknown platform: $TARGET_PLATFORM. Use: android, ios, ios-all, all, codegen, check-boundary, check-android-parity, check-ios-parity, check-ios, check-android-integration, check-android-integration-device, check-ios-native, check-ios-integration, check-ios-app, check-ios-device, check-ios-app-device, check-hygiene, check-packages-architecture, check-test-stability, check-api-contract, clean"
+        err "Unknown platform: $TARGET_PLATFORM. Use: android, ios, ios-all, all, codegen, check-boundary, check-android-parity, check-ios-parity, check-ios, check-android-integration, check-android-integration-device, check-ios-native, check-ios-integration, check-ios-app, check-ios-device, check-ios-app-device, check-hygiene, check-packages-architecture, check-test-stability, check-api-contract, check-manifest-action-alignment, clean"
         ;;
 esac

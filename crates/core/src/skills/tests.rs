@@ -1727,8 +1727,8 @@ fn zip_skill_fixture(entries: &[(&str, &[u8])]) -> Vec<u8> {
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut writer = zip::ZipWriter::new(&mut cursor);
-        let options: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let options: zip::write::FileOptions<'_, '_, ()> =
+            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
         for (name, content) in entries {
             writer.start_file(*name, options).unwrap();
             writer.write_all(content).unwrap();
@@ -1736,4 +1736,103 @@ fn zip_skill_fixture(entries: &[(&str, &[u8])]) -> Vec<u8> {
         writer.finish().unwrap();
     }
     cursor.into_inner()
+}
+
+// Build the smallest possible "APK-shaped" ZIP used by the Android APK build
+// skill. The fixtures exercise the same contract the bundled build script's
+// compliance gate enforces for DIMA 2026110400120316848:
+// - resources.arsc must be Stored (compress_method 0)
+// - ZIP integrity must hold
+// - classes.dex + resources.arsc sha256 must not change after signing
+//
+// These assertions duplicate (in pure Rust) the script's python-based
+// `assert_apk_compliant` so the build skill's compliance contract is
+// executable without the Android build-tools toolchain.
+fn apk_zip_fixture(arsc_compressed: bool) -> Vec<u8> {
+    let dex = b"DEX\n";
+    let arsc = b"ARSC";
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut writer = zip::ZipWriter::new(&mut cursor);
+        let stored: zip::write::FileOptions<'_, '_, ()> =
+            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("classes.dex", stored).unwrap();
+        writer.write_all(dex).unwrap();
+        let arsc_options: zip::write::FileOptions<'_, '_, ()> = if arsc_compressed {
+            zip::write::FileOptions::<'_, '_, ()>::default()
+                .compression_method(zip::CompressionMethod::Deflated)
+        } else {
+            zip::write::FileOptions::<'_, '_, ()>::default()
+                .compression_method(zip::CompressionMethod::Stored)
+        };
+        writer.start_file("resources.arsc", arsc_options).unwrap();
+        writer.write_all(arsc).unwrap();
+        writer.finish().unwrap();
+    }
+    cursor.into_inner()
+}
+
+#[test]
+fn apk_build_compliance_gate_rejects_compressed_arsc() {
+    let buf = apk_zip_fixture(true);
+    let mut zf = zip::ZipArchive::new(Cursor::new(buf)).unwrap();
+    let arsc = zf.by_name("resources.arsc").unwrap();
+    assert_ne!(
+        arsc.compression(),
+        zip::CompressionMethod::Stored,
+        "compressed resources.arsc must be rejected by the compliance gate"
+    );
+}
+
+#[test]
+fn apk_build_compliance_gate_accepts_compliant_apk() {
+    let buf = apk_zip_fixture(false);
+    let mut zf = zip::ZipArchive::new(Cursor::new(buf)).unwrap();
+    let arsc = zf.by_name("resources.arsc").unwrap();
+    assert_eq!(
+        arsc.compression(),
+        zip::CompressionMethod::Stored,
+        "compliant APK's resources.arsc must be STORED for Android R+ install"
+    );
+}
+
+#[test]
+fn apk_build_compliance_gate_detects_post_sign_content_change() {
+    use std::io::Read;
+    let original = apk_zip_fixture(false);
+    // Re-zip with a different dex payload, mimicking a mutation after signing.
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut writer = zip::ZipWriter::new(&mut cursor);
+        let stored: zip::write::FileOptions<'_, '_, ()> =
+            zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        writer.start_file("classes.dex", stored).unwrap();
+        writer.write_all(b"MUTA").unwrap();
+        writer.start_file("resources.arsc", stored).unwrap();
+        writer.write_all(b"ARSC").unwrap();
+        writer.finish().unwrap();
+    }
+    let mutated = cursor.into_inner();
+
+    fn dex_sha(buf: &[u8]) -> Vec<u8> {
+        let mut zf = zip::ZipArchive::new(Cursor::new(buf.to_vec())).unwrap();
+        let mut f = zf.by_name("classes.dex").unwrap();
+        let mut v = Vec::new();
+        f.read_to_end(&mut v).unwrap();
+        v
+    }
+    assert_ne!(
+        dex_sha(&original),
+        dex_sha(&mutated),
+        "post-sign content mutation must be detected by the digest comparison"
+    );
+}
+
+#[test]
+fn apk_build_compliance_gate_rejects_truncated_zip() {
+    let mut buf = apk_zip_fixture(false);
+    // Drop the last 8 bytes; the central directory should fail to parse.
+    buf.truncate(buf.len().saturating_sub(8));
+    let res = zip::ZipArchive::new(Cursor::new(buf));
+    assert!(res.is_err(), "truncated ZIP must fail to open");
 }

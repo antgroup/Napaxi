@@ -282,6 +282,8 @@ class ChatAttachment {
     required this.type,
     this.sandboxPath,
     this.mimeTypeOverride,
+    this.artifactSha256,
+    this.artifactVerified = false,
   });
 
   final String name;
@@ -289,6 +291,8 @@ class ChatAttachment {
   final ChatAttachmentType type;
   final String? sandboxPath;
   final String? mimeTypeOverride;
+  final String? artifactSha256;
+  final bool artifactVerified;
 
   String get extension {
     final dotIndex = name.lastIndexOf('.');
@@ -315,6 +319,12 @@ class ChatAttachment {
   bool get isApk =>
       _mimeTypeHint == 'application/vnd.android.package-archive' ||
       extension == 'apk';
+
+  /// Install-entry gate: only install a verified, registered final product
+  /// emitted by the Napaxi `android-apk-build` skill. A leftover/unsigned/test
+  /// APK with no `artifact.json` digest match is not installable.
+  bool get isInstallableApk =>
+      isApk && artifactVerified && artifactSha256 != null && artifactSha256!.isNotEmpty;
 
   bool get isWebLink {
     final value = path.trim().isNotEmpty ? path.trim() : name.trim();

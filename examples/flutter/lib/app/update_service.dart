@@ -103,12 +103,26 @@ class DemoUpdateInstallResult {
     this.permissionRequired = false,
     this.installerOpened = false,
     this.message,
+    this.installState,
+    this.canceled = false,
+    this.failedReason,
   });
 
   final bool success;
   final bool permissionRequired;
   final bool installerOpened;
   final String? message;
+  // Maps to the SDK-level NapaxiApkInstallState wire value
+  // (generated/verified_installable/awaiting_confirmation/installed/canceled/
+  // failed/already_installed_same_version/unknown/unsupported_ios).
+  final String? installState;
+  final bool canceled;
+  final String? failedReason;
+
+  /// True only for a definitively completed install. Anything else (opened
+  /// installer, pending user confirmation, canceled, already-installed same
+  /// version) is NOT a successful install and must not be presented as such.
+  bool get isDefinitivelyInstalled => installState == 'installed' && success;
 }
 
 abstract class DemoUpdateService {
@@ -315,12 +329,20 @@ class PgyerDemoUpdateService implements DemoUpdateService {
       );
     }
 
-    final result = await sdk.NapaxiApkInstaller.installApk(apkFile.path);
+    final result = await sdk.NapaxiApkInstaller.installApk(
+      apkFile.path,
+      // No build-time artifact.json for an OTA-downloaded APK; the demo update
+      // flow can still proceed, but we surface the install state so the UI
+      // cannot mistake "installer opened" for "installed".
+    );
     return DemoUpdateInstallResult(
       success: result.success,
       installerOpened: result.installerOpened,
       permissionRequired: result.permissionRequired,
       message: result.error,
+      installState: result.installState.wireName,
+      canceled: result.canceled,
+      failedReason: result.failedReason,
     );
   }
 
