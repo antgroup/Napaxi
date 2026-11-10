@@ -24,9 +24,17 @@ You will need:
 
 - Rust toolchain (stable, edition 2024, rust-version ≥ 1.92). Install
   `cargo`, then run `rustup target add` for any mobile targets you plan to
-  build (e.g. `aarch64-linux-android`, `aarch64-apple-ios`).
-- Flutter SDK ≥ 3.19 with Dart ≥ 3.3 for any change under `packages/flutter/`
-  or `examples/flutter/`.
+  build (e.g. `aarch64-linux-android`, `aarch64-apple-ios`). The Rust channel
+  is declared in `rust-toolchain.toml` (`channel = "1.92"`) and is the single
+  source of truth for both local and CI builds; the CI workflows
+  (`dtolnay/rust-toolchain@stable` with no `toolchain:` input) install from
+  that file, so do not pass a separate Rust version to the action.
+- Flutter SDK 3.47.8 (Dart 3.13, ≥ 3.12) for any change under
+  `packages/flutter/` or `examples/flutter/`. The exact patch is pinned in
+  `.github/workflows/flutter.yml` (and `coverage.yml` / `docs-publish.yml`);
+  bump it there in lockstep when updating the SDK. pubspec.lock pins
+  `video_player 2.14.0` which requires Dart ≥ 3.12, so do not lower the
+  Flutter/Dart version below this floor.
 - `ripgrep` (`rg`) — the boundary checker uses it.
 - For mobile native builds: Android NDK and/or Xcode command-line tools, see
   [`docs/sdk-integration.md`](docs/sdk-integration.md).

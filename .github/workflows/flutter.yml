@@ -32,9 +32,19 @@ jobs:
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: '3.41.x'
+          flutter-version: '3.47.8'
           channel: stable
           cache: true
+
+      # Fail fast with a clear cause if the Flutter/Dart install or pub
+      # resolution is broken before analyze/test run.
+      - name: Print Flutter / Dart version
+        run: |
+          flutter --version
+          dart --version
+      - name: Resolve Flutter dependencies (packages/flutter)
+        working-directory: packages/flutter
+        run: flutter pub get
 
       - name: flutter analyze (packages/flutter)
         working-directory: packages/flutter
@@ -52,9 +62,21 @@ jobs:
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
-          flutter-version: '3.41.x'
+          flutter-version: '3.47.8'
           channel: stable
           cache: true
+
+      # Fail fast with a clear cause if the Flutter/Dart install or pub
+      # resolution is broken before analyze/test run. examples/flutter's
+      # pubspec.lock pins video_player 2.14.0 which requires Dart >= 3.12;
+      # the demo job is what the workitem flags as failing on Dart 3.11.5.
+      - name: Print Flutter / Dart version
+        run: |
+          flutter --version
+          dart --version
+      - name: Resolve Flutter dependencies (examples/flutter)
+        working-directory: examples/flutter
+        run: flutter pub get
 
       - name: flutter analyze (examples/flutter)
         working-directory: examples/flutter

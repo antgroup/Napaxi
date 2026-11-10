@@ -14,8 +14,8 @@
 
 你需要：
 
-- Rust stable toolchain，edition 2024，`rust-version >= 1.92`。移动端构建需要额外安装对应 target，例如 `aarch64-linux-android` 或 `aarch64-apple-ios`。
-- Flutter SDK 3.19+ 和 Dart 3.3+，用于 `packages/flutter/` 和 `examples/flutter/`。
+- Rust stable toolchain，edition 2024，`rust-version >= 1.92`。移动端构建需要额外安装对应 target，例如 `aarch64-linux-android` 或 `aarch64-apple-ios`。Rust channel 由根目录 `rust-toolchain.toml`（`channel = "1.92"`）统一声明，是本地与 CI 的唯一来源；CI 工作流（`dtolnay/rust-toolchain@stable`，不传 `toolchain:` 输入）据此安装，请勿向 action 传单独的 Rust 版本。
+- Flutter SDK 3.47.8（Dart 3.13，≥ 3.12），用于 `packages/flutter/` 和 `examples/flutter/`。具体补丁版本统一 pin 在 `.github/workflows/flutter.yml`（以及 `coverage.yml` / `docs-publish.yml`），升级 SDK 时需同步修改。pubspec.lock 锁定 `video_player 2.14.0`，要求 Dart ≥ 3.12，请勿将 Flutter/Dart 版本降到该基线以下。
 - `ripgrep` (`rg`)，边界检查脚本会使用它。
 - Android NDK 或 Xcode command-line tools，用于原生移动构建。
 
