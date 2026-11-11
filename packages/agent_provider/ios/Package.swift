@@ -12,6 +12,10 @@ let package = Package(
     ],
     targets: [
         .target(name: "AgentProvider"),
-        .testTarget(name: "AgentProviderTests", dependencies: ["AgentProvider"]),
+        .testTarget(
+            name: "AgentProviderTests",
+            dependencies: ["AgentProvider"],
+            resources: [.copy("Resources/signing_fixtures.json")]
+        ),
     ]
 )

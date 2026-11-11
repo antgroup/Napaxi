@@ -2,6 +2,237 @@
 //! action proposals, signing, persistence, and triggers.
 
 use super::*;
+use crate::crypto::{canonical_json, sha256_base64_no_pad};
+
+/// Shared cross-port signing fixtures file. Lives at
+/// `packages/agent_provider/shared/signing_fixtures.json` and is consumed by
+/// Rust core (here), the Android `SigningParityTest.kt` and the iOS
+/// `SigningParityTests.swift`. Update all three ports together when adding
+/// new cases; never change `expected_canonical_json` for an existing case
+/// without coordinating the roll-out — that string is the byte-exact
+/// canonical form the Host signs and every Provider verifies.
+const SIGNING_FIXTURES_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../packages/agent_provider/shared/signing_fixtures.json"
+));
+
+#[derive(Debug, serde::Deserialize)]
+struct SigningFixtures {
+    string_cases: Vec<FixtureCase>,
+    value_cases: Vec<ValueFixtureCase>,
+    proposal_signing_cases: Vec<ProposalFixtureCase>,
+    #[allow(dead_code)]
+    secret_for_signing_fixtures: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct FixtureCase {
+    id: String,
+    input: serde_json::Value,
+    expected_canonical_json: String,
+    expected_sha256_base64_no_pad: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ValueFixtureCase {
+    id: String,
+    input: serde_json::Value,
+    expected_canonical_json: String,
+    expected_sha256_base64_no_pad: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ProposalFixtureCase {
+    #[allow(dead_code)]
+    id: String,
+    #[allow(dead_code)]
+    description: String,
+    secret: String,
+    proposal: serde_json::Value,
+}
+
+#[test]
+fn signing_fixtures_canonical_json_matches_rust_core_byte_for_byte() {
+    let fixtures: SigningFixtures =
+        serde_json::from_str(SIGNING_FIXTURES_JSON).expect("signing_fixtures.json must parse");
+
+    for case in &fixtures.string_cases {
+        let actual = canonical_json(&case.input);
+        assert_eq!(
+            actual, case.expected_canonical_json,
+            "string_case `{}` canonical_json mismatch",
+            case.id
+        );
+        let actual_sha = sha256_base64_no_pad(actual.as_bytes());
+        assert_eq!(
+            actual_sha, case.expected_sha256_base64_no_pad,
+            "string_case `{}` sha256 mismatch",
+            case.id
+        );
+    }
+
+    for case in &fixtures.value_cases {
+        let actual = canonical_json(&case.input);
+        assert_eq!(
+            actual, case.expected_canonical_json,
+            "value_case `{}` canonical_json mismatch",
+            case.id
+        );
+        let actual_sha = sha256_base64_no_pad(actual.as_bytes());
+        assert_eq!(
+            actual_sha, case.expected_sha256_base64_no_pad,
+            "value_case `{}` sha256 mismatch",
+            case.id
+        );
+    }
+}
+
+#[test]
+fn signing_fixtures_regression_proposal_matches_regression_payload() {
+    let fixtures: SigningFixtures =
+        serde_json::from_str(SIGNING_FIXTURES_JSON).expect("signing_fixtures.json must parse");
+    let case = &fixtures.proposal_signing_cases[0];
+    let proposal = &case.proposal;
+    let arguments = proposal
+        .get("arguments")
+        .and_then(serde_json::Value::as_object)
+        .expect("regression fixture proposal.arguments is an object");
+
+    // Compute arguments_sha256 using the same canonical_json used by
+    // `signing::proposal_signature_payload`, then assert the host-side hash
+    // matches the Host-signed regression payload's own hash so cross-port
+    // parity is anchored on the bytes the signing path actually consumed.
+    let arguments_value = serde_json::Value::Object(arguments.clone());
+    let arguments_canonical = canonical_json(&arguments_value);
+    let arguments_hash = sha256_base64_no_pad(arguments_canonical.as_bytes());
+    let proposal_payload =
+        signing::proposal_signature_payload(&build_proposal_from_fixture(proposal));
+    assert!(
+        proposal_payload
+            .lines()
+            .any(|line| line == format!("arguments_sha256={arguments_hash}")),
+        "signing::proposal_signature_payload must embed the same arguments_sha256 \
+         the fixtures computed from canonical_json(arguments)"
+    );
+
+    // Fingerprint the regression corpus: it MUST still carry the slash-bearing
+    // strings that triggered the 2026-11-03 incident. If anyone sanitizes them
+    // out, this test fails before the cross-port parity guarantee lapses.
+    let date = arguments
+        .get("date")
+        .and_then(serde_json::Value::as_str)
+        .expect("regression fixture has date string");
+    let unit = arguments
+        .get("unit")
+        .and_then(serde_json::Value::as_str)
+        .expect("regression fixture has unit string");
+    let source_url = arguments
+        .get("source_url")
+        .and_then(serde_json::Value::as_str)
+        .expect("regression fixture has source_url string");
+    assert!(date.contains('/'), "date must carry a '/' character");
+    assert!(unit.contains('/'), "unit must carry a '/' character");
+    assert!(
+        source_url.starts_with("https://"),
+        "source_url must be an HTTPS URL"
+    );
+
+    // Re-sign the proposal through the host-side signing path and verify
+    // determinism; tampering any field must invalidate the signature.
+    let payload = signing::proposal_signature_payload(&build_proposal_from_fixture(proposal));
+    let signature_a = hmac_sha256_base64_no_pad(case.secret.as_bytes(), payload.as_bytes());
+    let signature_b = hmac_sha256_base64_no_pad(case.secret.as_bytes(), payload.as_bytes());
+    assert_eq!(
+        signature_a, signature_b,
+        "proposal signature must be deterministic across re-signs"
+    );
+
+    let mut tampered = proposal.clone();
+    tampered["arguments"]["date"] = json!("2026/10/23");
+    let tampered_payload =
+        signing::proposal_signature_payload(&build_proposal_from_fixture(&tampered));
+    let tampered_sig =
+        hmac_sha256_base64_no_pad(case.secret.as_bytes(), tampered_payload.as_bytes());
+    assert_ne!(
+        tampered_sig, signature_a,
+        "tampered arguments must yield a different signature"
+    );
+}
+
+fn build_proposal_from_fixture(value: &serde_json::Value) -> ActionProposal {
+    let arguments = value.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    ActionProposal {
+        request_id: value
+            .get("request_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        provider_id: value
+            .get("provider_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        agent_id: value
+            .get("agent_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        action_id: value
+            .get("action_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        tool_name: value
+            .get("tool_name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        arguments,
+        user_intent_summary: value
+            .get("user_intent_summary")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        created_at: value
+            .get("created_at")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        expires_at: value
+            .get("expires_at")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        nonce: value
+            .get("nonce")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        idempotency_key: value
+            .get("idempotency_key")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        callback: json!({}),
+        risk: value
+            .get("risk")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        confirmation_policy: value
+            .get("confirmation_policy")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        host_instance_id: value
+            .get("host_instance_id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        signature_algorithm: SIGNATURE_ALGORITHM_HMAC_SHA256_V1.to_string(),
+        signature: None,
+    }
+}
 
 fn package_json() -> String {
     json!({
@@ -637,6 +868,8 @@ fn stores_and_updates_proposal_result() {
         provider_trace_id: Some("trace".to_string()),
         completed_at: now(),
         signature: None,
+        failure_stage: String::new(),
+        field_errors: Vec::new(),
     };
     let response = submit_result(&files_dir, &serde_json::to_string(&result).unwrap());
     assert!(response.contains("\"succeeded\""));

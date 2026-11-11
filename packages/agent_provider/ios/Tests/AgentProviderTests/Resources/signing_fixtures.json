@@ -1,0 +1,222 @@
+{
+  "$schema": "agent_provider_signing_fixtures",
+  "version": 1,
+  "description": "Shared canonical-JSON / HMAC-SHA256 signing fixtures bridging Rust core (crypto::canonical_json), Android Provider SDK (TrustedHost.kt canonicalJson), and iOS Provider SDK (AgentProvider.swift canonicalJson). Each fixture pins an input together with its byte-exact expected canonical_json (RFC 8259 string escapes only; '/' is NOT escaped; keys sorted ascending) and the SHA-256-of-canonical base64-no-pad digest. All three ports must reproduce these exactly (canonical_json + sha256); proposal/trigger signature cross-parity then follows because the signed payload embeds the same arguments_sha256. The 2026-11-03 13:42:12 production incident sample is included as a sanitized regression case. Load path: Android tests via src/test/resources/signing_fixtures.json (copied from this shared file in build.gradle), iOS tests via bundle resource, Rust tests via include_str! from the repo-relative path.",
+  "secret_for_signing_fixtures": "redacted",
+  "string_cases": [
+    {
+      "id": "slash_date",
+      "description": "Contains a forward slash that must NOT be escaped. Android org.json.JSONObject.quote used to emit '10\\/22'; serde_json and JSONSerialization do not.",
+      "input": "10/22",
+      "expected_canonical_json": "\"10/22\"",
+      "expected_sha256_base64_no_pad": "4CQi2mzcnPeCVbqtrdEyjtIIe+PdOZPlw5GUUDIucrI"
+    },
+    {
+      "id": "slash_unit",
+      "description": "Uses '/' as a unit separator that must be preserved verbatim.",
+      "input": "元/吨",
+      "expected_canonical_json": "\"元/吨\"",
+      "expected_sha256_base64_no_pad": "vciHBEN8kUSM2nfU/hh9k249KUKNi5YEUewrjt1O0xA"
+    },
+    {
+      "id": "url_https",
+      "description": "HTTPS URL must be preserved byte-for-byte; '/' must not be escaped.",
+      "input": "https://example.com/x",
+      "expected_canonical_json": "\"https://example.com/x\"",
+      "expected_sha256_base64_no_pad": "m6A3qRvoNj2KTaoPoxgoV76K47AOxKOOmndm4QP8cwQ"
+    },
+    {
+      "id": "backslash",
+      "description": "Backslash must be escaped to '\\\\' per RFC 8259; forward slash remains unescaped.",
+      "input": "a\\b",
+      "expected_canonical_json": "\"a\\\\b\"",
+      "expected_sha256_base64_no_pad": "1rRDm9LQ/su4rrJ9Q3CwNUaD6nKtyEzKmbX+gKoLYtA"
+    },
+    {
+      "id": "double_quote",
+      "description": "Double quote must be escaped to '\\\"' per RFC 8259.",
+      "input": "a\"b",
+      "expected_canonical_json": "\"a\\\"b\"",
+      "expected_sha256_base64_no_pad": "i7y2gXUK9IMljFynLoPFw5e/ZqoB58d4fA0hL8H2+h0"
+    },
+    {
+      "id": "newline",
+      "description": "U+000A newline must be escaped to '\\n' per RFC 8259.",
+      "input": "a\nb",
+      "expected_canonical_json": "\"a\\nb\"",
+      "expected_sha256_base64_no_pad": "jLZ/ifn/DiW7Bk2paQcVHY4Ot6XA1M3htyrRyaMMBl4"
+    },
+    {
+      "id": "tab",
+      "description": "U+0009 tab must be escaped to '\\t' per RFC 8259.",
+      "input": "a\tb",
+      "expected_canonical_json": "\"a\\tb\"",
+      "expected_sha256_base64_no_pad": "kIbDyi0eWhSnU1al2tbjJm4vfhEfXSZyNQvV0K6SMMY"
+    },
+    {
+      "id": "control_u001f",
+      "description": "U+001F control character must be escaped to '\\u001f' per RFC 8259.",
+      "input": "a\u001fb",
+      "expected_canonical_json": "\"a\\u001fb\"",
+      "expected_sha256_base64_no_pad": "lGl3fnSuLk6vagoEwhxEQRiTbvTBwUTEev3gb8S70l0"
+    },
+    {
+      "id": "chinese",
+      "description": "BMP CJK characters must be preserved as UTF-8; not escaped to \\uXXXX.",
+      "input": "中",
+      "expected_canonical_json": "\"中\"",
+      "expected_sha256_base64_no_pad": "pLP9AP7pXHCuZtcCjRn490QFf9D0Xy0pSQVOPw8D5jA"
+    },
+    {
+      "id": "emoji",
+      "description": "Astral plane emoji must be preserved as UTF-8 (4-byte sequence), not escaped.",
+      "input": "😀",
+      "expected_canonical_json": "\"😀\"",
+      "expected_sha256_base64_no_pad": "egxQuSQ0sBVUX+k6tyPbLUss3RSkQUBWJKnOi+KfHVo"
+    }
+  ],
+  "value_cases": [
+    {
+      "id": "key_order_a_b",
+      "description": "Different key insertion order must produce identical canonical form (keys sorted ascending).",
+      "input": {"b": 1, "a": 2},
+      "expected_canonical_json": "{\"a\":2,\"b\":1}",
+      "expected_sha256_base64_no_pad": "02JqwwqH5vemQoIzs8aCmZdoZfpVCOQmfFQVx2r3p3I"
+    },
+    {
+      "id": "key_order_b_a",
+      "description": "Reverse insertion order of the same logical object must serialize identically.",
+      "input": {"a": 2, "b": 1},
+      "expected_canonical_json": "{\"a\":2,\"b\":1}",
+      "expected_sha256_base64_no_pad": "02JqwwqH5vemQoIzs8aCmZdoZfpVCOQmfFQVx2r3p3I"
+    },
+    {
+      "id": "empty_object",
+      "description": "Empty object canonical form.",
+      "input": {},
+      "expected_canonical_json": "{}",
+      "expected_sha256_base64_no_pad": "RBNvo1WzZ4oRRq0W9+hknpT7T8If536DEMBg9hyq/4o"
+    },
+    {
+      "id": "empty_array",
+      "description": "Empty array canonical form.",
+      "input": [],
+      "expected_canonical_json": "[]",
+      "expected_sha256_base64_no_pad": "T1PNoYwrqgwDVLtfmj7L5e0Sq02OEbqHPC8RFhICuUU"
+    },
+    {
+      "id": "null_value",
+      "description": "Null literal.",
+      "input": null,
+      "expected_canonical_json": "null",
+      "expected_sha256_base64_no_pad": "dCNOmK/nSY+12vHzasLXiswzlGT5UHA7jAGYkvmCuQs"
+    },
+    {
+      "id": "bool_true",
+      "description": "Boolean true literal.",
+      "input": true,
+      "expected_canonical_json": "true",
+      "expected_sha256_base64_no_pad": "tb6kG2xiP3wJ8b8k3K5Y66s8DN2QrZZrxDpFtEhn4Ss"
+    },
+    {
+      "id": "bool_false",
+      "description": "Boolean false literal.",
+      "input": false,
+      "expected_canonical_json": "false",
+      "expected_sha256_base64_no_pad": "/LzxZZCN0YqeSff/J4EBdtuOn2O0NSITdBZkJFIk+Ko"
+    },
+    {
+      "id": "nested_array_object",
+      "description": "Nested combination of objects and arrays; slash in inner string preserved.",
+      "input": {"items": [{"path": "10/22"}, {"path": "https://example.com/x"}]},
+      "expected_canonical_json": "{\"items\":[{\"path\":\"10/22\"},{\"path\":\"https://example.com/x\"}]}",
+      "expected_sha256_base64_no_pad": "bJ1UYmAaXdokK6nWYF4ARWw5LBkGPClnB7xeDY8OUFA"
+    }
+  ],
+  "proposal_signing_cases": [
+    {
+      "id": "tradejournal_regression_20261103",
+      "description": "Sanitized regression sample from the 2026-11-03 13:42:12 incident. Original request carried a slash in 'date' (10/22) and 'unit' (元/吨); Android Provider once escaped the slash via JSONObject.quote and rejected the Host signature. All three ports must now reproduce the same signature with secret='redacted'. Test runners compute expected_arguments_canonical_json / expected_arguments_sha256_base64_no_pad / expected_signature_hmac_sha256_v1_base64_no_pad from this proposal using the platform implementation under test and assert the value matches when re-running signing on this same proposal (deterministic). Cross-port equality is also enforced via the regexp that the same fixture fed into Rust, Android, and iOS yields byte-identical signature strings.",
+      "secret": "redacted",
+      "proposal": {
+        "request_id": "req-20261103-134212",
+        "provider_id": "com.napaxi.generated.tradejournal",
+        "agent_id": "tradejournal.agent",
+        "action_id": "analysis.save",
+        "tool_name": "app_action_analysis_save",
+        "arguments": {
+          "id": "analysis-20261103-134212",
+          "date": "2026/10/22",
+          "symbol": "RB",
+          "symbol_name": "螺纹钢",
+          "title": "螺纹钢日报 10/22",
+          "unit": "元/吨",
+          "sentiment_score": 65,
+          "source_url": "https://example.com/reports/2026-10-22"
+        },
+        "user_intent_summary": "Save TradeJournal analysis for 2026-10-22.",
+        "created_at": "2026-11-03T05:42:12.000Z",
+        "expires_at": "2026-11-03T05:52:12.000Z",
+        "nonce": "nonce-20261103-134212",
+        "idempotency_key": "req-20261103-134212",
+        "risk": "high",
+        "confirmation_policy": "provider_required",
+        "host_instance_id": "host-instance-20261103"
+      },
+      "rejection_cases": [
+        {
+          "id": "tampered_arguments",
+          "description": "Tampering with arguments_json changes the arguments_sha256; signature no longer matches.",
+          "violation": "arguments_json_mismatch",
+          "expected_failure_code": "signature_invalid"
+        },
+        {
+          "id": "expired",
+          "description": "Validator runs at now > expires_at; rejection is 'expired' before signature is computed.",
+          "violation": "expired",
+          "expected_failure_code": "expired"
+        },
+        {
+          "id": "replay",
+          "description": "Re-using the same nonce/request_id after consumption is rejected as replay.",
+          "violation": "replay",
+          "expected_failure_code": "replay_detected"
+        },
+        {
+          "id": "wrong_host_signing_cert",
+          "description": "Host signing cert SHA-256 mismatch must reject before identity trust is granted.",
+          "violation": "host_signing_cert_sha256_mismatch",
+          "expected_failure_code": "caller_signature_mismatch"
+        },
+        {
+          "id": "wrong_provider",
+          "description": "Proposal provider_id does not match this Provider package.",
+          "violation": "provider_id_mismatch",
+          "expected_failure_code": "provider_id_mismatch"
+        },
+        {
+          "id": "wrong_agent",
+          "description": "Proposal agent_id does not match this Provider package.",
+          "violation": "agent_id_mismatch",
+          "expected_failure_code": "agent_id_mismatch"
+        }
+      ]
+    }
+  ],
+  "controlled_clock_cases": [
+    {
+      "id": "within_validity_window",
+      "description": "Controlled-clock case: now is before expires_at; proposal must be accepted.",
+      "now_iso": "2026-11-03T05:50:00.000Z",
+      "proposal_expires_at": "2026-11-03T05:52:12.000Z",
+      "expected_outcome": "accepted"
+    },
+    {
+      "id": "after_validity_window",
+      "description": "Controlled-clock case: now is after expires_at; proposal must be rejected as expired even if signature is otherwise valid.",
+      "now_iso": "2026-11-04T05:50:00.000Z",
+      "proposal_expires_at": "2026-11-03T05:52:12.000Z",
+      "expected_outcome": "expired"
+    }
+  ]
+}

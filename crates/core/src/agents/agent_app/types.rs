@@ -41,6 +41,26 @@ pub struct AgentAppPackage {
     pub created_at: String,
     #[serde(default)]
     pub updated_at: String,
+    /// Public business contract version this Provider App exposes. Version 1
+    /// (the default when omitted) keeps the historical `id`+`json` action
+    /// shape; version 2 declares structured `parameters`/`result_schema`
+    /// objects per action so the host can validate field-level errors and
+    /// reproduce the canonical-JSON signing exactly. Adapters must preserve
+    /// this field end-to-end so refresh parity checks
+    /// (`tools/scripts/check-manifest-action-alignment.js`) can compare the
+    /// installed APK manifest, the host-saved binding, and the tool
+    /// definition exposed to the model on the same contract version.
+    #[serde(default = "default_contract_version")]
+    #[serde(skip_serializing_if = "is_default_contract_version")]
+    pub contract_version: u32,
+}
+
+fn default_contract_version() -> u32 {
+    1
+}
+
+fn is_default_contract_version(value: &u32) -> bool {
+    *value == 1
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -159,6 +179,38 @@ pub struct ActionResult {
     pub completed_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Optional contract v2 field: when `status == "failed"` and the failure
+    /// is a contract validation rather than a runtime error, identifies the
+    /// life-cycle stage that produced the failure (`proposal_created`,
+    /// `dispatched`, `host_response`, `parsed`, `persisted`). Lets the host
+    /// surface "validation rejected before persistence" vs "host action ran
+    /// but the result violated the contract" distinctly in trace records.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub failure_stage: String,
+    /// Optional contract v2 field: structured, field-path-level validation
+    /// errors. Populated when `submit_result` rejects a result because its
+    /// schema differs from the manifest's declared `result_schema`. Each
+    /// entry carries a JSON Pointer style `path`, the `expected` type or
+    /// shape, the `found` type, and a single-line `suggestion`. Adapter layers
+    /// MUST surface this list verbatim rather than collapsing it into a
+    /// generic `error` string, so the calling Agent and the user can locate
+    /// the offending field without re-reading the manifest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub field_errors: Vec<FieldError>,
+}
+
+/// Field-level contract validation error.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FieldError {
+    /// JSON Pointer path into the action result (`/result/...`).
+    pub path: String,
+    /// Expected type or shape declared by the manifest's `result_schema`.
+    pub expected: String,
+    /// Actual type or shape observed in the result.
+    pub found: String,
+    /// Single-line suggestion for fixing the result before retrying.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub suggestion: String,
 }
 
 fn deserialize_optional_action_error<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
