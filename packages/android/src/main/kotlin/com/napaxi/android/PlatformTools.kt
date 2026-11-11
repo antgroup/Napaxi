@@ -353,10 +353,43 @@ public class AndroidPlatformToolExecutor(
         }
 
         // Gated artifact re-verification (caller can pass expectedArtifactSha256 OR
-        // we look for the artifact.json next to the apk under .mobile/).
+        // we look for the artifact.json next to the apk under .mobile/). The
+        // install entry MUST bind to the artifact registry, not to path/mtime:
+        // any sha256 mismatch (sample D/E), gate!=ok (sample H), size mismatch,
+        // or missing field rejects the install before opening the installer.
+        val buildIdParam = params.optNullableString("build_id")
+            ?: params.optNullableString("buildId")
+
+        // Read the artifact.json once and replay it across multiple checks.
+        val artifactJson = artifactJsonFor(resolvedPath)?.let { f ->
+            runCatching { JSONObject(f.readText()) }.getOrNull()
+        }
         val expectedSha = params.optNullableString("expected_sha256")
             ?: params.optNullableString("expectedArtifactSha256")
-            ?: readArtifactSha256(resolvedPath)
+            ?: artifactJson?.let { if (it.optString("gate") == "ok") it.optString("sha256").takeIf { s -> s.isNotBlank() } else null }
+        val expectedSize = artifactJson?.let { if (it.optString("gate") == "ok") it.optNullableLong("size") else null }
+        val artifactBuildId = buildIdParam
+            ?: artifactJson?.optNullableString("build_id")
+        // If an artifact.json exists but gate != ok, refuse the install with
+        // gate_failed rather than silently installing an unverified file.
+        artifactJson?.let { aj ->
+            val gate = aj.optString("gate", "")
+            if (gate != "ok" && gate.isNotBlank()) {
+                val reasonText = aj.optNullableString("failure_reason")
+                return JSONObject()
+                    .put("success", false)
+                    .put("installerOpened", false)
+                    .put("permissionRequired", false)
+                    .put("installState", "gate_failed")
+                    .put("apkPath", resolvedPath)
+                    .put("code", "artifact_gate_failed")
+                    .put("failureStage", aj.optNullableString("failure_stage") ?: "gate")
+                    .apply { if (!artifactBuildId.isNullOrBlank()) put("buildId", artifactBuildId) }
+                    .put("error", "Artifact gate failed (gate=$gate${if (reasonText.isNullOrBlank()) "" else ": $reasonText"}); install not allowed.")
+                    .put("failedReason", "gate_not_ok:$gate")
+                    .toString()
+            }
+        }
         if (!expectedSha.isNullOrBlank()) {
             val actual = sha256OfFileOrNull(resolvedPath)
             if (actual == null || actual != expectedSha) {
@@ -370,7 +403,36 @@ public class AndroidPlatformToolExecutor(
                     .put("error", "Artifact sha256 mismatch with registered product.")
                     .put("code", "artifact_sha_mismatch")
                     .put("failedReason", "artifact_sha_mismatch")
+                    .apply {
+                        if (!artifactBuildId.isNullOrBlank()) {
+                            put("buildId", artifactBuildId)
+                            put("failureStage", "pre_install")
+                        }
+                    }
                     .toString()
+            }
+            // G13: size parity.
+            if (expectedSize != null) {
+                val onDisk = File(resolvedPath).length()
+                if (onDisk != expectedSize) {
+                    return JSONObject()
+                        .put("success", false)
+                        .put("installerOpened", false)
+                        .put("permissionRequired", false)
+                        .put("installState", "failed")
+                        .put("apkPath", resolvedPath)
+                        .put("artifactSha256", actual ?: "")
+                        .put("error", "Artifact size mismatch with registered product.")
+                        .put("code", "artifact_size_mismatch")
+                        .put("failedReason", "size_mismatch:expected=$expectedSize,actual=$onDisk")
+                        .apply {
+                            if (!artifactBuildId.isNullOrBlank()) {
+                                put("buildId", artifactBuildId)
+                                put("failureStage", "pre_install")
+                            }
+                        }
+                        .toString()
+                }
             }
         }
 
@@ -419,6 +481,42 @@ public class AndroidPlatformToolExecutor(
                         .put("packageName", packageName)
                         .put("versionCode", installedVersion)
                         .put("error", "Same package and versionCode is already installed; install not performed.")
+                        .apply {
+                            if (!artifactBuildId.isNullOrBlank()) {
+                                put("buildId", artifactBuildId)
+                                put("failureStage", "pre_install")
+                            }
+                        }
+                        .toString()
+                }
+            }
+        }
+
+        // Sample K: signature-relation pre-check. When the same package is
+        // already installed, the candidate APK MUST be signed by the same
+        // certificate (or a certificate the platform accepts for the upgrade).
+        // We do NOT call PackageManager.deletePackage; we surface a clear
+        // failure so the user is told to re-sign before retrying.
+        if (!packageName.isNullOrBlank()) {
+            runCatching {
+                val pm = context.packageManager
+                val installed = pm.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+                val apkInfo = pm.getPackageArchiveInfo(resolvedPath, PackageManager.GET_SIGNATURES)
+                val installedFp = installed.signatures?.firstOrNull()?.toCharsString()
+                val candidateFp = apkInfo?.signatures?.firstOrNull()?.toCharsString()
+                if (installedFp != null && candidateFp != null && installedFp != candidateFp) {
+                    return JSONObject()
+                        .put("success", false)
+                        .put("installerOpened", false)
+                        .put("permissionRequired", false)
+                        .put("installState", "failed")
+                        .put("code", "signature_mismatch")
+                        .put("failureStage", "pre_install")
+                        .put("apkPath", resolvedPath)
+                        .put("packageName", packageName)
+                        .put("error", "Candidate APK signing certificate differs from installed app; install not performed, existing app was NOT removed.")
+                        .put("failedReason", "signature_mismatch")
+                        .apply { if (!artifactBuildId.isNullOrBlank()) put("buildId", artifactBuildId) }
                         .toString()
                 }
             }
@@ -442,6 +540,12 @@ public class AndroidPlatformToolExecutor(
             .put("code", "installer_opened")
             .put("apkPath", resolvedPath)
             .put("canceled", false)
+            .apply {
+                if (!artifactBuildId.isNullOrBlank()) {
+                    put("buildId", artifactBuildId)
+                    put("failureStage", "open_installer")
+                }
+            }
             .toString()
     }
 

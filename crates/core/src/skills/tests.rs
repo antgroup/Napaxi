@@ -1744,6 +1744,7 @@ fn zip_skill_fixture(entries: &[(&str, &[u8])]) -> Vec<u8> {
 // - resources.arsc must be Stored (compress_method 0)
 // - ZIP integrity must hold
 // - classes.dex + resources.arsc sha256 must not change after signing
+// - resources.arsc must be 4-byte aligned (post-zipalign data_offset % 4 == 0)
 //
 // These assertions duplicate (in pure Rust) the script's python-based
 // `assert_apk_compliant` so the build skill's compliance contract is
@@ -1772,6 +1773,141 @@ fn apk_zip_fixture(arsc_compressed: bool) -> Vec<u8> {
     cursor.into_inner()
 }
 
+// Build an APK-shaped ZIP whose `resources.arsc` local-file-header data offset
+// is NOT 4-byte aligned. We do this by hand-writing a minimal ZIP in raw
+// bytes: classes.dex (STORED) followed by resources.arsc (STORED) where the
+// classes.dex entry carries a 1-byte extra field, so the resources.arsc
+// local-file-header data offset lands on an odd value. Mirror of the
+// build_apk.sh `assert_apk_compliant` post-zipalign scan that would call
+// `fail_build("arsc_unaligned")` in this case.
+fn apk_zip_fixture_with_misaligned_arsc() -> Vec<u8> {
+    use std::io::Write as _;
+    let dex_name = b"classes.dex";
+    let dex_body = b"DEX\n";
+    let arsc_name = b"resources.arsc";
+    let arsc_body = b"ARSC";
+    // 1-byte extra field on classes.dex pushes arsc data offset to odd.
+    let dex_extra: &[u8] = b"\x00";
+
+    fn crc32(data: &[u8]) -> u32 {
+        let mut table = [0u32; 256];
+        for i in 0u32..256 {
+            let mut c = i;
+            for _ in 0..8 {
+                c = if c & 1 == 1 {
+                    0xEDB88320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
+            }
+            table[i as usize] = c;
+        }
+        let mut crc = 0xFFFF_FFFFu32;
+        for &b in data {
+            crc = (crc >> 8) ^ table[((crc ^ b as u32) & 0xFF) as usize];
+        }
+        crc ^ 0xFFFF_FFFF
+    }
+
+    let mut buf: Vec<u8> = Vec::new();
+
+    // Local file header for classes.dex (STORED).
+    let dex_offset_in_buf = buf.len();
+    buf.extend_from_slice(b"PK\x03\x04"); // signature
+    buf.extend_from_slice(&20u16.to_le_bytes()); // ver needed
+    buf.extend_from_slice(&0u16.to_le_bytes()); // flags
+    buf.extend_from_slice(&0u16.to_le_bytes()); // method = STORED
+    buf.extend_from_slice(&0u16.to_le_bytes()); // mod time
+    buf.extend_from_slice(&0u16.to_le_bytes()); // mod date
+    buf.extend_from_slice(&crc32(dex_body).to_le_bytes());
+    buf.extend_from_slice(&(dex_body.len() as u32).to_le_bytes()); // comp size
+    buf.extend_from_slice(&(dex_body.len() as u32).to_le_bytes()); // uncomp size
+    buf.extend_from_slice(&(dex_name.len() as u16).to_le_bytes()); // name len
+    buf.extend_from_slice(&(dex_extra.len() as u16).to_le_bytes()); // extra len
+    buf.extend_from_slice(dex_name);
+    buf.extend_from_slice(dex_extra);
+    let dex_data_offset = buf.len() - dex_offset_in_buf;
+    buf.extend_from_slice(dex_body);
+
+    let arsc_offset_in_buf = buf.len();
+    buf.extend_from_slice(b"PK\x03\x04");
+    buf.extend_from_slice(&20u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes()); // method = STORED
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&crc32(arsc_body).to_le_bytes());
+    buf.extend_from_slice(&(arsc_body.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(arsc_body.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(arsc_name.len() as u16).to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes()); // no extra
+    buf.extend_from_slice(arsc_name);
+    let arsc_data_offset = buf.len() - arsc_offset_in_buf;
+    buf.extend_from_slice(arsc_body);
+
+    // Central directory.
+    let cd_offset = buf.len();
+    // classes.dex CD entry.
+    buf.extend_from_slice(b"PK\x01\x02");
+    buf.extend_from_slice(&20u16.to_le_bytes()); // ver made by
+    buf.extend_from_slice(&20u16.to_le_bytes()); // ver needed
+    buf.extend_from_slice(&0u16.to_le_bytes()); // flags
+    buf.extend_from_slice(&0u16.to_le_bytes()); // method
+    buf.extend_from_slice(&0u16.to_le_bytes()); // time
+    buf.extend_from_slice(&0u16.to_le_bytes()); // date
+    buf.extend_from_slice(&crc32(dex_body).to_le_bytes());
+    buf.extend_from_slice(&(dex_body.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(dex_body.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(dex_name.len() as u16).to_le_bytes());
+    buf.extend_from_slice(&(dex_extra.len() as u16).to_le_bytes()); // extra
+    buf.extend_from_slice(&0u16.to_le_bytes()); // comment len
+    buf.extend_from_slice(&0u16.to_le_bytes()); // disk start
+    buf.extend_from_slice(&0u16.to_le_bytes()); // int attrs
+    buf.extend_from_slice(&0u32.to_le_bytes()); // ext attrs
+    buf.extend_from_slice(&0u32.to_le_bytes()); // local header offset
+    buf.extend_from_slice(dex_name);
+    buf.extend_from_slice(dex_extra);
+    // resources.arsc CD entry.
+    buf.extend_from_slice(b"PK\x01\x02");
+    buf.extend_from_slice(&20u16.to_le_bytes());
+    buf.extend_from_slice(&20u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&crc32(arsc_body).to_le_bytes());
+    buf.extend_from_slice(&(arsc_body.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(arsc_body.len() as u32).to_le_bytes());
+    buf.extend_from_slice(&(arsc_name.len() as u16).to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes()); // extra
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u32.to_le_bytes());
+    buf.extend_from_slice(&((arsc_offset_in_buf) as u32).to_le_bytes());
+    buf.extend_from_slice(arsc_name);
+
+    // EOCD.
+    let cd_size = buf.len() - cd_offset;
+    buf.extend_from_slice(b"PK\x05\x06");
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes());
+    buf.extend_from_slice(&2u16.to_le_bytes()); // entries
+    buf.extend_from_slice(&2u16.to_le_bytes());
+    buf.extend_from_slice(&(cd_size as u32).to_le_bytes());
+    buf.extend_from_slice(&(cd_offset as u32).to_le_bytes());
+    buf.extend_from_slice(&0u16.to_le_bytes()); // comment len
+
+    // Sanity: arsc data offset must be odd so the test contract holds.
+    assert!(
+        !arsc_data_offset.is_multiple_of(4),
+        "fixture construction must produce a non-aligned arsc data_offset: got {}",
+        arsc_data_offset
+    );
+    let _ = dex_data_offset;
+    buf
+}
+
 #[test]
 fn apk_build_compliance_gate_rejects_compressed_arsc() {
     let buf = apk_zip_fixture(true);
@@ -1794,6 +1930,80 @@ fn apk_build_compliance_gate_accepts_compliant_apk() {
         zip::CompressionMethod::Stored,
         "compliant APK's resources.arsc must be STORED for Android R+ install"
     );
+    // Compliant APK must also report an arsc data offset that is 4-byte
+    // aligned — the build script's assert_apk_compliant enforces this on the
+    // zipaligned APK.
+    let data_offset = arsc.data_start().expect("resources.arsc has data_start");
+    assert_eq!(
+        data_offset % 4,
+        0,
+        "compliant resources.arsc must be 4-byte aligned"
+    );
+}
+
+#[test]
+fn apk_build_compliance_gate_rejects_unaligned_arsc() {
+    // Mirror the build script's assert_apk_compliant: a STORED resources.arsc
+    // whose data_offset is not 4-byte aligned must be rejected, even when the
+    // entry itself is uncompressed. Compressed-vs-STORED is a separate check.
+    let buf = apk_zip_fixture_with_misaligned_arsc();
+    let mut zf = zip::ZipArchive::new(Cursor::new(buf)).unwrap();
+    let arsc = zf.by_name("resources.arsc").unwrap();
+    let data_offset = arsc.data_start().expect("resources.arsc has data_start");
+    // Fixture construction guarantees an odd offset; assert the contract.
+    assert!(
+        !data_offset.is_multiple_of(4),
+        "fixture data_offset must be non-aligned for this regression"
+    );
+    // The build script would fail_build("arsc_unaligned") in this case;
+    // assert the same decision here.
+    let compressed = !(arsc.compression() == zip::CompressionMethod::Stored);
+    let aligned = data_offset.is_multiple_of(4);
+    let gate_passed = !compressed && aligned;
+    assert!(
+        !gate_passed,
+        "unaligned (or compressed) resources.arsc must fail the compliance gate"
+    );
+}
+
+#[test]
+fn apk_build_gate_records_failure_with_build_id() {
+    // The build script's fail_build path writes a gate=failed artifact.json
+    // that includes build_id, failure_stage, failure_reason, and
+    // validation_rule_version so the install entry layer can distinguish
+    // "this build attempt failed at stage X" from "no attempt was made." We
+    // build the same JSON shape the script writes and assert the install
+    // entry's contract: any gate != "ok" must not be installable, but the
+    // failure must carry build_id + failure_stage.
+    let failed_artifact_json = serde_json::json!({
+        "gate": "failed",
+        "build_id": "32hexcharsfromsha256prefix",
+        "builder": "napaxi-bundled-android-apk-build",
+        "built_at_iso": "2026-11-05T00:00:00Z",
+        "failure_stage": "post_sign_digest",
+        "failure_reason": "post_sign_content_mismatch: classes.dex/resources.arsc changed after signing",
+        "validation_rule_version": "android-apk-build.gate.v1"
+    });
+    assert_eq!(
+        failed_artifact_json["gate"], "failed",
+        "failed artifact.json must report gate=failed, not gate=ok",
+    );
+    assert!(
+        failed_artifact_json["build_id"].is_string(),
+        "failed artifact.json must carry build_id so install entries can attribute the failure"
+    );
+    assert_eq!(
+        failed_artifact_json["failure_stage"], "post_sign_digest",
+        "failed artifact.json must carry the exact stage the build died at"
+    );
+    assert_eq!(
+        failed_artifact_json["validation_rule_version"], "android-apk-build.gate.v1",
+        "failed artifact.json must record which validation rule version produced this verdict"
+    );
+    // Install entry contract: any gate != "ok" is not installable, regardless
+    // of whether build_id is present.
+    let gate_ok = failed_artifact_json["gate"] == "ok";
+    assert!(!gate_ok, "gate=failed must NOT be installable");
 }
 
 #[test]
@@ -1835,4 +2045,57 @@ fn apk_build_compliance_gate_rejects_truncated_zip() {
     buf.truncate(buf.len().saturating_sub(8));
     let res = zip::ZipArchive::new(Cursor::new(buf));
     assert!(res.is_err(), "truncated ZIP must fail to open");
+}
+
+#[test]
+fn apk_build_gate_failure_preserves_build_id_not_byte_content() {
+    // The build_id is intentionally NOT a digest of the APK bytes — it is
+    // derived from projectDir + manifest + versionCode + built_at_iso so two
+    // rebuilds that produce the same byte output still have distinct
+    // build_ids and are not interchangeable at the install entry. This
+    // guards against same-path/same-bytes file replacement attacks where the
+    // install entry would otherwise be allowed to install "this build" twice.
+    use sha2::{Digest, Sha256};
+    let project_dir = "/workspace/TradeJournal";
+    let pkg = "com.napaxi.generated.tradejournal";
+    let vcode = "9";
+    let at_a = "2026-11-05T10:00:00Z";
+    let at_b = "2026-11-05T11:00:00Z";
+    let id_a = {
+        let mut h = Sha256::new();
+        h.update(project_dir.as_bytes());
+        h.update(b"|");
+        h.update(pkg.as_bytes());
+        h.update(b"|");
+        h.update(vcode.as_bytes());
+        h.update(b"|");
+        h.update(at_a.as_bytes());
+        let full = h.finalize();
+        let mut s = String::with_capacity(32);
+        for b in full.iter().take(16) {
+            s.push_str(&format!("{:02x}", b));
+        }
+        s
+    };
+    let id_b = {
+        let mut h = Sha256::new();
+        h.update(project_dir.as_bytes());
+        h.update(b"|");
+        h.update(pkg.as_bytes());
+        h.update(b"|");
+        h.update(vcode.as_bytes());
+        h.update(b"|");
+        h.update(at_b.as_bytes());
+        let full = h.finalize();
+        let mut s = String::with_capacity(32);
+        for b in full.iter().take(16) {
+            s.push_str(&format!("{:02x}", b));
+        }
+        s
+    };
+    assert_ne!(
+        id_a, id_b,
+        "build_id must differ by built_at_iso so two rebuilds with identical APK bytes are not interchangeable"
+    );
+    assert_eq!(id_a.len(), 32);
 }

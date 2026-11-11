@@ -3,8 +3,10 @@ package com.napaxi.android
 import android.content.ContextWrapper
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 import java.nio.file.Files
 
 class ToolingTest {
@@ -464,5 +466,108 @@ class ToolingTest {
         assertEquals(30, alarm.minute)
         assertEquals("Wake up", alarm.message)
         assertEquals(setOf(1, 2, 3, 4, 5, 6, 7), alarm.repeatDays.toSet())
+    }
+
+    // DIMA 2026110400120316848 install failure-matrix tests. These cover the
+    // failure branches PlatformTools.installApk must exercise before opening
+    // the system installer, so a replaced/unsigned/gate-failed/size-mismatched
+    // APK never reaches the OS installer. They write a real Android
+    // project_root on disk so artifactJsonFor behaves the same way the live
+    // tool path does; the ContextWrapper-null executor path is the same one
+    // the existing install_apk unit test uses.
+
+    @Test
+    fun installApkRejectsMissingArtifactJson() {
+        val tmp = Files.createTempDirectory("napaxi-install-missing-json").toFile()
+        val apkFile = File(tmp, "build/app.apk").apply { parentFile?.mkdirs() }
+        apkFile.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04))
+        try {
+            val out = JSONObject(
+                AndroidPlatformToolExecutor(ContextWrapper(null)).execute(
+                    "install_apk",
+                    JSONObject().put("path", apkFile.absolutePath).toString(),
+                )
+            )
+            assertFalse(out.getBoolean("success"))
+            assertFalse(out.getBoolean("installerOpened"))
+            // No artifact.json -> no sha mismatch path; we still surface a
+            // failed state but must NOT report installer_opened / awaiting.
+            assertEquals("failed", out.optString("installState"))
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun installApkRejectsGateNotOkArtifactJson() {
+        val tmp = Files.createTempDirectory("napaxi-install-gate-failed").toFile()
+        val apkFile = File(tmp, "build/app.apk").apply { parentFile?.mkdirs() }
+        apkFile.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04))
+        File(tmp, ".mobile").mkdirs()
+        File(tmp, ".mobile/artifact.json").writeText(
+            """
+            {
+              "gate": "failed",
+              "build_id": "abcdef0123456789",
+              "failure_stage": "post_sign_digest",
+              "failure_reason": "post_sign_content_mismatch",
+              "validation_rule_version": "android-apk-build.gate.v1"
+            }
+            """.trimIndent()
+        )
+        try {
+            val out = JSONObject(
+                AndroidPlatformToolExecutor(ContextWrapper(null)).execute(
+                    "install_apk",
+                    JSONObject().put("path", apkFile.absolutePath).toString(),
+                )
+            )
+            assertFalse(out.getBoolean("success"))
+            assertFalse(out.getBoolean("installerOpened"))
+            assertEquals("gate_failed", out.getString("installState"))
+            assertEquals("artifact_gate_failed", out.getString("code"))
+            assertEquals("post_sign_digest", out.getString("failureStage"))
+            assertEquals("abcdef0123456789", out.getString("buildId"))
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun installApkRejectsArtifactShaMismatch() {
+        val tmp = Files.createTempDirectory("napaxi-install-sha-mismatch").toFile()
+        val apkFile = File(tmp, "build/app.apk").apply { parentFile?.mkdirs() }
+        apkFile.writeBytes(byteArrayOf(0x50, 0x4b, 0x03, 0x04))
+        File(tmp, ".mobile").mkdirs()
+        File(tmp, ".mobile/artifact.json").writeText(
+            """
+            {
+              "gate": "ok",
+              "build_id": "abcdef0123456789",
+              "apk_abs_path": "${apkFile.absolutePath}",
+              "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+              "size": 4,
+              "packageName": "com.example",
+              "versionCode": "1",
+              "versionName": "1.0"
+            }
+            """.trimIndent()
+        )
+        try {
+            val out = JSONObject(
+                AndroidPlatformToolExecutor(ContextWrapper(null)).execute(
+                    "install_apk",
+                    JSONObject().put("path", apkFile.absolutePath).toString(),
+                )
+            )
+            assertFalse(out.getBoolean("success"))
+            assertFalse(out.getBoolean("installerOpened"))
+            assertEquals("failed", out.getString("installState"))
+            assertEquals("artifact_sha_mismatch", out.getString("code"))
+            assertEquals("abcdef0123456789", out.getString("buildId"))
+            assertEquals("pre_install", out.getString("failureStage"))
+        } finally {
+            tmp.deleteRecursively()
+        }
     }
 }

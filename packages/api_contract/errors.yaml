@@ -44,3 +44,65 @@ error_codes:
       API key, verify subscription).
   internal_error:
     meaning: Unexpected bridge or core failure; should be logged with context.
+
+  # DIMA 2026110400120316848 install_apk error codes. Returned by the
+  # `install_apk` platform tool and the `NapaxiApkInstaller.installApk` /
+  # `NapaxiApkInstaller.verifyArtifact` adapters on Flutter/Android/iOS.
+  install_apk_errors:
+    missing_apk_path:
+      meaning: install_apk was called without apk_path.
+    apk_not_found:
+      meaning: apk_path resolved to a file that does not exist on disk.
+    artifact_gate_failed:
+      meaning: artifact.json is missing or gate != ok; install entry refuses the APK before opening the installer.
+    artifact_sha_mismatch:
+      meaning: artifact.json sha256 does not match the file on disk (sample D/E); install is not performed.
+    artifact_size_mismatch:
+      meaning: artifact.json size does not match the file on disk (G13).
+    signature_mismatch:
+      meaning: Candidate APK signing certificate differs from the installed app (sample K); install not performed and PackageInstaller.deletePackage is NOT called.
+    already_installed_same_version:
+      meaning: Same package and versionCode is already installed (sample N); install was not performed.
+    build_failed:
+      meaning: build_apk.sh exited non-zero; product is not installable (partial build state).
+    gate_failed:
+      meaning: artifact.json exists with gate=failed; install entry hidden until a new gate=ok build overwrites it (sample H).
+    installer_opened:
+      meaning: System installer was launched but no definitive install result was received; installState=awaiting_confirmation (sample M).
+    user_canceled:
+      meaning: User canceled the install in the system installer (sample L).
+    pending_user_confirmation:
+      meaning: PackageInstaller.STATUS_PENDING; installState=awaiting_confirmation.
+    pending_artifact_missing:
+      meaning: After process restart, the artifact file behind an awaiting_confirmation install disappeared (sample O).
+    pending_artifact_sha_mismatch:
+      meaning: After process restart, the artifact sha no longer matches the persisted expected sha.
+    open_installer_failed:
+      meaning: Opening the system installer threw; installState=failed, failureStage=open_installer.
+    signature_or_version_blocked:
+      meaning: PackageInstaller.STATUS_FAILURE_BLOCKED; install rejected for signing/version reasons (sample K).
+    version_conflict:
+      meaning: PackageInstaller.STATUS_FAILURE_CONFLICT.
+    invalid_apk_or_signature:
+      meaning: PackageInstaller.STATUS_FAILURE_INVALID.
+    unsupported_platform:
+      meaning: install_apk was called on iOS / a non-Android platform; adapter returns installState=unsupported_ios.
+
+# install_apk_states is a state wire-name catalogue, not a set of error codes,
+# so it sits at the top level alongside error_codes rather than nested under it.
+install_apk_states:
+  meaning: Wire values for NapaxiApkInstallResult.installState across Flutter, Android, and iOS. iOS only ever returns unsupported_ios.
+  values:
+    - generated
+    - verifying
+    - verified_installable
+    - awaiting_confirmation
+    - installed
+    - update_succeeded
+    - already_installed_same_version
+    - install_failed
+    - build_failed
+    - gate_failed
+    - canceled
+    - unsupported_ios
+    - unknown

@@ -2663,8 +2663,17 @@ String _installStateMessage(sdk.NapaxiApkInstallResult result, bool isChinese) {
         'The same version is already installed; install was not performed.',
       );
     case sdk.NapaxiApkInstallState.generated:
+      return tr('产物已生成，等待发起安装。', 'Product generated; install has not started.');
+    case sdk.NapaxiApkInstallState.verifying:
+      return tr('正在校验产物，请稍候。', 'Verifying the build product; please wait.');
     case sdk.NapaxiApkInstallState.verifiedInstallable:
       return tr('产物已生成，等待发起安装。', 'Product generated; install has not started.');
+    case sdk.NapaxiApkInstallState.updateSucceeded:
+      return tr('覆盖安装成功，原有数据已保留。', 'Update installed successfully; previous data preserved.');
+    case sdk.NapaxiApkInstallState.buildFailed:
+      return tr('安装包生成异常，请重新生成。', 'Build product failed; regenerate the APK before installing.');
+    case sdk.NapaxiApkInstallState.gateFailed:
+      return tr('产物校验未通过，已不显示安装入口。', 'Artifact gate failed; install entry is hidden.');
     case sdk.NapaxiApkInstallState.unknown:
     case sdk.NapaxiApkInstallState.unsupportedIos:
       return tr('安装结果未知，请在系统安装器中确认。', 'Install result unknown; verify in the system installer.');

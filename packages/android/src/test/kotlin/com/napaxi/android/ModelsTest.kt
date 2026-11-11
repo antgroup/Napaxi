@@ -3063,4 +3063,90 @@ class ModelsTest {
         assertEquals("Resume on boot", JSONObject(job.toJson()).getString("name"))
         assertEquals(job.toJson(), job.toJsonString())
     }
+
+    @Test
+    fun apkInstallResultRoundtripsBuildIdAndFailureStageAndInstallerStatusCode() {
+        // DIMA 2026110400120316848: install results must carry attribution
+        // (build_id, failure_stage) so failures can be diagnosed back to the
+        // exact build attempt and the exact stage that died. The Kotlin model
+        // must round-trip these fields through to/from JSON; otherwise the
+        // Flutter UI cannot show "this build (id=...) failed at stage X".
+        val original = NapaxiApkInstallResult(
+            success = false,
+            installerOpened = false,
+            permissionRequired = false,
+            apkPath = "/tmp/app.apk",
+            error = "Install blocked (status=7).",
+            code = "signature_or_version_blocked",
+            installState = "failed",
+            packageName = "com.napaxi.generated.tradejournal",
+            versionCode = 9L,
+            canceled = false,
+            failedReason = "signature_or_version_blocked",
+            buildId = "abcdef0123456789",
+            failureStage = "post_install",
+            installerStatusCode = 7,
+        )
+
+        val json = original.toJson()
+        val parsed = NapaxiApkInstallResult.fromJson(json)
+
+        assertEquals(original, parsed)
+        assertEquals("abcdef0123456789", parsed.buildId)
+        assertEquals("post_install", parsed.failureStage)
+        assertEquals(7, parsed.installerStatusCode)
+        assertEquals("failed", parsed.installState)
+        assertEquals("signature_or_version_blocked", parsed.code)
+
+        // fromMap path must agree with fromJson.
+        val viaMap = NapaxiApkInstallResult.fromMap(
+            JSONObject(json).toMap()
+        )
+        assertEquals(original, viaMap)
+    }
+
+    @Test
+    fun apkInstallResultAcceptsExtendedInstallStateWireNames() {
+        // The Flutter enum gained verifying / update_succeeded / build_failed
+        // / gate_failed; the Android codeOrNull list must keep them so a
+        // result with these states round-trips without falling back to
+        // "unknown".
+        val wireStates = listOf(
+            "generated",
+            "verifying",
+            "verified_installable",
+            "awaiting_confirmation",
+            "installed",
+            "update_succeeded",
+            "canceled",
+            "failed",
+            "build_failed",
+            "gate_failed",
+            "already_installed_same_version",
+            "unknown",
+            "unsupported_ios",
+        )
+        for (state in wireStates) {
+            val json = JSONObject()
+                .put("success", false)
+                .put("installState", state)
+                .toString()
+            val parsed = NapaxiApkInstallResult.fromJson(json)
+            assertEquals("installState='$state' must round-trip", state, parsed.installState)
+        }
+    }
+
+    @Test
+    fun apkInstallResultExtendedStatesDoNotCollapseToUnknown() {
+        // The codeOrNull fallback only kicks in when installState is absent;
+        // if a result maps through the code column, it must still be retained
+        // exactly, not downgraded to "unknown". This guards against a future
+        // regression where the extended states are dropped from the Kotlin
+        // allowlist and silently become "unknown" on Android.
+        val json = """{"success":false,"code":"build_failed"}"""
+        val parsed = NapaxiApkInstallResult.fromJson(json)
+        // installState comes from code when installState key absent; "build_failed"
+        // IS in the allowlist so it is preserved.
+        assertEquals("build_failed", parsed.installState)
+    }
 }

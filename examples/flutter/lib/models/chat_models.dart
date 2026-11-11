@@ -326,6 +326,12 @@ class ChatAttachment {
   bool get isInstallableApk =>
       isApk && artifactVerified && artifactSha256 != null && artifactSha256!.isNotEmpty;
 
+  /// True for an attached .apk that is NOT a verified final product. Used by
+  /// the demo chat UI to show the file as a plain attachment (downloadable,
+  /// not directly installable) so sample F (unsigned/test APK mixed with the
+  /// final APK) renders the intermediate as a file, not an install entry.
+  bool get isIntermediateApk => isApk && !isInstallableApk;
+
   bool get isWebLink {
     final value = path.trim().isNotEmpty ? path.trim() : name.trim();
     final uri = Uri.tryParse(value);
