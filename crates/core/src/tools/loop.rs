@@ -221,16 +221,40 @@ fn mid_turn_overflow_error(overflow_tokens: usize) -> String {
 /// `ContextEngineConfig::enabled` / soft `trigger_ratio`. See
 /// `crate::context::mid_turn_hard_precheck`.
 ///
+/// Authoritative-source plumbing (AC-1, DIMA-2026110600120401874): when a
+/// `tool_execution_context` is supplied (production tool loop, not the bare
+/// estimate path) the mid-turn precheck takes
+/// `max(estimate, last_real_prompt_usage)`. The last real `prompt_tokens`
+/// come from [`crate::context::fresh_last_prompt_tokens`], validated against
+/// the current config fingerprint + message-count baseline. On any miss the
+/// function silently falls back to the pure estimate, so the new path can
+/// only tighten the check, never loosen it. See `crates/core/src/context/mod.rs`
+/// and `budget.rs` for the audit rationale.
+///
 /// Returns `Ok(())` when it fits, or `Err(<mid-turn marker>)` when it does
 /// not — the error string starts with `"mid-turn context overflow:"`.
 fn enforce_mid_turn_hard_precheck(
     config: &PlatformLlmConfig,
     messages: &[serde_json::Value],
     descriptor_tokens: usize,
+    tool_execution_context: Option<&ToolExecutionContext>,
 ) -> Result<(), String> {
     use crate::context::{MidTurnPrecheckStatus, mid_turn_hard_precheck_for_config};
-    let prompt_tokens =
+    let estimate =
         crate::context::estimate_messages_tokens(messages).saturating_add(descriptor_tokens);
+    let real = tool_execution_context.and_then(|context| {
+        let session_key_json = context.session_key_json.as_deref()?;
+        crate::context::fresh_last_prompt_tokens(
+            &context.files_dir,
+            Some(session_key_json),
+            config,
+            messages,
+        )
+    });
+    let prompt_tokens = match real {
+        Some(real) => estimate.max(real),
+        None => estimate,
+    };
     match mid_turn_hard_precheck_for_config(config, prompt_tokens, descriptor_tokens) {
         MidTurnPrecheckStatus::Fits { .. } => Ok(()),
         MidTurnPrecheckStatus::Overflow { overflow_tokens } => {
@@ -308,7 +332,12 @@ where
             descriptor_tokens,
             tool_execution_context.as_ref(),
         );
-        enforce_mid_turn_hard_precheck(config, &messages, descriptor_tokens)?;
+        enforce_mid_turn_hard_precheck(
+            config,
+            &messages,
+            descriptor_tokens,
+            tool_execution_context.as_ref(),
+        )?;
         let active_descriptors =
             descriptors_for_skill_protocol(&config.system_prompt, &messages, &descriptors);
         let turn = llm::complete_turn_with_raw_messages(config, &messages, &active_descriptors)
@@ -511,7 +540,12 @@ where
             descriptor_tokens,
             tool_execution_context.as_ref(),
         );
-        enforce_mid_turn_hard_precheck(config, &messages, descriptor_tokens)?;
+        enforce_mid_turn_hard_precheck(
+            config,
+            &messages,
+            descriptor_tokens,
+            tool_execution_context.as_ref(),
+        )?;
         let active_descriptors =
             descriptors_for_skill_protocol(&config.system_prompt, &messages, &descriptors);
         let mut tool_call_stream_state = StreamingToolCallState::default();

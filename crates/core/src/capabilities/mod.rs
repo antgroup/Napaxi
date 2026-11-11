@@ -36,7 +36,8 @@ pub use types::{
 pub(crate) use definitions::platform_tool_capability_id;
 #[allow(unused_imports)]
 pub use definitions::{
-    ExecApprovalMode, ExecPolicyOverride, ExecSecurityLevel, ExecSecurityPolicy, definitions,
+    ExecApprovalMode, ExecCeiling, ExecPolicyOverride, ExecSecurityLevel, ExecSecurityPolicy,
+    definitions,
 };
 #[allow(unused_imports)]
 pub use resolve::{
@@ -60,9 +61,9 @@ pub use scenarios::{
 pub(crate) use admission::admit_tool_invocation_typed;
 #[allow(unused_imports)]
 pub(crate) use admission::{
-    admit_agent_engine, admit_provider, admit_service, admit_service_for_config,
-    admit_tool_descriptor, admit_tool_descriptor_for_config, admit_tool_invocation,
-    admit_tool_invocation_for_config,
+    admit_agent_engine, admit_provider, admit_provider_with_model, admit_service,
+    admit_service_for_config, admit_tool_descriptor, admit_tool_descriptor_for_config,
+    admit_tool_invocation, admit_tool_invocation_for_config,
 };
 #[cfg(test)]
 pub(crate) use decisions::ADMISSION_DECISION_BUFFER_CAP;
@@ -71,7 +72,11 @@ pub use decisions::{
     AdmissionDecisionRecord, apply_exec_policy_layer, clear_admission_decisions,
     recent_admission_decisions,
 };
-pub(crate) use decisions::{AdmissionSink, new_admission_sink, sink_snapshot, with_admission_sink};
+#[allow(unused_imports)]
+pub(crate) use decisions::{
+    AdmissionSink, apply_exec_ceiling, clear_model_deny_set, deny_model, is_model_denied,
+    new_admission_sink, sink_snapshot, with_admission_sink,
+};
 pub use hooks::{CapabilityPolicyHook, PolicyHookGuard, register_policy_hook};
 
 #[cfg(test)]

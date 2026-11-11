@@ -1,7 +1,8 @@
 //! Tool listing, descriptor enumeration, remote tool loading, and tool calls.
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 
@@ -18,6 +19,49 @@ use super::types::{McpServer, McpTool, McpTransport};
 /// hammered on every `list_tools` / `tool_descriptors` call while still
 /// letting it recover (e.g. after the server comes back online).
 const TOOLS_RETRY_BACKOFF: Duration = Duration::from_secs(60);
+
+// Monotonic clock policy (AC-3 / monotonic 域审计, DIMA-2026110600120401874):
+//
+// `McpServer::last_tools_attempt_at` is persisted to disk as RFC3339 —
+// `chrono::Utc::now()` is the correct clock there (cross-process). The
+// `should_retry_lazy_load` elapsed decision, however, lives entirely
+// in-process: it asks "have enough monotonic seconds passed since the
+// last attempt on THIS server in THIS process?" That question belongs to
+// `std::time::Instant`, NOT `chrono::Utc::now()`, mirroring the precedent
+// in `crates/core/src/evolution/store.rs` (`monotonic_anchors`).
+//
+// The wall-clock timestamp stays on disk for cross-process back-off
+// after a restart; the in-process anchor below is preferred when present
+// (this process performed a recent attempt for the same server) and the
+// wall-clock stays as the fallback when the process was just restarted
+// and has no anchor recorded yet. See `monotonic_lazy_attempt_anchors`
+// and the audit report in `crates/core/src/evolution/mod.rs`.
+
+fn monotonic_lazy_attempt_anchors() -> &'static Mutex<HashMap<String, Instant>> {
+    static ANCHORS: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    ANCHORS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Record (or refresh) the in-process monotonic anchor for the lazy-load
+/// attempt of the given server, keyed by `"<user_id>::<server_name>"`.
+fn record_lazy_load_monotonic_anchor(server: &McpServer, at: Instant) {
+    if let Ok(mut anchors) = monotonic_lazy_attempt_anchors().lock() {
+        anchors.insert(lazy_anchor_key(server), at);
+    }
+}
+
+/// Drop the monotonic anchor for `server` — used on the success path
+/// where retries are no longer throttled (the server successfully listed
+/// its tools, the next call should retry eagerly).
+fn clear_lazy_load_monotonic_anchor(server: &McpServer) {
+    if let Ok(mut anchors) = monotonic_lazy_attempt_anchors().lock() {
+        anchors.remove(&lazy_anchor_key(server));
+    }
+}
+
+fn lazy_anchor_key(server: &McpServer) -> String {
+    format!("{}::{}", server.user_id, server.name)
+}
 
 pub fn list_tools(files_dir: &str, server_name: &str, user_id: &str) -> String {
     let user_id = default_user(user_id);
@@ -420,7 +464,22 @@ fn ensure_active_tools_loaded_blocking(
 /// back-off window ([`TOOLS_RETRY_BACKOFF`]). A server that just failed its
 /// `tools/list` call is not retried within the window — the cached
 /// `tools_error` keeps adapters informed without re-hitting the network.
+///
+/// Clock policy (AC-3, DIMA-2026110600120401874): prefers the in-process
+/// monotonic anchor (`record_lazy_load_monotonic_anchor`) when this
+/// process made a recent attempt for `server`; falls back to the persisted
+/// wall-clock `last_tools_attempt_at` only when the anchor does not exist
+/// (process restarted without an in-process attempt for this server).
 fn should_retry_lazy_load(server: &McpServer) -> bool {
+    // Preferred: monotonic in-process elapsed.
+    if let Ok(anchors) = monotonic_lazy_attempt_anchors().lock()
+        && let Some(anchor) = anchors.get(&lazy_anchor_key(server))
+    {
+        return anchor.elapsed() >= TOOLS_RETRY_BACKOFF;
+    }
+    // Fallback: wall-clock RFC3339 from disk (after a process restart the
+    // monotonic anchor is gone; the persisted timestamp keeps the back-off
+    // window honored so a restart cannot hammer the server).
     match &server.last_tools_attempt_at {
         None => true,
         Some(timestamp) => {
@@ -495,6 +554,11 @@ async fn ensure_server_tools_loaded(
     server.tools_loaded = true;
     server.tools_error = None;
     server.last_tools_attempt_at = Some(Utc::now().to_rfc3339());
+    // The server successfully listed its tools — drop the monotonic anchor
+    // so the next failure starts a fresh back-off window (this is the
+    // success path that removes the throttle, not the failure path that
+    // populates it).
+    clear_lazy_load_monotonic_anchor(server);
     *state = fresh;
     if !save_state(files_dir, state) {
         return Err("Failed to save MCP servers".to_string());
@@ -515,6 +579,12 @@ fn record_lazy_load_failure(
     server.tools_loaded = false;
     server.tools_error = Some(error);
     server.last_tools_attempt_at = Some(Utc::now().to_rfc3339());
+    // Record the in-process monotonic anchor so the next
+    // `should_retry_lazy_load` consults `Instant::elapsed()` rather than
+    // the persisted RFC3339 timestamp (wall-clock can jump backward under
+    // host time sync). The disk timestamp stays for cross-process fall-
+    // back. See the module-level clock-policy comment.
+    record_lazy_load_monotonic_anchor(server, Instant::now());
     let _ = save_state(files_dir, state);
 }
 

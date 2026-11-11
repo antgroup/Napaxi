@@ -408,6 +408,7 @@ fn display_uses_newer_preflight_when_provider_snapshot_is_stale() {
             reasoning_tokens: 0,
             total_tokens: Some(10_000),
             updated_at: "2026-06-01T00:00:00Z".to_string(),
+            message_count: 0,
         }),
         preflight_snapshot: Some(test_preflight_snapshot(
             16_000,
@@ -723,6 +724,7 @@ fn status_prefers_provider_usage_over_preflight_and_legacy() {
             reasoning_tokens: None,
             total_tokens: Some(12_700),
         }),
+        raw_history.len(),
     );
 
     let value: serde_json::Value = serde_json::from_str(&context_status_for_config(
@@ -767,6 +769,7 @@ fn status_marks_snapshots_stale_after_model_switch() {
             reasoning_tokens: None,
             total_tokens: Some(10_000),
         }),
+        raw_history.len(),
     );
 
     config.model = "model-b".to_string();

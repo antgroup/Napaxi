@@ -1450,3 +1450,197 @@ mod exec_policy_layer_tests {
         assert_eq!(merged.security_level, Some(ExecSecurityLevel::Permissive));
     }
 }
+
+// ============================================================================
+// AC-2 — per-provider/model exec ceiling (DIMA-2026110600120401874)
+// ============================================================================
+//
+// Covers:
+// - `apply_exec_ceiling` strictest-lattice merge for each ceiling pair.
+// - `deny_model`/`is_model_denied` registry isolation — a reviewer denial
+//   for `(openai, gpt-4.1)` does NOT block `(openai, gpt-4o)`.
+// - `admit_provider_with_model` propagates the reviewer model deny as the
+//   `capability_denied`-shaped error while keeping other models admitted.
+
+mod exec_ceiling_tests {
+    use super::super::{
+        ExecCeiling, ExecPolicyOverride, ExecSecurityPolicy, admit_provider_with_model,
+        apply_exec_ceiling, clear_model_deny_set, deny_model, is_model_denied,
+    };
+
+    fn global(provider: &str, model: &str, ceiling: ExecCeiling) -> ExecSecurityPolicy {
+        ExecSecurityPolicy {
+            provider: Some(provider.to_string()),
+            model: Some(model.to_string()),
+            exec_ceiling: Some(ceiling),
+            ..ExecSecurityPolicy::default()
+        }
+    }
+
+    fn agent(provider: &str, model: &str, ceiling: ExecCeiling) -> ExecPolicyOverride {
+        ExecPolicyOverride {
+            agent_id: "agent-a".to_string(),
+            provider: Some(provider.to_string()),
+            model: Some(model.to_string()),
+            exec_ceiling: Some(ceiling),
+            ..ExecPolicyOverride::default()
+        }
+    }
+
+    fn every_ceiling() -> [ExecCeiling; 5] {
+        [
+            ExecCeiling::Deny,
+            ExecCeiling::Allowlist,
+            ExecCeiling::Ask,
+            ExecCeiling::Auto,
+            ExecCeiling::Full,
+        ]
+    }
+
+    /// AC-2 strictest lattice: the more restrictive of two ceilings wins
+    /// for every ordered pair. The lattice is Deny < Allowlist < Ask <
+    /// Auto < Full.
+    #[test]
+    fn apply_exec_ceiling_strictest_picks_more_restrictive() {
+        let order = [
+            ExecCeiling::Deny,
+            ExecCeiling::Allowlist,
+            ExecCeiling::Ask,
+            ExecCeiling::Auto,
+            ExecCeiling::Full,
+        ];
+        // Direct variant ordering: strictest(a, b) == min(a, b) along the
+        // lattice, and the operation is symmetric.
+        for a in every_ceiling() {
+            for b in every_ceiling() {
+                let expected = order[order
+                    .iter()
+                    .position(|c| *c == a)
+                    .unwrap()
+                    .min(order.iter().position(|c| *c == b).unwrap())];
+                assert_eq!(
+                    a.strictest(b),
+                    expected,
+                    "strictest({a:?}, {b:?}) should be {expected:?}"
+                );
+                assert_eq!(
+                    b.strictest(a),
+                    expected,
+                    "strictest({b:?}, {a:?}) should also be {expected:?} (symmetric)"
+                );
+            }
+        }
+    }
+
+    /// Two layers both matching the requested (provider, model): the agent
+    /// override tightens a Full global to Deny — the strictest of the two
+    /// matching ceilings wins.
+    #[test]
+    fn apply_exec_ceiling_tightens_when_agent_more_restrictive() {
+        let g = global("openai", "gpt-4.1", ExecCeiling::Full);
+        let a = agent("openai", "gpt-4.1", ExecCeiling::Deny);
+        assert_eq!(
+            apply_exec_ceiling(&g, &a, "openai", "gpt-4.1", false),
+            ExecCeiling::Deny
+        );
+    }
+
+    /// Global ceiling scoped to other model does NOT bleed into the
+    /// requested pair when neither layer matches (default loosest unless
+    /// restrict-only).
+    #[test]
+    fn apply_exec_ceiling_unmatched_layer_is_full_by_default() {
+        let g = global("anthropic", "claude-3", ExecCeiling::Deny);
+        let a = ExecPolicyOverride::default();
+        assert_eq!(
+            apply_exec_ceiling(&g, &a, "openai", "gpt-4o", false),
+            ExecCeiling::Full,
+            "no matching layer ⇒ loosest under non-restrict mode"
+        );
+        assert_eq!(
+            apply_exec_ceiling(&g, &a, "openai", "gpt-4o", true),
+            ExecCeiling::Deny,
+            "restrict-only (miss = deny) ⇒ Deny when no layer matches"
+        );
+    }
+
+    /// Wildcard (`None` provider / `None` model) on the global layer still
+    /// matches every requested pair.
+    #[test]
+    fn apply_exec_ceiling_wildcard_global_matches_all() {
+        let g = ExecSecurityPolicy {
+            exec_ceiling: Some(ExecCeiling::Allowlist),
+            ..ExecSecurityPolicy::default()
+        };
+        let a = ExecPolicyOverride::default();
+        assert_eq!(
+            apply_exec_ceiling(&g, &a, "openai", "gpt-4o", false),
+            ExecCeiling::Allowlist
+        );
+        assert_eq!(
+            apply_exec_ceiling(&g, &a, "anthropic", "claude-3", false),
+            ExecCeiling::Allowlist
+        );
+    }
+
+    /// AC-2 — a global `ExecCeiling::Deny` for (openai, gpt-4.1) resolves to
+    /// Deny; combined with `admit_provider_with_model` after a reviewer
+    /// records that denial, the admission gate returns the
+    /// `capability denied by policy` error shape (parity with #193566).
+    #[test]
+    fn admit_provider_under_global_deny_returns_denied() {
+        clear_model_deny_set();
+        // First prove the ceiling resolution would return Deny for this pair.
+        let g = global("openai", "gpt-4.1", ExecCeiling::Deny);
+        let a = ExecPolicyOverride::default();
+        let ceiling = apply_exec_ceiling(&g, &a, "openai", "gpt-4.1", true);
+        assert_eq!(ceiling, ExecCeiling::Deny);
+        // Now simulate the reviewer recording that deny (the host exec
+        // policy bridge calls `deny_model` when a Ceiling::Deny resolves).
+        deny_model("openai", "gpt-4.1", "global ceiled");
+        let err = admit_provider_with_model("openai", "gpt-4.1")
+            .expect_err("capped (provider, model) must surface capability_denied");
+        assert!(
+            err.contains("capability denied by policy"),
+            "expected capability_denied shape, got: {err}"
+        );
+        assert!(
+            err.contains("exec ceiling: model gpt-4.1 denied by reviewer"),
+            "expected reviewer-deny reason, got: {err}"
+        );
+        clear_model_deny_set();
+    }
+
+    /// AC-2 — reviewer denial only blocks the capped `(provider, model)`
+    /// pair: although `("openai", "gpt-4.1")` is denied, `admit_provider_with_model
+    /// ("openai", "gpt-4o")` still admits. Capped model stays denied.
+    #[test]
+    fn admit_provider_reviewer_deny_blocks_only_capped_model() {
+        clear_model_deny_set();
+        // Sanity: nothing is denied before the reviewer writes.
+        assert!(!is_model_denied("openai", "gpt-4.1"));
+        assert!(!is_model_denied("openai", "gpt-4o"));
+        // Reviewer caps gpt-4.1 only.
+        deny_model("openai", "gpt-4.1", "tier3_reviewer_deny");
+        assert!(is_model_denied("openai", "gpt-4.1"));
+        assert!(
+            !is_model_denied("openai", "gpt-4o"),
+            "reviewer denial is per-(provider, model); gpt-4o must stay admitted"
+        );
+        // The non-capped model still admits (provider-level admission
+        // assumes the openai route resolves successfully via the policy
+        // hooks in this single-process test — no deny-hook installed).
+        assert!(
+            admit_provider_with_model("openai", "gpt-4o").is_ok(),
+            "non-capped model on the same provider must still admit"
+        );
+        // The capped model returns the reviewer-deny error.
+        let err = admit_provider_with_model("openai", "gpt-4.1")
+            .expect_err("capped model must surface a deny");
+        assert!(
+            err.contains("capability denied by policy"),
+            "capped model should produce capability_denied shape, got: {err}"
+        );
+        clear_model_deny_set();
+    }
+}

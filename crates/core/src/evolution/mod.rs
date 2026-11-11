@@ -1,6 +1,69 @@
 //! Mobile memory evolution glue.
 //!
 //! This module adapts `napaxi-evolution` to the file-backed mobile runtime.
+//!
+//! # Monotonic clock domain audit (AC-3, DIMA-2026110600120401874)
+//!
+//! Audit conclusion from a full-repo `Utc::now()` sweep at sites where the
+//! call lands in an elapsed / remaining / recovery decision (vs. a purely
+//! display / persistence field). The lattice is:
+//! - **In-process elapsed/remaining/recovery** — MUST use
+//!   `std::time::Instant::now()` + `Instant::elapsed()`. Wall-clock can
+//!   jump backwards under host NTP / user-set-time, leaking a stale
+//!   recovery / no-retry window.
+//! - **Cross-process persisted fields** — MUST stay on
+//!   `chrono::Utc::now()` (RFC3339). `Instant` is process-local and
+//!   cannot round-trip through disk.
+//!
+//! ## Already on monotonic (no change)
+//! - `crates/core/src/evolution/store.rs::refresh_stale_runs` —
+//!   `peek_monotonic_anchor(run_id)` + `Instant::elapsed()` (with a
+//!   wall-clock fallback when the anchor is missing after a restart).
+//!   `record_monotonic_anchor` / `take_monotonic_anchor` live in
+//!   `store.rs:34 / 42`; `queue.rs::create_queued_run_record` /
+//!   `mark_run_started` record anchors at the run lifecycle points.
+//! - `crates/core/src/mcp/oauth.rs::oauth_token_needs_refresh` and
+//!   surrounding helpers — kept on `chrono::Utc::now()` BY DESIGN (the
+//!   OAuth tokens cross process boundaries via RFC3339). The module
+//!   documents the policy at the top of `mcp/oauth.rs`.
+//!
+//! ## Fixed in this round (AC-3)
+//! - `crates/core/src/mcp/tools.rs::should_retry_lazy_load` elapsed
+//!   decision — switched from `Utc::now().signed_duration_since(parsed)`
+//!   to a process-local `monotonic_lazy_attempt_anchors` map (keyed by
+//!   `"<user_id>::<server_name>"`), with the persisted
+//!   `last_tools_attempt_at` RFC3339 kept on disk for the cross-process
+//!   fallback. Functionally identical to the evolution/queue precedent.
+//!
+//! ## Remaining wall-clock sites — RECORDED regression baseline (TODO
+//! #193070)
+//! The sites below stay on `chrono::Utc::now()` because their values
+//! cross process boundaries (persisted as RFC3339). They are listed here
+//! as the regression baseline so a future change can quickly tell
+//! "wall-clock eligible" from "needs monotonic" sites.
+//! - `crates/core/src/a2a/local.rs:804`, `a2a/mod.rs:342 / 696` — A2A
+//!   `expires_at` RFC3339 windows, cross-process by design.
+//! - `crates/core/src/agents/agent_app/mod.rs:906 / 912` — agent app
+//!   action expiry persisted as RFC3339.
+//! - `crates/core/src/channel/*` — channel routing emits / persists
+//!   timestamps used by display + cross-process recovery; the in-process
+//!   waiting paths there use `Instant::elapsed()` already (see
+//!   `channel_agent/state.rs`).
+//! - `crates/core/src/agent_runtime/runs.rs:432`,
+//!   `automation/mod.rs:34`, `automation/runner.rs:545`,
+//!   `context/compaction.rs:11 / 805`, `context/resolver.rs:126`,
+//!   `evolution/executor.rs:222 / 265` — all timestamp record / display
+//!   fields (RFC3339). No elapsed/remaining/recovery decision is taken
+//!   from these clocks: they are persisted surface values.
+//! - `crates/core/src/turn/orchestration/*.rs::record_last_prompt_snapshot`
+//!   — persists `updated_at` RFC3339; the elapsed-policy reason for a
+//!   snapshot lives in `display::provider_snapshot_is_current`, which
+//!   already runs off `chrono::Duration` against persisted timestamps
+//!   (cross-process by design).
+//!
+//! When a new elapsed/recovery timer is added to any of the above (or a
+//! new module), it MUST join the monotonic anchor family — `Utc::now()`
+//! is only valid for the persistence / display side of that field.
 
 pub mod curator;
 mod executor;

@@ -3,6 +3,31 @@
 //! All math used to decide whether a turn fits within the model's context
 //! window — pre-call estimates, in-place safety margins, route decisions,
 //! and per-model window defaults — lives here.
+//!
+//! # Prompt usage authoritative source (AC-1, DIMA-2026110600120401874)
+//!
+//! Audit conclusion (estimator vs. real usage across the gates):
+//! - **Display layer** (`display.rs::display_context_usage`): already uses
+//!   [`super::state::LastPromptSnapshot`] as the authoritative source when
+//!   the provider snapshot is fresh (`provider_snapshot_is_current`); the
+//!   "provider" source is preferred over the preflight estimate.
+//! - **Turn-start admission / preflight snapshot**
+//!   (`budget.rs::build_preflight_snapshot`): sticks to the ESTIMATE path —
+//!   no real `prompt_tokens` are available yet at preflight time, by
+//!   design.
+//! - **Mid-turn hard precheck** (`mid_turn_hard_precheck`, called from
+//!   `tools::loop.rs::enforce_mid_turn_hard_precheck`): PRE-FIX used the
+//!   pure `estimate_messages_tokens` baseline. POST-FIX takes
+//!   `max(estimate, last_real_prompt_usage)` when a fresh
+//!   `LastPromptSnapshot` is available — the real per-provider prompt
+//!   usage is the authoritative source; the estimator is the fallback.
+//!   Freshness gates: `config_fingerprint` match (provider/model/window/
+//!   reserve) and `messages.len() >= snapshot.message_count` (no shrink
+//!   since the snapshot was taken). On any miss the precheck silently
+//!   falls back to the pure estimate — the new path can only tighten the
+//!   check, never loosen it. See `super::fresh_last_prompt_tokens` for
+//!   the validation and `tools/loop.rs::enforce_mid_turn_hard_precheck`
+//!   for the `max(estimate, real)` plumbing.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};

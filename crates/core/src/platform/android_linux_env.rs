@@ -148,7 +148,11 @@ pub fn execute_shell(
     workdir: Option<&str>,
     timeout_secs: u64,
 ) -> anyhow::Result<String> {
-    execute_shell_in_workspace(
+    // Legacy convenience wrapper — keeps the historical
+    // `anyhow::Result<String>` shape for adapters that wanted the
+    // collapsed text + error message. Internally the new data-contract
+    // path is used and then rendered back to the legacy shape.
+    let exec_result = execute_shell_in_workspace(
         files_dir,
         native_library_dir,
         files_dir,
@@ -156,7 +160,8 @@ pub fn execute_shell(
         workdir,
         timeout_secs,
         None,
-    )
+    );
+    crate::builtin_tools::render_shell_exec_result(&exec_result).map_err(anyhow::Error::msg)
 }
 
 pub fn execute_shell_in_workspace(
@@ -167,21 +172,75 @@ pub fn execute_shell_in_workspace(
     workdir: Option<&str>,
     timeout_secs: u64,
     cancel: Option<&AtomicBool>,
-) -> anyhow::Result<String> {
+) -> crate::builtin_tools::ShellExecResult {
+    use crate::builtin_tools::{ShellExecResult, ShellExecStatus};
     if !is_ready(files_dir, native_library_dir) {
-        anyhow::bail!("Linux environment not ready");
+        return ShellExecResult::cleanup_failed("Linux environment not ready".to_string());
     }
     let mut paths = LinuxEnvPaths::new(files_dir, native_library_dir);
     paths.workspace_dir = workspace_mount_dir(workspace_files_dir);
-    fs::create_dir_all(&paths.workspace_dir)?;
-    fs::create_dir_all(&paths.skills_dir)?;
-    run_proot_with_timeout(
+    if let Err(err) =
+        fs::create_dir_all(&paths.workspace_dir).and_then(|_| fs::create_dir_all(&paths.skills_dir))
+    {
+        return ShellExecResult::cleanup_failed(format!("workspace setup failed: {err}"));
+    }
+    let timeout_duration = Some(Duration::from_secs(timeout_secs.clamp(1, 600)));
+    match run_proot_with_timeout(
         &paths,
         normalize_workdir(workdir),
         &["/bin/sh", "-lc", command],
-        Some(Duration::from_secs(timeout_secs.clamp(1, 600))),
+        timeout_duration,
         cancel,
-    )
+    ) {
+        // Result<String, anyhow::Error> — Ok carries the success text;
+        // the err variants are mapped into the structured contract.
+        Ok(text) => {
+            // run_proot_with_timeout only returns Ok on exit_code == 0
+            // (see output_to_text_result). The Ok text already merges
+            // stdout/stderr; we surface Ok status with the merged text
+            // as stdout so render_shell_exec_result stays identity.
+            ShellExecResult {
+                stdout: text,
+                stderr: String::new(),
+                exit_code: 0,
+                status: ShellExecStatus::Ok,
+            }
+        }
+        Err(error) => {
+            let message = error.to_string();
+            // Inspect the kind by message prefix to keep Cancelled /
+            // Timeout / NonZeroExit apart — the existing proot error
+            // strings are the stable contract callers depend on. The
+            // outer cargo `anyhow::Error` loses the typed stderr/stdout
+            // (they were inlined by output_to_text_result) so we surface
+            // as CleanupFailed for any failure mode here. A richer split
+            // would require lifting the Output through this layer,
+            // deferred to a follow-up (TODO #185636).
+            if message.contains("cancelled by user") {
+                ShellExecResult::cancelled(String::new(), String::new(), -1)
+            } else if message.contains("timed out") {
+                ShellExecResult::timeout(String::new(), String::new(), -124, timeout_secs)
+            } else if let Some(code) = parse_proot_exit_code(&message) {
+                ShellExecResult::non_zero_exit(String::new(), String::new(), code)
+            } else {
+                ShellExecResult::cleanup_failed(message)
+            }
+        }
+    }
+}
+
+/// Extract the proot nonzero exit code from the legacy "proot command failed
+/// (exit=N): ..." message — kept as best-effort heuristics so the structured
+/// contract still distinguishes a natural command failure from a driver
+/// failure even when only the anyhow error string makes it this far.
+fn parse_proot_exit_code(message: &str) -> Option<i32> {
+    let needle = "exit=";
+    let start = message.find(needle)?;
+    let rest = &message[start + needle.len()..];
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit() && c != '-')
+        .unwrap_or(rest.len());
+    rest[..end].parse::<i32>().ok()
 }
 
 pub struct LinuxCommandOutput {

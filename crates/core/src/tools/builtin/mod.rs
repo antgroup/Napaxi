@@ -30,6 +30,14 @@ pub(crate) use shell_policy::{GitShellIntent, git_shell_intent};
 // authoritative contract a host-injected descriptor must not loosen.
 pub(crate) use mcp::mcp_management_descriptors;
 pub(crate) use shell::shell_tool_descriptor;
+// Re-export the crate-private exec-result data contract so the
+// platform env modules (`android_linux_env`, `ios_qemu_env`) and tests
+// can construct `ShellExecResult` / `ShellExecStatus` without going
+// through the FRB boundary. The contract is intentionally crate-private
+// (#193802 gap, AC-4 DIMA-2026110600120401874) — `render_shell_exec_result`
+// is the LLM-facing adapter.
+#[allow(unused_imports)]
+pub(crate) use shell::{ShellExecResult, ShellExecStatus, render_shell_exec_result};
 
 use crate::tool_loop::InternalToolHandler;
 use crate::tool_registry::{ToolDescriptor, ToolRequestBridge};

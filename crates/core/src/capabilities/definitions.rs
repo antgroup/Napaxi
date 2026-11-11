@@ -591,6 +591,16 @@ pub struct ExecSecurityPolicy {
     pub denied_tools: Option<Vec<String>>,
     pub approval_mode: Option<ExecApprovalMode>,
     pub security_level: Option<ExecSecurityLevel>,
+    /// Per-provider/model exec ceiling. `None` (default) means "no ceiling
+    /// declared for this scope" so an older host JSON still deserializes
+    /// cleanly without enabling the ceiling (the admission gate then
+    /// falls back to the allow/deny filtering already in place).
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub exec_ceiling: Option<ExecCeiling>,
     /// Escape paths a hostile override might inject to soften the policy.
     /// Always stripped by `apply_exec_policy_layer` regardless of source.
     #[serde(skip_serializing)]
@@ -609,6 +619,81 @@ pub struct ExecPolicyOverride {
     pub denied_tools: Option<Vec<String>>,
     pub approval_mode: Option<ExecApprovalMode>,
     pub security_level: Option<ExecSecurityLevel>,
+    /// Per-provider/model exec ceiling bound to this agent override.
+    /// Defaults to `None` so legacy agent override JSON deserializes
+    /// without enabling the ceiling.
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub exec_ceiling: Option<ExecCeiling>,
     #[serde(skip_serializing)]
     pub bypass_strings: Option<Vec<String>>,
+}
+
+/// Per-provider/model exec ceiling (AC-2, DIMA-2026110600120401874,
+/// re-implemented from the OpenClaw #193566 design notes).
+///
+/// The ceiling is the most-restrictive posture allowed for an
+/// `(provider, model)` pair. Layering rules in
+/// [`super::decisions::apply_exec_ceiling`]:
+/// - When both the global policy and the agent override declare a ceiling
+///   scope that matches the requested `(provider, model)`,
+///   [`ExecCeiling::strictest`] picks the more restrictive one.
+/// - When only one side declares a matching ceiling, that side wins.
+/// - When neither side declares a matching ceiling under the
+///   `restrict-only` (miss = deny) read, the caller surfaces
+///   [`ExecCeiling::Deny`] (the "miss is deny" semantic from #193566).
+///
+/// `Deny < Allowlist < Ask < Auto < Full` — `Deny` blocks the model
+/// unconditionally; `Allowlist` permits only allow-listed tools;
+/// `Ask` raises the host approval prompt each invocation; `Auto` runs
+/// auto-approved but still gated by `apply_exec_policy_layer`; `Full` is
+/// unrestricted (still subject to the global tool deny-list).
+///
+/// The ordering is the slice new types use, NOT `ExecApprovalMode` /
+/// `ExecSecurityLevel` (those predate the ceiling feature and stay
+/// `#[allow(dead_code)]` for their own consumers). See
+/// `THIRD-PARTY-LICENSES.md` — no OpenClaw source ported.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum ExecCeiling {
+    /// Deny the (provider, model) pair unconditionally — the strictest
+    /// posture. Reserved for models marked dangerous / untrusted.
+    Deny,
+    /// Allow only tools on the policy allow-list; everything else is
+    /// denied without prompting.
+    Allowlist,
+    /// Each tool invocation prompts the host for approval (no caching).
+    Ask,
+    /// In-scope tools auto-run without prompting (still subject to
+    /// `apply_exec_policy_layer` allow/deny filtering).
+    #[default]
+    Auto,
+    /// Unrestricted; the model runs through the standard admit chain
+    /// (the loosest posture).
+    Full,
+}
+
+impl ExecCeiling {
+    /// Pick the more restrictive of two ceilings — the partial order is
+    /// `Deny < Allowlist < Ask < Auto < Full` (smaller discriminant =
+    /// stricter). Used by [`super::decisions::apply_exec_ceiling`] when
+    /// merging global + agent override ceilings.
+    #[allow(dead_code)]
+    pub fn strictest(self, other: ExecCeiling) -> ExecCeiling {
+        // The derive order encodes the strictness lattice directly, so
+        // `min` on the discriminant is the same as the lattice meet.
+        // Discriminants are intentionally 0..=4 (Deny < Allowlist < Ask <
+        // Auto < Full); we keep the explicit match so a future re-order
+        // of variants cannot accidentally flip the lattice.
+        match (self, other) {
+            (ExecCeiling::Deny, _) | (_, ExecCeiling::Deny) => ExecCeiling::Deny,
+            (ExecCeiling::Allowlist, _) | (_, ExecCeiling::Allowlist) => ExecCeiling::Allowlist,
+            (ExecCeiling::Ask, _) | (_, ExecCeiling::Ask) => ExecCeiling::Ask,
+            (ExecCeiling::Auto, _) | (_, ExecCeiling::Auto) => ExecCeiling::Auto,
+            (ExecCeiling::Full, ExecCeiling::Full) => ExecCeiling::Full,
+        }
+    }
 }

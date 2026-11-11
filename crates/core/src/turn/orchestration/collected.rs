@@ -252,6 +252,7 @@ where
                 &prepared.thread_id,
                 &prepared.config,
                 turn_result.usage.as_ref(),
+                prepared.raw_history.len(),
             );
             let outcome = finish_successful_turn(
                 &files_dir,
@@ -418,6 +419,7 @@ where
                             &retry_prepared.thread_id,
                             &retry_prepared.config,
                             turn_result.usage.as_ref(),
+                            retry_prepared.raw_history.len(),
                         );
                         let outcome = finish_successful_turn(
                             &files_dir,
