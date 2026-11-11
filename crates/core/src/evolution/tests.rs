@@ -442,6 +442,102 @@ fn refresh_stale_runs_lenient_when_wall_clock_unparseable_and_no_anchor() {
     );
 }
 
+#[test]
+fn refresh_stale_runs_decision_is_elapsed_based_independent_of_wall_clock() {
+    // DIMA #2026111000120512225 §2.B regression test (mapping OpenClaw
+    // #196093). The stale decision under a monotonic anchor must be purely
+    // `anchor.elapsed() >= RUN_STALE_AFTER_MINUTES` and must NOT move with
+    // the persisted wall-clock timestamps. We pin the two polarities in
+    // one test using two runs sharing the SAME deliberately-misleading
+    // wall-clock coupon (both timestamps far in the future — wall clock
+    // alone would NEVER mark either stale): one run carries a fresh
+    // anchor (kept alive), the other an aged anchor (marked failed). If
+    // the decision ever started consulting wall clock, both runs would
+    // be kept alive and the aged assertion would fail.
+    let tmp = tempfile::tempdir().unwrap();
+    let files_dir = tmp.path().to_str().unwrap();
+    let future_queued = (Utc::now() + Duration::minutes(RUN_STALE_AFTER_MINUTES + 10)).to_rfc3339();
+    let future_started = (Utc::now() + Duration::minutes(RUN_STALE_AFTER_MINUTES + 5)).to_rfc3339();
+
+    upsert_run_record(
+        files_dir,
+        EvolutionRunRecord {
+            id: "elapsed-fresh".to_string(),
+            agent_id: "napaxi".to_string(),
+            thread_id: "thread".to_string(),
+            review_type: "memory".to_string(),
+            status: EvolutionRunStatus::Running,
+            queued_at: future_queued.clone(),
+            started_at: Some(future_started.clone()),
+            completed_at: None,
+            suggestions_count: 0,
+            auto_applied_count: 0,
+            pending_count: 0,
+            error: None,
+        },
+    )
+    .unwrap();
+    record_monotonic_anchor("elapsed-fresh", std::time::Instant::now());
+
+    let stale_threshold_secs = (RUN_STALE_AFTER_MINUTES as u64 + 1) * 60;
+    let Some(stale_anchor) =
+        std::time::Instant::now().checked_sub(std::time::Duration::from_secs(stale_threshold_secs))
+    else {
+        eprintln!(
+            "[skip] refresh_stale_runs_decision_is_elapsed_based_independent_of_wall_clock: \
+             monotonic clock too young for synthetic stale anchor"
+        );
+        // Still reclaim the fresh anchor so we do not leak into other tests.
+        let _ = take_monotonic_anchor("elapsed-fresh");
+        return;
+    };
+    upsert_run_record(
+        files_dir,
+        EvolutionRunRecord {
+            id: "elapsed-aged".to_string(),
+            agent_id: "napaxi".to_string(),
+            thread_id: "thread".to_string(),
+            review_type: "memory".to_string(),
+            status: EvolutionRunStatus::Running,
+            queued_at: future_queued,
+            started_at: Some(future_started),
+            completed_at: None,
+            suggestions_count: 0,
+            auto_applied_count: 0,
+            pending_count: 0,
+            error: None,
+        },
+    )
+    .unwrap();
+    record_monotonic_anchor("elapsed-aged", stale_anchor);
+
+    let json = list_evolution_runs(files_dir, "[]");
+    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+    let status_of = |id: &str| -> String {
+        parsed
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|record| record["id"] == id)
+            .map(|record| record["status"].as_str().unwrap().to_string())
+            .unwrap_or_else(|| panic!("record {id} not found in runs"))
+    };
+    assert_eq!(
+        status_of("elapsed-fresh"),
+        "running",
+        "fresh monotonic anchor keeps the run alive even if wall clock alone would too"
+    );
+    assert_eq!(
+        status_of("elapsed-aged"),
+        "failed",
+        "aged monotonic anchor marks the run stale even with a future-dated wall clock"
+    );
+    // Sanitize: the aged anchor should be reclaimed by the stale path. The
+    // fresh anchor stayed in the map — clear it so it does not leak.
+    assert!(take_monotonic_anchor("elapsed-aged").is_none());
+    let _ = take_monotonic_anchor("elapsed-fresh");
+}
+
 #[tokio::test]
 async fn skill_evolution_state_counts_tool_calls_until_interval() {
     let tmp = tempfile::tempdir().unwrap();

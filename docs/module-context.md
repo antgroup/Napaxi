@@ -44,3 +44,16 @@ this module's compaction to shrink history before retrying.
   in sync.
 - New status fields shown to adapters: extend `state.rs` and `display.rs`
   together so persisted state and rendered status agree.
+
+## Default window fallback baseline
+
+`model_context_window_info` (`budget.rs`) returns
+`DEFAULT_CONTEXT_WINDOW_TOKENS` (128k) with source `"default"` when a model
+is not in the whitelist or no provider is explicit. This is the
+regression baseline for the compaction default-window fallback audit
+(DIMA #2026111000120512225 §2.A, mapping OpenClaw #195307): Napaxi routes
+every window decision through the single `context_window_details` helper,
+so it does not hit the OpenClaw chat/command-path catalog split, but the
+same-shaped silent-fallback risk lives in this default. Tests in
+`budget.rs::model_window_fallback_tests` pin both the whitelisted
+large-window resolution and the unknown-model 128k fallback.
