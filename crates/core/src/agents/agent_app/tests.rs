@@ -1,8 +1,11 @@
 //! Behavioral coverage for the Agent App runtime: package registration,
 //! action proposals, signing, persistence, and triggers.
 
+use super::signing::trigger_signature_payload;
+use super::trigger::accept_trigger;
+use super::types::AgentTriggerRequest;
 use super::*;
-use crate::crypto::{canonical_json, sha256_base64_no_pad};
+use crate::crypto::{canonical_json, hmac_sha256_base64_no_pad, sha256_base64_no_pad};
 
 /// Shared cross-port signing fixtures file. Lives at
 /// `packages/agent_provider/shared/signing_fixtures.json` and is consumed by
@@ -231,6 +234,7 @@ fn build_proposal_from_fixture(value: &serde_json::Value) -> ActionProposal {
             .to_string(),
         signature_algorithm: SIGNATURE_ALGORITHM_HMAC_SHA256_V1.to_string(),
         signature: None,
+        signature_protocol_version: super::SIGNATURE_PROTOCOL_VERSION_V2,
     }
 }
 
@@ -936,6 +940,7 @@ fn accepts_signed_agent_trigger_and_rejects_replay() {
         host_instance_id: "host-instance-1".to_string(),
         signature_algorithm: SIGNATURE_ALGORITHM_HMAC_SHA256_V1.to_string(),
         signature: None,
+        signature_protocol_version: 2,
     };
     trigger.signature = Some(hmac_sha256_base64_no_pad(
         b"secret-1",
@@ -989,4 +994,142 @@ fn rejects_tampered_agent_trigger_signature() {
     let rejected = accept_trigger(&files_dir, &trigger.to_string());
 
     assert!(rejected.contains("signature is invalid"));
+}
+
+/// Regression for the 2026-11-03 13:42:12 incident (`signing_incident_20261103`
+/// in `packages/agent_provider/shared/canonical_fixtures.json`): the same
+/// slash-laden arguments must produce byte-for-byte the canonical bytes the
+/// provider already signs, so `signature_invalid` cannot resurface after a
+/// Host-side `serde_json::to_string` that left `/` unescaped.
+#[test]
+fn signed_proposal_round_trips_canonical_fixture_incident_20261103() {
+    let secret = "napaxi-shared-fixture-secret";
+    let arguments = json!({
+        "journal_date": "10/22",
+        "date2": "10/23",
+        "symbol": "沪铜",
+        "unit": "元/吨",
+        "summary": "- **观点**：大剧院；备注含 / 冷",
+        "link": "https://napaxi.example.com/a/b?c=1&d=2",
+        "entries": ["10/22", "10/23"]
+    });
+    let arguments_canonical = crate::crypto::canonical_json(&arguments);
+    assert_eq!(
+        arguments_canonical,
+        "{\"date2\":\"10\\/23\",\"entries\":[\"10\\/22\",\"10\\/23\"],\"journal_date\":\"10\\/22\",\"link\":\"https:\\/\\/napaxi.example.com\\/a\\/b?c=1&d=2\",\"summary\":\"- **观点**：大剧院；备注含 \\/ 冷\",\"symbol\":\"沪铜\",\"unit\":\"元\\/吨\"}"
+    );
+    let arguments_sha256 = crate::crypto::sha256_base64_no_pad(arguments_canonical.as_bytes());
+    assert_eq!(
+        arguments_sha256,
+        "Py1OmeIHCQsRTjnUx5E+/CsTUd1IhGGgNvaqmX+msjc"
+    );
+
+    // Build a proposal matching the fixture's payload_lines and re-derive the
+    // HMAC. The provider-side `expected_hmac` must verify against Host bytes.
+    let proposal = ActionProposal {
+        request_id: "req-inc-001".to_string(),
+        provider_id: "com.napaxi.generated.tradejournal".to_string(),
+        agent_id: "trade-journal-agent".to_string(),
+        action_id: "note.create".to_string(),
+        tool_name: "napaxi_note_create".to_string(),
+        arguments,
+        user_intent_summary: String::new(),
+        created_at: "2026-11-03T13:42:12+08:00".to_string(),
+        expires_at: "2026-11-03T14:42:12+08:00".to_string(),
+        nonce: "n-once-001".to_string(),
+        idempotency_key: "idem-inc-001".to_string(),
+        callback: Value::Null,
+        risk: "low".to_string(),
+        confirmation_policy: "auto".to_string(),
+        host_instance_id: "host-001".to_string(),
+        signature_algorithm: String::new(),
+        signature: None,
+        signature_protocol_version: super::SIGNATURE_PROTOCOL_VERSION_V2,
+    };
+    let payload = super::signing::proposal_signature_payload(&proposal);
+    assert_eq!(
+        payload,
+        "request_id=req-inc-001\nprovider_id=com.napaxi.generated.tradejournal\nagent_id=trade-journal-agent\naction_id=note.create\ntool_name=napaxi_note_create\ncreated_at=2026-11-03T13:42:12+08:00\nexpires_at=2026-11-03T14:42:12+08:00\nnonce=n-once-001\nidempotency_key=idem-inc-001\nrisk=low\nconfirmation_policy=auto\nhost_instance_id=host-001\narguments_sha256=Py1OmeIHCQsRTjnUx5E+/CsTUd1IhGGgNvaqmX+msjc"
+    );
+    let hmac = crate::crypto::hmac_sha256_base64_no_pad(secret.as_bytes(), payload.as_bytes());
+    assert_eq!(hmac, "yryKBuqXxEbQQ5bZ8E55JAcvnbqheWoOE/XSPeCgW0I");
+
+    // Tampering arguments after signing must NOT verify against the
+    // untampered fixture's HMAC (acceptance criterion 13).
+    let mut tampered = proposal.clone();
+    tampered.arguments = json!({
+        "journal_date": "10/22",
+        "date2": "11/23",
+        "symbol": "沪铜",
+        "unit": "元/吨",
+        "summary": "- **观点**：大剧院；备注含 / 冷",
+        "link": "https://napaxi.example.com/a/b?c=1&d=2",
+        "entries": ["10/22", "10/23"]
+    });
+    let tampered_payload = super::signing::proposal_signature_payload(&tampered);
+    let tampered_hmac =
+        crate::crypto::hmac_sha256_base64_no_pad(secret.as_bytes(), tampered_payload.as_bytes());
+    assert_ne!(tampered_hmac, hmac);
+    assert_ne!(
+        crate::crypto::sha256_base64_no_pad(
+            crate::crypto::canonical_json(&tampered.arguments).as_bytes()
+        ),
+        arguments_sha256
+    );
+}
+
+/// Tightens the "protocol call completed ⇒ business saved" path
+/// (acceptance criteria 11, 20). An action result that reports `succeeded`
+/// but carries a null payload must be rejected by `submit_result` instead
+/// of being persisted as a terminal success.
+#[test]
+fn submit_result_rejects_succeeded_with_null_payload() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let package: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+    let proposal = create_proposal(&package, &package.actions[0], json!({"amount": 12.5}));
+    persist_proposal(&files_dir, &proposal).unwrap();
+    let result = ActionResult {
+        request_id: proposal.request_id.clone(),
+        status: "succeeded".to_string(),
+        result: Value::Null,
+        error: None,
+        provider_trace_id: None,
+        completed_at: now(),
+        signature: None,
+        failure_stage: String::new(),
+        field_errors: Vec::new(),
+    };
+    let response = submit_result(&files_dir, &serde_json::to_string(&result).unwrap());
+    assert!(response.contains("invalid_status"));
+    // The proposal must NOT have transitioned to a terminal success.
+    assert!(!get_proposal_json(&files_dir, &proposal.request_id).contains(r#""succeeded""#));
+}
+
+/// Unrecognized status strings (e.g. a legacy SDK emitting `"ok"`) cannot
+/// masquerade as a terminal success — `submit_result` downgrades them to
+/// `failed` (acceptance criterion 20).
+#[test]
+fn submit_result_downgrades_unrecognized_status_to_failed() {
+    let temp = tempfile::tempdir().unwrap();
+    let files_dir = temp.path().to_string_lossy();
+    let package: AgentAppPackage =
+        serde_json::from_str(&register_package(&files_dir, &package_json())).unwrap();
+    let proposal = create_proposal(&package, &package.actions[0], json!({"amount": 12.5}));
+    persist_proposal(&files_dir, &proposal).unwrap();
+    let result = ActionResult {
+        request_id: proposal.request_id.clone(),
+        status: "ok".to_string(),
+        result: json!({"note_id": "n-1"}),
+        error: None,
+        provider_trace_id: None,
+        completed_at: now(),
+        signature: None,
+        failure_stage: String::new(),
+        field_errors: Vec::new(),
+    };
+    let response = submit_result(&files_dir, &serde_json::to_string(&result).unwrap());
+    assert!(response.contains(r#""failed""#));
+    assert!(!response.contains(r#""succeeded""#));
 }
