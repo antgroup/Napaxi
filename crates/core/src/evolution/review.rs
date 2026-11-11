@@ -117,7 +117,12 @@ fn history_source_hash(history: &[SessionMessage]) -> String {
         hasher.update(message.content.as_bytes());
         hasher.update([0xff]);
     }
-    format!("{:x}", hasher.finalize())
+    let result = hasher.finalize();
+    let mut hex = String::with_capacity(result.len() * 2);
+    for byte in result.iter() {
+        hex.push_str(&format!("{byte:02x}"));
+    }
+    hex
 }
 
 fn bounded_preview(text: &str, max_chars: usize) -> String {

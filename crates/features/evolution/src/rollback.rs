@@ -181,7 +181,12 @@ async fn compute_dir_hash(dir: &Path) -> EvolutionResult<String> {
         }
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    let result = hasher.finalize();
+    let mut hex = String::with_capacity(result.len() * 2);
+    for byte in result.iter() {
+        hex.push_str(&format!("{byte:02x}"));
+    }
+    Ok(hex)
 }
 
 #[cfg(test)]

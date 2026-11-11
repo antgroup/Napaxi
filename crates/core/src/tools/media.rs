@@ -219,7 +219,11 @@ fn provider_default_image_base64_url_format(config: &PlatformLlmConfig) -> Image
 fn image_analysis_metadata(image_path: &str, media_type: &str, bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    let hash = format!("{:x}", hasher.finalize());
+    let result = hasher.finalize();
+    let mut hash = String::with_capacity(result.len() * 2);
+    for byte in result.iter() {
+        hash.push_str(&format!("{byte:02x}"));
+    }
     let dimensions = image_dimensions(bytes, media_type)
         .map(|(width, height)| format!("{width}x{height}"))
         .unwrap_or_else(|| "unknown".to_string());
