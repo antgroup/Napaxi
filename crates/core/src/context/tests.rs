@@ -826,3 +826,140 @@ fn status_reports_tool_result_pruning_snapshot() {
     );
     assert_eq!(value["last_context_delta_tokens"].as_i64(), Some(-800));
 }
+
+// Audit baseline for OpenClaw #197105 / #197179 — compaction deterministic floor fidelity upgrade.
+// Snapshot of `local_summary_fallback` behaviour *before* any verbatim-floor upgrade:
+// `summarize_middle_locally` previews each user message to 280 chars (`compact_text_preview`)
+// and keeps only the first 8 user items (`bullet_list(.., 8)`), so long user wording is
+// truncated (not verbatim) and a 9th+ user message is omitted entirely. When the floor upgrade
+// lands this test must be updated to assert verbatim retention + omission counts.
+#[tokio::test]
+async fn local_summary_fallback_truncates_long_user_wording_and_omits_beyond_eighth_user_item() {
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_str().unwrap();
+    let mut config = PlatformLlmConfig::default();
+    config.context_engine.context_window_tokens = Some(220);
+    config.context_engine.protect_head_messages = 1;
+    config.context_engine.protect_tail_messages = 1;
+    config.context_engine.compaction_strategy = "llm_summary".to_string();
+
+    // A long user message whose unique tail wording exceeds the 280-char preview budget.
+    let long_user_head = "needs real summarization ".repeat(20); // ~460 chars, head fits the trigger budget
+    let unique_tail = " UNIQUETAILWORDING_MUST_NOT_APPEAR_IN_NON_VERBATIM_BASELINE x";
+    let long_user_content = format!("{long_user_head}{unique_tail}");
+
+    // Build 10 user messages so the 9th and 10th must be omitted by bullet_list(.., 8).
+    // Interleave short assistant turns so the history is compaction-eligible.
+    let mut history: Vec<SessionMessage> = Vec::new();
+    for index in 0..10 {
+        history.push(message(
+            index,
+            "user",
+            if index == 3 {
+                long_user_content.as_str()
+            } else {
+                "needs real summarization short turn "
+            },
+        ));
+        history.push(message(
+            100 + index,
+            "assistant",
+            "assistant continuation reply body text ",
+        ));
+    }
+
+    let output = build_context(
+        files_dir,
+        "thread",
+        &config,
+        &config.system_prompt,
+        &history,
+        true,
+        Some("manual compact"),
+    )
+    .await
+    .unwrap();
+
+    let summary = output.summary.expect("fallback summary must be produced");
+    assert!(
+        summary.contains("## Conversation Context Summary"),
+        "fallback summary header must be present: {summary}"
+    );
+
+    // Baseline #1 — non-verbatim: the long user message is previewed to 280 chars, so the
+    // unique tail wording beyond the preview must NOT survive verbatim.
+    assert!(
+        !summary.contains("UNIQUETAILWORDING_MUST_NOT_APPEAR_IN_NON_VERBATIM_BASELINE"),
+        "baseline: 280-char preview must truncate the long user wording (deterministic-floor upgrade will flip this to verbatim): {summary}"
+    );
+
+    // The head of the long user message (first 280 chars) must survive within the preview.
+    // `compact_text_preview` re-joins on single spaces, so compare against the whitespace-normalized head.
+    let head_normalized: String = long_user_head
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let head_preview: String = head_normalized.chars().take(280).collect();
+    assert!(
+        summary.contains(&head_preview),
+        "baseline: the first 280 chars of the long user message must survive the preview: {summary}"
+    );
+
+    // Baseline #2 — omission: with 10 user messages, the 9th and 10th are dropped by
+    // bullet_list(.., 8). Their ordering index is encoded in nothing else, so use a sentinel
+    // that only those later messages carry and assert its absence.
+    // (We redo the construction so the omission sentinel lives ONLY in items > 8.)
+    let omitted_sentinel = "OMITTED_AFTER_EIGHTH_USER_ITEM_SENTINEL";
+    let mut history2: Vec<SessionMessage> = Vec::new();
+    for index in 0..12 {
+        let body = if index < 8 {
+            format!("needs real summarization unique-early-{} ", index)
+        } else {
+            format!("needs real summarization {omitted_sentinel}-{}", index)
+        };
+        history2.push(message(index, "user", &body));
+        history2.push(message(
+            200 + index,
+            "assistant",
+            "assistant body text follows ",
+        ));
+    }
+    let output2 = build_context(
+        files_dir,
+        "thread-two",
+        &config,
+        &config.system_prompt,
+        &history2,
+        true,
+        Some("manual compact"),
+    )
+    .await
+    .unwrap();
+    let summary2 = output2.summary.expect("fallback summary must be produced");
+    assert!(
+        summary2.contains("## Conversation Context Summary"),
+        "fallback summary header must be present: {summary2}"
+    );
+    assert!(
+        !summary2.contains(omitted_sentinel),
+        "baseline: bullet_list(.., 8) must omit user items beyond the 8th (deterministic-floor upgrade will add omission counts): {summary2}"
+    );
+    // The 8th (last-kept) early item must survive.
+    assert!(
+        summary2.contains("unique-early-7"),
+        "baseline: the 8th user item (index 7) must survive bullet_list(.., 8): {summary2}"
+    );
+
+    // Both fallbacks must be reported as the local_summary_fallback strategy.
+    let status = serde_json::from_str::<serde_json::Value>(&context_status_for_config(
+        files_dir,
+        "thread",
+        Some(&config),
+    ))
+    .unwrap();
+    assert_eq!(
+        status["compaction_strategy"].as_str(),
+        Some("local_summary_fallback"),
+        "fallback strategy must be recorded: {status}"
+    );
+}
