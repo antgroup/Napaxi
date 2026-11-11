@@ -102,3 +102,45 @@ the filesystem, it must keep the same bound: hold only the best-N candidates,
 bound further-distance computation by the current Nth-best, and never
 retain+sort an entire directory. Do not add an unbounded candidate
 accumulator.
+
+## Provider-failure × tool-warning baseline (OpenClaw #194439 mapping)
+
+OpenClaw #194439 retains classified provider-failure payloads alongside the
+preceding tool warning at a shared terminal owner, so a `RateLimit` /
+`QuotaExhausted` carrying a reset time is not swallowed by an earlier
+`Bash failed`-style warning. Napaxi has **no shared terminal error owner** that
+serializes tool warning + provider failure at turn finalization today — so
+there is no existing swallow-stall to fix.
+
+The `LlmError` classifier (`crates/core/src/error.rs`) is the carrier point the
+future terminal owner will build on. The regression cage lives in `error.rs`
+tests:
+
+- `rate_limit_classification_preserves_reset_time_signal_in_message` — a
+  `try again at <time>` reset window stays intact in the classified
+  `RateLimit { message }` (not truncated or rewritten).
+- `quota_failure_is_not_collapsed_into_plain_rate_limit` — a 429 + quota
+  signal stays `QuotaExhausted`, not downgraded to generic `RateLimit`.
+- `non_rate_limit_provider_failure_is_not_absorbed_as_rate_limit` — a 503 with
+  no rate-limit signal stays `Provider`, not absorbed into the rate-limit
+  dimension by a future shared owner.
+
+## Exec outcome observation-type baseline (OpenClaw #194175 + #185636 / #193802)
+
+OpenClaw #194175 splits the exec observable result away from the
+policy / sync execution path into an independent type owner (uncertain marker,
+terminal / ordinal fields), so a timeout, queue-preemption, or shutdown cannot
+rewrite an already-observed success. Napaxi's `ShellExecResult` is currently
+coupled to the sync path with **no independent observation-type owner** — so
+there is no existing overwrite to fix; we solidify two invariants via the
+smallest observable result we have, the `read_file` tool:
+
+- `read_file_observation_survives_unrelated_apply_patch` — an observed
+  `read_file` result reads back identically after an unrelated `apply_patch`
+  on another file; the observation is not overwritten by a later tool action.
+- `read_file_observation_bounded_per_call_not_shared_across_calls` — a
+  `max_bytes=4` truncation on one call does not leak into a subsequent
+  unbounded call on the same file; the observation bound is per-call.
+
+A future independent observation-type owner for `ShellExecResult` must keep
+both invariants holding for the read path.
