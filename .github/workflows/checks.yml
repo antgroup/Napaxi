@@ -20,13 +20,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The action ref is the action's own `stable` branch (the latest stable
+      # release of dtolnay/rust-toolchain), NOT a Rust version. With no
+      # `toolchain:` input, the action reads the repo-root `rust-toolchain.toml`
+      # (channel = "1.92") and installs that toolchain, so the source of truth
+      # stays in rust-toolchain.toml alongside the per-crate `rust-version`.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1.120
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: "1.92"
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+
+      # Fail fast with a clear cause if the toolchain install or workspace
+      # manifest is broken, before the boundary/hygiene checks run.
+      - name: Print Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+      - name: Resolve workspace metadata
+        run: cargo metadata --no-deps --format-version 1 >/dev/null
 
       - name: Install ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep

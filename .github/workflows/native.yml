@@ -54,7 +54,7 @@ jobs:
         with:
           lfs: true
 
-      - uses: dtolnay/rust-toolchain@1.120
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
 
@@ -62,6 +62,13 @@ jobs:
         run: rustup target add aarch64-linux-android
 
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+
+      - name: Print Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+      - name: Resolve workspace metadata
+        run: cargo metadata --no-deps --format-version 1 >/dev/null
 
       # Provides $ANDROID_NDK_HOME, which detect_android_ndk() picks up.
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
@@ -114,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@1.120
+      - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
 
@@ -122,6 +129,13 @@ jobs:
         run: rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+
+      - name: Print Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+      - name: Resolve workspace metadata
+        run: cargo metadata --no-deps --format-version 1 >/dev/null
 
       - name: Build iOS SDK (xcframework)
         run: ./tools/scripts/build.sh fast ios

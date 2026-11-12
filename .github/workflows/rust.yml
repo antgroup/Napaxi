@@ -24,11 +24,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@1.120
+      # `@stable` is the action's own stable branch (latest action release),
+      # not a Rust version. With no `toolchain:` input it installs the channel
+      # pinned by the repo-root `rust-toolchain.toml` (channel = "1.92").
+      - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+
+      - name: Print Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+          rustfmt --version
+          cargo clippy --version
+      - name: Resolve workspace metadata
+        run: cargo metadata --no-deps --format-version 1 >/dev/null
 
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -48,9 +60,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@1.120
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2
+
+      - name: Print Rust toolchain
+        run: |
+          rustc --version
+          cargo --version
+      - name: Resolve workspace metadata
+        run: cargo metadata --no-deps --format-version 1 >/dev/null
 
       # Generated rustdoc is the published API reference. Treat any rustdoc
       # diagnostic — broken intra-doc links, ambiguous paths, undocumented
