@@ -387,3 +387,44 @@ fn build_result(
         source: reason,
     })
 }
+
+#[cfg(test)]
+mod diagnostic_candidate_bound_tests {
+    // Diagnostic-candidate / error-excerpt bound baseline (DIMA
+    // #2026110800120444016, OpenClaw #194790). apply_patch error messages surface
+    // only `pattern_excerpt`/`replacement_excerpt` — which are `.take(3)` bounded —
+    // never an unbounded accumulation of string-distance candidate lines. Pin the
+    // bound so a future "did you mean" candidate path cannot reintroduce the
+    // OpenClaw O(n²) steady accumulation stall.
+
+    use super::{pattern_excerpt, replacement_excerpt};
+
+    #[test]
+    fn pattern_excerpt_is_bounded_to_three_lines() {
+        let pattern: Vec<String> = (0..50).map(|i| format!("line {i}")).collect();
+        let excerpt = pattern_excerpt(&pattern);
+        assert_eq!(
+            excerpt.len(),
+            3,
+            "error-message pattern excerpt must be bounded to 3 lines, not accumulate all candidates"
+        );
+        assert_eq!(excerpt[0], "line 0");
+        assert_eq!(excerpt[2], "line 2");
+    }
+
+    #[test]
+    fn replacement_excerpt_is_bounded_to_three_lines() {
+        let replacement: Vec<String> = (0..80).map(|i| format!("rep {i}")).collect();
+        let excerpt = replacement_excerpt(&replacement);
+        assert_eq!(excerpt.len(), 3);
+        assert_eq!(excerpt[0], "rep 0");
+        assert_eq!(excerpt[2], "rep 2");
+    }
+
+    #[test]
+    fn excerpts_preserve_short_inputs_unchanged() {
+        let short: Vec<String> = vec!["a".into(), "b".into()];
+        assert_eq!(pattern_excerpt(&short), short);
+        assert_eq!(replacement_excerpt(&short), short);
+    }
+}

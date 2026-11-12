@@ -449,3 +449,69 @@ fn streaming_progress_chunk_uses_apply_patch_progress_type() {
     assert_eq!(payload["path"].as_str(), Some("/workspace/plan.md"));
     assert_eq!(payload["action"].as_str(), Some("updated"));
 }
+
+// ---------------------------------------------------------------------------
+// exec diagnostic-candidate bound audit baseline (DIMA #2026110800120444016,
+// OpenClaw #194790). Audit conclusion: Napaxi has no strsim/levenshtein
+// diagnostic-candidate module, and read_file returns `file not found: <path>`
+// directly on a missing path WITHOUT listing or sorting sibling directory
+// entries — so it cannot reproduce the OpenClaw `missing-file read →
+// retain+sort large dir` stall. These tests pin that invariant so a future
+// diagnostic-candidate path cannot silently reintroduce it.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn read_file_missing_returns_not_found_without_listing_directory() {
+    let dir = temp_dir("missing_nolist");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+    fs::create_dir_all(bridge.workspace_dir()).unwrap();
+    // Populate the workspace dir with several sibling files so that an
+    // OpenClaw-#194790-style "did you mean" candidate path would have material
+    // to surface — but read_file must return only the canonical not-found
+    // message, never the sibling names.
+    let siblings = ["alpha.txt", "beta.txt", "gamma.rs", "delta_long_name.txt"];
+    for name in &siblings {
+        fs::write(bridge.workspace_dir().join(name), "noise").unwrap();
+    }
+    let missing = run_err(
+        &files_dir,
+        READ_FILE_TOOL_NAME,
+        serde_json::json!({"path": "/workspace/does_not_exist.txt"}),
+    );
+    assert!(
+        missing.contains("does_not_exist.txt"),
+        "missing-file error must name the requested path; got: {missing}"
+    );
+    for name in &siblings {
+        assert!(
+            !missing.contains(name),
+            "missing-file error must not list sibling directory entries (no retain+sort), \
+             but `{name}` appeared in: {missing}"
+        );
+    }
+}
+
+#[test]
+fn read_file_truncates_at_max_bytes_bound() {
+    let dir = temp_dir("maxbytes_bound");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+    fs::create_dir_all(bridge.workspace_dir()).unwrap();
+    // File larger than max_bytes; read_file must bound output via take(max_bytes)
+    // and report truncation rather than accumulating the whole file.
+    let big: Vec<u8> = (0u8..255).cycle().take(4096).collect();
+    fs::write(bridge.workspace_dir().join("big.bin"), &big).unwrap();
+    let out = serde_json::from_str::<serde_json::Value>(&run(
+        &files_dir,
+        READ_FILE_TOOL_NAME,
+        serde_json::json!({"path": "/workspace/big.bin", "max_bytes": 128}),
+    ))
+    .expect("read_file output is JSON");
+    let bytes_read = out["bytes_read"].as_u64().expect("bytes_read");
+    assert!(
+        bytes_read <= 128,
+        "bytes_read must respect max_bytes; got {bytes_read}"
+    );
+    assert_eq!(out["truncated"].as_bool(), Some(true));
+}

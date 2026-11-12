@@ -73,3 +73,32 @@ and `mcp_tools_and_handler`:
 - Security gates for shell or tool admission are core gates; keep them in
   `tools/builtin/shell_*` and the registry, and do not bypass them from adapter
   or demo code.
+
+## Diagnostic-candidate bound baseline (file/exec tools)
+
+OpenClaw #194790 (`reduce stalls from failed file tool calls`) fixed a stall
+where failed file edits accumulated unbounded string-distance diagnostic
+candidates and missing-file reads retained+sorted every qualifying filename in
+a large directory. A DIMA-#2026110800120444016 audit confirmed Napaxi does
+**not** reproduce this: there is no `strsim`/`levenshtein` dependency, no
+did-you-mean/closest-match candidate module, `read_file` returns a canonical
+`file not found: <path>` without listing or sorting sibling directory entries,
+its output is bounded by `take(max_bytes)`, and `apply_patch` error messages
+surface only a `.take(3)`-bounded `pattern_excerpt`/`replacement_excerpt`
+rather than an unbounded candidate list.
+
+Two regression invariants are pinned so a future diagnostic-candidate path
+cannot silently reintroduce the OpenClaw stall mode:
+
+- `read_file` must return only the canonical not-found message on a missing
+  path — never sibling directory entries — and must respect `max_bytes`
+  (see `tools/file/tests.rs::read_file_missing_returns_not_found_without_listing_directory`
+  and `read_file_truncates_at_max_bytes_bound`).
+- `apply_patch` error-message excerpts must stay bounded to three lines
+  (see `tools/file/apply_patch/apply.rs::diagnostic_candidate_bound_tests`).
+
+When a future change introduces fuzzy-match diagnostic candidates against
+the filesystem, it must keep the same bound: hold only the best-N candidates,
+bound further-distance computation by the current Nth-best, and never
+retain+sort an entire directory. Do not add an unbounded candidate
+accumulator.
