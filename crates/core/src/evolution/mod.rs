@@ -64,6 +64,17 @@
 //! When a new elapsed/recovery timer is added to any of the above (or a
 //! new module), it MUST join the monotonic anchor family — `Utc::now()`
 //! is only valid for the persistence / display side of that field.
+//!
+//! ## Re-confirmation cycle (DIMA #2026111000120512225)
+//! This audit cycle re-confirmed no new wall-clock process-local
+//! elapsed/recovery sites have been introduced: the lattice above still
+//! holds, OpenClaw #196093 same-class fix (memory-search failure pause
+//! written/read on `performance.now()`) is already closed in Napaxi via
+//! the `mcp/tools.rs` + `evolution/store.rs` monotonic anchor families.
+//! Regression tests were added pinning the elapsed-based decision under
+//! an in-process anchor against wall-clock jumps:
+//! `crates/core/src/mcp/tools.rs::monotonic_anchor_tests` and
+//! `crates/core/src/evolution/tests.rs::refresh_stale_runs_decision_is_elapsed_based_independent_of_wall_clock`.
 
 pub mod curator;
 mod executor;

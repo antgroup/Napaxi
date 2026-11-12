@@ -727,3 +727,122 @@ fn tools_activation_from_response(
         .collect();
     Ok(McpActivation { tools, session_id })
 }
+
+#[cfg(test)]
+mod monotonic_anchor_tests {
+    //! Regression tests for the monotonic-anchor decision in
+    //! `should_retry_lazy_load` (DIMA #2026111000120512225 §2.B, mapping
+    //! OpenClaw #196093).
+    //!
+    //! `should_retry_lazy_load` decides whether the lazy-load retry
+    //! back-off (`TOOLS_RETRY_BACKOFF`, 60s) has elapsed. When an
+    //! in-process monotonic anchor exists, the decision is purely
+    //! `anchor.elapsed() >= TOOLS_RETRY_BACKOFF` — it must NOT consult the
+    //! wall clock, so a backward (NTP) or forward wall-clock jump cannot
+    //! stretch or shorten the back-off. These tests pin that invariant:
+    //! the anchor path returns `false` while the anchor is young and
+    //! `true` once it ages past the back-off, regardless of the persisted
+    //! wall-clock `last_tools_attempt_at`.
+
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::{Duration, Instant};
+
+    use super::super::types::{McpServer, McpTransport};
+    use super::{
+        TOOLS_RETRY_BACKOFF, clear_lazy_load_monotonic_anchor, record_lazy_load_monotonic_anchor,
+        should_retry_lazy_load,
+    };
+
+    /// Per-test sequence counter that yields unique server names so the
+    /// process-global anchor map (`monotonic_lazy_attempt_anchors`) does
+    /// not leak between tests in the same binary.
+    static NAME_SEQ: AtomicU64 = AtomicU64::new(0);
+
+    fn server(name: &str, last_tools_attempt_at: Option<String>) -> McpServer {
+        McpServer {
+            name: name.to_string(),
+            url: "https://example.com/mcp".to_string(),
+            transport: McpTransport::Http,
+            headers: HashMap::new(),
+            user_id: "monotonic-test-user".to_string(),
+            active: true,
+            tools: Vec::new(),
+            tools_loaded: false,
+            tools_error: None,
+            last_tools_attempt_at,
+            session_id: None,
+            activation_error: None,
+            oauth: None,
+            oauth_pending: None,
+            oauth_tokens: None,
+        }
+    }
+
+    fn unique_server(tag: &str, last_tools_attempt_at: Option<String>) -> McpServer {
+        let seq = NAME_SEQ.fetch_add(1, Ordering::SeqCst);
+        let name = format!("monotonic-test-{tag}-{seq}");
+        server(&name, last_tools_attempt_at)
+    }
+
+    #[test]
+    fn fresh_monotonic_anchor_blocks_retry_regardless_of_wall_clock() {
+        // A freshly-recorded anchor (elapsed ~0) must block the retry
+        // even when the persisted wall-clock `last_tools_attempt_at` is
+        // far in the past — proving the anchor path wins over wall clock
+        // and is independent of it. Construct the persisted timestamp an
+        // hour in the past; a wall-clock-only decision would have allowed
+        // the retry, but the fresh anchor must override it.
+        let past = (chrono::Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
+        let server = unique_server("fresh", Some(past));
+        record_lazy_load_monotonic_anchor(&server, Instant::now());
+        assert!(
+            !should_retry_lazy_load(&server),
+            "fresh anchor must block retry regardless of the persisted wall clock"
+        );
+        clear_lazy_load_monotonic_anchor(&server);
+    }
+
+    #[test]
+    fn aged_monotonic_anchor_allows_retry_regardless_of_wall_clock() {
+        // An anchor aged past `TOOLS_RETRY_BACKOFF` must allow retry even
+        // when the persisted wall-clock timestamp is far in the future
+        // (a wall-clock-only path would have said "not yet"). Proves the
+        // elapsed decision is monotonic, not wall-clock-driven.
+        let Some(aged) = Instant::now().checked_sub(TOOLS_RETRY_BACKOFF + Duration::from_secs(5))
+        else {
+            eprintln!(
+                "[skip] aged_monotonic_anchor_allows_retry_regardless_of_wall_clock: \
+                 monotonic clock too young to fabricate an aged anchor"
+            );
+            return;
+        };
+        let future = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+        let server = unique_server("aged", Some(future));
+        record_lazy_load_monotonic_anchor(&server, aged);
+        assert!(
+            should_retry_lazy_load(&server),
+            "aged anchor must allow retry even with a future-dated wall clock"
+        );
+        clear_lazy_load_monotonic_anchor(&server);
+    }
+
+    #[test]
+    fn no_anchor_falls_back_to_wall_clock() {
+        // Without an anchor, the wall-clock fallback governs: a
+        // future-dated `last_tools_attempt_at` blocks retry, an absent
+        // timestamp allows it. Records the fallback behavior so the
+        // anchor-preferred path above stays meaningful.
+        let future = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+        let future_server = unique_server("future", Some(future));
+        assert!(
+            !should_retry_lazy_load(&future_server),
+            "no anchor + future wall-clock timestamp should block retry"
+        );
+        let none_server = unique_server("none", None);
+        assert!(
+            should_retry_lazy_load(&none_server),
+            "no anchor + no timestamp should allow retry"
+        );
+    }
+}
