@@ -160,6 +160,16 @@ pub struct ActionProposal {
     pub signature_algorithm: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Canonical-JSON byte contract used to derive `arguments_sha256` and the
+    /// HMAC over the signed payload. Defaults to
+    /// [`crate::crypto::SIGNATURE_PROTOCOL_VERSION_V2`] (`canonical-json-minv1`,
+    /// AOSP `org.json`-compatible); legacy stored proposals may carry
+    /// `1` to allow byte-for-byte re-verification without silent drift.
+    /// Host-side `accept_trigger` refuses proposals whose version is below 2
+    /// with a `protocol_incompatible` error rather than silently matching a
+    /// different canonical form.
+    #[serde(default = "default_signature_protocol_version")]
+    pub signature_protocol_version: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -267,6 +277,12 @@ pub struct AgentTriggerRequest {
     pub signature_algorithm: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
+    /// Canonical-JSON byte contract used to derive `payload_sha256` and the
+    /// HMAC over the signed trigger payload. Defaults to
+    /// [`crate::crypto::SIGNATURE_PROTOCOL_VERSION_V2`]; legacy stored
+    /// triggers may carry `1` to allow byte-for-byte re-verification.
+    #[serde(default = "default_signature_protocol_version")]
+    pub signature_protocol_version: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -289,6 +305,13 @@ pub(super) struct AgentTriggerRecord {
 
 fn default_trigger_protocol_version() -> u32 {
     2
+}
+
+/// Default `signature_protocol_version` for newly-created proposals and
+/// triggers. Matches [`crate::crypto::SIGNATURE_PROTOCOL_VERSION_V2`] so
+/// all new signatures bind the `canonical-json-minv1` byte form.
+fn default_signature_protocol_version() -> u32 {
+    crate::crypto::SIGNATURE_PROTOCOL_VERSION_V2
 }
 
 fn default_parameters() -> Value {

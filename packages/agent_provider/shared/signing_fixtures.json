@@ -1,29 +1,29 @@
 {
   "$schema": "agent_provider_signing_fixtures",
   "version": 1,
-  "description": "Shared canonical-JSON / HMAC-SHA256 signing fixtures bridging Rust core (crypto::canonical_json), Android Provider SDK (TrustedHost.kt canonicalJson), and iOS Provider SDK (AgentProvider.swift canonicalJson). Each fixture pins an input together with its byte-exact expected canonical_json (RFC 8259 string escapes only; '/' is NOT escaped; keys sorted ascending) and the SHA-256-of-canonical base64-no-pad digest. All three ports must reproduce these exactly (canonical_json + sha256); proposal/trigger signature cross-parity then follows because the signed payload embeds the same arguments_sha256. The 2026-11-03 13:42:12 production incident sample is included as a sanitized regression case. Load path: Android tests via src/test/resources/signing_fixtures.json (copied from this shared file in build.gradle), iOS tests via bundle resource, Rust tests via include_str! from the repo-relative path.",
+  "description": "Shared canonical-JSON / HMAC-SHA256 signing fixtures bridging Rust core (crypto::canonical_json), Android Provider SDK (TrustedHost.kt canonicalJson), and iOS Provider SDK (AgentProvider.swift canonicalJson). Each fixture pins an input together with its byte-exact expected canonical_json (RFC 8259 string escapes with '/' escaped as '\\/' (AOSP org.json.JSONObject.quote-compatible); keys sorted ascending) and the SHA-256-of-canonical base64-no-pad digest. All three ports must reproduce these exactly (canonical_json + sha256); proposal/trigger signature cross-parity then follows because the signed payload embeds the same arguments_sha256. The 2026-11-03 13:42:12 production incident sample is included as a sanitized regression case. Load path: Android tests via src/test/resources/signing_fixtures.json (copied from this shared file in build.gradle), iOS tests via bundle resource, Rust tests via include_str! from the repo-relative path.",
   "secret_for_signing_fixtures": "redacted",
   "string_cases": [
     {
       "id": "slash_date",
-      "description": "Contains a forward slash that must NOT be escaped. Android org.json.JSONObject.quote used to emit '10\\/22'; serde_json and JSONSerialization do not.",
+      "description": "Contains a forward slash that MUST be escaped as '\\/' so Android org.json.JSONObject.quote, Rust core, and iOS JSONSerialization all match. The 2026-11-03 incident stem was a host/provider mismatch on exactly this byte.",
       "input": "10/22",
-      "expected_canonical_json": "\"10/22\"",
-      "expected_sha256_base64_no_pad": "4CQi2mzcnPeCVbqtrdEyjtIIe+PdOZPlw5GUUDIucrI"
+      "expected_canonical_json": "\"10\\/22\"",
+      "expected_sha256_base64_no_pad": "Z2vsKlSky1Ry62usAWhybVrc+YEaIwrvvzsk7L5Nd/k"
     },
     {
       "id": "slash_unit",
-      "description": "Uses '/' as a unit separator that must be preserved verbatim.",
+      "description": "Forward slash in a value must be escaped as '\\/' for cross-port byte parity (org.json-quote neutral).",
       "input": "元/吨",
-      "expected_canonical_json": "\"元/吨\"",
-      "expected_sha256_base64_no_pad": "vciHBEN8kUSM2nfU/hh9k249KUKNi5YEUewrjt1O0xA"
+      "expected_canonical_json": "\"元\\/吨\"",
+      "expected_sha256_base64_no_pad": "reItrgrg0Mr2sOqoI9ZjAgxOEfvmgzpQE1grEJDzGrg"
     },
     {
       "id": "url_https",
       "description": "HTTPS URL must be preserved byte-for-byte; '/' must not be escaped.",
       "input": "https://example.com/x",
-      "expected_canonical_json": "\"https://example.com/x\"",
-      "expected_sha256_base64_no_pad": "m6A3qRvoNj2KTaoPoxgoV76K47AOxKOOmndm4QP8cwQ"
+      "expected_canonical_json": "\"https:\\/\\/example.com\\/x\"",
+      "expected_sha256_base64_no_pad": "SDdo8p03TMH7VuLK7m6dfO88haUiHajfxz7883M08OE"
     },
     {
       "id": "backslash",
@@ -79,14 +79,20 @@
     {
       "id": "key_order_a_b",
       "description": "Different key insertion order must produce identical canonical form (keys sorted ascending).",
-      "input": {"b": 1, "a": 2},
+      "input": {
+        "b": 1,
+        "a": 2
+      },
       "expected_canonical_json": "{\"a\":2,\"b\":1}",
       "expected_sha256_base64_no_pad": "02JqwwqH5vemQoIzs8aCmZdoZfpVCOQmfFQVx2r3p3I"
     },
     {
       "id": "key_order_b_a",
       "description": "Reverse insertion order of the same logical object must serialize identically.",
-      "input": {"a": 2, "b": 1},
+      "input": {
+        "a": 2,
+        "b": 1
+      },
       "expected_canonical_json": "{\"a\":2,\"b\":1}",
       "expected_sha256_base64_no_pad": "02JqwwqH5vemQoIzs8aCmZdoZfpVCOQmfFQVx2r3p3I"
     },
@@ -128,9 +134,18 @@
     {
       "id": "nested_array_object",
       "description": "Nested combination of objects and arrays; slash in inner string preserved.",
-      "input": {"items": [{"path": "10/22"}, {"path": "https://example.com/x"}]},
-      "expected_canonical_json": "{\"items\":[{\"path\":\"10/22\"},{\"path\":\"https://example.com/x\"}]}",
-      "expected_sha256_base64_no_pad": "bJ1UYmAaXdokK6nWYF4ARWw5LBkGPClnB7xeDY8OUFA"
+      "input": {
+        "items": [
+          {
+            "path": "10/22"
+          },
+          {
+            "path": "https://example.com/x"
+          }
+        ]
+      },
+      "expected_canonical_json": "{\"items\":[{\"path\":\"10\\/22\"},{\"path\":\"https:\\/\\/example.com\\/x\"}]}",
+      "expected_sha256_base64_no_pad": "kghdmWKLAAApsne64W+mx4RiST15nmql183dbWce3aE"
     }
   ],
   "proposal_signing_cases": [

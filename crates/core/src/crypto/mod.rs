@@ -79,24 +79,105 @@ pub(crate) fn constant_time_eq(a: &str, b: &str) -> bool {
     a.as_bytes().ct_eq(b.as_bytes()).into()
 }
 
-/// Deterministic, canonical JSON serialization for signing.
+/// Signature protocol version 1: the legacy canonical-JSON form used by
+/// the first agent-app deployments. Strings serialize via
+/// `serde_json::to_string` (no `/` escape) and numbers render via
+/// `serde_json::Number::Display`. Kept only so historical stored
+/// proposals whose `signature_protocol_version == 1` can be re-verified
+/// byte-for-byte without silent drift.
+pub(crate) const SIGNATURE_PROTOCOL_VERSION_V1: u32 = 1;
+
+/// Signature protocol version 2: the canonical-JSON form named
+/// `canonical-json-minv1` in the shared fixtures (AOSP `org.json`-compatible).
+/// Strings escape `/` as `\/`, control code points as lowercase `\u00xx`,
+/// integers fitting `i64` render as decimal digits, and everything else
+/// follows Java `Double.toString`. New proposals and triggers are signed at
+/// this version; providers that only speak v1 are rejected as
+/// `protocol_incompatible` rather than silently relaxed.
+pub(crate) const SIGNATURE_PROTOCOL_VERSION_V2: u32 = 2;
+
+/// Canonical JSON serialized for a specific signature-protocol version.
 ///
-/// Object keys are sorted lexicographically and there is no insignificant
-/// whitespace, so the host and provider derive byte-identical payloads from
-/// the same logical value regardless of map iteration order.
+/// Host and provider must agree on the version before signing or
+/// verifying, since the version selects the canonical byte form. New
+/// code should pass [`SIGNATURE_PROTOCOL_VERSION_V2`]; verification of
+/// a stored legacy payload must use version 1 (or [`canonical_json_v1`]).
+pub(crate) fn canonical_json_for_signature(value: &Value, version: u32) -> String {
+    if version <= SIGNATURE_PROTOCOL_VERSION_V1 {
+        canonical_json_v1(value)
+    } else {
+        canonical_json(value)
+    }
+}
+
+/// Legacy canonical-JSON form (signature-protocol version 1).
 ///
-/// # Warning
-///
-/// Serialization failures are silently replaced with `""`. In a signing context,
-/// this means a malformed input would produce a different canonical form than
-/// intended. Callers that need strict failure semantics should validate their
-/// `Value` before calling this function.
-pub(crate) fn canonical_json(value: &Value) -> String {
+/// Object keys are sorted lexicographically; strings serialize via
+/// `serde_json::to_string`, which does not escape `/` and emits
+/// `serde_json`'s default number rendering. Kept for byte-for-byte
+/// verification of historical stored proposals; new code must use
+/// [`canonical_json`] (version 2). The legacy path silently replaces
+/// serialization failures with `""`, matching the historical behavior.
+pub(crate) fn canonical_json_v1(value: &Value) -> String {
     match value {
         Value::Null => "null".to_string(),
         Value::Bool(value) => value.to_string(),
         Value::Number(value) => value.to_string(),
         Value::String(value) => serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string()),
+        Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(canonical_json_v1)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        Value::Object(map) => {
+            let mut entries = map.iter().collect::<Vec<_>>();
+            entries.sort_by(|a, b| a.0.cmp(b.0));
+            format!(
+                "{{{}}}",
+                entries
+                    .into_iter()
+                    .map(|(key, value)| format!(
+                        "{}:{}",
+                        serde_json::to_string(key).unwrap_or_else(|_| "\"\"".to_string()),
+                        canonical_json_v1(value)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+    }
+}
+/// Deterministic, canonical-JSON serialization for signing
+/// (`canonical-json-minv1`).
+///
+/// Object keys are sorted lexicographically and there is no insignificant
+/// whitespace, so the host and provider derive byte-identical payloads from
+/// the same logical value regardless of map iteration order.
+///
+/// Strings are escaped exactly like AOSP `org.json.JSONObject.quote`:
+/// `"` and `\` are escaped; the five named controls `\b\f\n\r\t` use their
+/// lowercase-name escape; every other code point below U+0020 uses lowercase
+/// `\u00xx`; `/` is escaped as `\/`; everything else (CJK, emoji incl. ZWJ,
+/// U+2028/U+2029, U+FEFF, U+007F) is emitted as raw UTF-8. The business
+/// string is never rewritten — `10/22`, `元/吨`, URLs, Markdown and newlines
+/// must round-trip byte-for-byte.
+///
+/// Numbers use Java `Double.toString` rules: integers that fit in `i64`
+/// render as decimal digits; everything else parses as a double and renders
+/// as Java would (decimal below `1e7` and at/above `1e-3`, scientific `E`
+/// form otherwise, mantissa always carrying a fractional digit, exponent
+/// without a leading `+`). This matches the Android/iOS provider
+/// implementations byte-for-byte; the cross-platform contract is pinned by
+/// `packages/agent_provider/shared/signing_fixtures.json`.
+pub(crate) fn canonical_json(value: &Value) -> String {
+    match value {
+        Value::Null => "null".to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => canonical_number(value),
+        Value::String(value) => canonical_string(value),
         Value::Array(values) => format!(
             "[{}]",
             values
@@ -114,13 +195,120 @@ pub(crate) fn canonical_json(value: &Value) -> String {
                     .into_iter()
                     .map(|(key, value)| format!(
                         "{}:{}",
-                        serde_json::to_string(key).unwrap_or_else(|_| "\"\"".to_string()),
+                        canonical_string(key),
                         canonical_json(value)
                     ))
                     .collect::<Vec<_>>()
                     .join(",")
             )
         }
+    }
+}
+
+/// String escaping per `canonical-json-minv1` (mirrors AOSP
+/// `org.json.JSONObject.quote`). The input string is treated as raw UTF-8
+/// bytes; no business character (`/`, CJK, emoji, …) is rewritten — only the
+/// JSON-level escape rules above are applied.
+fn canonical_string(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{0008}' => out.push_str("\\b"),
+            '\u{000C}' => out.push_str("\\f"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '/' => out.push_str("\\/"),
+            c if (c as u32) < 0x20 => {
+                out.push_str(&format!("\\u{:04x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// Number serialization per `canonical-json-minv1` (mirrors Java
+/// `Double.toString` for non-`i64`-fitting numbers, matching AOSP org.json).
+fn canonical_number(value: &serde_json::Number) -> String {
+    if value.is_i64() {
+        // `is_i64()` already proved the `i64` accessor succeeds; `expect` keeps
+        // the panic message actionable without relaxing the `unwrap_used` lint.
+        return value
+            .as_i64()
+            .expect("serde_json Number::is_i64() guarantees as_i64() is Some")
+            .to_string();
+    }
+    if value.is_u64() {
+        // u64-only integers (i64::MAX < value <= u64::MAX) round-trip through
+        // Java Double.toString in org.json, losing precision but matching the
+        // shared fixture bytes.
+        return format_double_java(
+            value
+                .as_u64()
+                .expect("serde_json Number::is_u64() guarantees as_u64() is Some")
+                as f64,
+        );
+    }
+    if value.is_f64() {
+        return format_double_java(
+            value
+                .as_f64()
+                .expect("serde_json Number::is_f64() guarantees as_f64() is Some"),
+        );
+    }
+    // Defensive fallback: an unknown variant should not exist in `serde_json`
+    // today, but never silently substitute — emit whatever the underlying
+    // number prints so a mismatch is observable rather than masked.
+    value.to_string()
+}
+
+/// Format `value` like Java's `Double.toString`. Used by the canonical-JSON
+/// serializer for any number that is not an `i64`-fitting integer literal.
+fn format_double_java(value: f64) -> String {
+    // NaN/Infinity cannot round-trip through JSON; org.json emits them as
+    // "null"/strings but no fixture uses them. Fall back to Display so the
+    // output stays a single JSON token and never silently succeeds a sign.
+    if value.is_nan() || value.is_infinite() {
+        return format!("{value}");
+    }
+    if value == 0.0 {
+        return if value.is_sign_negative() {
+            "-0.0".to_string()
+        } else {
+            "0.0".to_string()
+        };
+    }
+    let abs = value.abs();
+    // Java Double.toString: decimal form when 1e-3 <= |x| < 1e7, otherwise
+    // scientific with uppercase `E` and no leading `+`/zero on the exponent.
+    if (1e-3..1e7).contains(&abs) {
+        let s = format!("{value}");
+        if !s.contains('.') && !s.contains('e') && !s.contains('E') {
+            format!("{s}.0")
+        } else {
+            s
+        }
+    } else {
+        // `{:e}` produces `<mantissa>e<exp>` with the shortest mantissa that
+        // round-trips, e.g. "1e7", "1.5e-10", "9.223372036854776e18".
+        let s = format!("{value:e}");
+        let (mantissa, exponent) = s
+            .split_once('e')
+            .expect("finite non-zero f64 always serializes with an exponent via {:e}");
+        let mantissa = if mantissa.contains('.') {
+            mantissa.to_string()
+        } else {
+            format!("{mantissa}.0")
+        };
+        let exponent: i32 = exponent
+            .parse()
+            .expect("Rust {:e} exponent is a signed integer");
+        format!("{mantissa}E{exponent}")
     }
 }
 
@@ -190,5 +378,30 @@ mod tests {
         assert!(!canonical.contains(' '));
         assert!(!canonical.contains('\n'));
         assert_eq!(canonical, r#"{"nested":{"y":"v","z":[1,2]},"x":true}"#);
+    }
+
+    #[test]
+    fn canonical_json_escapes_slash_per_canonical_json_minv1() {
+        // The 2026-11-03 signature_invalid root cause: serde_json does not
+        // escape `/`, but AOSP org.json (and the shared fixture contract)
+        // does. A slash in the business string must round-trip unchanged
+        // after parsing while serializing to `\/` for signing.
+        let value = json!("10/22");
+        assert_eq!(canonical_json(&value), r#""10\/22""#);
+        assert_eq!(
+            sha256_base64_no_pad(canonical_json(&value).as_bytes()),
+            "Z2vsKlSky1Ry62usAWhybVrc+YEaIwrvvzsk7L5Nd/k"
+        );
+
+        // Symbol/unit with CJK + slash stays raw CJK and escapes the slash.
+        let value = json!("元/吨");
+        assert_eq!(canonical_json(&value), r#""元\/吨""#);
+
+        // URL: every slash escaped, ampersand and other ASCII punctuation raw.
+        let value = json!("https://napaxi.example.com/a/b?c=1&d=2");
+        assert_eq!(
+            canonical_json(&value),
+            r#""https:\/\/napaxi.example.com\/a\/b?c=1&d=2""#
+        );
     }
 }

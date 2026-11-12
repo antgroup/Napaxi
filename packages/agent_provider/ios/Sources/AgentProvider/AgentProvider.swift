@@ -355,14 +355,51 @@ private func canonicalJson(_ value: JSONValue) -> String {
     }
 }
 
+/// String escaping per `canonical-json-minv1` (mirrors AOSP
+/// `org.json.JSONObject.quote` byte-for-byte). The previous implementation
+/// relied on `JSONSerialization`, which neither escapes `/` nor handles
+/// the JSON-invisible control code points (`U+0000`-`U+001F`) using the
+/// lowercase `\u00xx` form the shared `canonical_fixtures.json` contract
+/// pins. Hand-written escape keeps the business string intact — `10/22`,
+/// `元/吨`, URLs and Markdown round-trip unchanged — and matches the Rust
+/// core (see `crates/core/src/crypto/mod.rs`) and the Android provider
+/// (`org.json.JSONObject.quote`) byte-for-byte.
+///
+/// `encodeJson` (separate function) builds the wire request body and is
+/// intentionally *not* used for signing — `JSONEncoder.withoutEscapingSlashes`
+/// is fine for transport because the request body does not participate in
+/// the HMAC payload.
 private func jsonQuoted(_ value: String) -> String {
-    guard
-        let data = try? JSONSerialization.data(withJSONObject: [value], options: []),
-        let encoded = String(data: data, encoding: .utf8)
-    else {
-        return "\"\(value)\""
+    var out = "\""
+    for scalar in value.unicodeScalars {
+        switch scalar.value {
+        case 0x22: // "
+            out += "\\\""
+        case 0x5C: // backslash
+            out += "\\\\"
+        case 0x2F: // /
+            out += "\\/"
+        case 0x08: // backspace
+            out += "\\b"
+        case 0x0C: // form feed
+            out += "\\f"
+        case 0x0A: // line feed
+            out += "\\n"
+        case 0x0D: // carriage return
+            out += "\\r"
+        case 0x09: // horizontal tab
+            out += "\\t"
+        case let code where code < 0x20:
+            // Lowercase 4-hex `\u00xx` for the remaining control range.
+            // Code points beyond U+007F (DEL, line/par separators, BOM,
+            // ZWJ, CJK, …) remain raw UTF-8, matching the fixture contract.
+            out += String(format: "\\u%04x", code)
+        default:
+            out.unicodeScalars.append(scalar)
+        }
     }
-    return String(encoded.dropFirst().dropLast())
+    out += "\""
+    return out
 }
 
 private func sha256Base64NoPad(_ data: Data) -> String {

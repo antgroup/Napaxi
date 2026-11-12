@@ -424,7 +424,12 @@ pub fn compute_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
     let result = hasher.finalize();
-    format!("sha256:{:x}", result)
+    let mut out = String::with_capacity("sha256:".len() + result.len() * 2);
+    out.push_str("sha256:");
+    for byte in result.iter() {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
 }
 
 fn metadata_terms(manifest: &SkillManifest) -> Vec<String> {

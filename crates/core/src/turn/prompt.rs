@@ -119,7 +119,12 @@ pub(super) fn compile_prompt_content(prompt: &PromptPlan) -> String {
 fn sha256_hex(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
-    format!("{:x}", hasher.finalize())
+    let result = hasher.finalize();
+    let mut hex = String::with_capacity(result.len() * 2);
+    for byte in result.iter() {
+        hex.push_str(&format!("{byte:02x}"));
+    }
+    hex
 }
 
 #[cfg(test)]
