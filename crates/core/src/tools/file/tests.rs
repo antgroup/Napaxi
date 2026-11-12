@@ -515,3 +515,87 @@ fn read_file_truncates_at_max_bytes_bound() {
     );
     assert_eq!(out["truncated"].as_bool(), Some(true));
 }
+
+// --- §2 exec 结果观察类型独立化基线（#194175 映射 + #185636/#193802 续） ---------
+// OpenClaw #194175：把 exec 已可观察结果与退场/失败/policy 合约拆到独立 observation type owner
+// （uncertain 标记 / terminal / ordinal 字段），避免后续 cleanup 信号改写已观察成功结果、或
+// 超时/被排队打断/退场路径下结果被 failed/canceled/shutdown 覆盖。Napaxi 当前
+// `ShellExecResult` 与执行路径耦在一起、无独立 observation type owner——本族 baseline 用
+// read_file 工具作最小可观察结果载体，固化两条不变式：观察结果相比后续无关工单不被覆盖、
+// 观察边界 per-call 不串扰（max_bytes 截断只作用于当次调用）。末来引入独立 observation type
+// owner 时这两条不变式继续约束读路径行为。
+
+#[test]
+fn read_file_observation_survives_unrelated_apply_patch() {
+    // OpenClaw #194175：已观察的 exec 结果不应被后续无关工单的失败/退场信号改写。
+    // baseline 用 read_file 先读一份稳定结果，再对另一个无关文件 apply_patch（add），
+    // 然后重读同一文件——结果与首次观察一致，证明观察结果未被外部路径覆盖。
+    let dir = temp_dir("obs_survive");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+    fs::create_dir_all(bridge.workspace_dir()).unwrap();
+    fs::write(
+        bridge.workspace_dir().join("observed.md"),
+        "first observation payload",
+    )
+    .unwrap();
+
+    let first = run(
+        &files_dir,
+        READ_FILE_TOOL_NAME,
+        serde_json::json!({"path":"/workspace/observed.md"}),
+    );
+    assert_eq!(first["content"].as_str(), Some("first observation payload"),);
+    assert_eq!(first["truncated"].as_bool(), Some(false));
+
+    // 对无关文件 apply_patch（add）——模拟一个后续无关工具动作。
+    let _add = run(
+        &files_dir,
+        APPLY_PATCH_TOOL_NAME,
+        serde_json::json!({
+            "patch": "*** Begin Patch\n*** Add File: /workspace/other.md\n+unrelated\n*** End Patch"
+        }),
+    );
+
+    // 重读同一已观察文件：结果必须与首次观察一致，不被后续动作覆盖。
+    let reread = run(
+        &files_dir,
+        READ_FILE_TOOL_NAME,
+        serde_json::json!({"path":"/workspace/observed.md"}),
+    );
+    assert_eq!(
+        reread["content"].as_str(),
+        Some("first observation payload"),
+    );
+    assert_eq!(reread["truncated"].as_bool(), Some(false));
+}
+
+#[test]
+fn read_file_observation_bounded_per_call_not_shared_across_calls() {
+    // OpenClaw #194175：观察边界 per-call——单次调用的 max_bytes 截断只作用于当次读取，
+    // 不应串扰到同一文件的后续无界读取（独立 observation owner 的 per-call 语义）。
+    // baseline：一个 max_bytes=4 的截断调用其后，无 max_bytes 调用须读回完整内容。
+    let dir = temp_dir("obs_per_call");
+    let files_dir = dir.to_string_lossy().to_string();
+    let bridge = FileBridge::new(&files_dir);
+    fs::create_dir_all(bridge.workspace_dir()).unwrap();
+    let full = "observation-bounded-per-call-payload";
+    fs::write(bridge.workspace_dir().join("bounded.md"), full).unwrap();
+
+    let bounded = run(
+        &files_dir,
+        READ_FILE_TOOL_NAME,
+        serde_json::json!({"path":"/workspace/bounded.md","max_bytes":4}),
+    );
+    assert_eq!(bounded["bytes_read"].as_u64(), Some(4));
+    assert_eq!(bounded["truncated"].as_bool(), Some(true));
+
+    // 同一文件、无 max_bytes 的后续调用：观察边界不应串扰，须读回完整未截断内容。
+    let unbounded = run(
+        &files_dir,
+        READ_FILE_TOOL_NAME,
+        serde_json::json!({"path":"/workspace/bounded.md"}),
+    );
+    assert_eq!(unbounded["content"].as_str(), Some(full));
+    assert_eq!(unbounded["truncated"].as_bool(), Some(false));
+}

@@ -74,3 +74,80 @@ If a future phase introduces a restricted egress proxy, it must absorb both
 - No version branch, no new per-request op.
 
 This is a mid/long-term item pending egress-boundary product decisions.
+
+---
+
+# Alternate napaxi-side process-hosting roadmap (PR #111 original)
+
+# Process-hosting roadmap
+
+Napaxi is single-process and reaches child processes (codex engine, exec)
+through rpc / supervised channels rather than OpenClaw's long-lived supervised
+Gateway. Several OpenClaw hardening items map to a daemonization + supervised
+process track that Napaxi has not entered yet. This file records the design
+checklists so the items are tracked against their OpenClaw sources instead of
+being dropped; none are landed in the audit-baseline CRs that reference it.
+
+Each section is a checklist plus its OpenClaw source id(s) and the trigger
+that should start the work.
+
+## §1 compaction ↔ watchdog nested-attachment (#194722)
+
+The context-compaction watcher and the main-thread stall watchdog must not
+nest-attach in a way where one falsifies the other's liveness signal (the
+compaction watcher looking live while the worker thread that should drive it
+is wedged). Checklist before enabling:
+
+- [ ] Confirm the compaction watchdog's heartbeat owner is the same bounded
+  owner as the stall watchdog, or document why they are independent.
+- [ ] A nested-attach must re-arm the parent watchdog, not reset the child's
+  observation window.
+- [ ] Test: wedge the compaction worker thread; the stall watchdog must still
+  fire (the compaction watcher does not mask it).
+
+Trigger: land this when the stall watchdog in §2 is wired against a real
+heartbeat owner, not before.
+
+## §2 restart terminal-reply bounded grace (#195164)
+
+When the process is restarted by an external supervisor (systemd / launchd /
+app child), an in-flight terminal reply should get a bounded grace window to
+flush before the old instance is killed, and the new instance should not
+duplicate-emit the reply. Checklist:
+
+- [ ] Define the grace window (strictly bounded, not unbounded wait).
+- [ ] A reply flushed during grace must be marked so the new instance does
+  not re-emit it as a fresh authored answer.
+- [ ] On ungraceful kill, the in-flight reply is dropped, not partially
+  emitted.
+
+Trigger: land this with daemonization, where restart is a real path.
+
+## §3 main-thread stall watchdog + external-supervisor recovery
+(#194481, related #190964 / #191632)
+
+OpenClaw #194481 has the supervised Gateway kill itself (SIGKILL) after 5
+minutes without a heartbeat, relying on an external supervisor to restart and
+on existing crash-recovery to resume eligible runs. Napaxi has only the
+qqbot-protocol WS heartbeat (`channel/qqbot/gateway.rs`, an app-level liveness
+signal) and no general main-thread stall watchdog, no supervisor-kill +
+restart-resume chain. Checklist before introducing:
+
+- [ ] Confirm the codex-engine main thread is plausibly subject to a stall
+  (if the codex child-process rpc has no main-thread stall surface, downgrade
+  the priority of this item).
+- [ ] Reuse the existing bounded heartbeat owner (qqbot's or a new shared
+  one); do NOT add a second independent watchdog.
+- [ ] Define the stall threshold against the heartbeat owner; 5 min is an
+  OpenClaw default, Napaxi's threshold should be sized to its own workload.
+- [ ] On stall: SIGKILL self, write a `main-thread stall recovery:` terminal
+  fact to stderr synchronously, do not wait for an inspector capture.
+- [ ] External supervisor (systemd / launchd) restarts; existing
+  crash-recovery resumes eligible runs.
+- [ ] Inspector / startup profiling are exempt from the stall window; laptop
+  sleep resets the observation window.
+
+Trigger: this is on the daemonization + self-managed-process track, gated on
+Napaxi deciding the external-supervisor deployment shape. It is long-term and
+explicitly out of scope for the audit-baseline CRs that land in this file's
+neighborhood.

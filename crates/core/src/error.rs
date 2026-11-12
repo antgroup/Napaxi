@@ -498,4 +498,55 @@ mod tests {
         let wire = err.to_wire_json();
         assert!(wire.contains(r#""code":"llm_rate_limit""#));
     }
+
+    // --- §1 provider-failure × tool-warning 并列保留 baseline（#194439 映射） ---------
+    // OpenClaw #194439：工具失败后 provider usage-limit 失败应在前序 tool warning 之前
+    // 被并列保留展示（canonical `terminalProviderError` 防 authored-answer 误判），避免被
+    // tool warning 吞掉、用户拿不到 reset 时间。Napaxi 当前无共享 terminal error owner 做
+    // 串行收尾，但 `LlmError` 分类契约是末来引入该 owner 时的承载点。下列 baseline 固化：
+    // (1) rate-limit reset 时间信号保留进分类后的 `message`、(2) 429+quota 不会被降级为
+    // 普通 rate-limit、(3) 普通 provider 失败不会被吞成 rate-limit——任一退化即回归失败。
+
+    #[test]
+    fn rate_limit_classification_preserves_reset_time_signal_in_message() {
+        // OpenClaw #194439：rate-limit detail recognizer 接 native "try again at" reset 措辞。
+        // Napaxi 无 reset 解析器，但分类后的 `RateLimit { message }` 必须原样保留该窗口，
+        // 供末来 terminal owner 渲染。这里断言 reset 措辞不被覆盖/裁剪。
+        let msg = "Rate limit exceeded, please try again at 2026-11-08T03:00:00Z";
+        let err = LlmError::from_anyhow(anyhow::anyhow!(msg));
+        match err {
+            LlmError::RateLimit { message, .. } => assert_eq!(message, msg),
+            other => panic!("expected RateLimit, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn quota_failure_is_not_collapsed_into_plain_rate_limit() {
+        // OpenClaw #194439：provider usage-limit 主分 quota vs transient rate-limit 两条，
+        // terminal owner 须分别展示。baseline 防 429+quota 被降级成普通 rate-limit 丢失
+        // quota 维度信息（用户拿不到“账户配额耗尽”语义）。
+        let err = LlmError::from_anyhow(anyhow::anyhow!(
+            "LLM provider error (429): You exceeded your current quota"
+        ));
+        assert_eq!(err.code(), "llm_quota_exhausted");
+        match err {
+            LlmError::QuotaExhausted { status, .. } => assert_eq!(status, 429),
+            other => panic!("expected QuotaExhausted, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn non_rate_limit_provider_failure_is_not_absorbed_as_rate_limit() {
+        // OpenClaw #194439：前序 tool warning 不得把后续非 rate-limit provider 失败吞成
+        // rate-limit。baseline 保证普通 provider 失败（非 429、无 rate-limit 信号）保持
+        // `llm_provider`，末来引入共享 terminal owner 时不会被误归到 rate-limit 维度。
+        let err = LlmError::from_anyhow(anyhow::anyhow!(
+            "LLM provider error (503): upstream unavailable for the model"
+        ));
+        assert_eq!(err.code(), "llm_provider");
+        match err {
+            LlmError::Provider { status, .. } => assert_eq!(status, 503),
+            other => panic!("expected Provider, got {other:?}"),
+        }
+    }
 }
