@@ -198,7 +198,7 @@ fn summarize_middle_locally(
     let mut assistant_items = Vec::new();
     let mut tool_items = Vec::new();
     for message in messages {
-        let preview = compact_text_preview(&message.content, 280);
+        let preview = redacted_preview(&message.content, 280);
         match message.role.as_str() {
             "user" => user_items.push(preview),
             "assistant" => assistant_items.push(preview),
@@ -213,12 +213,12 @@ fn summarize_middle_locally(
             .to_string(),
     );
     if let Some(focus) = focus.filter(|value| !value.trim().is_empty()) {
-        sections.push(format!("### Focus\n{}", compact_text_preview(focus, 500)));
+        sections.push(format!("### Focus\n{}", redacted_preview(focus, 500)));
     }
     if let Some(previous) = previous_summary.filter(|value| !value.trim().is_empty()) {
         sections.push(format!(
             "### Previous Summary\n{}",
-            compact_text_preview(previous, 1400)
+            redacted_preview(previous, 1400)
         ));
     }
     sections.push(format!(
@@ -364,7 +364,10 @@ async fn run_compaction_llm(
     if summary.is_empty() {
         return Err("Context compaction LLM returned an empty summary".to_string());
     }
-    Ok(summary.to_string())
+    // Redact credentials before the summary leaves this layer so neither the
+    // required-section check nor the returned content can persist raw secrets
+    // (covers both the first attempt and the retry path).
+    Ok(redact_credentials_in_text(summary))
 }
 
 fn summary_has_required_sections(summary: &str) -> bool {
@@ -543,12 +546,12 @@ fn compaction_user_prompt(
 ) -> String {
     let mut sections = Vec::new();
     if let Some(focus) = focus.filter(|value| !value.trim().is_empty()) {
-        sections.push(format!("Focus:\n{}", compact_text_preview(focus, 1_200)));
+        sections.push(format!("Focus:\n{}", redacted_preview(focus, 1_200)));
     }
     if let Some(summary) = previous_summary.filter(|value| !value.trim().is_empty()) {
         sections.push(format!(
             "Previous summary:\n{}",
-            compact_text_preview(summary, 6_000)
+            redacted_preview(summary, 6_000)
         ));
     }
     let mut message_lines = Vec::new();
@@ -558,7 +561,7 @@ fn compaction_user_prompt(
                 "<message id=\"{}\" role=\"{}\">\n{}\n</message>",
                 message.id,
                 message.role,
-                compact_text_preview(&message.content, 1_000)
+                redacted_preview(&message.content, 1_000)
             )),
             "tool_calls" => {
                 let items = tool_summary_items(&message.content, 12);
@@ -566,7 +569,7 @@ fn compaction_user_prompt(
                     message_lines.push(format!(
                         "<tool_observation source_message_id=\"{}\">\n{}\n</tool_observation>",
                         message.id,
-                        compact_text_preview(&message.content, 700)
+                        redacted_preview(&message.content, 700)
                     ));
                 }
                 for item in items {
@@ -789,6 +792,60 @@ fn oldest_large_tool_message(messages: &[serde_json::Value]) -> Option<usize> {
         .map(|(index, _)| index)
 }
 
+/// Replace likely-credential substrings in compaction products with a fixed
+/// placeholder so summary / floor text never persists raw secrets.
+///
+/// Applied before preview/anchor extraction (matching the upstream #4a47d02c6d
+/// mapping) so credentials cannot be echoed into the durable summary and later
+/// re-extracted by downstream summarizers. Conservative on purpose: only high
+/// confidence credential shapes are redacted, leaving a readable prefix
+/// (`Bearer [REDACTED]`, `ghp_[REDACTED]`) so the surrounding prose stays useful.
+///
+/// No lookarounds are used — the `regex` crate does not support them — so each
+/// pattern is `(prefix)(body)` and we keep the prefix, redacting only the body.
+pub(crate) fn redact_credentials_in_text(text: &str) -> String {
+    use regex::Regex;
+    use std::sync::OnceLock;
+    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
+    let patterns = PATTERNS.get_or_init(|| {
+        vec![
+            // RFC 6750 bearer tokens: `Bearer <opaque>` / `bearer  <opaque>`.
+            Regex::new(r"(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})").unwrap(),
+            // `Authorization: <opaque>` (bare scheme-less token, ≥8 alnum, no space).
+            Regex::new(r"(?i)(Authorization\s*[:=]\s*)([A-Za-z0-9._~+/=-]{8,})").unwrap(),
+            // Known provider prefixes — keep the prefix, redact the body.
+            //   GitHub (ghp_/gho_/ghs_/ghr_/github_pat_), Anthropic (sk-ant-),
+            //   OpenAI (sk- + ≥20 body to avoid short false positives),
+            //   Slack (xox[bps]-), Google API key (AIza).
+            Regex::new(r"(ghp_|gho_|ghs_|ghr_|github_pat_|sk-ant-)([A-Za-z0-9]{8,})").unwrap(),
+            Regex::new(r"(sk-)([A-Za-z0-9]{20,})").unwrap(),
+            Regex::new(r"(xox[bps]-)([A-Za-z0-9-]{8,})").unwrap(),
+            Regex::new(r"\b(AIza)([A-Za-z0-9_\-]{20,})").unwrap(),
+            // `<key>=` / `<key>:` assignments: api_key / access_token / refresh_token /
+            // client_secret / secret / token, optionally followed by a quote char.
+            Regex::new(
+                r"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token)\s*[:=]\s*['\"]?)([A-Za-z0-9._~+/=-]{8,})",
+            )
+            .unwrap(),
+        ]
+    });
+    let mut out = text.to_string();
+    for re in patterns {
+        out = re
+            .replace_all(&out, |caps: &regex::Captures| {
+                format!("{}[REDACTED]", &caps[1])
+            })
+            .to_string();
+    }
+    out
+}
+
+/// Redact credentials, then produce the bounded preview. Used at every compaction
+/// write-out / sampling point so secrets never survive preview/anchor extraction.
+fn redacted_preview(text: &str, max_chars: usize) -> String {
+    compact_text_preview(&redact_credentials_in_text(text), max_chars)
+}
+
 pub(super) fn compact_text_preview(text: &str, max_chars: usize) -> String {
     let compact = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if compact.chars().count() <= max_chars {
@@ -860,5 +917,121 @@ mod auto_focus_tests {
     fn returns_none_without_user_turns() {
         let history = vec![message("m1", "assistant", "hello")];
         assert!(derive_auto_focus_topic(&history).is_none());
+    }
+}
+
+#[cfg(test)]
+mod credential_redaction_tests {
+    use super::*;
+
+    // Edition 2024 makes an identifier directly before a closing `"` a reserved
+    // prefix (hard error), so credential-bearing inputs are assembled at runtime
+    // via format!/concat! and assertion messages end in punctuation.
+
+    #[test]
+    fn redacts_github_pat_prefix() {
+        let input = format!("token is ghp_{tok} . ", tok = "oAbCdEfGhIjKlMnOpQrStUv8000deadbeef");
+        let out = redact_credentials_in_text(&input);
+        assert!(out.contains("ghp_[REDACTED]"), "redaction missing: {out} . ");
+        assert!(!out.contains("oAbCdEfGhIjKlMnOpQrStUv8000deadbeef"));
+    }
+
+    #[test]
+    fn redacts_bearer_authorization() {
+        let input = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9payload . ";
+        let out = redact_credentials_in_text(input);
+        assert!(out.contains("Authorization: Bearer [REDACTED]"), "redaction missing: {out} . ");
+        assert!(!out.contains("eyJhbGci"));
+    }
+
+    #[test]
+    fn redacts_bare_authorization_assignment() {
+        let input = "Authorization: dXNlcjpwYXNzMTIzNDU2Nzg5 . ";
+        let out = redact_credentials_in_text(input);
+        assert!(out.contains("Authorization: [REDACTED]"), "redaction missing: {out} . ");
+        assert!(!out.contains("dXNlcjpwYXNzMTIzNDU2Nzg5"));
+    }
+
+    #[test]
+    fn redacts_anthropic_prefix() {
+        let input = format!("keys: sk-ant-{tok} . ", tok = "api03AbCdEfGhIjKlMnOpQrStUv");
+        let out = redact_credentials_in_text(&input);
+        assert!(out.contains("sk-ant-[REDACTED]"), "redaction missing: {out} . ");
+        assert!(!out.contains("api03AbCdEfGhIjKlMnOpQrStUv"));
+    }
+
+    #[test]
+    fn redacts_openai_long_prefix() {
+        let input = format!("sk-{tok} . ", tok = "AbCdEfGhIjKlMnOpQrSt0123456789");
+        let out = redact_credentials_in_text(&input);
+        assert!(out.contains("sk-[REDACTED]"), "redaction missing: {out} . ");
+        assert!(!out.contains("AbCdEfGhIjKlMnOpQrSt0123456789"));
+    }
+
+    #[test]
+    fn does_not_redact_short_sk() {
+        // sk- with <20 body chars is left alone (avoids false positives).
+        let out = redact_credentials_in_text("dash sk-short stuff . ");
+        assert_eq!(out, "dash sk-short stuff . ");
+    }
+
+    #[test]
+    fn redacts_key_value_assignments() {
+        let input = "config: api_key=abc12345678901234 token=abcdef0123456789 secret: SHORT . ";
+        let out = redact_credentials_in_text(input);
+        assert!(out.contains("api_key=[REDACTED]"), "api_key not redacted: {out} . ");
+        assert!(out.contains("token=[REDACTED]"), "token not redacted: {out} . ");
+        // `secret: SHORT` body below the 8-char floor must NOT be redacted.
+        assert!(out.contains("secret: SHORT"), "short secret wrongly redacted: {out} . ");
+    }
+
+    #[test]
+    fn redacts_slack_and_google_prefixes() {
+        let input = "slack xoxb-1234567890ABCDEFGH; google AIzaSyABCDEFGHIJKLMN01234567 . ";
+        let out = redact_credentials_in_text(input);
+        assert!(out.contains("xoxb-[REDACTED]"), "slack not redacted: {out} . ");
+        assert!(out.contains("AIza[REDACTED]"), "google not redacted: {out} . ");
+    }
+
+    #[test]
+    fn leaves_ordinary_text_untouched() {
+        let text = "Run cargo test in the worktree, ref 55f899f . ";
+        let out = redact_credentials_in_text(text);
+        assert_eq!(out, text, "ordinary text was changed.");
+    }
+
+    #[test]
+    fn local_summary_redacts_user_credentials_before_preview() {
+        let user_msg = SessionMessage {
+            id: "u1".to_string(),
+            role: "user".to_string(),
+            content: format!("Please use ghp_{tok} and Bearer {jwt} . ", tok = "deadbeefcafe1234567890abcdef", jwt = "supersecretjwt1234"),
+            created_at: "2026-11-12T00:00:00Z".to_string(),
+            interrupted: false,
+            turn_id: None,
+        };
+        let summary = summarize_middle_locally(None, std::slice::from_ref(&user_msg), None);
+        assert!(!summary.contains("ghp_deadbeefcafe1234567890abcdef"), "ghp leaked into summary.");
+        assert!(!summary.contains("supersecretjwt1234"), "bearer jwt leaked into summary.");
+        assert!(summary.contains("[REDACTED]"));
+        // Structural invariants preserved.
+        assert!(summary.contains("## Conversation Context Summary"));
+        assert!(summary.contains("### User Goals And Constraints"));
+    }
+
+    #[test]
+    fn compaction_user_prompt_redacts_sampled_input() {
+        let user_msg = SessionMessage {
+            id: "u1".to_string(),
+            role: "user".to_string(),
+            content: format!("key=Bearer {jwt} long ghp_{tok} . ", jwt = "eyJleGFtcGxllnNpZ25hdHVyZQ", tok = "1234567890abcdefghijklmno"),
+            created_at: "2026-11-12T00:00:00Z".to_string(),
+            interrupted: false,
+            turn_id: None,
+        };
+        let prompt = compaction_user_prompt(None, std::slice::from_ref(&user_msg), None);
+        assert!(!prompt.contains("eyJleGFtcGxllnNpZ25hdHVyZQ"), "jwt leaked into prompt.");
+        assert!(!prompt.contains("1234567890abcdefghijklmno"), "ghp leaked into prompt.");
+        assert!(prompt.contains("[REDACTED]"));
     }
 }
