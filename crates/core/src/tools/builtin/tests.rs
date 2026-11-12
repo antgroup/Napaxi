@@ -1051,3 +1051,42 @@ fn render_shell_exec_result_preserves_timeout_and_cancelled_markers() {
         "proot command timed out after 42s: "
     );
 }
+
+// --- §1 #185636 exec 结果保留语义 baseline -------------------------------------------------
+// OpenClaw #185636：detached daemon 脱离 process group，supervisor 在 cleanup deadline
+// 无法确认 descendant extinction，把已观察到的成功结果改写成丢 exit code 的 runtime
+// error。Napaxi 同步 exec 无 background/detached/cleanup_deadline 概念，#193614 data
+// contract 已把 Ok/NonZeroExit/Cancelled/Timeout/CleanupFailed 在类型层分开。下面
+// baseline 锁住 #185636 的关键退化点：完成命令 timeout 前已收集的 partial stdout/stderr
+// 不被 timeout 路径丢弃——这正是 "已观察结果被后续 cleanup 改写" 的等价形态。任一退化
+// （timeout 改成空 message 或丢 stdout）即回归失败。
+
+#[test]
+fn timeout_preserves_already_collected_stdout_when_killed() {
+    use super::shell::{ShellExecResult, render_shell_exec_result};
+
+    // A long-running command hit the wall-clock timeout AFTER already
+    // emitting partial stdout/stderr — the contract must carry that
+    // partial output in the timeout message, not drop it to an empty
+    // "proot command timed out after 30s: " (the #185636 regression
+    // is "observed success rewritten to a losing error").
+    let timeout = ShellExecResult::timeout(
+        "partial stdout already collected before kill".to_string(),
+        "partial stderr already collected before kill".to_string(),
+        -124,
+        30,
+    );
+    let rendered = render_shell_exec_result(&timeout).unwrap_err();
+    assert!(
+        rendered.contains("proot command timed out after 30s:"),
+        "timeout marker must stay: {rendered}"
+    );
+    assert!(
+        rendered.contains("partial stdout already collected before kill"),
+        "Timeout must NOT drop stdout collected before the kill (#185636): {rendered}"
+    );
+    assert!(
+        rendered.contains("partial stderr already collected before kill"),
+        "Timeout must NOT drop stderr collected before the kill (#185636): {rendered}"
+    );
+}
