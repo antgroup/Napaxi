@@ -14,9 +14,12 @@
 # result.json summary and the Maestro JUnit report.
 set -uo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# NAPAXI_ROOT / MAESTRO_FLOW_DIR allow running this script from a copy
+# outside the repo (the layer-6 acceptance runner bootstraps it into
+# $HOME/testing/bin/) and with flows extracted from another branch.
+ROOT_DIR="${NAPAXI_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 APP_DIR="$ROOT_DIR/examples/flutter"
-FLOW_DIR="$APP_DIR/.maestro"
+FLOW_DIR="${MAESTRO_FLOW_DIR:-$APP_DIR/.maestro}"
 AVD_NAME="${AVD_NAME:-napaxi_api34}"
 SKIP_BUILD=0
 
