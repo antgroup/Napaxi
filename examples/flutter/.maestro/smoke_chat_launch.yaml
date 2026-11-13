@@ -14,8 +14,8 @@ appId: com.napa.app.test
 - tapOn:
     text: "稍后"
     optional: true
-- assertVisible:
-    text: "Napaxi"
+- extendedWaitUntil:
+    visible: "Napaxi"
     timeout: 30000
 - assertVisible: "给 napaxi 发消息"
 - tapOn: "给 napaxi 发消息"
