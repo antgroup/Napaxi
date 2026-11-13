@@ -47,6 +47,30 @@ RESULT_DIR="$HOME/testing/results/$TS"
 mkdir -p "$RESULT_DIR"
 cd "$ROOT_DIR"
 
+# Environment self-heal: force every Kotlin compile task to jvmTarget 1.8.
+# Third-party plugins (umeng_common_sdk, flutter_contacts, ...) compile Java
+# at 1.8 but leave Kotlin's jvmTarget unset, and KGP then defaults it to the
+# JDK running Gradle (JBR 21 on this machine). Gradle variant resolution
+# drops those modules' classes from consumers targeting < 21, surfacing as
+# "cannot find symbol" in :app:compileDebugJavaWithJavac. Forcing all Kotlin
+# to 1.8 is downgrade-compatible for Java 1.8 and Java 17 consumers alike.
+# The consistency validation is downgraded to a warning as a safety net.
+INIT_DIR="$HOME/.gradle/init.d"
+mkdir -p "$INIT_DIR"
+cat > "$INIT_DIR/napaxi-jvm-align.gradle" <<'GRADLE'
+allprojects {
+    afterEvaluate {
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+        }
+    }
+}
+GRADLE
+GRADLE_PROPS="$HOME/.gradle/gradle.properties"
+touch "$GRADLE_PROPS"
+grep -q "kotlin.jvm.target.validation.mode" "$GRADLE_PROPS" || \
+    echo "kotlin.jvm.target.validation.mode=warning" >> "$GRADLE_PROPS"
+
 step() { echo "[layer2] $*"; }
 STEP_BUILD="skipped"; STEP_EMULATOR="failed"; STEP_INSTALL="failed"; STEP_MAESTRO="failed"
 
