@@ -54,14 +54,23 @@ cd "$ROOT_DIR"
 # drops those modules' classes from consumers targeting < 21, surfacing as
 # "cannot find symbol" in :app:compileDebugJavaWithJavac. Forcing all Kotlin
 # to 1.8 is downgrade-compatible for Java 1.8 and Java 17 consumers alike.
-# The consistency validation is downgraded to a warning as a safety net.
+# The init script guards on the Kotlin Android plugin (the included ':gradle'
+# build has no Kotlin) and uses dynamic Groovy dispatch only — init scripts
+# compile against the bare Gradle API, so KGP class literals would not
+# resolve. The consistency validation is downgraded to a warning as a
+# safety net.
 INIT_DIR="$HOME/.gradle/init.d"
 mkdir -p "$INIT_DIR"
 cat > "$INIT_DIR/napaxi-jvm-align.gradle" <<'GRADLE'
 allprojects {
-    afterEvaluate {
-        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+    plugins.withId("org.jetbrains.kotlin.android") {
+        tasks.configureEach { t ->
+            if (t.hasProperty("compilerOptions") && t.compilerOptions.hasProperty("jvmTarget")) {
+                def cur = t.compilerOptions.jvmTarget.getOrNull()
+                if (cur != null && cur.toString() != "1.8") {
+                    t.compilerOptions.jvmTarget.set(cur.getClass().valueOf("JVM_1_8"))
+                }
+            }
         }
     }
 }
