@@ -18,10 +18,11 @@ appId: com.napa.app.test
     visible: "Napaxi"
     timeout: 30000
 - assertVisible: "给 napaxi 发消息"
-# Navigate first: with a non-empty composer draft the top-bar sessions
-# button leaves the semantics tree, so drawer navigation must run before
-# typing.
-- tapOn: "会话历史"
+# Navigation coverage via the engine-selector popup: a PopupMenuButton is a
+# modal route, so `back` dismisses it deterministically (the custom sessions
+# drawer has no such guarantee — a back there can exit to the launcher).
+- tapOn: "Napaxi"
+- assertVisible: "Codex(beta)"
 - back
 - assertVisible: "给 napaxi 发消息"
 - tapOn: "给 napaxi 发消息"
