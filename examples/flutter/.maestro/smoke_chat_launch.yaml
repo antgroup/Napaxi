@@ -18,10 +18,13 @@ appId: com.napa.app.test
     visible: "Napaxi"
     timeout: 30000
 - assertVisible: "给 napaxi 发消息"
+# Navigate first: with a non-empty composer draft the top-bar sessions
+# button leaves the semantics tree, so drawer navigation must run before
+# typing.
+- tapOn: "会话历史"
+- back
+- assertVisible: "给 napaxi 发消息"
 - tapOn: "给 napaxi 发消息"
 - inputText: "冒烟测试 hello"
 - assertVisible: "冒烟测试 hello"
 - hideKeyboard
-- tapOn: "会话历史"
-- back
-- assertVisible: "给 napaxi 发消息"
