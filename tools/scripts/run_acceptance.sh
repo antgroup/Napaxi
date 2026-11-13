@@ -7,6 +7,8 @@
 #   tools/scripts/run_acceptance.sh [--skip-build] [--base <ref>] [--threshold <pct>]
 #
 #   --skip-build   pass through to layer2 (reuse the previously built APK)
+#   --head         head ref layer1 runs against (default: origin/main);
+#                  e.g. a delivery branch for a pre-merge green dry-run
 #   --base         base ref for the changed-line coverage gate
 #                  (default: origin/main~10)
 #   --threshold    changed-line coverage percent (default: 80)
@@ -27,6 +29,7 @@ set -uo pipefail
 REPO="${NAPAXI_REPO:-$HOME/repos/Napaxi}"
 BIN_DIR="$HOME/testing/bin"
 FLOW_OUT="$HOME/testing/maestro-flows"
+HEAD_REF="origin/main"
 BASE_REF="origin/main~10"
 THRESHOLD="80"
 SKIP_BUILD=0
@@ -34,6 +37,7 @@ SKIP_BUILD=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --skip-build) SKIP_BUILD=1 ;;
+        --head)       HEAD_REF="$2"; shift ;;
         --base)       BASE_REF="$2"; shift ;;
         --threshold)  THRESHOLD="$2"; shift ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
@@ -114,7 +118,7 @@ newest_result_since() {
 }
 
 touch "$OUT_DIR/.marker"
-run_layer layer1 bash "$BIN_DIR/layer1_gate.sh" origin/main "$BASE_REF" "$THRESHOLD"
+run_layer layer1 bash "$BIN_DIR/layer1_gate.sh" "$HEAD_REF" "$BASE_REF" "$THRESHOLD"
 L1_JSON="$(newest_result_since "$OUT_DIR/.marker")"
 
 touch "$OUT_DIR/.marker"
