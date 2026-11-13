@@ -1,0 +1,27 @@
+# Maestro smoke: launch the app, verify the chat screen renders, type into
+# the composer (without sending), open and close the session history drawer.
+#
+# Selectors are text-based (Flutter does not expose widget Keys to the
+# accessibility tree). The demo app defaults to Chinese UI on a fresh
+# install; the composer hint and tooltips below come from
+# examples/flutter/lib/app/strings.dart (chinese).
+appId: com.napa.app.test
+---
+- launchApp:
+    clearState: true
+# Dismiss the in-app update dialog if the demo build happens to be
+# configured with Pgyer credentials and a newer build exists.
+- tapOn:
+    text: "稍后"
+    optional: true
+- assertVisible:
+    text: "Napaxi"
+    timeout: 30000
+- assertVisible: "给 napaxi 发消息"
+- tapOn: "给 napaxi 发消息"
+- inputText: "冒烟测试 hello"
+- assertVisible: "冒烟测试 hello"
+- hideKeyboard
+- tapOn: "会话历史"
+- back
+- assertVisible: "给 napaxi 发消息"
