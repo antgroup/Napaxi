@@ -2521,7 +2521,10 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     ))
                 }
             }
-            PackageInstaller.STATUS_USER_CANCELED -> {
+            PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                // The SDK reports user cancellation of the install
+                // confirmation as STATUS_FAILURE_ABORTED (there is no
+                // STATUS_USER_CANCELED constant in android.content.pm).
                 result.success(apkInstallStateMap(
                     installState = "canceled",
                     success = false,
@@ -2535,7 +2538,6 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 ))
             }
             PackageInstaller.STATUS_FAILURE_BLOCKED,
-            PackageInstaller.STATUS_FAILURE_ABORTED,
             PackageInstaller.STATUS_FAILURE_INVALID,
             PackageInstaller.STATUS_FAILURE_CONFLICT -> {
                 // Signature/version conflict: explicitly recommend uninstalling
