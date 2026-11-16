@@ -176,8 +176,8 @@ public enum NapaxiApkInstaller {
             error: "APK installation is only supported on Android.",
             code: "unsupported_ios",
             installState: "unsupported_ios",
-            failedReason: "APK installation is not supported on iOS.",
-            canceled: false
+            canceled: false,
+            failedReason: "APK installation is not supported on iOS."
         )
     }
 }
