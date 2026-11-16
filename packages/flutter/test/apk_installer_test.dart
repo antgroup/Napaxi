@@ -19,8 +19,10 @@ void main() {
         'success': false,
         'installerOpened': true,
         'permissionRequired': false,
+        'installState': 'unknown',
         'apkPath': '/tmp/app.apk',
         'code': 'installer_opened',
+        'canceled': false,
       });
     },
   );
