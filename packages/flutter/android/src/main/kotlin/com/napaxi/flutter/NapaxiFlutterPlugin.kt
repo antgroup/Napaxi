@@ -2331,7 +2331,8 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         openPackageInstaller(ctx, apkPath, result)
     }
 
-    private fun currentApkInstallExpectedSha256: String? = pendingApkInstallExpectedSha256
+    private val currentApkInstallExpectedSha256: String?
+        get() = pendingApkInstallExpectedSha256
 
     private val currentApkInstallBuildId: String?
         get() = pendingApkInstallBuildId
@@ -2441,7 +2442,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
         }
     }
 
-    private fun reportInstallStatus(
+    internal fun reportInstallStatus(
         ctx: Context,
         status: Int,
         sessionId: Int,
@@ -2558,7 +2559,7 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     installerStatusCode = status,
                 ))
             }
-            PackageInstaller.STATUS_PENDING -> {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 result.success(apkInstallStateMap(
                     installState = "awaiting_confirmation",
                     success = false,
@@ -3253,7 +3254,7 @@ class PendingInstallReceiver : BroadcastReceiver() {
         val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, -999)
         val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
         val sessionId = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
-        val plugin = NapaxiFlutterPlugin.pendingInstallHandler
+        val plugin = pendingInstallHandler
         plugin?.reportInstallStatus(context, status, sessionId, message)
     }
 
