@@ -824,7 +824,7 @@ pub(crate) fn redact_credentials_in_text(text: &str) -> String {
             // `<key>=` / `<key>:` assignments: api_key / access_token / refresh_token /
             // client_secret / secret / token, optionally followed by a quote char.
             Regex::new(
-                r"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token)\s*[:=]\s*['\"]?)([A-Za-z0-9._~+/=-]{8,})",
+                r#"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token)\s*[:=]\s*['"]?)([A-Za-z0-9._~+/=-]{8,})"#,
             )
             .unwrap(),
         ]

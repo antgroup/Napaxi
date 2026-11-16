@@ -502,12 +502,11 @@ fn read_file_truncates_at_max_bytes_bound() {
     // and report truncation rather than accumulating the whole file.
     let big: Vec<u8> = (0u8..255).cycle().take(4096).collect();
     fs::write(bridge.workspace_dir().join("big.bin"), &big).unwrap();
-    let out = serde_json::from_str::<serde_json::Value>(&run(
+    let out = run(
         &files_dir,
         READ_FILE_TOOL_NAME,
         serde_json::json!({"path": "/workspace/big.bin", "max_bytes": 128}),
-    ))
-    .expect("read_file output is JSON");
+    );
     let bytes_read = out["bytes_read"].as_u64().expect("bytes_read");
     assert!(
         bytes_read <= 128,
