@@ -8,6 +8,12 @@
 > 11-16 更新（DIMA 工单 2026111600120683137，OpenClaw 巡检 2026-11-16）：增补 11-12~11-16
 > compaction 正确性族延续性（§5），并新增「反向验证 / 设计参照」备忘条目（§6）。仍不引入
 > 生产改动。
+>
+> 11-17 更新（DIMA 工单 2026111700120722148，OpenClaw 巡检 2026-11-17）：
+> 增补 11-17 窗口 compaction 正确性族延续性（§5 新增一行），并扩充 §6 defensive-design
+> boundary 簇（per-page skills-used REVERT 两例并轨 + OAuth MCP 单 owner 对齐验证
+> + subagent 持久族 + compaction 准备工作线程化 + secrets redaction + restart
+> 资源退役族互链）。仍不引入生产改动。
 
 ## 1. OpenClaw 修复语义
 
@@ -85,6 +91,12 @@ model-free deterministic floor：
 - 11-14 skill-snapshot 多入口 / item 冲突；
 - 11-15 并发协调 + 中断 abort；
 - **11-16 REVERT 并发协调 + manual 扁拷贝 + provider-side compaction 归因 + 重启资源**。
+- **11-17 prepare 大 history out-of-thread + REVERT #200159/#196065 skills-used
+  per-page 全扫 + subagent 持久族（#200249 簇）+ OAuth MCP 在线 sign-in 单 owner
+  （#200538）**。本周 REVERT 反向信号达**两例**（11-16 #196550 + 11-17 #196065，
+  两处 per-page/per-session 全扫描/全量共享设计在大型 session 上 cost 不可接受被证伪）；
+  Napaxi 单进程同步 in-memory 单 turn 串行 compaction **两形态均不触达**，叠加
+  11-15/11-16 反向验证，防御性边界确认。
 
 11-16 #199561 REVERT #196550 是本周首次 REVERT 反向信号：OpenClaw "并发会话共享 compaction
 facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单会话 compaction 形态为正确基本
@@ -121,6 +133,84 @@ facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单�
   无 SQLite 文件 lifetime admission / POSIX-lock-bound descriptor retention 概念，不构成
   现状缺口。设计参照：若 daemon 化引入 shadow/template/临时 DB 文件，须在删文件前显式
   退役 admission 避免残 inode——与 sandbox template 跨 restart 复用同族资源卫生。仅备忘。
+
+### 11-17 新增条目（DIMA 工单 2026111700120722148）
+
+- **#196065 被 #200159 REVERT — 反向验证（defensive-design boundary，本周第二例）**：
+  OpenClaw 每打开一次 chat 在 first-page skills-used 读扫**全 transcript**，在 36k-event
+  session 上每分钟挂 55–60s 上下文，冻结 transcript appends / pendingInputs
+  mutations / subagent deliveries；被 REVERT，bounded re-land 改"per-run
+  skillsUsed facts, no full scan"。与 11-16 #196550 同形态（per-page/per-session
+  全扫描 + 共享 facts 在大型 session 冷启动/反复开销不可接受）。Napaxi
+  `crates/core/src/context/` grep `skills.used|skills_used|skillsUsed` 零命中 ——
+  **Napaxi 无此 feature，never 触及，非反向回退的受害者**。**防御性边界结论**：
+  未来若 Napaxi 引入 per-page/per-session 触发 feature + 全 transcript 扫描基线，
+  须预先证 cost（限扫 + per-run facts，**不 each-page full scan**）——与 11-16
+  #196550 的"不默认共享 compaction facts"同处一簇，记入本节作 defensive-design
+  boundary。仅借鉴设计思路与边界规则，不直接移植代码。
+
+- **#200538 OAuth MCP 在线 sign-in / running-Gateway 为 single owner — 对齐验证 Napaxi 既有方向**：
+  OpenClaw 把 running Gateway 成 MCP 共享 sign-in 的单 owner——`openclaw mcp
+  login`/`logout` 在 Gateway 运行时也 work，direct chat 内"connect Linear"→
+  拿 sign-in link→同 reply 批准→下条消息用 Linear，不重启；安全边界：owner-only +
+  direct chat 未处理 untrusted + 链路单次 + PKCE verifier 绑定 + 无
+  `gateway.publicOrigin` 时 redirect 走 loopback。**Napaxi ground check**：
+  `crates/core/src/mcp/oauth.rs`（use_pkce @ oauth.rs:108/125）、
+  `crates/core/src/mcp/oauth_flow.rs`（code_verifier @ oauth_flow.rs:181）、
+  `crates/core/src/mcp/types.rs` 已具备 PKCE + `napaxi://oauth/callback` redirect
+  flow；Napaxi **单进程**——`mcp login`/`add/configure`/callback 全在同进程，
+  "running Gateway = single OAuth MCP owner" 的不变量**天然成立**，不撞
+  #200538。**对齐验证**：Napaxi 既有 PKCE/callback 设计方向正确。**保留 11-13
+  备忘**：未来若引入并发 worker / 进程外旁路刷新，须加 state-owner 仲裁（并发旁路
+  为触发条件，单进程目前不构成）。仅借鉴设计思路与边界规则，不直接移植代码。
+
+- **#200249 簇 subagent requester-settle durable-delivery — daemon-fork 备忘**：
+  OpenClaw requester wake 把 child result commit 进 parent transcript 再调 model；
+  修复 turn 失败曾记 `delivery=failed/permanent_failure` 导致 broadcast/批量二次
+  派发。新语义：**已 commit → 永不再 dispatch；turn answer 前失败 → delivered；
+  answer 后 miss channel → 留失败；未 commit → stays owed 无 attempt limit/ladder/expiry**；
+  删除 REQUESTER_SETTLE_WAKE_MAX_ATTEMPTS 重试梯 + resolveRequesterSettleRetryState
+  + exhausted settle；real-Gateway proof: down 300s 下 base 失败/head 仍 delivered
+  不 loop。承 #200279/#200165/#200190/#199868/#197137/#200516 同族。**Napaxi
+  ground check**：`crates/` 全目录 grep
+  `requester.*settle|child.*result.*commit|delivery.?state|permanent_failure|REQUESTER_SETTLE_WAKE_MAX_ATTEMPTS`
+  零命中 —— inline 同步子 agent 调用，**无 requester-settle/durable-delivery
+  协议，不撞**。**daemon-fork 备忘**：若未来引入 daemon-distributed subagent +
+  requester transcript 持久化，须采 #200249 语义（committed=delivered、
+  refused-replay、owed-uncommitted 无梯）——避免重试梯广播放大失败成 batch。仅
+  借鉴设计思路与边界规则，不直接移植代码。
+
+- **#472cd0a2 compaction 准备工作线程化 — 设计参照（async 工作线程化备忘）**：
+  OpenClaw 把大型 history 准备工作拆出 Gateway 主线程（新增 compaction-preparation.ts
+  +328 行、compaction-floor.ts +110/-39），避免主线程在 compaction 准备阶段被
+  blocking。**Napaxi ground check**：`crates/core/src/context/` grep
+  `compaction-preparation|prepare.*history|outside.*thread` 零命中 —— 单进程
+  同步，**无主线程/worker 划分**，compaction 与执行同线程；"outside the Gateway
+  thread" 这样的 thread 解耦对 Napaxi**不直接成立 / 不撞**。**备备忘**：若未来
+  Napaxi 引入 async 工作线程，须把大型 history 准备移出执行 keypath 避免 blocking，
+  与 §5 11-17 行"compaction 准备工作线程化"同处一线。仅借鉴设计思路，不直接移植代码。
+
+- **#200539 / #200255 secrets 保留 SecretRef / redaction 不扩散明文 — 设计参照**：
+  OpenClaw `skills.update` 不得用 plaintext 替换 SecretRef API key；QA live run
+  配置 SecretRef 时 live run 须 fail（不准 fallback 明文）。Napaxi 已 11-12
+  落地 compaction credential redaction（commit f9d43db，crates/core/src/context/
+  compaction.rs summary/preview write-out paths redact credentials）。**扩展参照**：
+  skills/credential 配置全路径应保留 SecretRef-not-plaintext、明文 redact；当前
+  无 skills.update 同形 API 入口，**不撞**。低优先备备忘。仅借鉴设计思路，不直接移植代码。
+
+- **restart 资源生命周期 daemon 族（#200435/#200504/#200330/#200370/#200136/#200306/#200457/#200383/#200321 等）— 归 daemon 资源退役族**：
+  OpenClaw 本窗集中修：completed restart recovery input / published admission
+  closures 不保留完成 work（#200435）；startup state 在 signal handlers 前释放
+  （#200504）；clean exit 时释放 retained state leases（#200330）；readiness probe
+  不冻结主线程（#200370）；catalog refresh 避免文件系统 stall（#200136）；缺
+  store 时 first session 允许读（#200306）；Windows home 路径在 SQLite 失败报告
+  redact（#200457）；PostgreSQL→SQLite 回退（#200383）；updater 拒下个 release
+  （transcript worker re-emits Gateway graph）（#200321）。**Napaxi 现状**：无
+  Gateway daemon restart 生命周期、无 readiness probe / catalog refresh —— 全部
+  **非现状缺口**。**归 daemon 资源退役族**（承 11-12 #197230/#195369、11-16
+  #199873/#7de99f0419）。详细 checklist 落于
+  `docs/process-hosting-roadmap.md` §4（见下文文件 B 互锚）。本节仅作互链锚点。
+  仅借鉴设计思路与边界规则，不直接移植代码。
 
 ## 7. 许可证
 
