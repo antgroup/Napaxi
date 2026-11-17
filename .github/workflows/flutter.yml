@@ -78,6 +78,25 @@ jobs:
         working-directory: examples/flutter
         run: flutter pub get
 
+      # Android Kotlin compile gate (DIMA 2026111700120700056).
+      # The Flutter plugin's Kotlin sources (packages/flutter/android/src/main/kotlin)
+      # are compiled by :napaxi_flutter:compileDebugKotlin, reachable via the
+      # example app's gradle build (dev.flutter.flutter-plugin-loader includes
+      # packages/flutter/android as the :napaxi_flutter library module). flutter pub
+      # get above generated examples/flutter/android/gradlew (gitignored at runtime).
+      # excludes verifySdkNativeInputs/buildRust/verifySdkNativeOutputs so the gate
+      # stays a pure Kotlin type-check and does not require the NDK/cargo .so build
+      # (that pipeline lives in .github/workflows/native.yml); preBuild is not a
+      # dependency of compileDebugKotlin under AGP, and -x guards against variance.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: napaxi_flutter compileDebugKotlin gate (examples/flutter)
+        working-directory: examples/flutter/android
+        run: ./gradlew :napaxi_flutter:compileDebugKotlin --no-daemon -x verifySdkNativeInputs -x buildRust -x verifySdkNativeOutputs
+
       - name: flutter analyze (examples/flutter)
         working-directory: examples/flutter
         run: flutter analyze --no-fatal-infos
