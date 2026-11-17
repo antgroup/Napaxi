@@ -226,6 +226,39 @@ class NapaxiEngine {
 
   static bool _rustLibInitialized = false;
 
+  // Single-flight guard for RustLib.init(): a non-atomic "check then init" with
+  // an `await` in between lets two concurrent callers of NapaxiEngine.create()
+  // both read `_rustLibInitialized == false` and call RustLib.init() twice, which
+  // throws "Should not initialize flutter_rust_bridge twice". We memoize the
+  // init in a Future so concurrent callers share one in-flight init; on failure
+  // we clear it so a later caller can retry. (DIMA 2026111700120705128)
+  static Future<void>? _rustLibInitFuture;
+
+  static Future<void> _ensureRustLibInitialized() {
+    if (_rustLibInitialized) return Future<void>.value();
+    return _rustLibInitFuture ??= _initRustLib();
+  }
+
+  static Future<void> _initRustLib() async {
+    try {
+      // On iOS, the Rust static library is linked into the Runner binary.
+      // We must use DynamicLibrary.process() instead of DynamicLibrary.open().
+      if (Platform.isIOS) {
+        await RustLib.init(
+          externalLibrary: ExternalLibrary.process(iKnowHowToUseIt: true),
+        );
+      } else {
+        await RustLib.init();
+      }
+      _rustLibInitialized = true;
+    } catch (e) {
+      // Allow a later caller to retry; don't let a permanently-failed Future
+      // block every concurrent init attempt.
+      _rustLibInitFuture = null;
+      rethrow;
+    }
+  }
+
   McpApi mcpForAccount(String accountId) {
     final effectiveAccountId = accountId.trim().isEmpty
         ? defaultAccountId
@@ -305,18 +338,9 @@ class NapaxiEngine {
     NapaxiCapabilityProfile? capabilityProfile,
     NapaxiCapabilitySelection? capabilitySelection,
   }) async {
-    if (!_rustLibInitialized) {
-      // On iOS, the Rust static library is linked into the Runner binary.
-      // We must use DynamicLibrary.process() instead of DynamicLibrary.open().
-      if (Platform.isIOS) {
-        await RustLib.init(
-          externalLibrary: ExternalLibrary.process(iKnowHowToUseIt: true),
-        );
-      } else {
-        await RustLib.init();
-      }
-      _rustLibInitialized = true;
-    }
+    // Single-flight init: concurrent callers of create() share one in-flight
+    // RustLib.init() future instead of racing the non-atomic check-then-init.
+    await _ensureRustLibInitialized();
 
     final platformContext = await NapaxiPlatformContextResolver.resolve();
     final platformContextMap = decodeJsonObject(
