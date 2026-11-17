@@ -1075,7 +1075,7 @@ Future<void> _downloadFiles(
   final strings = AppStrings.of(context);
   for (final item in items) {
     final bytes = await _readFileBytes(client, agentId, item);
-    final savedPath = await FilePicker.platform.saveFile(
+    final savedPath = await FilePicker.saveFile(
       dialogTitle: strings.downloadFile,
       fileName: item.name,
       bytes: bytes,
