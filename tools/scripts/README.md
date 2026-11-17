@@ -103,3 +103,46 @@ Flutter bridge functions, so raw migration aliases cannot pass by merely
 appearing in comments or unrelated helper code.
 The summary also reports top-level generated bridge coverage while those raw
 migration wrappers are being filled in domain by domain.
+
+## FRB version consistency gate
+
+`./tools/scripts/build.sh check-frb-version` (DIMA workitem 2026111700120705360)
+guards the codegen/runtime drift class that SIGABRTs the app on launch:
+`flutter_rust_bridge`'s runtime hard-asserts that the codegen version baked
+into `frb_generated.dart` / `frb_generated.rs` equals the crate / pub package
+that actually links. The gate compares five values and fails on any mismatch:
+
+- `codegenVersion` in `packages/flutter/lib/generated/frb_generated.dart`
+- `FLUTTER_RUST_BRIDGE_CODEGEN_VERSION` in `packages/api_bridge/generated/frb_generated.rs`
+- the `flutter_rust_bridge = "=X.Y.Z"` pin in `packages/api_bridge/Cargo.toml`
+- the resolved `version:` of `flutter_rust_bridge` in `packages/flutter/pubspec.lock`
+- the resolved `version:` of `flutter_rust_bridge` in `examples/flutter/pubspec.lock`
+
+It also verifies `packages/flutter/pubspec.yaml` declares `flutter_rust_bridge`
+with a lower bound `>=2.13.0`, so pub cannot resolve to a pre-2.13.0 release
+and silently re-introduce the drift. CI runs this step in `checks.yml`,
+`flutter.yml` (both `sdk` and `demo` jobs), and `native.yml` (both `android`
+and `ios` jobs).
+
+After touching the bridge crate or bumping the Cargo / pubspec pin:
+
+```
+./tools/scripts/build.sh codegen
+./tools/scripts/build.sh check-frb-version
+cd packages/flutter && flutter pub get
+cd examples/flutter && flutter pub get
+```
+
+Skipping `check-frb-version` lets codegen output slide out of sync with the
+linked flutter_rust_bridge runtime, which is exactly the regression that
+crashed the iOS device launch in the original incident.
+
+## Device smoke survival window
+
+The device smoke checks (`check-android-integration-device`,
+`check-ios-app-device`) treat the app staying alive for N seconds after launch
+as a pass condition rather than just relying on the launch return code. Set
+`NAPAXI_DEVICE_SURVIVAL_SECONDS` (default `5`) to widen the window; the
+gate polls once per second and FAILs immediately if the process disappears
+within the window — catching the SIGABRT-at-launch false positive that
+prompted this work.

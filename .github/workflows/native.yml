@@ -70,6 +70,12 @@ jobs:
       - name: Resolve workspace metadata
         run: cargo metadata --no-deps --format-version 1 >/dev/null
 
+      # Regression gate for workitem 2026111700120705360: catch codegen/runtime
+      # flutter_rust_bridge version drift before the .so build is invoked, so that
+      # a stale frb_generated.rs does not link against a newer runtime crate.
+      - name: check-frb-version
+        run: ./tools/scripts/build.sh check-frb-version
+
       # Provides $ANDROID_NDK_HOME, which detect_android_ndk() picks up.
       - uses: nttld/setup-ndk@ed92fe6cadad69be94a966a7ee3271275e62f779 # v1.6.0
         id: setup-ndk
@@ -136,6 +142,11 @@ jobs:
           cargo --version
       - name: Resolve workspace metadata
         run: cargo metadata --no-deps --format-version 1 >/dev/null
+
+      # Regression gate for workitem 2026111700120705360 (iOS side): catch drift
+      # before the xcframework build links the Rust runtime into the iOS app.
+      - name: check-frb-version
+        run: ./tools/scripts/build.sh check-frb-version
 
       - name: Build iOS SDK (xcframework)
         run: ./tools/scripts/build.sh fast ios

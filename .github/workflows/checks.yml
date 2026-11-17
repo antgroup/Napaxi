@@ -49,6 +49,12 @@ jobs:
       - name: check-boundary
         run: ./tools/scripts/build.sh check-boundary
 
+      # Regression gate for the SIGABRT class introduced by workitem
+      # 2026111700120705360: keeps codegen (frb_generated.dart/.rs) and runtime
+      # (Cargo.toml pin + pubspec.lock) flutter_rust_bridge versions aligned.
+      - name: check-frb-version
+        run: ./tools/scripts/build.sh check-frb-version
+
       - name: check-hygiene
         run: ./tools/scripts/build.sh check-hygiene
 
