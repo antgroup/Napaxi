@@ -9250,10 +9250,10 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     return jsonEncode(response);
   }
 
-  // ignore: unused_element
   // Android APK post-build cleanup hook (build/stale .apk + artifact.json).
   // Currently orphaned pending wiring into the Android build flow; kept so
-  // callers can be added without re-deriving the cleanup path.
+  // later wiring can reuse the path without re-deriving it.
+  // ignore: unused_element
   Future<void> _androidCleanupStaleApks(Directory projectDir) async {
     final buildDir = Directory('${projectDir.path}/build');
     if (await buildDir.exists()) {
