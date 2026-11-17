@@ -173,8 +173,15 @@ run_ios() {
 
     local app="$APP_DIR/build/ios/iphoneos/Runner.app"
     if [ ! -d "$app" ]; then
-        echo "ios: $app not found" >&2
-        return
+        # 裸 `xcodebuild -workspace Runner.xcworkspace build`（无 -derivedDataPath）的产物
+        # 落在 ~/Library/Developer/Xcode/DerivedData/Runner-*/Build/Products/Debug-iphoneos。
+        app="$(ls -dt "$HOME"/Library/Developer/Xcode/DerivedData/Runner-*/Build/Products/Debug-iphoneos/Runner.app 2>/dev/null | head -1)"
+        if [ -n "$app" ] && [ -d "$app" ]; then
+            echo "ios: using DerivedData product $app"
+        else
+            echo "ios: Runner.app not found (build/ios/iphoneos nor DerivedData)" >&2
+            return
+        fi
     fi
     step "ios: install -> $IOS_UDID"
     if xcrun devicectl device install app --device "$IOS_UDID" "$app" \
@@ -206,7 +213,7 @@ write_platform_json() {
         [ "$install" = "passed" ] || verdict="FAIL"
         [ "$maestro" = "passed" ] || verdict="FAIL"
     fi
-    cat > "$RESULT_DIR/$file" <<EOF
+    cat > "$file" <<EOF
 {
   "layer": "device-regression",
   "platform": "$platform",
