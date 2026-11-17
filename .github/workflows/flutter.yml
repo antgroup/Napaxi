@@ -112,9 +112,23 @@ jobs:
       # compile gate needs; the runner's preinstalled SDK provides platforms /
       # build-tools the gradle task resolves.
       - uses: android-actions/setup-android@v4
+      # `examples/flutter/android/{gradlew,gradlew.bat,gradle/wrapper/gradle-wrapper.jar}`
+      # are gitignored at runtime and `flutter pub get` does NOT regenerate them
+      # (only `flutter create --*` / a Gradle wrapper task does) — invoking
+      # `./gradlew` fails with "No such file or directory". Use
+      # `gradle/actions/setup-gradle` to provision Gradle 8.14 (the version pinned
+      # in examples/flutter/android/gradle/wrapper/gradle-wrapper.properties) and
+      # drive the build via the on-PATH `gradle` instead of the absent wrapper
+      # script. compileDebugKotlin stays a pure Kotlin type-check (AGP does not
+      # make it depend on preBuild, and -x guards verifySdkNative*/buildRust so
+      # no NDK/cargo .so build is required — that pipeline lives in native.yml).
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14'
       - name: napaxi_flutter compileDebugKotlin gate (examples/flutter)
         working-directory: examples/flutter/android
-        run: ./gradlew :napaxi_flutter:compileDebugKotlin --no-daemon -x verifySdkNativeInputs -x buildRust -x verifySdkNativeOutputs
+        run: gradle :napaxi_flutter:compileDebugKotlin --no-daemon -x verifySdkNativeInputs -x buildRust -x verifySdkNativeOutputs
+
 
       - name: flutter analyze (examples/flutter)
         working-directory: examples/flutter

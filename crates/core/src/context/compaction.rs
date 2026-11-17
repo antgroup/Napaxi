@@ -904,25 +904,32 @@ pub(crate) fn redact_credentials_in_text(text: &str) -> String {
     use std::sync::OnceLock;
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     let patterns = PATTERNS.get_or_init(|| {
+        // These patterns are compile-time-constant literals; if any is invalid it is a
+        // programmer error caught at first use (build/test), so `expect` (not `unwrap`,
+        // which `clippy::unwrap_used` denies in non-test builds — `lib.rs`) is the
+        // sanctioned initializer here.
         vec![
             // RFC 6750 bearer tokens: `Bearer <opaque>` / `bearer  <opaque>`.
-            Regex::new(r"(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})").unwrap(),
+            Regex::new(r"(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})")
+                .expect("static credential-redaction regex"),
             // `Authorization: <opaque>` (bare scheme-less token, ≥8 alnum, no space).
-            Regex::new(r"(?i)(Authorization\s*[:=]\s*)([A-Za-z0-9._~+/=-]{8,})").unwrap(),
+            Regex::new(r"(?i)(Authorization\s*[:=]\s*)([A-Za-z0-9._~+/=-]{8,})")
+                .expect("static credential-redaction regex"),
             // Known provider prefixes — keep the prefix, redact the body.
             //   GitHub (ghp_/gho_/ghs_/ghr_/github_pat_), Anthropic (sk-ant-),
             //   OpenAI (sk- + ≥20 body to avoid short false positives),
             //   Slack (xox[bps]-), Google API key (AIza).
-            Regex::new(r"(ghp_|gho_|ghs_|ghr_|github_pat_|sk-ant-)([A-Za-z0-9]{8,})").unwrap(),
-            Regex::new(r"(sk-)([A-Za-z0-9]{20,})").unwrap(),
-            Regex::new(r"(xox[bps]-)([A-Za-z0-9-]{8,})").unwrap(),
-            Regex::new(r"\b(AIza)([A-Za-z0-9_\-]{20,})").unwrap(),
+            Regex::new(r"(ghp_|gho_|ghs_|ghr_|github_pat_|sk-ant-)([A-Za-z0-9]{8,})")
+                .expect("static credential-redaction regex"),
+            Regex::new(r"(sk-)([A-Za-z0-9]{20,})").expect("static credential-redaction regex"),
+            Regex::new(r"(xox[bps]-)([A-Za-z0-9-]{8,})").expect("static credential-redaction regex"),
+            Regex::new(r"\b(AIza)([A-Za-z0-9_\-]{20,})").expect("static credential-redaction regex"),
             // `<key>=` / `<key>:` assignments: api_key / access_token / refresh_token /
             // client_secret / secret / token, optionally followed by a quote char.
             Regex::new(
                 r#"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token)\s*[:=]\s*['"]?)([A-Za-z0-9._~+/=-]{8,})"#,
             )
-            .unwrap(),
+            .expect("static credential-redaction regex"),
         ]
     });
     let mut out = text.to_string();
