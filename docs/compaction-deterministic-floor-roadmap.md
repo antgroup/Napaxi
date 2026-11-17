@@ -4,6 +4,10 @@
 > 本文件记录 OpenClaw #197105 / #197179 的"deterministic floor"语义、Napaxi 现状基线对照、
 > 以及后续精修 CR 的升级行动项。本 CR **不引入任何生产改动**，仅确立 audit baseline +
 > 回归测试 + 路线图文档。
+>
+> 11-16 更新（DIMA 工单 2026111600120683137，OpenClaw 巡检 2026-11-16）：增补 11-12~11-16
+> compaction 正确性族延续性（§5），并新增「反向验证 / 设计参照」备忘条目（§6）。仍不引入
+> 生产改动。
 
 ## 1. OpenClaw 修复语义
 
@@ -75,12 +79,40 @@ model-free deterministic floor：
 延续 compaction 正确性族深化序列：
 - 11-08 compaction-watchdog nested-attach；
 - 11-10 compaction default-window fallback audit；
-- **11-11 deterministic floor（拒/成两路径）**。
+- **11-11 deterministic floor（拒/成两路径）**；
+- 11-12 floor 纵深 credential-redaction；
+- 11-13 prefix append-only / OAuth 单 owner；
+- 11-14 skill-snapshot 多入口 / item 冲突；
+- 11-15 并发协调 + 中断 abort；
+- **11-16 REVERT 并发协调 + manual 扁拷贝 + provider-side compaction 归因 + 重启资源**。
+
+11-16 #199561 REVERT #196550 是本周首次 REVERT 反向信号：OpenClaw "并发会话共享 compaction
+facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单会话 compaction 形态为正确基本
+形态**（详见 §6 第一条 defensive-design boundary）。
 
 本 CR 只落基线 + 路线图，不动生产路径，与上述序列的"补/审"层一致。
 
-## 6. 不在范围（workitem 已确认非缺口）
+## 6. 不在范围（workitem 已确认非缺口／备忘）
 
+- **#196550 被 #199561 REVERT — 反向验证（defensive-design boundary）**：OpenClaw "并发会话
+  共享 compaction facts"（11-15 备忘的"未来若并发须共享 facts"）在 cold-path 成本不可接受被
+  回退，跨会话共享 compaction facts **不应被默认基建**。Napaxi `crates/core/src/context/compaction.rs`
+  单会话 compaction（`summarize_middle` / `summarize_middle_with_llm` 单 turn 串行，无跨会话
+  facts 共享）是被反向验证印证的正确基本形态。**降级 / 撤回 11-15"未来若并发须共享 facts"备忘**：
+  若未来确需多会话并发，走"每会话独立 compaction + 共享稳定 transcript 读取缓存"，而非"共享
+  compaction facts"。记入本节作为 defensive-design boundary。
+- **#199840 manual compaction 省冗余拷贝（设计参照）**：OpenClaw manual preflight 用既有 read-only
+  branch accessor 替代可写 SDK copies，省重复 transcript 拷贝。Napaxi manual compact 直接在
+  in-memory `Vec<Value>` 上 read in place，无多 worker 跨进程 branch read、无 writable SDK copies
+  重复，**不撞**。设计参照：未来 daemon 化 + 跨进程 transcript 共享须用 read-only branch accessor
+  而非每路 request writable copy。仅备忘。
+- **#198730 provider server-side compaction 当 rebuild point 显式宣告（设计参照）**：OpenAI
+  Responses 在 70% context window 触发 server-side compaction，须把 checkpoint 显式宣告为 prompt
+  history rewrite（compaction rebuild point）而非 provider drift，否则 prompt-cache audit 误报
+  unexplained warm cache breaks。Napaxi 路由当前**无 OpenAI Responses `context_management`
+  通路**（仅客户端检测 provider overflow 后 compact-and-retry-once），不撞。设计参照：未来引入
+  该路由时须把 server compaction-induced checkpoint 显式宣告为 "compaction rebuild point"——与
+  11-13 prefix append-only / system-prompt pin 同处 prompt-cache prefix 协同线。仅备忘。
 - **#196868 tool_describe default 不发 output schema**：Napaxi 工具定义静态嵌 prompt
   （`crates/core/src/tools/file/descriptors.rs` 等 const 描述），无动态 tool_describe /
   Tool-Search 按需拉取，不撞 #196868 同形问题。设计参照：若未来引入按需 tool describe，
