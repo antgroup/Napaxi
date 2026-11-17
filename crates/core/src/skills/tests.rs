@@ -1759,13 +1759,20 @@ fn apk_zip_fixture(arsc_compressed: bool) -> Vec<u8> {
             zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
         writer.start_file("classes.dex", stored).unwrap();
         writer.write_all(dex).unwrap();
-        let arsc_options: zip::write::FileOptions<'_, '_, ()> = if arsc_compressed {
+        // Mirrors a zipaligned APK: `resources.arsc` is STORED and its data
+        // offset is padded to a 4-byte boundary (build_apk.sh runs `zipalign
+        // -p 4`), so the compliance-gate's assert_apk_compliant passes. We use
+        // `with_alignment(4)` so the zip crate inserts a local-header extra
+        // field that 4-byte-aligns the entry's data start, instead of relying
+        // on an external `zipalign` tool the tests do not run.
+        let arsc_options: zip::write::FileOptions<'_, '_, ()> =
             zip::write::FileOptions::<'_, '_, ()>::default()
-                .compression_method(zip::CompressionMethod::Deflated)
-        } else {
-            zip::write::FileOptions::<'_, '_, ()>::default()
-                .compression_method(zip::CompressionMethod::Stored)
-        };
+                .compression_method(if arsc_compressed {
+                    zip::CompressionMethod::Deflated
+                } else {
+                    zip::CompressionMethod::Stored
+                })
+                .with_alignment(4);
         writer.start_file("resources.arsc", arsc_options).unwrap();
         writer.write_all(arsc).unwrap();
         writer.finish().unwrap();
@@ -1842,7 +1849,14 @@ fn apk_zip_fixture_with_misaligned_arsc() -> Vec<u8> {
     buf.extend_from_slice(&(arsc_name.len() as u16).to_le_bytes());
     buf.extend_from_slice(&0u16.to_le_bytes()); // no extra
     buf.extend_from_slice(arsc_name);
-    let arsc_data_offset = buf.len() - arsc_offset_in_buf;
+    // Absolute archive offset at which `resources.arsc` data begins — this is
+    // what `zip::ZipFile::data_start()` reports and what `zipalign -p 4` /
+    // `assert_apk_compliant` check. The 1-byte `classes.dex` extra field
+    // shifts this to a value that is NOT a multiple of 4 (so the gate must
+    // reject it). The previous form used `buf.len() - arsc_offset_in_buf`,
+    // which only measures the local-header+name size (always 4-byte aligned),
+    // not the absolute offset the gate actually inspects.
+    let arsc_data_offset = buf.len();
     buf.extend_from_slice(arsc_body);
 
     // Central directory.
@@ -1898,7 +1912,9 @@ fn apk_zip_fixture_with_misaligned_arsc() -> Vec<u8> {
     buf.extend_from_slice(&(cd_offset as u32).to_le_bytes());
     buf.extend_from_slice(&0u16.to_le_bytes()); // comment len
 
-    // Sanity: arsc data offset must be odd so the test contract holds.
+    // Sanity: the absolute arsc data offset must NOT be 4-byte aligned (the
+    // 1-byte classes.dex extra field shifts it off a 4-boundary) so the
+    // compliance gate's assert_apk_compliant would reject the APK.
     assert!(
         !arsc_data_offset.is_multiple_of(4),
         "fixture construction must produce a non-aligned arsc data_offset: got {}",

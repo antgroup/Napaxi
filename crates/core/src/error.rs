@@ -139,8 +139,9 @@ pub enum StorageError {
     /// Unlike [`StorageError::NotFound`], this variant distinguishes a
     /// readiness check from a runtime lookup so the caller can decide
     /// whether to retry, fail closed, or surface a repair prompt — but the
-    /// [`crate::storage::bridge::FileBridge::check_workspace_readiness`]
-    /// path itself never creates directories.
+    /// `crate::storage::bridge::FileBridge::check_workspace_readiness`
+    /// path itself never creates directories (the `bridge` module is
+    /// private/internal, so this is a textual reference, not a doc link).
     #[error("workspace not ready ({kind}) at {path}: {reason}")]
     WorkspaceNotReady {
         kind: WorkspaceNotReadyKind,

@@ -104,6 +104,13 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      # setup-android@v3 defaults its `packages` input to the legacy `tools`
+      # package, which sdkmanager (cmdline-tools 16+) no longer serves — the
+      # step fails with "Failed to find package 'tools'" (this PR's first
+      # iteration). @v4 drops `tools` from the default (defaults to
+      # `platform-tools`) and skips the dead package, which is all this Kotlin
+      # compile gate needs; the runner's preinstalled SDK provides platforms /
+      # build-tools the gradle task resolves.
       - uses: android-actions/setup-android@v4
       - name: napaxi_flutter compileDebugKotlin gate (examples/flutter)
         working-directory: examples/flutter/android
