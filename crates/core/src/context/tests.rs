@@ -13,13 +13,13 @@ use super::budget::{build_context_budget_status, context_window_details, respons
 use super::compaction::{ToolMessageCompactionStats, compact_tool_messages};
 use super::state::{
     ContextBudgetStatus, ContextState, ContextTokenBreakdown, LastPromptSnapshot,
-    PreflightSnapshot, ToolCompactionSnapshot,
+    PreflightSnapshot, ToolCompactionSnapshot, load_state,
 };
 use super::{
     PreCompactionMemoryFlush, build_context, build_context_for_turn_with_event_sink,
     context_status, context_status_for_config, display_context_delta, display_context_usage,
-    record_last_prompt_snapshot, record_preflight_snapshot,
-    record_tool_compaction_snapshot_for_session,
+    fresh_last_prompt_tokens, record_last_prompt_snapshot, record_overflow_recovery_snapshot,
+    record_preflight_snapshot, record_tool_compaction_snapshot_for_session,
 };
 
 fn message(id: usize, role: &str, content: &str) -> SessionMessage {
@@ -961,5 +961,242 @@ async fn local_summary_fallback_truncates_long_user_wording_and_omits_beyond_eig
         status["compaction_strategy"].as_str(),
         Some("local_summary_fallback"),
         "fallback strategy must be recorded: {status}"
+    );
+}
+
+/// Invariant (A): compaction success must reset both `preflight_snapshot`
+/// and `last_tool_compaction` (`mod.rs:376-377`), and the next turn's
+/// `record_preflight_snapshot` entry point also clears
+/// `last_tool_compaction` (`mod.rs:855`) — so neither checkpoint written by
+/// a failed/interrupted turn can leak into the next turn's preflight input.
+#[tokio::test]
+async fn compaction_success_clears_tool_compaction_and_preflight_snapshots() {
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_str().unwrap();
+    let mut config = PlatformLlmConfig::default();
+    config.context_engine.context_window_tokens = Some(220);
+    config.context_engine.protect_head_messages = 2;
+    config.context_engine.protect_tail_messages = 2;
+    use_local_summary(&mut config);
+
+    // Step 2 — write a preflight snapshot at the turn entry point.
+    let raw_history = vec![serde_json::json!({"role":"user","content":"hi"})];
+    record_preflight_snapshot(files_dir, "thread-a", &config, &raw_history, &[]);
+
+    // Step 3 — write a tool-compaction snapshot mirroring mid-turn pruning.
+    let session_key_json = serde_json::json!({ "thread_id": "thread-a" }).to_string();
+    record_tool_compaction_snapshot_for_session(
+        files_dir,
+        &session_key_json,
+        &config,
+        ToolMessageCompactionStats {
+            compacted_messages: 1,
+            original_chars: 2_000,
+            compacted_chars: 400,
+            pruned_chars: 1_600,
+            estimated_pruned_tokens: 800,
+        },
+    );
+
+    // Step 4 — both snapshots persisted before compaction.
+    let state_before = load_state(files_dir, "thread-a").expect("state must persist");
+    assert!(
+        state_before.preflight_snapshot.is_some(),
+        "preflight_snapshot must be recorded before compaction"
+    );
+    assert!(
+        state_before.last_tool_compaction.is_some(),
+        "last_tool_compaction must be recorded before compaction"
+    );
+
+    // Step 5-6 — drive a forced compaction (12-message middle is compactable).
+    let history: Vec<_> = (0..12)
+        .map(|index| {
+            message(
+                index,
+                if index % 2 == 0 { "user" } else { "assistant" },
+                &"x".repeat(160),
+            )
+        })
+        .collect();
+    let output = build_context(
+        files_dir, "thread-a", &config, "prompt", &history, /* force */ true, None,
+    )
+    .await
+    .unwrap();
+    assert!(
+        output.summary.is_some(),
+        "compaction must have produced a summary (success path)"
+    );
+
+    // Step 7 — both checkpoints reset by the compaction success path.
+    let state_after = load_state(files_dir, "thread-a").expect("state must persist");
+    assert!(
+        state_after.preflight_snapshot.is_none(),
+        "compaction success must reset preflight_snapshot (mod.rs:376)"
+    );
+    assert!(
+        state_after.last_tool_compaction.is_none(),
+        "compaction success must reset last_tool_compaction (mod.rs:377)"
+    );
+
+    // Step 8 — the next turn's `record_preflight_snapshot` must not resurrect
+    // `last_tool_compaction` (it clears it again as a turn-entry invariant).
+    record_preflight_snapshot(files_dir, "thread-a", &config, &raw_history, &[]);
+    let state_after_next = load_state(files_dir, "thread-a").expect("state must persist");
+    assert!(
+        state_after_next.last_tool_compaction.is_none(),
+        "next-turn record_preflight_snapshot must keep last_tool_compaction cleared (mod.rs:855)"
+    );
+    assert!(
+        state_after_next.preflight_snapshot.is_some(),
+        "next-turn preflight was recorded"
+    );
+}
+
+/// Invariant (B): a failed overflow-recovery snapshot written in the
+/// interrupted turn is **not consumed, cleared, or rewritten** by the next
+/// turn's `record_preflight_snapshot` entry point — it is only ever read by
+/// pure-display paths (`display.rs:201-209`, `mod.rs:768-783`). Pre-flight
+/// preserves the snapshot verbatim, and `display_context_delta` returns the
+/// zero-delta `overflow_retry_failed` label (display only, no behaviour
+/// replay).
+#[test]
+fn overflow_recovery_snapshot_is_not_consumed_by_next_turn_preflight() {
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_str().unwrap();
+    let config = PlatformLlmConfig::default();
+
+    // Step 2 — record a failed overflow-recovery snapshot.
+    record_overflow_recovery_snapshot(
+        files_dir,
+        "thread-b",
+        &config,
+        /* succeeded */ false,
+        /* retry_count */ 1,
+        "overflow_retry_failed",
+        Some("simulated overflow"),
+    );
+
+    // Step 3 — snapshot persisted with all fields intact.
+    let state_before = load_state(files_dir, "thread-b").expect("state must persist");
+    let recovery_before = state_before
+        .last_overflow_recovery
+        .clone()
+        .expect("overflow recovery snapshot must be recorded");
+    assert!(
+        state_before.last_overflow_recovery.is_some(),
+        "overflow recovery snapshot must persist before next-turn preflight"
+    );
+
+    // Step 4 — next-turn preflight entry point.
+    let raw_history = vec![serde_json::json!({"role":"user","content":"next turn hi"})];
+    record_preflight_snapshot(files_dir, "thread-b", &config, &raw_history, &[]);
+
+    // Step 5-6 — snapshot fields preserved verbatim; preflight recorded.
+    let state_after = load_state(files_dir, "thread-b").expect("state must persist");
+    let recovery_after = state_after
+        .last_overflow_recovery
+        .as_ref()
+        .expect("overflow recovery snapshot must survive next-turn preflight");
+
+    // Read sites of last_overflow_recovery in product code (audit baseline):
+    //   - display.rs:201-209 (display_context_delta — pure display)
+    //   - mod.rs:768-783 (ContextStatus JSON serialization — pure adapter pass-through)
+    // Any new read site must update this test or be flagged at review.
+    assert_eq!(recovery_after.provider, recovery_before.provider);
+    assert_eq!(recovery_after.model, recovery_before.model);
+    assert_eq!(recovery_after.attempted_at, recovery_before.attempted_at);
+    assert!(!recovery_after.succeeded);
+    assert_eq!(recovery_after.retry_count, 1);
+    assert_eq!(recovery_after.reason, "overflow_retry_failed");
+    assert_eq!(recovery_after.error.as_deref(), Some("simulated overflow"));
+    assert!(
+        state_after.preflight_snapshot.is_some(),
+        "next-turn preflight was recorded"
+    );
+
+    // Step 7 — display path returns zero delta with the failed-recovery label
+    // (pure display — no behaviour replay path consumes the snapshot).
+    let settings = super::normalized_config(&config.context_engine);
+    let display = display_context_usage(&state_after, &config, &settings, 1_000);
+    let (delta, reason) = display_context_delta(&state_after, &display);
+    assert_eq!(delta, 0);
+    assert_eq!(reason, "overflow_retry_failed");
+}
+
+/// Invariant (C-1): `fresh_last_prompt_tokens` drops the snapshot when the
+/// current message list has shrunk below the snapshot's `message_count`
+/// (`mod.rs:948`), keeps it at exact match or growth (normal mid-turn
+/// direction — `max(estimate, real)` keeps the result strictly tight), and
+/// drops it when `config_fingerprint` mismatches after a model swap
+/// (`mod.rs:939`).
+#[test]
+fn fresh_last_prompt_tokens_drops_when_message_count_shrinks() {
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_str().unwrap();
+    let mut config = PlatformLlmConfig::default();
+    config.provider = "anthropic".to_string();
+    config.model = "claude-3-5-sonnet".to_string();
+    config.context_engine.context_window_tokens = Some(200_000);
+    config.context_engine.enabled = true;
+
+    let real_prompt_tokens = 196_000_usize;
+    let usage = LlmUsage {
+        input_tokens: Some(real_prompt_tokens),
+        output_tokens: Some(0),
+        cache_read_tokens: Some(0),
+        cache_write_tokens: Some(0),
+        reasoning_tokens: None,
+        total_tokens: Some(real_prompt_tokens),
+    };
+    record_last_prompt_snapshot(
+        files_dir,
+        "thread-c",
+        &config,
+        Some(&usage),
+        /* message_count */ 5,
+    );
+
+    let session_key_json = serde_json::json!({ "thread_id": "thread-c" }).to_string();
+    let short_user = serde_json::json!({"role":"user","content":"hi"});
+    let messages_shrunk: Vec<serde_json::Value> = (0..3).map(|_| short_user.clone()).collect();
+    let messages_kept: Vec<serde_json::Value> = (0..5).map(|_| short_user.clone()).collect();
+    let messages_grown: Vec<serde_json::Value> = (0..8).map(|_| short_user.clone()).collect();
+
+    assert_eq!(
+        fresh_last_prompt_tokens(
+            files_dir,
+            Some(&session_key_json),
+            &config,
+            &messages_shrunk,
+        ),
+        None,
+        "message_count shrink below snapshot baseline must drop the snapshot (mod.rs:948)"
+    );
+    assert_eq!(
+        fresh_last_prompt_tokens(files_dir, Some(&session_key_json), &config, &messages_kept,),
+        Some(real_prompt_tokens),
+        "exact message_count match keeps the snapshot"
+    );
+    assert_eq!(
+        fresh_last_prompt_tokens(files_dir, Some(&session_key_json), &config, &messages_grown,),
+        Some(real_prompt_tokens),
+        "grow beyond message_count keeps the snapshot (normal mid-turn direction; max(estimate, real) keeps strict)"
+    );
+
+    // Fingerprint mismatch (model swap) must drop the snapshot regardless of
+    // message-count alignment.
+    let mut stale_config = config.clone();
+    stale_config.model = "claude-3-5-haiku".to_string();
+    assert_eq!(
+        fresh_last_prompt_tokens(
+            files_dir,
+            Some(&session_key_json),
+            &stale_config,
+            &messages_kept,
+        ),
+        None,
+        "config_fingerprint mismatch must drop the snapshot (mod.rs:939)"
     );
 }
