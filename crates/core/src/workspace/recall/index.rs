@@ -274,6 +274,11 @@ async fn ensure_index_async(files_dir: &str) -> Result<(), String> {
                 .map_err(|e| format!("{error}; reset failed: {e}"));
             return result;
         }
+        // Count the read-path `ensure_schema` invocation per `db_path(files_dir)`
+        // so the recall-schema-cache oracle is parallel-safe under
+        // `cargo test --workspace` (see `sql::bump_ensure_calls_for`).
+        #[cfg(test)]
+        super::bump_ensure_calls_for(files_dir);
         let version = meta_value(&conn, "schema_version").await?;
         if version.as_deref() != Some(&SCHEMA_VERSION.to_string()) {
             super::invalidate_schema_cache(files_dir);

@@ -70,7 +70,7 @@ pub(super) fn invalidate_schema_cache(files_dir: &str) {
 
 #[cfg(test)]
 #[cfg(feature = "libsql")]
-pub(crate) use sql::{ENSURE_CALLS, reset_ensure_calls_counter};
+pub(crate) use sql::{bump_ensure_calls_for, ensure_calls_for, reset_ensure_calls_for};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
