@@ -1358,3 +1358,80 @@ fn enforce_mid_turn_hard_precheck_uses_real_usage_when_fresh() {
         "stale fingerprint (model swap) must drop the snapshot and fall back to estimate"
     );
 }
+
+/// Invariant (C-2): when `fresh_last_prompt_tokens` drops the snapshot
+/// because the current `messages` list has shrunk below the snapshot's
+/// `message_count` (`mod.rs:948`), `enforce_mid_turn_hard_precheck` must
+/// fall back to the pure estimate and clear the precheck (`loop.rs:245-257`).
+/// Conversely, when the snapshot is still fresh (the message list matches
+/// the snapshot baseline) the precheck reads `real = 196_000`, takes
+/// `max(estimate, real)`, and fires the overflow marker — proving the
+/// snapshot only ever *tightens* the precheck, never loosens it.
+#[test]
+fn enforce_mid_turn_hard_precheck_falls_back_to_estimate_when_message_count_shrinks() {
+    use crate::context::record_last_prompt_snapshot;
+    use crate::llm::LlmUsage;
+    use crate::tool_registry::ToolExecutionContext;
+    use crate::types::ContextEngineConfig;
+
+    let dir = tempfile::tempdir().unwrap();
+    let files_dir = dir.path().to_str().unwrap().to_string();
+
+    // Window big enough that the ESTIMATE comfortably fits the floor reserve
+    // (so the only way the precheck fires is via the fresh real snapshot).
+    let config = PlatformLlmConfig {
+        provider: "anthropic".to_string(),
+        model: "claude-3-5-sonnet".to_string(),
+        context_engine: ContextEngineConfig {
+            enabled: true,
+            context_window_tokens: Some(200_000),
+            trigger_ratio: 1.0,
+            ..ContextEngineConfig::default()
+        },
+        ..PlatformLlmConfig::default()
+    };
+
+    // Persist a real per-provider snapshot claiming a prompt_tokens far above
+    // the configured floor reserve; message_count = 5 is the freshness baseline.
+    let real_prompt_tokens = 196_000_usize;
+    let usage = LlmUsage {
+        input_tokens: Some(real_prompt_tokens),
+        output_tokens: Some(0),
+        cache_read_tokens: Some(0),
+        cache_write_tokens: Some(0),
+        reasoning_tokens: None,
+        total_tokens: Some(real_prompt_tokens),
+    };
+    record_last_prompt_snapshot(
+        &files_dir,
+        "thread-c-shrink",
+        &config,
+        Some(&usage),
+        /* message_count */ 5,
+    );
+
+    let short_user = serde_json::json!({"role":"user","content":"hi"});
+    let messages_len_3: Vec<serde_json::Value> = (0..3).map(|_| short_user.clone()).collect();
+    let messages_len_5: Vec<serde_json::Value> = (0..5).map(|_| short_user.clone()).collect();
+    let session_key_json = serde_json::json!({ "thread_id": "thread-c-shrink" }).to_string();
+    let exec_context = ToolExecutionContext {
+        files_dir: files_dir.clone(),
+        workspace_files_dir: files_dir.clone(),
+        agent_id: String::new(),
+        session_key_json: Some(session_key_json),
+    };
+
+    // Shrunk (3 < 5) → snapshot dropped → estimate fallback → Fits / Ok.
+    assert!(
+        enforce_mid_turn_hard_precheck(&config, &messages_len_3, 0, Some(&exec_context)).is_ok(),
+        "shrunk message_count must drop stale snapshot and fall back to estimate (loop.rs:245-257)"
+    );
+
+    // Fresh (5 == 5) → real = 196_000 → max(estimate, real) → Overflow.
+    let err = enforce_mid_turn_hard_precheck(&config, &messages_len_5, 0, Some(&exec_context))
+        .expect_err("fresh real prompt_tokens above floor reserve must trigger overflow");
+    assert!(
+        err.starts_with("mid-turn context overflow:"),
+        "expected overflow marker when real prompt_tokens tightens precheck, got: {err}"
+    );
+}
