@@ -46,6 +46,12 @@ jobs:
         working-directory: packages/flutter
         run: flutter pub get
 
+      # Regression gate for the SIGABRT class introduced by workitem
+      # 2026111700120705360: keeps codegen (frb_generated.dart/.rs) and runtime
+      # (Cargo.toml pin + both pubspec.locks) flutter_rust_bridge versions aligned.
+      - name: check-frb-version (packages/flutter)
+        run: ./tools/scripts/build.sh check-frb-version
+
       - name: flutter analyze (packages/flutter)
         working-directory: packages/flutter
         run: flutter analyze --no-fatal-infos
@@ -77,6 +83,12 @@ jobs:
       - name: Resolve Flutter dependencies (examples/flutter)
         working-directory: examples/flutter
         run: flutter pub get
+
+      # Drift high-point: examples/flutter/pubspec.lock carried flutter_rust_bridge
+      # 2.12.0 in workitem 2026111700120705360 while codegen had moved to 2.13.0;
+      # re-running check-frb-version here catches that drift before analyze/test.
+      - name: check-frb-version (examples/flutter)
+        run: ./tools/scripts/build.sh check-frb-version
 
       # Android Kotlin compile gate (DIMA 2026111700120700056).
       # The Flutter plugin's Kotlin sources (packages/flutter/android/src/main/kotlin)

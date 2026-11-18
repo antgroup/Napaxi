@@ -23,6 +23,7 @@
 #   ./tools/scripts/build.sh release check-test-stability
 #   ./tools/scripts/build.sh release check-api-contract
 #   ./tools/scripts/build.sh release check-manifest-action-alignment
+#   ./tools/scripts/build.sh release check-frb-version
 #   ./tools/scripts/build.sh release clean
 
 set -euo pipefail
@@ -48,7 +49,7 @@ case "$BUILD_MODE" in
         CARGO_PROFILE="dev"
         PROFILE_DIR="debug"
         ;;
-    android|ios|ios-all|all|codegen|check-boundary|check-android-parity|check-ios-parity|check-ios|check-android-integration|check-android-integration-device|check-android-host|check-android-device|check-ios-native|check-ios-integration|check-ios-app|check-ios-device|check-ios-app-device|check-hygiene|check-packages-architecture|check-test-stability|check-api-contract|check-manifest-action-alignment|clean)
+    android|ios|ios-all|all|codegen|check-boundary|check-android-parity|check-ios-parity|check-ios|check-android-integration|check-android-integration-device|check-android-host|check-android-device|check-ios-native|check-ios-integration|check-ios-app|check-ios-device|check-ios-app-device|check-hygiene|check-packages-architecture|check-test-stability|check-api-contract|check-manifest-action-alignment|check-frb-version|clean)
         TARGET_PLATFORM="$BUILD_MODE"
         BUILD_MODE="release"
         CARGO_PROFILE="release"
@@ -362,6 +363,68 @@ EOF
     info "Codegen complete"
 }
 
+# Compare flutter_rust_bridge versions across codegen output (Dart + Rust) and
+# the cargo / pub dependency locks. Any mismatch fails: this is the regression
+# gate for the SIGABRT class introduced by 2026111700120705360 (codegen 2.12.0
+# racing the runtime 2.13.0). Pure shell + standard grep/awk; no extra toolchain.
+check_flutter_rust_bridge_version() {
+    info "Checking flutter_rust_bridge codegen/runtime version consistency"
+    cd "$ROOT_DIR"
+
+    local dart_gen="$SDK_DIR/lib/generated/frb_generated.dart"
+    local rust_gen="$RUST_DIR/generated/frb_generated.rs"
+    local cargo_toml="$RUST_DIR/Cargo.toml"
+    local pub_lock_pkg="$SDK_DIR/pubspec.lock"
+    local pub_lock_examples="$ROOT_DIR/examples/flutter/pubspec.lock"
+
+    [ -f "$dart_gen" ] || err "missing generated dart: $dart_gen"
+    [ -f "$rust_gen" ] || err "missing generated rust: $rust_gen"
+    [ -f "$cargo_toml" ] || err "missing Cargo.toml: $cargo_toml"
+    [ -f "$pub_lock_pkg" ] || err "missing pubspec.lock: $pub_lock_pkg"
+    [ -f "$pub_lock_examples" ] || err "missing pubspec.lock: $pub_lock_examples"
+
+    local codegen_dart codegen_rust cargo_pin pub_flutter pub_examples
+    codegen_dart="$(grep -oE "codegenVersion => '[0-9.]+'" "$dart_gen" | grep -oE "[0-9.]+" | head -1)"
+    codegen_rust="$(grep -oE 'FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "[0-9.]+"' "$rust_gen" | grep -oE '[0-9.]+' | head -1)"
+    cargo_pin="$(grep -oE 'flutter_rust_bridge *= *"?=?[0-9.]+"?' "$cargo_toml" | grep -oE '[0-9.]+' | head -1)"
+    pub_flutter="$(awk '/^  flutter_rust_bridge:/{f=1} f && /^    version:/{print; exit}' "$pub_lock_pkg" | grep -oE '[0-9.]+')"
+    pub_examples="$(awk '/^  flutter_rust_bridge:/{f=1} f && /^    version:/{print; exit}' "$pub_lock_examples" | grep -oE '[0-9.]+')"
+
+    [ -n "$codegen_dart" ]     || err "codegenVersion not found in $dart_gen"
+    [ -n "$codegen_rust" ]     || err "FLUTTER_RUST_BRIDGE_CODEGEN_VERSION not found in $rust_gen"
+    [ -n "$cargo_pin" ]        || err "flutter_rust_bridge pin not found in $cargo_toml"
+    [ -n "$pub_flutter" ]      || err "flutter_rust_bridge version not found in $pub_lock_pkg"
+    [ -n "$pub_examples" ]    || err "flutter_rust_bridge version not found in $pub_lock_examples"
+
+    info "flutter_rust_bridge versions: dart_codegen=$codegen_dart rust_codegen=$codegen_rust cargo_pin=$cargo_pin pub_packages=$pub_flutter pub_examples=$pub_examples"
+
+    if [ "$codegen_dart" != "$codegen_rust" ] \
+        || [ "$codegen_dart" != "$cargo_pin" ] \
+        || [ "$codegen_dart" != "$pub_flutter" ] \
+        || [ "$codegen_dart" != "$pub_examples" ]; then
+        err "flutter_rust_bridge version drift detected: dart_codegen=$codegen_dart rust_codegen=$codegen_rust cargo_pin=$cargo_pin pub_packages=$pub_flutter pub_examples=$pub_examples — re-run ./tools/scripts/build.sh codegen with the matching flutter_rust_bridge_codegen release and refresh the lock files."
+    fi
+
+    # Also guard the pubspec.yaml constraint lower-bound so pub can not silently
+    # resolve to a pre-2.13.0 release (which would re-introduce the drift).
+    local raw_line constraint
+    raw_line="$(awk '/^  flutter_rust_bridge:/{print; exit}' "$SDK_DIR/pubspec.yaml")"
+    constraint="${raw_line#*:}"
+    constraint="${constraint#\"}"
+    constraint="${constraint%\"}"
+    constraint="$(printf '%s' "$constraint" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    case "$constraint" in
+        *">=2.13.0"*)
+            : # tight constraint in place
+            ;;
+        *)
+            err "packages/flutter/pubspec.yaml flutter_rust_bridge constraint ('$constraint') is not bounded to >=2.13.0 — pub may resolve to an older release and re-introduce the codegen/runtime drift."
+            ;;
+    esac
+
+    info "flutter_rust_bridge codegen/runtime versions are consistent"
+}
+
 check_standalone_boundary() {
     info "Checking Napaxi SDK standalone mobile runtime boundary"
     cd "$ROOT_DIR"
@@ -558,13 +621,23 @@ check_android_integration_device() {
         err "Android integration Activity did not start cleanly."
     }
 
-    sleep 2
-    wake_android_device "$adb" "$serial"
-    pid="$("$adb" -s "$serial" shell pidof "$package" 2>/dev/null | tr -d '\r')"
-    [ -n "$pid" ] || {
-        "$adb" -s "$serial" shell dumpsys activity activities | grep "$package" >&2 || true
-        err "Android integration process is not running after launch."
-    }
+    local survival_secs="${NAPAXI_DEVICE_SURVIVAL_SECONDS:-5}"
+    case "$survival_secs" in
+        ''|*[!0-9]*) err "NAPAXI_DEVICE_SURVIVAL_SECONDS must be a positive integer, got: '$survival_secs'";;
+    esac
+    [ "$survival_secs" -ge 1 ] || err "NAPAXI_DEVICE_SURVIVAL_SECONDS must be >= 1, got: $survival_secs"
+    local probe
+    pid=""
+    for probe in $(seq 1 "$survival_secs"); do
+        sleep 1
+        wake_android_device "$adb" "$serial"
+        pid="$("$adb" -s "$serial" shell pidof "$package" 2>/dev/null | tr -d '\r')"
+        if [ -z "$pid" ]; then
+            "$adb" -s "$serial" shell dumpsys activity activities | grep "$package" >&2 || true
+            err "Android integration process exited before ${probe}s survival window elapsed (NAPAXI_DEVICE_SURVIVAL_SECONDS=$survival_secs). Likely SIGABRT/abort during startup."
+        fi
+    done
+    info "Android integration process survived $survival_secs s on device (pid=$pid)"
 
     local attempt
     for attempt in $(seq 1 30); do
@@ -1000,7 +1073,14 @@ check_ios_app_device_smoke() {
         "$bundle_id" \
         --napaxi-smoke-token "$token"
 
+    local survival_secs="${NAPAXI_DEVICE_SURVIVAL_SECONDS:-5}"
+    case "$survival_secs" in
+        ''|*[!0-9]*) err "NAPAXI_DEVICE_SURVIVAL_SECONDS must be a positive integer, got: '$survival_secs'";;
+    esac
+    [ "$survival_secs" -ge 1 ] || err "NAPAXI_DEVICE_SURVIVAL_SECONDS must be >= 1, got: $survival_secs"
+
     local attempt
+    local first_report_seen=0
     for attempt in $(seq 1 20); do
         if xcrun devicectl device copy from \
             --device "$device_id" \
@@ -1012,8 +1092,12 @@ check_ios_app_device_smoke() {
             --json-output "$copy_json" \
             --quiet; then
             if [ -f "$report_path" ] && grep -q "^token=$token$" "$report_path"; then
+                first_report_seen=1
                 break
             fi
+        fi
+        if [ "$attempt" -ge "$survival_secs" ] && [ "$first_report_seen" -eq 0 ]; then
+            err "iOS integration app did not produce a smoke report within ${survival_secs}s survival window (NAPAXI_DEVICE_SURVIVAL_SECONDS=$survival_secs). Process likely aborted (SIGABRT) at startup."
         fi
         sleep 1
     done
@@ -1417,10 +1501,13 @@ case "$TARGET_PLATFORM" in
     check-manifest-action-alignment)
         check_manifest_action_alignment
         ;;
+    check-frb-version)
+        check_flutter_rust_bridge_version
+        ;;
     clean)
         clean_outputs
         ;;
     *)
-        err "Unknown platform: $TARGET_PLATFORM. Use: android, ios, ios-all, all, codegen, check-boundary, check-android-parity, check-ios-parity, check-ios, check-android-integration, check-android-integration-device, check-ios-native, check-ios-integration, check-ios-app, check-ios-device, check-ios-app-device, check-hygiene, check-packages-architecture, check-test-stability, check-api-contract, check-manifest-action-alignment, clean"
+        err "Unknown platform: $TARGET_PLATFORM. Use: android, ios, ios-all, all, codegen, check-boundary, check-android-parity, check-ios-parity, check-ios, check-android-integration, check-android-integration-device, check-ios-native, check-ios-integration, check-ios-app, check-ios-device, check-ios-app-device, check-hygiene, check-packages-architecture, check-test-stability, check-api-contract, check-manifest-action-alignment, check-frb-version, clean"
         ;;
 esac
