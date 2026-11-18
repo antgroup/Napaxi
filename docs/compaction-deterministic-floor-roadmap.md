@@ -14,6 +14,13 @@
 > boundary 簇（per-page skills-used REVERT 两例并轨 + OAuth MCP 单 owner 对齐验证
 > + subagent 持久族 + compaction 准备工作线程化 + secrets redaction + restart
 > 资源退役族互链）。仍不引入生产改动。
+>
+> 11-18 更新（DIMA 工单 2026111800120760358，OpenClaw 巡检 2026-11-18）：
+> 增补 11-18 窗口延续性（§5 末追加一行），并新增 §6 子节「11-18 新增条目」——含
+> defensive-design boundary 簇第 3 对（#200899 = 11-17 REVERT #196065 答案形态：
+> admission-prepare + lazy-invalidate + immutable-witness）、#200249 簇 subagent
+> 持久续修（outage/steer/expiry 第 4 迭代）、sandbox checkpoint lease-contention
+> 仲裁族。仍不引入生产改动。
 
 ## 1. OpenClaw 修复语义
 
@@ -103,6 +110,12 @@ facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单�
 形态**（详见 §6 第一条 defensive-design boundary）。
 
 本 CR 只落基线 + 路线图，不动生产路径，与上述序列的"补/审"层一致。
+
+- **11-18 subagent 持久簇门跨窗第 4 迭代（outage/steer/expiry）+ sandbox
+  checkpoint lease 仲裁 + session-list admission-prepare 正确形态（#200899
+  = 11-17 REVERT #196065 答案）** —— OpenClaw compaction 主题本周转入
+  subagent/sandbox 持久资源治理线，与 compaction 正确性族并行持续；本轮
+  ground check 全部零命中（Napaxi inline 单进程同步）。
 
 ## 6. 不在范围（workitem 已确认非缺口／备忘）
 
@@ -211,6 +224,73 @@ facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单�
   #199873/#7de99f0419）。详细 checklist 落于
   `docs/process-hosting-roadmap.md` §4（见下文文件 B 互锚）。本节仅作互链锚点。
   仅借鉴设计思路与边界规则，不直接移植代码。
+
+### 11-18 新增条目（DIMA 工单 2026111800120760358）
+
+- **#200899 — defensive-design boundary 簇第 3 对（#196065 REVERT 的正确答案形态）**：
+  来源：#200899 `perf(gateway): avoid repeated session-list invalidation scans`。
+  OpenClaw 11-17 REVERT 把 first-page skills-used per-chat-open full scan 撤了；
+  11-18 给出正确替代 = "admission 阶段准备 list membership + invalidate selections
+  lazily + 保留 immutable comparison witnesses + Float64 identity vectors 直接填
+  避免 temp allocation"，并 "release invalidated selections before idle readers"
+  （只 retire populated selections，保 no-next-reader 收集契约，不做重复账务）。
+  **Napaxi ground check**：`crates/` grep
+  `session.?list.*invalidat|membership.*admission|Float64.*ident|session.?list.?view|comparison witness`
+  零命中——单进程同步 in-memory 无 session-list-view-cache / 跨进程 ready tracking，
+  **不撞**。**反向验证结论**：OpenClaw 11-17 REVERT 后的正确形态 = admission-prepare +
+  lazy-invalidate + immutable-witness，**反推 Napaxi in-memory 同步"按需重算、不缓存
+  跨页 membership"的朴素形态 = 正确**；前两对（#196550 共享 facts、#196065 per-page
+  scan）反面，本对补"若须加 session-list / membership 视图缓存，正确形态 =
+  admission-prepare 而非 per-page / per-session scan"。**不须立刻改**：当前 Napaxi
+  in-memory 即未加视图缓存的"朴素 = 正确"形态。**daemon-fork 备忘**：未来 daemon 化 +
+  多 session stream 并发若需 session-list / membership 视图缓存，须采
+  admission-prepare + lazy-invalidate + immutable-witness 形态，**不**取 11-17
+  #196065 per-page full-scan 形态（与第 1 对 #196550 / 第 2 对 #196065 同簇同形态
+  denial）。仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT vs Napaxi
+  GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
+
+- **#200249 簇 subagent requester-settle durable-delivery 续修 — daemon-fork
+  资源/持久族**（扩既有 §6 #200249 条目，作为续记）：11-18 第 4 窗口迭代：
+  - **#200649** "stop losing finished subagent results during access-policy
+    outages, steer races and expiry"：三种丢 completed child result 路径分别 fix：
+    (a) access-policy outage 被记成永久 delivery failure、policy 恢复后父仍未收到；
+    (b) busy parent 用 steer 接 child result、delivery owner 后续切换被记
+    intentional non-delivery，父实际收了但记录说没收到、run 后续过期发误导 failure；
+    (c) suspended required completion 7 天后被丢且 requester 对话里无任何 notice，
+    仅 operator log 记录。某 Gateway 光 access-policy outage 一类一周 25 次失败
+    child result。
+  - 同簇续修：**#200823** keep subagent results owed after a Gateway restart /
+    **#200873** preserve subagent results under each requester turn / **#200924**
+    resume requester turns after committed subagent input / **#200760** deliver
+    finished results instead of refusing on store path or operator authority /
+    **#200807** fail children interrupted by a Gateway crash / **#200636** plugin
+    forks read/ls/run owner exec under session policy。
+  - **Napaxi ground check（11-18 重跑）**：`crates/` grep
+    `subagent.*result.*persist|requester.*settle|child result.*commit|fork.*workspace|session.?fork|delivered.?to.?parent`
+    零命中——inline 同步子 agent 调用，无 requester-settle / durable-delivery /
+    fork-workspace 协议，本轮所有持久簇 bug 不撞。
+  - **daemon-fork 备忘（续 #200249）**：若未来引入 daemon-distributed subagent，须
+    同时采 (i) 11-17 #200249 committed-never-replayed 幂等铁律；(ii) 本窗 #200649
+    outage / steer-race / expiry 三条 delivery correctness 边界；(iii) Gateway
+    重启 / requester turn / committed input 三对 result owed 保护。一并归
+    "daemon-fork resource/lifetime 持久族"备备忘。仅借鉴设计思路与边界规则，不直接
+    移植代码（OpenClaw MIT vs Napaxi GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
+
+- **sandbox checkpoint lease-contention 仲裁族 — daemon-fork/sandbox 资源族备备忘**：
+  来源：**#200643** `keep sandbox tools from starving behind checkpoints`
+  （`local-workspace-lease.ts` +77 行 lease-contention 模型，sandbox 工具不被
+  checkpoint 饿死）+ 同簇 **#200669** / **#200787** / **#200800** / **#200984** /
+  **#200989** / **#201037** / **#201039**。
+  - **Napaxi ground check**：`crates/` grep
+    `workspace.?lease|sandbox.*lease|checkpoint.*starv|tool.?lease|workspace.?contention|lease.*contention`
+    零命中——Napaxi 工具调同步路径，无 OpenClaw local-workspace-lease 模型、无
+    sandbox checkpoint 对工具饿死场景，**不撞**。
+  - **daemon-fork/sandbox 备备忘**：若未来 daemon 化 fork worker + sandbox 在
+    fork 与 turn 间共享工作目录、引入 checkpoint 仲裁，须参照 workspace-lease
+    lease-contention 模型防"工具被 checkpoint 饿死"，并落 #201039 类可观测性
+    （"show what keeps sandboxes paused during publication"）记录暂停归因。归
+    daemon-fork/sandbox 资源族。仅借鉴设计思路与边界规则，不直接移植代码
+    （OpenClaw MIT vs Napaxi GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
 
 ## 7. 许可证
 
