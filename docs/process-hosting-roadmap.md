@@ -151,3 +151,37 @@ Trigger: this is on the daemonization + self-managed-process track, gated on
 Napaxi deciding the external-supervisor deployment shape. It is long-term and
 explicitly out of scope for the audit-baseline CRs that land in this file's
 neighborhood.
+
+## §4 11-17 OpenClaw restart 资源退役族（设计参照，无 Napaxi 现状）
+
+Source: DIMA 工单 2026111700120722148（OpenClaw 巡检 2026-11-17 窗口）。OpenClaw
+restart 资源生命周期族本窗集中修，逐条归 daemon 资源退役族备备忘：
+
+- **#200435**：completed restart recovery input / published admission closures
+  不保留完成 work（释放完成 restart input）。
+- **#200504**：startup state 在 signal handlers 前释放，避免 signal 路径下还触达
+  已释放 state。
+- **#200330**：clean exit 时释放 retained state leases，与 #200504 配套。
+- **#200370**：readiness probe 不冻结主线程（避免 probe 阻塞主线程）。
+- **#200136**：catalog refresh 避免文件系统 stall（避免 refresh 期间阻塞）。
+- **#200306**：缺 store 时 first session 允许读（避免 cold-start 全失败）。
+- **#200457**：Windows home 路径在 SQLite 失败报告 redact（不泄露用户主目录）。
+- **#200383**：允许 agents 从 PostgreSQL 回退到 SQLite（升级后路径切换）。
+- **#200321**：shipped updaters 拒绝下个 release——transcript worker re-emits
+  Gateway graph 会绕开 updater 守卫，须阻止跨版本升级。
+
+**Napaxi 现状**：单进程，无 Gateway daemon restart 生命周期、无 readiness probe /
+catalog refresh，全部**非现状缺口**。
+
+**daemon 化引入时 checklist**：completed restart input 须释放 / startup state 须
+在 signal handler 前释放 / clean exit 释放 lease / readiness probe 不冻结主线程 /
+catalog refresh 避文件系统 stall / redact 主目录 / 支持 PostgreSQL→SQLite 回退 /
+updater 拒下 release 须防止 transcript worker re-emits Gateway graph。
+
+**承前**：11-12 #197230/#195369（shadow admission 退役 / clean exit lease）、
+11-16 #199873/#7de99f0419（restart 内存归因族）。与
+`docs/compaction-deterministic-floor-roadmap.md` §6 "restart 资源生命周期
+daemon 族" 条目互锚。
+
+仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT vs Napaxi
+GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
