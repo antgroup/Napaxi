@@ -104,7 +104,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
       - name: napaxi_flutter compileDebugKotlin gate (examples/flutter)
         working-directory: examples/flutter/android
         run: ./gradlew :napaxi_flutter:compileDebugKotlin --no-daemon -x verifySdkNativeInputs -x buildRust -x verifySdkNativeOutputs
