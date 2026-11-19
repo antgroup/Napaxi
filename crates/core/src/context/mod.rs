@@ -28,6 +28,7 @@ pub const CONTEXT_ENGINE_CAPABILITY_ID: &str = "napaxi.service.context_engine";
 
 mod budget;
 mod compaction;
+mod compaction_assembly;
 mod display;
 mod resolver;
 mod state;

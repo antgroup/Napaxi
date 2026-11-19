@@ -244,22 +244,36 @@ async fn summarize_middle_with_llm(
     messages: &[SessionMessage],
     focus: Option<&str>,
 ) -> Result<SummaryResult, String> {
-    let max_chunk_tokens = adaptive_chunk_token_budget(config, settings);
-    let (sanitized_messages, oversized_message_count) =
-        sanitize_oversized_messages(messages, max_chunk_tokens, config, settings);
-    let chunks = chunk_messages_by_tokens(&sanitized_messages, max_chunk_tokens);
-    if chunks.len() > 1 {
+    // range-local 累积 + payload-free planning + lazy render selected rows
+    // (see `compaction_assembly` mod doc + plan.md §3.3). Default
+    // `OwnedSliceTranscript` keeps short/mid-session byte-equal with the
+    // previous direct materialize-all flow.
+    use super::compaction_assembly::{OwnedSliceTranscript, collect_facts, plan_from_facts};
+
+    let transcript = OwnedSliceTranscript::new(messages);
+    let facts = collect_facts(&transcript);
+    let plan = plan_from_facts(&facts, config, settings);
+
+    if plan.chunks.len() > 1 {
+        let chunk_count = plan.chunks.len();
         let mut chunk_summaries = Vec::new();
-        let chunk_count = chunks.len();
-        for (index, chunk) in chunks.iter().enumerate() {
+        for (index, chunk) in plan.chunks.iter().enumerate() {
             let chunk_focus = format!(
                 "Chunk {} of {}. Preserve concrete decisions, identifiers, constraints, pending asks, and visible tool outcomes from this chunk.",
                 index + 1,
                 chunk_count
             );
-            let summary =
-                summarize_middle_with_llm_once(config, settings, None, chunk, Some(&chunk_focus))
-                    .await?;
+            let summary = summarize_chunk_with_llm_once(
+                config,
+                settings,
+                &plan,
+                chunk,
+                &transcript,
+                &facts,
+                None,
+                Some(&chunk_focus),
+            )
+            .await?;
             chunk_summaries.push(SessionMessage {
                 id: format!("compaction_chunk_{}", index + 1),
                 role: "assistant".to_string(),
@@ -284,14 +298,19 @@ async fn summarize_middle_with_llm(
             content,
             strategy: "llm_summary".to_string(),
             adaptive_chunk_count: chunk_count,
-            oversized_message_count,
+            oversized_message_count: plan.oversized_count,
         });
     }
-    summarize_middle_with_llm_once(
+
+    let first_chunk = &plan.chunks[0];
+    summarize_chunk_with_llm_once(
         config,
         settings,
+        &plan,
+        first_chunk,
+        &transcript,
+        &facts,
         previous_summary,
-        &sanitized_messages,
         focus,
     )
     .await
@@ -299,8 +318,36 @@ async fn summarize_middle_with_llm(
         content,
         strategy: "llm_summary".to_string(),
         adaptive_chunk_count: 1,
-        oversized_message_count,
+        oversized_message_count: plan.oversized_count,
     })
+}
+
+/// Lazy-per-chunk LLM caller: renders the chunk's selected rows just before
+/// the LLM call and drops the rendered `String` right after. The retry path
+/// re-renders the prompt with the `retry_focus` injected, so the existing
+/// required-section retry logic stays byte-equal with the previous
+/// `summarize_middle_with_llm_once` implementation.
+async fn summarize_chunk_with_llm_once(
+    config: &PlatformLlmConfig,
+    settings: &ContextEngineConfig,
+    plan: &super::compaction_assembly::CompactionPlan,
+    chunk: &super::compaction_assembly::CompactionChunk,
+    transcript: &dyn super::compaction_assembly::CompactionTranscript,
+    facts: &[super::compaction_assembly::CompactionFact],
+    previous_summary: Option<&str>,
+    focus: Option<&str>,
+) -> Result<String, String> {
+    run_compaction_with_retry(config, settings, focus, |focus_override| {
+        super::compaction_assembly::render_chunk_prompt(
+            plan,
+            chunk,
+            transcript,
+            facts,
+            previous_summary,
+            focus_override,
+        )
+    })
+    .await
 }
 
 async fn summarize_middle_with_llm_once(
@@ -310,6 +357,32 @@ async fn summarize_middle_with_llm_once(
     messages: &[SessionMessage],
     focus: Option<&str>,
 ) -> Result<String, String> {
+    // Merge path for chunk summaries (small `Vec<SessionMessage>`): reuse
+    // the existing `compaction_user_prompt` renderer directly so the
+    // 6-section prompt structure stays byte-equal with the prior flow.
+    run_compaction_with_retry(config, settings, focus, |focus_override| {
+        compaction_user_prompt(previous_summary, messages, focus_override)
+    })
+    .await
+}
+
+/// Shared retry-with-required-sections driver for both the lazy-per-chunk
+/// path (`render_chunk_prompt` closure) and the merge path
+/// (`compaction_user_prompt` closure). Both paths:
+///   1. clone the LLM config + swap system prompt + cap `max_tokens` +
+///      override the model;
+///   2. render the prompt with the caller-supplied focus;
+///   3. if the result misses the required section headings, render again
+///      with an injected `retry_focus` and retry once.
+async fn run_compaction_with_retry<P>(
+    config: &PlatformLlmConfig,
+    settings: &ContextEngineConfig,
+    focus: Option<&str>,
+    render_prompt: P,
+) -> Result<String, String>
+where
+    P: Fn(Option<&str>) -> String,
+{
     let mut summary_config = config.clone();
     summary_config.system_prompt = compaction_system_prompt();
     summary_config.max_tokens = compaction_max_tokens(config, settings);
@@ -321,7 +394,7 @@ async fn summarize_middle_with_llm_once(
     {
         summary_config.model = model.to_string();
     }
-    let prompt = compaction_user_prompt(previous_summary, messages, focus);
+    let prompt = render_prompt(focus);
     let summary = run_compaction_llm(&summary_config, settings, &prompt).await?;
     if summary_has_required_sections(&summary) {
         return Ok(summary);
@@ -335,7 +408,7 @@ async fn summarize_middle_with_llm_once(
         .unwrap_or_else(|| {
             "Retry with exactly these headings: Decisions, Open TODOs, Constraints/Rules, Pending user asks, Exact identifiers, Tool outcomes.".to_string()
         });
-    let retry_prompt = compaction_user_prompt(previous_summary, messages, Some(&retry_focus));
+    let retry_prompt = render_prompt(Some(&retry_focus));
     let retry_summary = run_compaction_llm(&summary_config, settings, &retry_prompt).await?;
     if !summary_has_required_sections(&retry_summary) {
         return Err(
@@ -368,6 +441,19 @@ async fn run_compaction_llm(
     // required-section check nor the returned content can persist raw secrets
     // (covers both the first attempt and the retry path).
     Ok(redact_credentials_in_text(summary))
+}
+
+/// Effective oversized threshold used by both the legacy sanitize path and
+/// the new payload-free planning path. Exposed `pub(super)` so the assembly
+/// module can mirror it in `CompactionPlan::from_facts` and lazy render.
+pub(super) fn effective_oversized_threshold(
+    config: &PlatformLlmConfig,
+    settings: &ContextEngineConfig,
+) -> usize {
+    let context_window = context_window_tokens(config, settings);
+    let oversized_threshold = ((context_window as f64) * OVERSIZED_MESSAGE_RATIO).round() as usize;
+    let max_chunk_tokens = adaptive_chunk_token_budget(config, settings);
+    oversized_threshold.min(max_chunk_tokens).max(1)
 }
 
 fn summary_has_required_sections(summary: &str) -> bool {
@@ -454,11 +540,11 @@ fn protected_tail_tokens(history: &[SessionMessage]) -> usize {
         .fold(0usize, usize::saturating_add)
 }
 
-fn session_message_tokens(message: &SessionMessage) -> usize {
+pub(super) fn session_message_tokens(message: &SessionMessage) -> usize {
     estimate_context_tokens("", None, std::slice::from_ref(message))
 }
 
-fn adaptive_chunk_token_budget(
+pub(super) fn adaptive_chunk_token_budget(
     config: &PlatformLlmConfig,
     settings: &ContextEngineConfig,
 ) -> usize {
@@ -472,7 +558,12 @@ fn adaptive_chunk_token_budget(
         .max(1_024.0) as usize
 }
 
-fn sanitize_oversized_messages(
+/// Kept `pub(super)` for byte-equal golden parity tests against the new
+/// `compaction_assembly` path; no longer called on the
+/// `summarize_middle_with_llm` hot path (oversize replacement now happens
+/// lazily inside `render_chunk_prompt`, see `compaction_assembly`).
+#[allow(dead_code)]
+pub(super) fn sanitize_oversized_messages(
     messages: &[SessionMessage],
     max_chunk_tokens: usize,
     config: &PlatformLlmConfig,
@@ -503,7 +594,12 @@ fn sanitize_oversized_messages(
     (sanitized, oversized_count)
 }
 
-fn chunk_messages_by_tokens(
+/// Kept `pub(super)` for byte-equal golden parity tests against the new
+/// `compaction_assembly` path; no longer called on the
+/// `summarize_middle_with_llm` hot path (chunking now happens inside
+/// `CompactionPlan::from_facts`, see `compaction_assembly`).
+#[allow(dead_code)]
+pub(super) fn chunk_messages_by_tokens(
     messages: &[SessionMessage],
     max_chunk_tokens: usize,
 ) -> Vec<Vec<SessionMessage>> {
@@ -539,7 +635,7 @@ fn compaction_system_prompt() -> String {
     .join("\n")
 }
 
-fn compaction_user_prompt(
+pub(super) fn compaction_user_prompt(
     previous_summary: Option<&str>,
     messages: &[SessionMessage],
     focus: Option<&str>,
@@ -641,7 +737,7 @@ fn is_context_summary_content(content: &str) -> bool {
         || trimmed.starts_with("[CONTEXT COMPACTION")
 }
 
-fn tool_summary_items(content: &str, limit: usize) -> Vec<String> {
+pub(super) fn tool_summary_items(content: &str, limit: usize) -> Vec<String> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(content) else {
         return Vec::new();
     };
@@ -842,7 +938,7 @@ pub(crate) fn redact_credentials_in_text(text: &str) -> String {
 
 /// Redact credentials, then produce the bounded preview. Used at every compaction
 /// write-out / sampling point so secrets never survive preview/anchor extraction.
-fn redacted_preview(text: &str, max_chars: usize) -> String {
+pub(super) fn redacted_preview(text: &str, max_chars: usize) -> String {
     compact_text_preview(&redact_credentials_in_text(text), max_chars)
 }
 
@@ -930,9 +1026,15 @@ mod credential_redaction_tests {
 
     #[test]
     fn redacts_github_pat_prefix() {
-        let input = format!("token is ghp_{tok} . ", tok = "oAbCdEfGhIjKlMnOpQrStUv8000deadbeef");
+        let input = format!(
+            "token is ghp_{tok} . ",
+            tok = "oAbCdEfGhIjKlMnOpQrStUv8000deadbeef"
+        );
         let out = redact_credentials_in_text(&input);
-        assert!(out.contains("ghp_[REDACTED]"), "redaction missing: {out} . ");
+        assert!(
+            out.contains("ghp_[REDACTED]"),
+            "redaction missing: {out} . "
+        );
         assert!(!out.contains("oAbCdEfGhIjKlMnOpQrStUv8000deadbeef"));
     }
 
@@ -940,7 +1042,10 @@ mod credential_redaction_tests {
     fn redacts_bearer_authorization() {
         let input = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9payload . ";
         let out = redact_credentials_in_text(input);
-        assert!(out.contains("Authorization: Bearer [REDACTED]"), "redaction missing: {out} . ");
+        assert!(
+            out.contains("Authorization: Bearer [REDACTED]"),
+            "redaction missing: {out} . "
+        );
         assert!(!out.contains("eyJhbGci"));
     }
 
@@ -948,7 +1053,10 @@ mod credential_redaction_tests {
     fn redacts_bare_authorization_assignment() {
         let input = "Authorization: dXNlcjpwYXNzMTIzNDU2Nzg5 . ";
         let out = redact_credentials_in_text(input);
-        assert!(out.contains("Authorization: [REDACTED]"), "redaction missing: {out} . ");
+        assert!(
+            out.contains("Authorization: [REDACTED]"),
+            "redaction missing: {out} . "
+        );
         assert!(!out.contains("dXNlcjpwYXNzMTIzNDU2Nzg5"));
     }
 
@@ -956,7 +1064,10 @@ mod credential_redaction_tests {
     fn redacts_anthropic_prefix() {
         let input = format!("keys: sk-ant-{tok} . ", tok = "api03AbCdEfGhIjKlMnOpQrStUv");
         let out = redact_credentials_in_text(&input);
-        assert!(out.contains("sk-ant-[REDACTED]"), "redaction missing: {out} . ");
+        assert!(
+            out.contains("sk-ant-[REDACTED]"),
+            "redaction missing: {out} . "
+        );
         assert!(!out.contains("api03AbCdEfGhIjKlMnOpQrStUv"));
     }
 
@@ -979,18 +1090,33 @@ mod credential_redaction_tests {
     fn redacts_key_value_assignments() {
         let input = "config: api_key=abc12345678901234 token=abcdef0123456789 secret: SHORT . ";
         let out = redact_credentials_in_text(input);
-        assert!(out.contains("api_key=[REDACTED]"), "api_key not redacted: {out} . ");
-        assert!(out.contains("token=[REDACTED]"), "token not redacted: {out} . ");
+        assert!(
+            out.contains("api_key=[REDACTED]"),
+            "api_key not redacted: {out} . "
+        );
+        assert!(
+            out.contains("token=[REDACTED]"),
+            "token not redacted: {out} . "
+        );
         // `secret: SHORT` body below the 8-char floor must NOT be redacted.
-        assert!(out.contains("secret: SHORT"), "short secret wrongly redacted: {out} . ");
+        assert!(
+            out.contains("secret: SHORT"),
+            "short secret wrongly redacted: {out} . "
+        );
     }
 
     #[test]
     fn redacts_slack_and_google_prefixes() {
         let input = "slack xoxb-1234567890ABCDEFGH; google AIzaSyABCDEFGHIJKLMN01234567 . ";
         let out = redact_credentials_in_text(input);
-        assert!(out.contains("xoxb-[REDACTED]"), "slack not redacted: {out} . ");
-        assert!(out.contains("AIza[REDACTED]"), "google not redacted: {out} . ");
+        assert!(
+            out.contains("xoxb-[REDACTED]"),
+            "slack not redacted: {out} . "
+        );
+        assert!(
+            out.contains("AIza[REDACTED]"),
+            "google not redacted: {out} . "
+        );
     }
 
     #[test]
@@ -1005,14 +1131,24 @@ mod credential_redaction_tests {
         let user_msg = SessionMessage {
             id: "u1".to_string(),
             role: "user".to_string(),
-            content: format!("Please use ghp_{tok} and Bearer {jwt} . ", tok = "deadbeefcafe1234567890abcdef", jwt = "supersecretjwt1234"),
+            content: format!(
+                "Please use ghp_{tok} and Bearer {jwt} . ",
+                tok = "deadbeefcafe1234567890abcdef",
+                jwt = "supersecretjwt1234"
+            ),
             created_at: "2026-11-12T00:00:00Z".to_string(),
             interrupted: false,
             turn_id: None,
         };
         let summary = summarize_middle_locally(None, std::slice::from_ref(&user_msg), None);
-        assert!(!summary.contains("ghp_deadbeefcafe1234567890abcdef"), "ghp leaked into summary.");
-        assert!(!summary.contains("supersecretjwt1234"), "bearer jwt leaked into summary.");
+        assert!(
+            !summary.contains("ghp_deadbeefcafe1234567890abcdef"),
+            "ghp leaked into summary."
+        );
+        assert!(
+            !summary.contains("supersecretjwt1234"),
+            "bearer jwt leaked into summary."
+        );
         assert!(summary.contains("[REDACTED]"));
         // Structural invariants preserved.
         assert!(summary.contains("## Conversation Context Summary"));
@@ -1024,14 +1160,193 @@ mod credential_redaction_tests {
         let user_msg = SessionMessage {
             id: "u1".to_string(),
             role: "user".to_string(),
-            content: format!("key=Bearer {jwt} long ghp_{tok} . ", jwt = "eyJleGFtcGxllnNpZ25hdHVyZQ", tok = "1234567890abcdefghijklmno"),
+            content: format!(
+                "key=Bearer {jwt} long ghp_{tok} . ",
+                jwt = "eyJleGFtcGxllnNpZ25hdHVyZQ",
+                tok = "1234567890abcdefghijklmno"
+            ),
             created_at: "2026-11-12T00:00:00Z".to_string(),
             interrupted: false,
             turn_id: None,
         };
         let prompt = compaction_user_prompt(None, std::slice::from_ref(&user_msg), None);
-        assert!(!prompt.contains("eyJleGFtcGxllnNpZ25hdHVyZQ"), "jwt leaked into prompt.");
-        assert!(!prompt.contains("1234567890abcdefghijklmno"), "ghp leaked into prompt.");
+        assert!(
+            !prompt.contains("eyJleGFtcGxllnNpZ25hdHVyZQ"),
+            "jwt leaked into prompt."
+        );
+        assert!(
+            !prompt.contains("1234567890abcdefghijklmno"),
+            "ghp leaked into prompt."
+        );
         assert!(prompt.contains("[REDACTED]"));
+    }
+}
+
+// Golden parity tests for the compaction_assembly path against the legacy
+// sanitize+chunk_messages_by_tokens+compaction_user_prompt flow. Locks the
+// plan §5.1 / §5.4 invariant: the new lazy-render path produces
+// byte-equal prompts with the prior materialize-all path for the
+// non-oversized single/multi-chunk cases (the dominant short/mid session
+// shape), and the oversized placeholder text matches the legacy
+// `sanitize_oversized_messages` output exactly.
+#[cfg(test)]
+mod compaction_assembly_parity_tests {
+    use super::super::compaction_assembly::{
+        OwnedSliceTranscript, collect_facts, plan_from_facts, render_chunk_prompt,
+    };
+    use super::*;
+    use chrono::Utc;
+
+    fn msg(id: &str, role: &str, content: &str) -> SessionMessage {
+        SessionMessage {
+            id: id.to_string(),
+            role: role.to_string(),
+            content: content.to_string(),
+            created_at: Utc::now().to_rfc3339(),
+            interrupted: false,
+            turn_id: None,
+        }
+    }
+
+    fn cfg(window: usize) -> (PlatformLlmConfig, ContextEngineConfig) {
+        let mut config = PlatformLlmConfig::default();
+        config.context_engine.context_window_tokens = Some(window);
+        let settings = config.context_engine.clone();
+        (config, settings)
+    }
+
+    fn legacy_per_chunk_prompts(
+        messages: &[SessionMessage],
+        config: &PlatformLlmConfig,
+        settings: &ContextEngineConfig,
+        focus: Option<&str>,
+    ) -> Vec<String> {
+        let max_chunk = adaptive_chunk_token_budget(config, settings);
+        let (sanitized, _) = sanitize_oversized_messages(messages, max_chunk, config, settings);
+        let chunks = chunk_messages_by_tokens(&sanitized, max_chunk);
+        chunks
+            .iter()
+            .map(|chunk| compaction_user_prompt(None, chunk, focus))
+            .collect()
+    }
+
+    fn new_per_chunk_prompts(
+        messages: &[SessionMessage],
+        config: &PlatformLlmConfig,
+        settings: &ContextEngineConfig,
+        focus: Option<&str>,
+    ) -> Vec<String> {
+        let transcript = OwnedSliceTranscript::new(messages);
+        let facts = collect_facts(&transcript);
+        let plan = plan_from_facts(&facts, config, settings);
+        plan.chunks
+            .iter()
+            .map(|chunk| render_chunk_prompt(&plan, chunk, &transcript, &facts, None, focus))
+            .collect()
+    }
+
+    #[test]
+    fn single_chunk_non_oversized_byte_equal_with_legacy() {
+        let messages = vec![
+            msg("u1", "user", "Help me ship the build today"),
+            msg("a1", "assistant", "Ack: starting CI now."),
+            msg("u2", "user", "Did the test pass?"),
+        ];
+        let (config, settings) = cfg(8_000);
+        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, Some("ship focus"));
+        let new = new_per_chunk_prompts(&messages, &config, &settings, Some("ship focus"));
+        assert_eq!(
+            legacy.len(),
+            1,
+            "legacy single-chunk expected, got {}: {legacy:?}",
+            legacy.len()
+        );
+        assert_eq!(
+            new.len(),
+            1,
+            "new single-chunk expected, got {}: {new:?}",
+            new.len()
+        );
+        assert_eq!(new[0], legacy[0], "single-chunk prompt drifted from legacy");
+    }
+
+    #[test]
+    fn multi_chunk_non_oversized_byte_equal_per_chunk() {
+        // Each message carries ~6k chars (~1.5k tokens) — adaptive budget is
+        // ~floor 1024 for an 8_000 window, so 3 such rows span multiple chunks
+        // in both the legacy path (over sanitized == original here) and the
+        // new payload-free plan.
+        let messages = vec![
+            msg("u1", "user", &"needs real summarization ".repeat(250)),
+            msg(
+                "a1",
+                "assistant",
+                &"assistant continuation body ".repeat(250),
+            ),
+            msg("u2", "user", &"next user turn body ".repeat(250)),
+        ];
+        let (config, settings) = cfg(8_000);
+        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, None);
+        let new = new_per_chunk_prompts(&messages, &config, &settings, None);
+        assert!(
+            legacy.len() >= 2,
+            "legacy must produce multiple chunks, got {}: {legacy:?}",
+            legacy.len()
+        );
+        assert_eq!(
+            new.len(),
+            legacy.len(),
+            "chunk count drift: new={} legacy={}",
+            new.len(),
+            legacy.len()
+        );
+        for (i, (legacy_prompt, new_prompt)) in legacy.iter().zip(new.iter()).enumerate() {
+            assert_eq!(
+                new_prompt, legacy_prompt,
+                "chunk {i} prompt drifted from legacy"
+            );
+        }
+    }
+
+    #[test]
+    fn single_oversized_row_placeholder_byte_equal_with_legacy() {
+        // 80k-char row → oversized against an 8_000 window. Both legacy and new
+        // produce a single chunk whose sole row carries the placeholder text.
+        let messages = vec![msg("u1", "user", &"O".repeat(80_000))];
+        let (config, settings) = cfg(8_000);
+        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, None);
+        let new = new_per_chunk_prompts(&messages, &config, &settings, None);
+        assert_eq!(legacy.len(), 1, "legacy single-chunk expected: {legacy:?}");
+        assert_eq!(new.len(), 1, "new single-chunk expected: {new:?}");
+        assert_eq!(
+            new[0], legacy[0],
+            "oversized placeholder prompt drifted from legacy"
+        );
+        assert!(
+            new[0].contains("[oversized message omitted during context compaction:"),
+            "oversized placeholder missing in: {0}",
+            new[0]
+        );
+    }
+
+    #[test]
+    fn tool_calls_chunk_non_oversized_byte_equal_with_legacy() {
+        let tool_content = serde_json::json!({
+            "calls": [
+                {"name": "browser_snapshot", "result": "page snapshot ok"},
+                {"name": "shell_exec", "result": "exit 0"},
+            ]
+        })
+        .to_string();
+        let messages = vec![
+            msg("t1", "tool_calls", &tool_content),
+            msg("u1", "user", "next ask"),
+        ];
+        let (config, settings) = cfg(8_000);
+        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, Some("tools focus"));
+        let new = new_per_chunk_prompts(&messages, &config, &settings, Some("tools focus"));
+        assert_eq!(legacy.len(), 1, "legacy single-chunk expected: {legacy:?}");
+        assert_eq!(new.len(), 1, "new single-chunk expected: {new:?}");
+        assert_eq!(new[0], legacy[0], "tool_calls prompt drifted from legacy");
     }
 }
