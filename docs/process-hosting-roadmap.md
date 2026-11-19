@@ -152,7 +152,7 @@ Napaxi deciding the external-supervisor deployment shape. It is long-term and
 explicitly out of scope for the audit-baseline CRs that land in this file's
 neighborhood.
 
-## §4 11-17 OpenClaw restart 资源退役族（设计参照，无 Napaxi 现状）
+## §4 11-17 / 11-18 OpenClaw restart 资源退役族（设计参照，无 Napaxi 现状）
 
 Source: DIMA 工单 2026111700120722148（OpenClaw 巡检 2026-11-17 窗口）。OpenClaw
 restart 资源生命周期族本窗集中修，逐条归 daemon 资源退役族备备忘：
@@ -178,10 +178,33 @@ catalog refresh，全部**非现状缺口**。
 catalog refresh 避文件系统 stall / redact 主目录 / 支持 PostgreSQL→SQLite 回退 /
 updater 拒下 release 须防止 transcript worker re-emits Gateway graph。
 
+### 11-18 续记（DIMA 工单 2026111800120760358 / OpenClaw 巡检 2026-11-18）
+
+Source: DIMA 工单 2026111800120760358（OpenClaw 巡检 2026-11-18 窗口）。续接 11-17
+§4 同族，本窗 OpenClaw restart 资源退役族续修 7 条：
+
+- **#200794**：transcript backfill probes 不跑在 session writer 线程上。
+- **#200742**：另 OpenClaw 进程在写时，updates 不再以 "database is locked" 失败。
+- **#199666**：（backup）删 staging databases 时释放磁盘空间。
+- **#200837**：Gateway restart 等"仍启动中的 Gateway"先开端口再接管。
+- **#200736**：（build）admission 拒绝时 Gateway 报内存。
+- **#200647**：（worker）取消被遗弃的 Gateway tool 调用 —— 与既有 §4 已记的
+  "completed restart input 退役" 同 cancel-occupied-tool-call 子族，但这是
+  #200647 specific。
+- **#200823**：（subagent）keep subagent results owed after a Gateway restart ——
+  同时出现于 `docs/compaction-deterministic-floor-roadmap.md` §6 #200249 簇续修；
+  此处仅互锚，不重复定义。
+
+**Napaxi 现状**延续不撞结论：无 backfill worker、无 staging DB、单进程无
+"database is locked" 多进程冲突、无 readiness probe / memory-on-refusal。归
+daemon 资源退役族（承 11-12 #197230/#195369、11-16 #199873/#7de99f0419、
+11-17 §4）。仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT vs Napaxi
+GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
+
 **承前**：11-12 #197230/#195369（shadow admission 退役 / clean exit lease）、
 11-16 #199873/#7de99f0419（restart 内存归因族）。与
 `docs/compaction-deterministic-floor-roadmap.md` §6 "restart 资源生命周期
-daemon 族" 条目互锚。
+daemon 族" 条目互锚；#200823 互锚文件 A §6 #200249 簇续记。
 
 仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT vs Napaxi
 GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
