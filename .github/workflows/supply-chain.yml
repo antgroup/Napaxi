@@ -46,7 +46,12 @@ jobs:
         run: cargo metadata --no-deps --format-version 1 >/dev/null
 
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        # Pin below 0.22: cargo-deny 0.22.0 requires rustc 1.95, but the
+        # `actions/checkout` runner's `dtolnay/rust-toolchain@stable` currently
+        # resolves to rustc 1.92. 0.21.0 supports rustc 1.89+, so it installs on
+        # the pinned/1.92 runner; bump once stable advances past 1.95. (See
+        # CI log: "cargo-deny 0.21.0 supports rustc 1.89.0".)
+        run: cargo install cargo-deny --version 0.21 --locked
 
       - name: cargo deny check
         run: cargo deny check
