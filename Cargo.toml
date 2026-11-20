@@ -5,7 +5,7 @@ members = [
     "crates/features/skills",
     "packages/api_bridge",
 ]
-resolver = "2"
+resolver = "3"
 
 # Workspace-wide lint policy. `cargo clippy --workspace --all-targets -- -D
 # warnings` is a hard CI gate (see .github/workflows/rust.yml), so the few
