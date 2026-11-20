@@ -242,7 +242,12 @@ pub(super) fn render_chunk_prompt(
         ));
     }
     let mut message_lines: Vec<String> = Vec::new();
-    for (idx, fact) in facts.iter().enumerate().skip(chunk.start).take(chunk.end - chunk.start) {
+    // `idx` indexes both `facts` and `transcript.message(idx)`; an iterator
+    // rewrite would obscure the dual indexing, so the range loop is clearer
+    // here than clippy's suggested `enumerate().skip().take()`.
+    #[allow(clippy::needless_range_loop)]
+    for idx in chunk.start..chunk.end {
+        let fact = &facts[idx];
         let message = transcript.message(idx);
         let content: Cow<'_, str> = if fact.token_estimate > plan.oversized_threshold {
             Cow::Owned(format_oversized_placeholder(message, fact))

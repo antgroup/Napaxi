@@ -963,7 +963,6 @@ pub(super) fn compact_text_preview(text: &str, max_chars: usize) -> String {
 #[path = "compaction_auto_focus_tests.rs"]
 mod auto_focus_tests;
 
-
 #[cfg(test)]
 #[path = "compaction_credential_redaction_tests.rs"]
 mod credential_redaction_tests;
@@ -978,4 +977,3 @@ mod credential_redaction_tests;
 #[cfg(test)]
 #[path = "compaction_assembly_parity_tests.rs"]
 mod compaction_assembly_parity_tests;
-
