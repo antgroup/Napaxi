@@ -242,8 +242,7 @@ pub(super) fn render_chunk_prompt(
         ));
     }
     let mut message_lines: Vec<String> = Vec::new();
-    for idx in chunk.start..chunk.end {
-        let fact = &facts[idx];
+    for (idx, fact) in facts.iter().enumerate().skip(chunk.start).take(chunk.end - chunk.start) {
         let message = transcript.message(idx);
         let content: Cow<'_, str> = if fact.token_estimate > plan.oversized_threshold {
             Cow::Owned(format_oversized_placeholder(message, fact))
