@@ -3099,9 +3099,14 @@ class ModelsTest {
         assertEquals("signature_or_version_blocked", parsed.code)
 
         // fromMap path must agree with fromJson.
-        val viaMap = NapaxiApkInstallResult.fromMap(
-            JSONObject(json).toMap()
-        )
+        // org.json on the Android unit-test classpath does not expose
+        // JSONObject.toMap() (added in upstream org.json only, not in the
+        // android.jar stub nor the pinned 20240303 artifact), so reconstruct the
+        // Map the same way toMap() would: every direct member, value-by-key.
+        val obj = JSONObject(json)
+        val map = HashMap<String, Any?>()
+        for (key in obj.keys()) map[key] = obj.get(key)
+        val viaMap = NapaxiApkInstallResult.fromMap(map)
         assertEquals(original, viaMap)
     }
 
