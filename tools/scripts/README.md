@@ -146,3 +146,51 @@ as a pass condition rather than just relying on the launch return code. Set
 gate polls once per second and FAILs immediately if the process disappears
 within the window — catching the SIGABRT-at-launch false positive that
 prompted this work.
+
+## Layer 3: physical device regression
+
+`./tools/scripts/layer3_device_regression.sh` runs the Maestro smoke flows on
+physical devices: an Android phone over `adb` and/or an iPhone over
+`devicectl`. It builds and installs the example app with the data-preserving
+`adb install -r`, then drives the `.maestro` flows under
+`examples/flutter/.maestro`.
+
+Typical invocation (Android only, one device):
+
+```bash
+./tools/scripts/layer3_device_regression.sh --android-only --android-serial 7e78be85
+```
+
+Per-platform results land in `$HOME/testing/results/<timestamp>-layer3/`
+(`android.json`, `ios.json`) together with an overall `verdict` line. Each
+JSON records `steps.build / install / maestro`, a `verdict` of `PASS` / `FAIL`
+/ `SKIP`, and (Android only) an `autoclick.taps` / `autoclick.exit_reason`
+observational block that never affects the verdict.
+
+### Android install auto-clicker
+
+MIUI's "Continue install" dialog blocks unattended `adb install -r` on Xiaomi
+handsets. `tools/scripts/android_install_autoclick.sh` is the in-tree
+auto-clicker; layer 3 starts it in the background before the Maestro run and
+kills it after, leaving the transcript at
+`$RESULT_DIR/android-autoclick.log`. Detection stays on
+`adb shell dumpsys window | grep -m1 mCurrentFocus` plus `adb shell input tap`,
+and deliberately avoids UI Automator dump — that bridge mounts an
+accessibility service that makes Flutter integration_test emit a false
+`A SemanticsHandle was active at the end of the test` on tear-down.
+
+One-time prerequisites on the device (apply via `adb shell`):
+
+```bash
+# Developer options -> "USB debugging (security settings)" = ON
+# (manually; otherwise `adb shell input tap` raises INJECT_EVENTS)
+# Screen unlocked before each run.
+adb shell settings put global stay_on_while_plugged_in 7
+adb shell settings put system screen_off_timeout 2147483647
+```
+
+Keeping the screen on avoids `INSTALL_FAILED_USER_RESTRICTED: Install
+canceled by user` when the display sleeps mid-install. Override the tap
+target per device with `--tap-x` / `--tap-y` or the `AUTOCLICK_TAP_X` /
+`AUTOCLICK_TAP_Y` env vars (defaults `346 2483` are the Xiaomi 15 "Continue
+install" button center).
