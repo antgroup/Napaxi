@@ -376,7 +376,7 @@ internal fun jsonQuoted(value: String): String {
             '"' -> builder.append("\\\"")
             '\\' -> builder.append("\\\\")
             '\b' -> builder.append("\\b")
-            '\f' -> builder.append("\\f")
+            '\u000C' -> builder.append("\\f")
             '\n' -> builder.append("\\n")
             '\r' -> builder.append("\\r")
             '\t' -> builder.append("\\t")

@@ -28,16 +28,48 @@ use chrono::Utc;
 
 use super::{RecallDoc, corpus::source_weight, db_path, reset_db_file};
 
-/// Test-only counter of [`ensure_schema`] invocations. Used by
-/// `recall_schema_ensure_is_cached` to verify that the schema-ensured cache
-/// (idea reference: OpenClaw #186483) skips the DDL pass on subsequent reads.
+/// Test-only per-`db_path(files_dir)` counter of read-path [`ensure_schema`]
+/// invocations. Used by `recall_schema_ensure_is_cached_across_reads` to verify
+/// the schema-ensured cache (idea reference: OpenClaw #186483) skips the DDL
+/// pass on subsequent reads.
+///
+/// Keyed by `db_path(files_dir)` — not a single process-global atomic — so the
+/// oracle is parallel-safe under `cargo test --workspace`: each test owns a
+/// unique tempdir / db file, so concurrent recall tests in other crates bump
+/// *their own* `db_path` counters and never contaminate this one's measured
+/// DELTA. (A process-global counter is bumped by those concurrent reads during
+/// this test's "second read must add zero" window, intermittently flipping it
+/// red.) The counter still observes bumps made on a tokio worker thread because
+/// it is a shared process-global *map* (keyed per dir), not a thread-local.
 #[cfg(test)]
-pub(crate) static ENSURE_CALLS: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+fn ensure_calls_map()
+-> &'static std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, usize>> {
+    use std::sync::OnceLock;
+    static MAP: OnceLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, usize>>> =
+        OnceLock::new();
+    MAP.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
 
 #[cfg(test)]
-pub(crate) fn reset_ensure_calls_counter() {
-    ENSURE_CALLS.store(0, std::sync::atomic::Ordering::Relaxed);
+pub(crate) fn ensure_calls_for(files_dir: &str) -> usize {
+    ensure_calls_map()
+        .lock()
+        .map(|map| map.get(&db_path(files_dir)).copied().unwrap_or(0))
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+pub(crate) fn bump_ensure_calls_for(files_dir: &str) {
+    if let Ok(mut map) = ensure_calls_map().lock() {
+        *map.entry(db_path(files_dir)).or_insert(0) += 1;
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn reset_ensure_calls_for(files_dir: &str) {
+    if let Ok(mut map) = ensure_calls_map().lock() {
+        map.remove(&db_path(files_dir));
+    }
 }
 
 pub(super) async fn open_db(files_dir: &str) -> Result<libsql::Database, String> {
@@ -58,8 +90,6 @@ pub(super) async fn open_db(files_dir: &str) -> Result<libsql::Database, String>
 }
 
 pub(super) async fn ensure_schema(conn: &libsql::Connection) -> Result<(), String> {
-    #[cfg(test)]
-    ENSURE_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     conn.execute_batch(
         r#"
         PRAGMA busy_timeout = 5000;

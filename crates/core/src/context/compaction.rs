@@ -251,7 +251,8 @@ async fn summarize_middle_with_llm(
     use super::compaction_assembly::{OwnedSliceTranscript, collect_facts, plan_from_facts};
 
     let transcript = OwnedSliceTranscript::new(messages);
-    let facts = collect_facts(&transcript);
+    let threshold = effective_oversized_threshold(config, settings);
+    let facts = collect_facts(&transcript, threshold);
     let plan = plan_from_facts(&facts, config, settings);
 
     if plan.chunks.len() > 1 {
@@ -904,25 +905,32 @@ pub(crate) fn redact_credentials_in_text(text: &str) -> String {
     use std::sync::OnceLock;
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     let patterns = PATTERNS.get_or_init(|| {
+        // These patterns are compile-time-constant literals; if any is invalid it is a
+        // programmer error caught at first use (build/test), so `expect` (not `unwrap`,
+        // which `clippy::unwrap_used` denies in non-test builds — `lib.rs`) is the
+        // sanctioned initializer here.
         vec![
             // RFC 6750 bearer tokens: `Bearer <opaque>` / `bearer  <opaque>`.
-            Regex::new(r"(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})").unwrap(),
+            Regex::new(r"(?i)(Bearer\s+)([A-Za-z0-9._~+/=-]{8,})")
+                .expect("static credential-redaction regex"),
             // `Authorization: <opaque>` (bare scheme-less token, ≥8 alnum, no space).
-            Regex::new(r"(?i)(Authorization\s*[:=]\s*)([A-Za-z0-9._~+/=-]{8,})").unwrap(),
+            Regex::new(r"(?i)(Authorization\s*[:=]\s*)([A-Za-z0-9._~+/=-]{8,})")
+                .expect("static credential-redaction regex"),
             // Known provider prefixes — keep the prefix, redact the body.
             //   GitHub (ghp_/gho_/ghs_/ghr_/github_pat_), Anthropic (sk-ant-),
             //   OpenAI (sk- + ≥20 body to avoid short false positives),
             //   Slack (xox[bps]-), Google API key (AIza).
-            Regex::new(r"(ghp_|gho_|ghs_|ghr_|github_pat_|sk-ant-)([A-Za-z0-9]{8,})").unwrap(),
-            Regex::new(r"(sk-)([A-Za-z0-9]{20,})").unwrap(),
-            Regex::new(r"(xox[bps]-)([A-Za-z0-9-]{8,})").unwrap(),
-            Regex::new(r"\b(AIza)([A-Za-z0-9_\-]{20,})").unwrap(),
+            Regex::new(r"(ghp_|gho_|ghs_|ghr_|github_pat_|sk-ant-)([A-Za-z0-9]{8,})")
+                .expect("static credential-redaction regex"),
+            Regex::new(r"(sk-)([A-Za-z0-9]{20,})").expect("static credential-redaction regex"),
+            Regex::new(r"(xox[bps]-)([A-Za-z0-9-]{8,})").expect("static credential-redaction regex"),
+            Regex::new(r"\b(AIza)([A-Za-z0-9_\-]{20,})").expect("static credential-redaction regex"),
             // `<key>=` / `<key>:` assignments: api_key / access_token / refresh_token /
             // client_secret / secret / token, optionally followed by a quote char.
             Regex::new(
                 r#"(?i)\b((?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token)\s*[:=]\s*['"]?)([A-Za-z0-9._~+/=-]{8,})"#,
             )
-            .unwrap(),
+            .expect("static credential-redaction regex"),
         ]
     });
     let mut out = text.to_string();
@@ -953,234 +961,12 @@ pub(super) fn compact_text_preview(text: &str, max_chars: usize) -> String {
 }
 
 #[cfg(test)]
-mod auto_focus_tests {
-    use super::*;
-    use chrono::Utc;
-
-    fn message(id: &str, role: &str, content: &str) -> SessionMessage {
-        SessionMessage {
-            id: id.to_string(),
-            role: role.to_string(),
-            content: content.to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            interrupted: false,
-            turn_id: None,
-        }
-    }
-
-    #[test]
-    fn derives_focus_from_recent_user_turns() {
-        let history = vec![
-            message("m1", "user", "first ask"),
-            message("m2", "assistant", "ok"),
-            message("m3", "user", "second ask"),
-            message("m4", "assistant", "ok"),
-            message("m5", "user", "third ask"),
-        ];
-        let focus = derive_auto_focus_topic(&history).expect("focus");
-        assert!(focus.starts_with("Recent user focus:"));
-        assert!(focus.contains("- first ask"));
-        assert!(focus.contains("- second ask"));
-        assert!(focus.contains("- third ask"));
-    }
-
-    #[test]
-    fn limits_to_three_most_recent_turns() {
-        let history = vec![
-            message("m1", "user", "oldest"),
-            message("m2", "user", "two"),
-            message("m3", "user", "three"),
-            message("m4", "user", "newest"),
-        ];
-        let focus = derive_auto_focus_topic(&history).expect("focus");
-        assert!(!focus.contains("oldest"));
-        assert!(focus.contains("- newest"));
-    }
-
-    #[test]
-    fn skips_persisted_summary_handoff() {
-        let history = vec![
-            message("m1", "user", "## Conversation Context Summary\nstale topic"),
-            message("m2", "assistant", "ok"),
-            message("m3", "user", "current real ask"),
-        ];
-        let focus = derive_auto_focus_topic(&history).expect("focus");
-        assert!(focus.contains("- current real ask"));
-        assert!(!focus.contains("stale topic"));
-    }
-
-    #[test]
-    fn returns_none_without_user_turns() {
-        let history = vec![message("m1", "assistant", "hello")];
-        assert!(derive_auto_focus_topic(&history).is_none());
-    }
-}
+#[path = "compaction_auto_focus_tests.rs"]
+mod auto_focus_tests;
 
 #[cfg(test)]
-mod credential_redaction_tests {
-    use super::*;
-
-    // Edition 2024 makes an identifier directly before a closing `"` a reserved
-    // prefix (hard error), so credential-bearing inputs are assembled at runtime
-    // via format!/concat! and assertion messages end in punctuation.
-
-    #[test]
-    fn redacts_github_pat_prefix() {
-        let input = format!(
-            "token is ghp_{tok} . ",
-            tok = "oAbCdEfGhIjKlMnOpQrStUv8000deadbeef"
-        );
-        let out = redact_credentials_in_text(&input);
-        assert!(
-            out.contains("ghp_[REDACTED]"),
-            "redaction missing: {out} . "
-        );
-        assert!(!out.contains("oAbCdEfGhIjKlMnOpQrStUv8000deadbeef"));
-    }
-
-    #[test]
-    fn redacts_bearer_authorization() {
-        let input = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9payload . ";
-        let out = redact_credentials_in_text(input);
-        assert!(
-            out.contains("Authorization: Bearer [REDACTED]"),
-            "redaction missing: {out} . "
-        );
-        assert!(!out.contains("eyJhbGci"));
-    }
-
-    #[test]
-    fn redacts_bare_authorization_assignment() {
-        let input = "Authorization: dXNlcjpwYXNzMTIzNDU2Nzg5 . ";
-        let out = redact_credentials_in_text(input);
-        assert!(
-            out.contains("Authorization: [REDACTED]"),
-            "redaction missing: {out} . "
-        );
-        assert!(!out.contains("dXNlcjpwYXNzMTIzNDU2Nzg5"));
-    }
-
-    #[test]
-    fn redacts_anthropic_prefix() {
-        let input = format!("keys: sk-ant-{tok} . ", tok = "api03AbCdEfGhIjKlMnOpQrStUv");
-        let out = redact_credentials_in_text(&input);
-        assert!(
-            out.contains("sk-ant-[REDACTED]"),
-            "redaction missing: {out} . "
-        );
-        assert!(!out.contains("api03AbCdEfGhIjKlMnOpQrStUv"));
-    }
-
-    #[test]
-    fn redacts_openai_long_prefix() {
-        let input = format!("sk-{tok} . ", tok = "AbCdEfGhIjKlMnOpQrSt0123456789");
-        let out = redact_credentials_in_text(&input);
-        assert!(out.contains("sk-[REDACTED]"), "redaction missing: {out} . ");
-        assert!(!out.contains("AbCdEfGhIjKlMnOpQrSt0123456789"));
-    }
-
-    #[test]
-    fn does_not_redact_short_sk() {
-        // sk- with <20 body chars is left alone (avoids false positives).
-        let out = redact_credentials_in_text("dash sk-short stuff . ");
-        assert_eq!(out, "dash sk-short stuff . ");
-    }
-
-    #[test]
-    fn redacts_key_value_assignments() {
-        let input = "config: api_key=abc12345678901234 token=abcdef0123456789 secret: SHORT . ";
-        let out = redact_credentials_in_text(input);
-        assert!(
-            out.contains("api_key=[REDACTED]"),
-            "api_key not redacted: {out} . "
-        );
-        assert!(
-            out.contains("token=[REDACTED]"),
-            "token not redacted: {out} . "
-        );
-        // `secret: SHORT` body below the 8-char floor must NOT be redacted.
-        assert!(
-            out.contains("secret: SHORT"),
-            "short secret wrongly redacted: {out} . "
-        );
-    }
-
-    #[test]
-    fn redacts_slack_and_google_prefixes() {
-        let input = "slack xoxb-1234567890ABCDEFGH; google AIzaSyABCDEFGHIJKLMN01234567 . ";
-        let out = redact_credentials_in_text(input);
-        assert!(
-            out.contains("xoxb-[REDACTED]"),
-            "slack not redacted: {out} . "
-        );
-        assert!(
-            out.contains("AIza[REDACTED]"),
-            "google not redacted: {out} . "
-        );
-    }
-
-    #[test]
-    fn leaves_ordinary_text_untouched() {
-        let text = "Run cargo test in the worktree, ref 55f899f . ";
-        let out = redact_credentials_in_text(text);
-        assert_eq!(out, text, "ordinary text was changed.");
-    }
-
-    #[test]
-    fn local_summary_redacts_user_credentials_before_preview() {
-        let user_msg = SessionMessage {
-            id: "u1".to_string(),
-            role: "user".to_string(),
-            content: format!(
-                "Please use ghp_{tok} and Bearer {jwt} . ",
-                tok = "deadbeefcafe1234567890abcdef",
-                jwt = "supersecretjwt1234"
-            ),
-            created_at: "2026-11-12T00:00:00Z".to_string(),
-            interrupted: false,
-            turn_id: None,
-        };
-        let summary = summarize_middle_locally(None, std::slice::from_ref(&user_msg), None);
-        assert!(
-            !summary.contains("ghp_deadbeefcafe1234567890abcdef"),
-            "ghp leaked into summary."
-        );
-        assert!(
-            !summary.contains("supersecretjwt1234"),
-            "bearer jwt leaked into summary."
-        );
-        assert!(summary.contains("[REDACTED]"));
-        // Structural invariants preserved.
-        assert!(summary.contains("## Conversation Context Summary"));
-        assert!(summary.contains("### User Goals And Constraints"));
-    }
-
-    #[test]
-    fn compaction_user_prompt_redacts_sampled_input() {
-        let user_msg = SessionMessage {
-            id: "u1".to_string(),
-            role: "user".to_string(),
-            content: format!(
-                "key=Bearer {jwt} long ghp_{tok} . ",
-                jwt = "eyJleGFtcGxllnNpZ25hdHVyZQ",
-                tok = "1234567890abcdefghijklmno"
-            ),
-            created_at: "2026-11-12T00:00:00Z".to_string(),
-            interrupted: false,
-            turn_id: None,
-        };
-        let prompt = compaction_user_prompt(None, std::slice::from_ref(&user_msg), None);
-        assert!(
-            !prompt.contains("eyJleGFtcGxllnNpZ25hdHVyZQ"),
-            "jwt leaked into prompt."
-        );
-        assert!(
-            !prompt.contains("1234567890abcdefghijklmno"),
-            "ghp leaked into prompt."
-        );
-        assert!(prompt.contains("[REDACTED]"));
-    }
-}
+#[path = "compaction_credential_redaction_tests.rs"]
+mod credential_redaction_tests;
 
 // Golden parity tests for the compaction_assembly path against the legacy
 // sanitize+chunk_messages_by_tokens+compaction_user_prompt flow. Locks the
@@ -1190,163 +976,5 @@ mod credential_redaction_tests {
 // shape), and the oversized placeholder text matches the legacy
 // `sanitize_oversized_messages` output exactly.
 #[cfg(test)]
-mod compaction_assembly_parity_tests {
-    use super::super::compaction_assembly::{
-        OwnedSliceTranscript, collect_facts, plan_from_facts, render_chunk_prompt,
-    };
-    use super::*;
-    use chrono::Utc;
-
-    fn msg(id: &str, role: &str, content: &str) -> SessionMessage {
-        SessionMessage {
-            id: id.to_string(),
-            role: role.to_string(),
-            content: content.to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            interrupted: false,
-            turn_id: None,
-        }
-    }
-
-    fn cfg(window: usize) -> (PlatformLlmConfig, ContextEngineConfig) {
-        let mut config = PlatformLlmConfig::default();
-        config.context_engine.context_window_tokens = Some(window);
-        let settings = config.context_engine.clone();
-        (config, settings)
-    }
-
-    fn legacy_per_chunk_prompts(
-        messages: &[SessionMessage],
-        config: &PlatformLlmConfig,
-        settings: &ContextEngineConfig,
-        focus: Option<&str>,
-    ) -> Vec<String> {
-        let max_chunk = adaptive_chunk_token_budget(config, settings);
-        let (sanitized, _) = sanitize_oversized_messages(messages, max_chunk, config, settings);
-        let chunks = chunk_messages_by_tokens(&sanitized, max_chunk);
-        chunks
-            .iter()
-            .map(|chunk| compaction_user_prompt(None, chunk, focus))
-            .collect()
-    }
-
-    fn new_per_chunk_prompts(
-        messages: &[SessionMessage],
-        config: &PlatformLlmConfig,
-        settings: &ContextEngineConfig,
-        focus: Option<&str>,
-    ) -> Vec<String> {
-        let transcript = OwnedSliceTranscript::new(messages);
-        let facts = collect_facts(&transcript);
-        let plan = plan_from_facts(&facts, config, settings);
-        plan.chunks
-            .iter()
-            .map(|chunk| render_chunk_prompt(&plan, chunk, &transcript, &facts, None, focus))
-            .collect()
-    }
-
-    #[test]
-    fn single_chunk_non_oversized_byte_equal_with_legacy() {
-        let messages = vec![
-            msg("u1", "user", "Help me ship the build today"),
-            msg("a1", "assistant", "Ack: starting CI now."),
-            msg("u2", "user", "Did the test pass?"),
-        ];
-        let (config, settings) = cfg(8_000);
-        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, Some("ship focus"));
-        let new = new_per_chunk_prompts(&messages, &config, &settings, Some("ship focus"));
-        assert_eq!(
-            legacy.len(),
-            1,
-            "legacy single-chunk expected, got {}: {legacy:?}",
-            legacy.len()
-        );
-        assert_eq!(
-            new.len(),
-            1,
-            "new single-chunk expected, got {}: {new:?}",
-            new.len()
-        );
-        assert_eq!(new[0], legacy[0], "single-chunk prompt drifted from legacy");
-    }
-
-    #[test]
-    fn multi_chunk_non_oversized_byte_equal_per_chunk() {
-        // Each message carries ~6k chars (~1.5k tokens) — adaptive budget is
-        // ~floor 1024 for an 8_000 window, so 3 such rows span multiple chunks
-        // in both the legacy path (over sanitized == original here) and the
-        // new payload-free plan.
-        let messages = vec![
-            msg("u1", "user", &"needs real summarization ".repeat(250)),
-            msg(
-                "a1",
-                "assistant",
-                &"assistant continuation body ".repeat(250),
-            ),
-            msg("u2", "user", &"next user turn body ".repeat(250)),
-        ];
-        let (config, settings) = cfg(8_000);
-        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, None);
-        let new = new_per_chunk_prompts(&messages, &config, &settings, None);
-        assert!(
-            legacy.len() >= 2,
-            "legacy must produce multiple chunks, got {}: {legacy:?}",
-            legacy.len()
-        );
-        assert_eq!(
-            new.len(),
-            legacy.len(),
-            "chunk count drift: new={} legacy={}",
-            new.len(),
-            legacy.len()
-        );
-        for (i, (legacy_prompt, new_prompt)) in legacy.iter().zip(new.iter()).enumerate() {
-            assert_eq!(
-                new_prompt, legacy_prompt,
-                "chunk {i} prompt drifted from legacy"
-            );
-        }
-    }
-
-    #[test]
-    fn single_oversized_row_placeholder_byte_equal_with_legacy() {
-        // 80k-char row → oversized against an 8_000 window. Both legacy and new
-        // produce a single chunk whose sole row carries the placeholder text.
-        let messages = vec![msg("u1", "user", &"O".repeat(80_000))];
-        let (config, settings) = cfg(8_000);
-        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, None);
-        let new = new_per_chunk_prompts(&messages, &config, &settings, None);
-        assert_eq!(legacy.len(), 1, "legacy single-chunk expected: {legacy:?}");
-        assert_eq!(new.len(), 1, "new single-chunk expected: {new:?}");
-        assert_eq!(
-            new[0], legacy[0],
-            "oversized placeholder prompt drifted from legacy"
-        );
-        assert!(
-            new[0].contains("[oversized message omitted during context compaction:"),
-            "oversized placeholder missing in: {0}",
-            new[0]
-        );
-    }
-
-    #[test]
-    fn tool_calls_chunk_non_oversized_byte_equal_with_legacy() {
-        let tool_content = serde_json::json!({
-            "calls": [
-                {"name": "browser_snapshot", "result": "page snapshot ok"},
-                {"name": "shell_exec", "result": "exit 0"},
-            ]
-        })
-        .to_string();
-        let messages = vec![
-            msg("t1", "tool_calls", &tool_content),
-            msg("u1", "user", "next ask"),
-        ];
-        let (config, settings) = cfg(8_000);
-        let legacy = legacy_per_chunk_prompts(&messages, &config, &settings, Some("tools focus"));
-        let new = new_per_chunk_prompts(&messages, &config, &settings, Some("tools focus"));
-        assert_eq!(legacy.len(), 1, "legacy single-chunk expected: {legacy:?}");
-        assert_eq!(new.len(), 1, "new single-chunk expected: {new:?}");
-        assert_eq!(new[0], legacy[0], "tool_calls prompt drifted from legacy");
-    }
-}
+#[path = "compaction_assembly_parity_tests.rs"]
+mod compaction_assembly_parity_tests;

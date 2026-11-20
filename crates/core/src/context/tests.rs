@@ -905,14 +905,18 @@ async fn local_summary_fallback_truncates_long_user_wording_and_omits_beyond_eig
         "baseline: the first 280 chars of the long user message must survive the preview: {summary}"
     );
 
-    // Baseline #2 — omission: with 10 user messages, the 9th and 10th are dropped by
-    // bullet_list(.., 8). Their ordering index is encoded in nothing else, so use a sentinel
-    // that only those later messages carry and assert its absence.
-    // (We redo the construction so the omission sentinel lives ONLY in items > 8.)
+    // Baseline #2 — omission: build 12 user messages. With protect_head_messages=1
+    // the head-protected user0 is excluded from the compaction middle, so the
+    // middle holds user1..user11 and bullet_list(.., 8) keeps user1..user8 (the
+    // first 8 middle user items) and omits user9+. We place a sentinel on the
+    // user messages that must be OMITTED (index >= 9) and per-index early markers
+    // on the kept ones, then assert the sentinel is absent and the last-kept
+    // (user8) survives. (We redo the construction so the sentinel lives ONLY in
+    // items beyond the 8th middle user item, accounting for the head shift.)
     let omitted_sentinel = "OMITTED_AFTER_EIGHTH_USER_ITEM_SENTINEL";
     let mut history2: Vec<SessionMessage> = Vec::new();
     for index in 0..12 {
-        let body = if index < 8 {
+        let body = if index < 9 {
             format!("needs real summarization unique-early-{} ", index)
         } else {
             format!("needs real summarization {omitted_sentinel}-{}", index)
@@ -944,10 +948,12 @@ async fn local_summary_fallback_truncates_long_user_wording_and_omits_beyond_eig
         !summary2.contains(omitted_sentinel),
         "baseline: bullet_list(.., 8) must omit user items beyond the 8th (deterministic-floor upgrade will add omission counts): {summary2}"
     );
-    // The 8th (last-kept) early item must survive.
+    // The 8th-kept middle user item (user8, the last inside bullet_list(.., 8))
+    // must survive; user0 is head-protected out of the summary, so the 8 kept
+    // middle user items are user1..user8.
     assert!(
-        summary2.contains("unique-early-7"),
-        "baseline: the 8th user item (index 7) must survive bullet_list(.., 8): {summary2}"
+        summary2.contains("unique-early-8"),
+        "baseline: the 8th-kept middle user item (index 8) must survive bullet_list(.., 8): {summary2}"
     );
 
     // Both fallbacks must be reported as the local_summary_fallback strategy.

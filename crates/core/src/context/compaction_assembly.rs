@@ -47,6 +47,15 @@ pub(super) struct CompactionFact {
     /// `approx_tokens`, identical to `chunk_messages_by_tokens` /
     /// `sanitize_oversized_messages` so chunking boundaries stay aligned.
     pub token_estimate: usize,
+    /// Token cost this row contributes to the *chunking* budget. For a
+    /// non-oversized row this equals [`CompactionFact::token_estimate`]. For
+    /// an oversized row it equals `session_message_tokens` of the sanitized
+    /// placeholder message (the small `[oversized message omitted …]\nPreview:
+    /// …` body), so chunk boundaries match the legacy path, which replaces
+    /// oversized rows with that placeholder *before* chunking. The full
+    /// `token_estimate` is still used for the `> threshold` oversize
+    /// classification; only the chunk budget uses this reduced cost.
+    pub chunk_budget_tokens: usize,
     /// `message.content.chars().count()` — kept for future audits of
     /// oversize classification; not consumed by planning directly.
     pub content_chars: usize,
@@ -56,11 +65,13 @@ pub(super) struct CompactionFact {
 
 impl CompactionFact {
     fn from_message(index: usize, message: &SessionMessage) -> Self {
+        let token_estimate = session_message_tokens(message);
         Self {
             index,
             id: message.id.clone(),
             role: message.role.clone(),
-            token_estimate: session_message_tokens(message),
+            token_estimate,
+            chunk_budget_tokens: token_estimate,
             content_chars: message.content.chars().count(),
             created_at: message.created_at.clone(),
         }
@@ -106,11 +117,54 @@ impl<'a> CompactionTranscript for OwnedSliceTranscript<'a> {
 /// transcript. No content clone; only short per-row metadata strings are
 /// retained. For long-lived sessions this is the same-domain "accumulate
 /// facts during transcript reads" point that OpenClaw #201304 stages.
-pub(super) fn collect_facts(transcript: &dyn CompactionTranscript) -> Vec<CompactionFact> {
+/// Collect per-row facts and precompute each row's `chunk_budget_tokens`:
+/// for oversized rows (token_estimate > threshold) this is the token cost of
+/// the legacy `sanitize_oversized_messages` placeholder message, so the
+/// payload-free planner chunks on the same (small) cost the legacy path
+/// chunks on after sanitizing — keeping chunk boundaries byte-equal to the
+/// prior materialize-all flow. Takes the oversize `threshold`
+/// (`effective_oversized_threshold`, identical to legacy's sanitize threshold)
+/// so the placeholder budget is computed only for rows legacy would also
+/// replace.
+pub(super) fn collect_facts(
+    transcript: &dyn CompactionTranscript,
+    threshold: usize,
+) -> Vec<CompactionFact> {
     let len = transcript.len();
     (0..len)
-        .map(|index| CompactionFact::from_message(index, transcript.message(index)))
+        .map(|index| {
+            let message = transcript.message(index);
+            let mut fact = CompactionFact::from_message(index, message);
+            if fact.token_estimate > threshold {
+                fact.chunk_budget_tokens = sanitized_placeholder_tokens(message, &fact);
+            }
+            fact
+        })
         .collect()
+}
+
+/// Token cost a row would contribute to the chunking budget when oversized:
+/// equal to `session_message_tokens` of the sanitized placeholder message,
+/// i.e. the legacy `sanitize_oversized_messages` replacement body `[oversized
+/// message omitted …]\nPreview: {compact_text_preview(content, 1200)}`. Used
+/// so the payload-free planner's chunk boundaries match the legacy path,
+/// which chunks on the sanitized (small-placeholder) token cost rather than
+/// the row's original (large) token estimate.
+fn sanitized_placeholder_tokens(message: &SessionMessage, fact: &CompactionFact) -> usize {
+    let preview = compact_text_preview(&message.content, 1_200);
+    let placeholder_content = format!(
+        "[oversized message omitted during context compaction: role={}, original_chars={}, estimated_tokens={}]\nPreview: {}",
+        message.role, fact.content_chars, fact.token_estimate, preview,
+    );
+    let placeholder = SessionMessage {
+        id: message.id.clone(),
+        role: message.role.clone(),
+        content: placeholder_content,
+        created_at: message.created_at.clone(),
+        interrupted: message.interrupted,
+        turn_id: message.turn_id.clone(),
+    };
+    session_message_tokens(&placeholder)
 }
 
 /// Payload-free planning output: chunk boundaries + oversized markers
@@ -146,10 +200,11 @@ pub(super) struct CompactionChunk {
 
 /// Build a [`CompactionPlan`] from facts only. Chunking mirrors the
 /// legacy `chunk_messages_by_tokens(sanitized, max_chunk_tokens)` token
-/// sum walk — except the bytes being summed are the original row tokens,
-/// since oversized rows keep their original body in facts (content
-/// replacement is deferred to render time). For non-oversized sessions
-/// the chunk boundaries are byte-equal with the legacy path.
+/// sum walk. Crucially, the per-row token cost used for the chunk-budget
+/// walk is [`CompactionFact::chunk_budget_tokens`], which for oversized
+/// rows equals the legacy sanitized placeholder's token cost (not the
+/// row's original large token estimate) — so chunk boundaries stay
+/// byte-equal with the legacy path even when rows are oversized.
 pub(super) fn plan_from_facts(
     facts: &[CompactionFact],
     config: &PlatformLlmConfig,
@@ -160,7 +215,9 @@ pub(super) fn plan_from_facts(
 
     // The legacy `chunk_messages_by_tokens` walks each message and pushes a
     // new chunk when the running sum would exceed the budget — identical
-    // token-sum rule, applied to facts here.
+    // token-sum rule, applied to per-row `chunk_budget_tokens` here. Oversized
+    // rows contribute their (small) placeholder cost, matching legacy's
+    // sanitize-then-chunk order.
     let mut chunks: Vec<CompactionChunk> = Vec::new();
     let mut current_start = 0usize;
     let mut current_tokens = 0usize;
@@ -174,7 +231,7 @@ pub(super) fn plan_from_facts(
             oversized_count = oversized_count.saturating_add(1);
         }
         if count_in_current > 0
-            && current_tokens.saturating_add(fact.token_estimate) > max_chunk_tokens
+            && current_tokens.saturating_add(fact.chunk_budget_tokens) > max_chunk_tokens
         {
             chunks.push(CompactionChunk {
                 start: current_start,
@@ -186,7 +243,7 @@ pub(super) fn plan_from_facts(
             chunk_has_oversized = false;
             count_in_current = 0;
         }
-        current_tokens = current_tokens.saturating_add(fact.token_estimate);
+        current_tokens = current_tokens.saturating_add(fact.chunk_budget_tokens);
         if oversized {
             chunk_has_oversized = true;
         }
@@ -242,6 +299,10 @@ pub(super) fn render_chunk_prompt(
         ));
     }
     let mut message_lines: Vec<String> = Vec::new();
+    // `idx` indexes both `facts` and `transcript.message(idx)`; an iterator
+    // rewrite would obscure the dual indexing, so the range loop is clearer
+    // here than clippy's suggested `enumerate().skip().take()`.
+    #[allow(clippy::needless_range_loop)]
     for idx in chunk.start..chunk.end {
         let fact = &facts[idx];
         let message = transcript.message(idx);
@@ -323,8 +384,15 @@ mod tests {
     }
 
     fn facts(messages: &[SessionMessage]) -> (Vec<CompactionFact>, OwnedSliceTranscript<'_>) {
+        facts_with_threshold(messages, usize::MAX)
+    }
+
+    fn facts_with_threshold(
+        messages: &[SessionMessage],
+        threshold: usize,
+    ) -> (Vec<CompactionFact>, OwnedSliceTranscript<'_>) {
         let transcript = OwnedSliceTranscript::new(messages);
-        let facts = collect_facts(&transcript);
+        let facts = collect_facts(&transcript, threshold);
         (facts, transcript)
     }
 
@@ -448,8 +516,12 @@ mod tests {
             msg("u1", "user", "small"),
             msg("u2", "user", &"O".repeat(80_000)),
         ];
-        let (facts, transcript) = facts(&messages);
         let (config, settings) = cfg(8_000);
+        // Threshold must match the planner's so `chunk_budget_tokens` for the
+        // oversized u2 is the small placeholder cost; otherwise the 80k-tok row
+        // splits into its own chunk and `plan.chunks[0]` no longer covers u2.
+        let threshold = effective_oversized_threshold(&config, &settings);
+        let (facts, transcript) = facts_with_threshold(&messages, threshold);
         let plan = plan_from_facts(&facts, &config, &settings);
         assert!(plan.oversized_count >= 1);
         let rendered = render_chunk_prompt(&plan, &plan.chunks[0], &transcript, &facts, None, None);

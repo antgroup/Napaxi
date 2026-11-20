@@ -6314,7 +6314,7 @@ class NapaxiSdkChatClient implements NapaxiChatClient {
           if (!await sendFrame(chunkFrame)) return false;
         }
       }
-      return sendFrame({
+      return await sendFrame({
         'frameType': 'a2a_blob_complete',
         'protocolVersion': _a2aBlobProtocolVersion,
         'manifestId': plan.manifestId,
@@ -9250,6 +9250,10 @@ class _DemoAutomationToolExecutor extends sdk.McToolExecutor {
     return jsonEncode(response);
   }
 
+  // Android APK post-build cleanup hook (build/stale .apk + artifact.json).
+  // Currently orphaned pending wiring into the Android build flow; kept so
+  // later wiring can reuse the path without re-deriving it.
+  // ignore: unused_element
   Future<void> _androidCleanupStaleApks(Directory projectDir) async {
     final buildDir = Directory('${projectDir.path}/build');
     if (await buildDir.exists()) {

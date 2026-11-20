@@ -191,25 +191,23 @@ fn recall_search_forgets_deleted_curated_memory() {
 #[cfg(feature = "libsql")]
 #[test]
 fn recall_schema_ensure_is_cached_across_reads() {
-    use super::recall::{ENSURE_CALLS, reset_ensure_calls_counter};
+    use super::recall::{ensure_calls_for, reset_ensure_calls_for};
 
     let dir = temp_dir("recall_schema_cached");
     let files_dir = dir.to_string_lossy().to_string();
     write_workspace_file(&files_dir, MEMORY, "Curated schema cache marker");
-    reset_ensure_calls_counter();
-    let counter_before_first = ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+    reset_ensure_calls_for(&files_dir);
+    let counter_before_first = ensure_calls_for(&files_dir);
     let _ = search_memory_results(&files_dir, "schema cache marker", 10).unwrap();
-    let calls_first =
-        ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed) - counter_before_first;
+    let calls_first = ensure_calls_for(&files_dir) - counter_before_first;
     assert!(
         calls_first >= 1,
         "first read should run ensure_schema at least once"
     );
 
-    let counter_before_second = ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+    let counter_before_second = ensure_calls_for(&files_dir);
     let _ = search_memory_results(&files_dir, "schema cache marker", 10).unwrap();
-    let calls_second =
-        ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed) - counter_before_second;
+    let calls_second = ensure_calls_for(&files_dir) - counter_before_second;
     assert_eq!(
         calls_second, 0,
         "second read should hit the schema cache and skip ensure_schema"
@@ -217,10 +215,9 @@ fn recall_schema_ensure_is_cached_across_reads() {
 
     // rebuild_index must invalidate the cache so the next read re-ensures.
     let _ = super::recall::rebuild_index(&files_dir).unwrap();
-    let counter_before_rebuild_read = ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed);
+    let counter_before_rebuild_read = ensure_calls_for(&files_dir);
     let _ = search_memory_results(&files_dir, "schema cache marker", 10).unwrap();
-    let calls_after_rebuild =
-        ENSURE_CALLS.load(std::sync::atomic::Ordering::Relaxed) - counter_before_rebuild_read;
+    let calls_after_rebuild = ensure_calls_for(&files_dir) - counter_before_rebuild_read;
     assert!(
         calls_after_rebuild >= 1,
         "read after rebuild should re-run ensure_schema because the cache was invalidated"

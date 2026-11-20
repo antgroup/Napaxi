@@ -2521,7 +2521,13 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                     ))
                 }
             }
-            PackageInstaller.STATUS_USER_CANCELED -> {
+            // Android's `PackageInstaller` has no `STATUS_USER_CANCELED` constant;
+            // when the user backs out of the install-confirmation UI the system
+            // surfaces `STATUS_FAILURE_ABORTED`. Key the explicit "user canceled"
+            // result on that constant so the UI/telemetry can distinguish a user
+            // back-out from a hard install failure (the generic failure arm below
+            // keeps the other non-aborted failure statuses).
+            PackageInstaller.STATUS_FAILURE_ABORTED -> {
                 result.success(apkInstallStateMap(
                     installState = "canceled",
                     success = false,
@@ -2535,7 +2541,6 @@ class NapaxiFlutterPlugin : FlutterPlugin, MethodCallHandler, StreamHandler, Act
                 ))
             }
             PackageInstaller.STATUS_FAILURE_BLOCKED,
-            PackageInstaller.STATUS_FAILURE_ABORTED,
             PackageInstaller.STATUS_FAILURE_INVALID,
             PackageInstaller.STATUS_FAILURE_CONFLICT -> {
                 // Signature/version conflict: explicitly recommend uninstalling
