@@ -1027,7 +1027,6 @@ mod auto_focus_tests {
 #[path = "compaction_credential_redaction_tests.rs"]
 mod credential_redaction_tests;
 
-
 // Golden parity tests for the compaction_assembly path against the legacy
 // sanitize+chunk_messages_by_tokens+compaction_user_prompt flow. Locks the
 // plan §5.1 / §5.4 invariant: the new lazy-render path produces
