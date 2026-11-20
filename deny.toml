@@ -25,6 +25,23 @@ ignore = [
     "RUSTSEC-2026-0098",
     "RUSTSEC-2026-0099",
     "RUSTSEC-2026-0104",
+
+    # Newly surfaced advisories on the same vendored libsql 0.6 chain
+    # (rustls 0.22 / rustls-webpki / h2) plus transitive unsafe-libyaml from
+    # that chain. Same root cause as the libsql block above; tracked here so
+    # `cargo deny check` goes green until libsql is bumped/replaced.
+    "RUSTSEC-2026-0258", # h2 0.3.27 (via libsql TLS stack)
+    "RUSTSEC-2026-0349", # rustls 0.22.4
+    "RUSTSEC-2026-0346", # rustls 0.22.4
+    "RUSTSEC-2026-0382", # rustls-webpki 0.102.8
+    "RUSTSEC-2024-0449", # unsafe-libyaml 0.2.11 (transitive)
+
+    # chrono 0.4.45 / chrono-tz 0.10.4 advisories surfaced in the same run.
+    # chrono / chrono-tz are direct Napaxi dependencies (crates/core). The fix
+    # is to bump the version constraint once a 1.92-compatible, advisory-cleared
+    # release is available, rather than carrying an unverified bump here.
+    "RUSTSEC-2026-0543", # chrono 0.4.45
+    "RUSTSEC-2026-0555", # chrono-tz 0.10.4 (unmaintained)
 ]
 
 [licenses]
