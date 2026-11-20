@@ -251,7 +251,8 @@ async fn summarize_middle_with_llm(
     use super::compaction_assembly::{OwnedSliceTranscript, collect_facts, plan_from_facts};
 
     let transcript = OwnedSliceTranscript::new(messages);
-    let facts = collect_facts(&transcript);
+    let threshold = effective_oversized_threshold(config, settings);
+    let facts = collect_facts(&transcript, threshold);
     let plan = plan_from_facts(&facts, config, settings);
 
     if plan.chunks.len() > 1 {

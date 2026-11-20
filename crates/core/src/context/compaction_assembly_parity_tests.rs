@@ -44,7 +44,8 @@ fn new_per_chunk_prompts(
     focus: Option<&str>,
 ) -> Vec<String> {
     let transcript = OwnedSliceTranscript::new(messages);
-    let facts = collect_facts(&transcript);
+    let threshold = effective_oversized_threshold(config, settings);
+    let facts = collect_facts(&transcript, threshold);
     let plan = plan_from_facts(&facts, config, settings);
     plan.chunks
         .iter()
