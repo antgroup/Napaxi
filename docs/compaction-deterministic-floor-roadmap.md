@@ -21,6 +21,14 @@
 > admission-prepare + lazy-invalidate + immutable-witness）、#200249 簇 subagent
 > 持久续修（outage/steer/expiry 第 4 迭代）、sandbox checkpoint lease-contention
 > 仲裁族。仍不引入生产改动。
+>
+> 11-21 更新（DIMA 工单 2026112100120846655，OpenClaw 巡检 2026-11-20~11-21）：
+> 增补 11-21 窗口 compaction 正确性族延续性（§5 末追加一行），并扩充 §6
+> defensive-design boundary 簇（sealed-history read-only accessor 隔离族
+> #202547/#203037/#203039 + Postgres compaction 批读 #202104 + #203008
+> tool-surface-in-trigger 结构性观察）。4/5 多进程/持久族单进程不撞，1 项
+> #203008 映射仅落前瞻复检记录。仍不引入生产改动，未修改任何 Napaxi 源码
+> （连注释也不改）。
 
 ## 1. OpenClaw 修复语义
 
@@ -116,6 +124,13 @@ facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单�
   = 11-17 REVERT #196065 答案）** —— OpenClaw compaction 主题本周转入
   subagent/sandbox 持久资源治理线，与 compaction 正确性族并行持续；本轮
   ground check 全部零命中（Napaxi inline 单进程同步）。
+
+- **11-21 sealed-history read-only accessor 隔离族（#202547/#203037/#203039）
+  + Postgres compaction 批读 #202104 + #203008 tool-surface-in-trigger
+  结构性观察** —— compaction 线连续第十三窗；并发隔离侧（sealed history
+  read-only accessor）落到具体 perf 数据（main-thread CPU −95.5%），持久 I/O
+  侧（Postgres 批读）与触发计费侧（#203008 常驻开销计入 trigger）延续。本轮
+  ground check 4/5 单进程不撞、1 项 #203008 仅落前瞻复检记录（详见 §6）。
 
 ## 6. 不在范围（workitem 已确认非缺口／备忘）
 
@@ -291,6 +306,79 @@ facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单�
     （"show what keeps sandboxes paused during publication"）记录暂停归因。归
     daemon-fork/sandbox 资源族。仅借鉴设计思路与边界规则，不直接移植代码
     （OpenClaw MIT vs Napaxi GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
+
+- **sealed-history read-only accessor 隔离族 — daemon-fork/持久化隔离族备备忘**：
+  来源：**#202547** `reduce Gateway stalls during compaction rewrites`（含 sealed-history
+  隔离）+ 配套 **#203037** `preserve sealed history during endpoint compaction` +
+  **#203039** `restore selected subagent payloads once`。
+  - OpenClaw 形态：compaction rewrite 匹配/replay 用 **internal read-only branch
+    boundary**，使 hydrated payloads 在 preparation 与 publication 之间保持共享，
+    保留 writable SDK 与 opaque graph 的隔离（新增 mutation regression + compaction
+    transcript benchmark）；endpoint compaction locate assistant checkpoint owner
+    时用 internal read-only branch accessor，保 public writable views 与 detached
+    rewrite publication isolation，合成持久化 endpoint proof **main-thread CPU
+    −95.5% / sampled allocation −96.7%**；合并 durable/published/live registry 行，
+    只 restore 最终 selected owners，去掉 turn-context preparation 的重复 payload
+    copies。
+  - **Napaxi ground check**：`crates/` grep
+    `sealed|read.?only|writer.*fence|queue.*compaction|read.?only.*branch|hydrated.*payload`
+    零命中——`crates/core/src/context/compaction.rs:125` `compacted_through_message_id`
+    是内存边界；单进程 inline-sync 无多进程持久化（Postgres/SQLite 多读多写）并发隔离
+    场景，本轮隔离族全部 **不撞**，判为 defensive-design boundary（记录不建）。
+  - **daemon-fork 备备忘**：未来 daemon 化 + 多进程持久化若引入 compaction rewrite
+    期间 read/write 并发，须采 internal read-only accessor + sealed-history 隔离形态
+    （不取直接 mutate live transcript 形态）。仅借鉴设计思路与边界规则，不直接移植
+    代码（OpenClaw MIT vs Napaxi GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
+
+- **Postgres compaction 批读 #202104 — daemon-fork/持久化 I/O 族备备忘**：
+  - OpenClaw 形态：批量化 PostgreSQL transcript 读取，使 compaction 期间大 transcript
+    读取不再逐行 round-trip（涉及 `conversation-serialization.ts` /
+    `session-compaction-prepared.worker.ts` / `session-compaction-render.postgres.test.ts`
+    / `session-compaction-render.worker.ts`）。
+  - **Napaxi ground check**：单进程 inline 内存 transcript，无持久化逐行 round-trip
+    路径；`crates/` grep
+    `postgres|pg.?conn|row.*round|transcript.*iter.*db|db.*transcript`
+    零相关命中——**不撞**。
+  - **daemon-fork 备备忘**：未来若 Napaxi compaction 改为对持久化 transcript 操作，
+    须采批量读取而非逐行。仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT
+    vs Napaxi GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
+
+- **#203008 tool-surface-in-trigger 结构性观察（前瞻，非当前 bug，需复检）⭐本轮重点**：
+  来源：**#203008** `stop charging custom state entries as active transcript bytes`
+  —— OpenClaw byte-triggered compaction 把 `maxActiveTranscriptBytes` 与 "active
+  transcript byte count" 比较，该 count 把每个 `openclaw.system-prompt` checkpoint
+  （saved system-prompt + 整个 tool surface）都计入；~200 MCP tools 时 checkpoint 单独
+  ~150KB 即触发 compaction，compaction 后仍超 cap、set latch、每条 reply 显示 "bounded
+  recent context" notice（guest @garrytan 复现）。真因在
+  `transcriptEventContextEligibility`（`session-transcript-projection-append.ts`）：
+  `custom` entry 返回 1，所有 byte counter 累加这些行；修复 α 让 `custom` entry 只存
+  host/plugin state、**不投影进 model message**，counter 不再计费（latch/notice/cap
+  不变）。
+  - **Napaxi 同源现象（ground check 已坐实，`crates/core/src/context/budget.rs`
+    HEAD 59f2371）**：
+    - `build_preflight_snapshot`（budget.rs:370）：`prompt_tokens =
+      apply_safety_margin(system_prompt_tokens + message_estimate.total_tokens
+      + tool_descriptor_tokens)`（:389-393）——**system_prompt_tokens 与
+      tool_descriptor_tokens 都进入 prompt_tokens**。
+    - `ContextBudgetPlanner::plan` 触发判定（budget.rs:524-528）：`trigger_tokens =
+      context_window_tokens × trigger_ratio`，`total_tokens = prompt_tokens +
+      effective_reserve_tokens`，`over_trigger = total_tokens >= trigger_tokens`
+      ——**tool_descriptor_tokens 显著抬高 prompt_tokens 即提前触发 compaction**，
+      与 OpenClaw"checkpoint 计入 active transcript bytes"同源。
+  - **关键形态差异（Napaxi 当前不复现 #203008 完整病灶链）**：触发判定为**每 turn
+    实时计算**（preflight/token budget），**不存在持久化 `active_transcript_bytes`
+    累加器、不存在 `custom` 行污染、不存在 post-compaction 仍超 cap 的 latch 锁死**——
+    OpenClaw 那条"计入累加器 → 压缩后仍超 → 锁 notice"的完整链在 Napaxi 无对应放大。
+  - **结构性边界前瞻（需复检）**：Napaxi 把 tool surface 计入 trigger 合理（它真实
+    占用 context budget），但 **compaction 可压缩目标只有 history**（tool surface
+    无法被 compaction 削减）。若未来 tool surface 单独巨大（200+ MCP tools）导致"即
+    触发 compaction 却压缩不动（history 占比小）"的空转，则与 #203008 同源于"开销
+    归属分类"问题。**非当前 bug**：建议未来若 Napaxi 支持大 tool surface，复检 trigger
+    是否应区分"可压缩体（history）"与"不可压缩常驻（system_prompt + tool
+    descriptors）"再决定是否 compaction。本次**仅落观察记录，不改 budget.rs（含注释）**，
+    与工单"维持只读 ground check，未修改 Napaxi 任何源码"一致。仅借鉴设计思路与边界
+    规则，不直接移植代码（OpenClaw MIT vs Napaxi GPL-3.0-or-later，见
+    `THIRD-PARTY-LICENSES.md`）。
 
 ## 7. 许可证
 
