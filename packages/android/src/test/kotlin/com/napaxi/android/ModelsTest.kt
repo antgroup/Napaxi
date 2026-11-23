@@ -1,5 +1,6 @@
 package com.napaxi.android
 
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -3099,9 +3100,32 @@ class ModelsTest {
         assertEquals("signature_or_version_blocked", parsed.code)
 
         // fromMap path must agree with fromJson.
-        val viaMap = NapaxiApkInstallResult.fromMap(
-            JSONObject(json).toMap()
-        )
+        // org.json on the Android unit-test classpath does not expose
+        // JSONObject.toMap() (added in upstream org.json only, not in the
+        // android.jar stub nor the pinned 20240303 artifact), so reconstruct the
+        // Map with org.json toMap()'s documented semantics (JSONObject.NULL ->
+        // null, nested JSONObject -> Map, nested JSONArray -> List) so the
+        // fromMap path receives the same shape toMap() would have produced.
+        fun toMapLike(value: Any?): Any? = when (value) {
+            JSONObject.NULL -> null
+            is JSONObject -> {
+                val nested = HashMap<String, Any?>()
+                val keys = value.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    nested[k] = toMapLike(value.get(k))
+                }
+                nested
+            }
+            is JSONArray -> (0 until value.length()).map { toMapLike(value.get(it)) }
+            else -> value
+        }
+        val obj = JSONObject(json)
+        val keys = ArrayList<String>()
+        val iterator = obj.keys()
+        while (iterator.hasNext()) keys.add(iterator.next())
+        val map = keys.associateWith { toMapLike(obj.get(it)) }
+        val viaMap = NapaxiApkInstallResult.fromMap(map)
         assertEquals(original, viaMap)
     }
 
