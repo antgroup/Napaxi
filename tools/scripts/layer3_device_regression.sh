@@ -235,7 +235,10 @@ run_ios() {
         # profile covering this device UDID. Requires the team account in
         # Xcode > Settings > Accounts. -allowProvisioningUpdates lets
         # xcodebuild create/update the profile without UI interaction.
-        step "ios: xcodebuild Debug for device (automatic signing)"
+        # -derivedDataPath pins the build output to a per-run directory so
+        # the showBuildSettings lookup below can deterministically locate
+        # the .app instead of globbing ~/Library/.../DerivedData/Runner-*.
+        step "ios: xcodebuild Debug for device (automatic signing, per-run DerivedData)"
         if (cd "$APP_DIR/ios" && xcodebuild \
                 -workspace Runner.xcworkspace -scheme Runner \
                 -configuration Debug \
@@ -243,6 +246,7 @@ run_ios() {
                 DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
                 CODE_SIGN_STYLE=Automatic \
                 -allowProvisioningUpdates \
+                -derivedDataPath "$RESULT_DIR/ios-derived" \
                 build) > "$RESULT_DIR/ios-build.log" 2>&1; then
             I_BUILD="passed"
         else
@@ -252,18 +256,57 @@ run_ios() {
         fi
     fi
 
-    local app="$APP_DIR/build/ios/iphoneos/Runner.app"
-    if [ ! -d "$app" ]; then
-        # 裸 `xcodebuild -workspace Runner.xcworkspace build`（无 -derivedDataPath）的产物
-        # 落在 ~/Library/Developer/Xcode/DerivedData/Runner-*/Build/Products/Debug-iphoneos。
-        app="$(ls -dt "$HOME"/Library/Developer/Xcode/DerivedData/Runner-*/Build/Products/Debug-iphoneos/Runner.app 2>/dev/null | head -1)"
-        if [ -n "$app" ] && [ -d "$app" ]; then
-            echo "ios: using DerivedData product $app"
-        else
-            echo "ios: Runner.app not found (build/ios/iphoneos nor DerivedData)" >&2
-            return
+    # Locate the .app via -showBuildSettings against the SAME -derivedDataPath
+    # used for the build, so TARGET_BUILD_DIR / FULL_PRODUCT_NAME always refer
+    # to this run's per-run DerivedData. Any failure (xcodebuild nonzero,
+    # missing field, missing directory) is treated as "not located": write
+    # the cause to ios-install.log, set I_BUILD=failed, and return loudly
+    # (this is the negative-control contract — never silently skip).
+    local app=""
+    local settings_log="$RESULT_DIR/ios-showBuildSettings.log"
+    if (cd "$APP_DIR/ios" && xcodebuild \
+            -workspace Runner.xcworkspace -scheme Runner \
+            -configuration Debug \
+            -destination "id=$IOS_UDID" \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            -allowProvisioningUpdates \
+            -derivedDataPath "$RESULT_DIR/ios-derived" \
+            -showBuildSettings) > "$settings_log" 2>&1; then
+        local tbd fpn
+        tbd="$(awk -F' *= *' '/^[[:space:]]*TARGET_BUILD_DIR[[:space:]]*=/{
+            sub(/^[[:space:]]+/, "", $1);
+            if ($1=="TARGET_BUILD_DIR") { print $2; exit }
+        }' "$settings_log")"
+        fpn="$(awk -F' *= *' '/^[[:space:]]*FULL_PRODUCT_NAME[[:space:]]*=/{
+            sub(/^[[:space:]]+/, "", $1);
+            if ($1=="FULL_PRODUCT_NAME") { print $2; exit }
+        }' "$settings_log")"
+        if [ -n "$tbd" ] && [ -n "$fpn" ] && [ -d "$tbd/$fpn" ]; then
+            app="$tbd/$fpn"
         fi
     fi
+
+    if [ -z "$app" ] || [ ! -d "$app" ]; then
+        {
+            echo "ios: Runner.app not located via -showBuildSettings."
+            echo "derivedDataPath: $RESULT_DIR/ios-derived"
+            echo "showBuildSettings log: $settings_log"
+            if [ -f "$settings_log" ]; then
+                echo '---- showBuildSettings tail ----'
+                tail -50 "$settings_log"
+            else
+                echo 'showBuildSettings did not run; no log.'
+            fi
+            echo '---- ios-build.log tail (if any) ----'
+            [ -f "$RESULT_DIR/ios-build.log" ] && tail -50 "$RESULT_DIR/ios-build.log"
+        } > "$RESULT_DIR/ios-install.log" 2>&1
+        I_BUILD="failed"
+        echo "ios: Runner.app not located, see $RESULT_DIR/ios-install.log" >&2
+        return
+    fi
+    step "ios: located app $app"
+
     step "ios: install -> $IOS_UDID"
     if xcrun devicectl device install app --device "$IOS_UDID" "$app" \
         > "$RESULT_DIR/ios-install.log" 2>&1; then
@@ -286,7 +329,12 @@ run_ios() {
 [ "$DO_IOS" -eq 1 ] && run_ios
 
 write_platform_json() {
-    local file="$1" platform="$2" build="$3" install="$4" maestro="$5"
+    local basename="$1" platform="$2" build="$3" install="$4" maestro="$5"
+    # Only receive the filename (android.json / ios.json) and join with
+    # $RESULT_DIR here, so callers cannot accidentally double-join and
+    # produce $RESULT_DIR/$RESULT_DIR/<name>. Result path is always a
+    # single level under $RESULT_DIR (itself $HOME/testing/results/<ts>-layer3).
+    local out="$RESULT_DIR/$basename"
     local verdict="SKIP"
     if [ "$install" != "skipped" ]; then
         verdict="PASS"
@@ -304,7 +352,7 @@ write_platform_json() {
         autoclick_block="\"autoclick\": null,"
     fi
 
-    cat > "$file" <<EOF
+    cat > "$out" <<EOF
 {
   "layer": "device-regression",
   "platform": "$platform",
@@ -318,12 +366,12 @@ EOF
 
 OVERALL="PASS"
 if [ "$DO_ANDROID" -eq 1 ]; then
-    AV="$(write_platform_json "$RESULT_DIR/android.json" android "$A_BUILD" "$A_INSTALL" "$A_MAESTRO")"
+    AV="$(write_platform_json android.json android "$A_BUILD" "$A_INSTALL" "$A_MAESTRO")"
     [ "$AV" = "FAIL" ] && OVERALL="FAIL"
     step "android verdict=$AV"
 fi
 if [ "$DO_IOS" -eq 1 ]; then
-    IV="$(write_platform_json "$RESULT_DIR/ios.json" ios "$I_BUILD" "$I_INSTALL" "$I_MAESTRO")"
+    IV="$(write_platform_json ios.json ios "$I_BUILD" "$I_INSTALL" "$I_MAESTRO")"
     [ "$IV" = "FAIL" ] && OVERALL="FAIL"
     step "ios verdict=$IV"
 fi
