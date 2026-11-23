@@ -72,7 +72,9 @@ MAESTRO_BIN="$(command -v maestro || true)"
 [ -n "$MAESTRO_BIN" ] && [ -x "$MAESTRO_BIN" ] || { echo "maestro CLI not found" >&2; exit 2; }
 
 TS="$(date +%Y%m%d-%H%M%S)"
-RESULT_DIR="$HOME/testing/results/$TS-layer3"
+# devpool 闸口注入 DEVPOOL_RESULT_DIR(=$POOL/results/<jobid>) 时产物落该目录（单层，满足
+# 验收 E：android.json 直接在 results/<jobid>/ 下）；无注入时回退原 timestamped 单跑目录。
+RESULT_DIR="${DEVPOOL_RESULT_DIR:-$HOME/testing/results/$TS-layer3}"
 mkdir -p "$RESULT_DIR"
 cd "$ROOT_DIR"
 
