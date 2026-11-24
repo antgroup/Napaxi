@@ -14,6 +14,8 @@
 #   AUTOCLICK_TAP_X       override autoclick tap X (default 346, Xiaomi 15)
 #   AUTOCLICK_TAP_Y       override autoclick tap Y (default 2483, Xiaomi 15)
 #   AUTOCLICK_TIMEOUT     autoclick lifetime seconds (default 600)
+#   UI_FRAMEWORK          android smoke driver: u2 (uiautomator2, default) | maestro (legacy)
+#   U2_VENV_PY            python venv for u2 mode (default: $HOME/testing/u2env/bin/python)
 #
 # Prerequisites (manual, one-time):
 #   Android: USB debugging enabled, `adb devices` shows the phone authorized.
@@ -67,9 +69,25 @@ if [ -z "${JAVA_HOME:-}" ] && [ -x /usr/libexec/java_home ]; then
     [ -n "$JAVA_HOME" ] && export JAVA_HOME
 fi
 
+# UI framework for the android smoke step: u2 (uiautomator2, default) or
+# maestro (legacy fallback). maestro path is preserved verbatim below.
+UI_FRAMEWORK="${UI_FRAMEWORK:-u2}"
+case "$UI_FRAMEWORK" in
+    u2|maestro) ;;
+    *) echo "unknown UI_FRAMEWORK: $UI_FRAMEWORK (expected u2|maestro)" >&2; exit 2 ;;
+esac
+U2_VENV_PY="${U2_VENV_PY:-$HOME/testing/u2env/bin/python}"
+
 MAESTRO_BIN="$(command -v maestro || true)"
 [ -n "$MAESTRO_BIN" ] || MAESTRO_BIN="$HOME/.maestro/bin/maestro"
-[ -n "$MAESTRO_BIN" ] && [ -x "$MAESTRO_BIN" ] || { echo "maestro CLI not found" >&2; exit 2; }
+# maestro CLI is required only when its path is actually exercised: the maestro
+# android branch, or any iOS run (iOS step always uses maestro). In u2 +
+# --android-only mode maestro is never invoked, so a missing CLI must not
+# hard-fail the gate — the negative control (验收 B) must reach a verdict line
+# rather than exit 2 on a dependency it does not use.
+if [ "$UI_FRAMEWORK" = "maestro" ] || [ "$DO_IOS" -eq 1 ]; then
+    [ -n "$MAESTRO_BIN" ] && [ -x "$MAESTRO_BIN" ] || { echo "maestro CLI not found" >&2; exit 2; }
+fi
 
 TS="$(date +%Y%m%d-%H%M%S)"
 # devpool 闸口注入 DEVPOOL_RESULT_DIR(=$POOL/results/<jobid>) 时产物落该目录（单层，满足
@@ -128,6 +146,12 @@ run_android() {
     detect_android
     if [ -z "$ANDROID_SERIAL" ]; then
         step "android: no physical device found, skipped"
+        # In u2 mode a missing device is not a silent skip — the gate must
+        # still go red (验收 B negative control). Mark the smoke step blocked
+        # so write_platform_json forces verdict=FAIL rather than SKIP.
+        if [ "$UI_FRAMEWORK" = "u2" ]; then
+            A_MAESTRO="blocked"
+        fi
         return
     fi
     step "android: device $ANDROID_SERIAL"
@@ -179,10 +203,27 @@ run_android() {
         A_AUTOCLICK_EXIT="missing"
     fi
 
-    step "android: maestro test --device $ANDROID_SERIAL"
-    if "$MAESTRO_BIN" test --device "$ANDROID_SERIAL" "$FLOW_DIR" --format junit \
-        --output "$RESULT_DIR/android-maestro.xml" > "$RESULT_DIR/android-maestro.log" 2>&1; then
-        A_MAESTRO="passed"
+    # UI smoke step. android.json keeps the field name `steps.maestro` for
+    # downstream compatibility; only the implementation behind A_MAESTRO
+    # switches on UI_FRAMEWORK. u2 runs the python smoke via the Mac mini
+    # venv (~/testing/u2env); a missing venv is "blocked" (verdict=FAIL,
+    # never a silent pass). maestro preserves the legacy path verbatim.
+    step "android: ui smoke ($UI_FRAMEWORK) --device $ANDROID_SERIAL"
+    if [ "$UI_FRAMEWORK" = "u2" ]; then
+        if [ ! -x "$U2_VENV_PY" ]; then
+            step "android: u2 venv missing ($U2_VENV_PY) -> blocked"
+            A_MAESTRO="blocked"
+        elif "$U2_VENV_PY" "$ROOT_DIR/tools/scripts/u2_smoke.py" "$ANDROID_SERIAL" \
+                > "$RESULT_DIR/android-maestro.log" 2>&1; then
+            A_MAESTRO="passed"
+        else
+            A_MAESTRO="failed"
+        fi
+    else
+        if "$MAESTRO_BIN" test --device "$ANDROID_SERIAL" "$FLOW_DIR" --format junit \
+            --output "$RESULT_DIR/android-maestro.xml" > "$RESULT_DIR/android-maestro.log" 2>&1; then
+            A_MAESTRO="passed"
+        fi
     fi
 
     # Stop the auto-clicker and harvest its summary. Any auto-clicker
@@ -344,6 +385,10 @@ write_platform_json() {
         [ "$install" = "passed" ] || verdict="FAIL"
         [ "$maestro" = "passed" ] || verdict="FAIL"
     fi
+    # A "blocked" smoke step (u2 venv missing, or no device in u2 mode) forces
+    # FAIL even when install was skipped — the gate must not go green silently
+    # when its run dependency is absent (验收 B negative control).
+    [ "$maestro" = "blocked" ] && verdict="FAIL"
 
     local autoclick_block
     if [ "$platform" = "android" ]; then
