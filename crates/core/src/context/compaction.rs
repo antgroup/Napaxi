@@ -6,7 +6,7 @@
 //! invoked from [`super::build_context`] and
 //! [`super::compact_tool_messages`].
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use chrono::Utc;
 
@@ -19,6 +19,13 @@ use super::budget::{
     normalized_config, response_reserve_info, response_reserve_tokens,
 };
 use super::state::{ContextState, ContextSummaryRecord};
+
+#[path = "compaction_cold.rs"]
+mod compaction_cold;
+#[path = "compaction_warm.rs"]
+mod compaction_warm;
+#[cfg(test)]
+pub(crate) use compaction_warm::with_warm_path_probe;
 
 const COMPACTION_SAFETY_MARGIN: f64 = 1.2;
 const COMPACTION_OVERHEAD_TOKENS: usize = 4_096;
@@ -264,6 +271,10 @@ async fn summarize_middle_with_llm(
                 index + 1,
                 chunk_count
             );
+            // Chunk slices index into the same `messages` slice the
+            // `OwnedSliceTranscript` wraps (see `plan_from_facts`); safe to
+            // borrow directly for the warm prefix.
+            let chunk_messages = &messages[chunk.start..chunk.end];
             let summary = summarize_chunk_with_llm_once(
                 config,
                 settings,
@@ -273,6 +284,7 @@ async fn summarize_middle_with_llm(
                 &facts,
                 None,
                 Some(&chunk_focus),
+                chunk_messages,
             )
             .await?;
             chunk_summaries.push(SessionMessage {
@@ -304,6 +316,7 @@ async fn summarize_middle_with_llm(
     }
 
     let first_chunk = &plan.chunks[0];
+    let first_chunk_messages = &messages[first_chunk.start..first_chunk.end];
     summarize_chunk_with_llm_once(
         config,
         settings,
@@ -313,6 +326,7 @@ async fn summarize_middle_with_llm(
         &facts,
         previous_summary,
         focus,
+        first_chunk_messages,
     )
     .await
     .map(|content| SummaryResult {
@@ -328,6 +342,13 @@ async fn summarize_middle_with_llm(
 /// re-renders the prompt with the `retry_focus` injected, so the existing
 /// required-section retry logic stays byte-equal with the previous
 /// `summarize_middle_with_llm_once` implementation.
+///
+/// `warm_prefix_messages` is the middle-history slice the chunk covers. When
+/// `settings.compaction_model` is empty, this slice is sent verbatim as the
+/// warm prefix and the directive is appended at the end so the request shares
+/// the session's prompt-cache prefix (OpenClaw #204111). When
+/// `compaction_model` is set the cold path is taken instead; the slice is
+/// only used to render the cold prompt.
 async fn summarize_chunk_with_llm_once(
     config: &PlatformLlmConfig,
     settings: &ContextEngineConfig,
@@ -337,17 +358,28 @@ async fn summarize_chunk_with_llm_once(
     facts: &[super::compaction_assembly::CompactionFact],
     previous_summary: Option<&str>,
     focus: Option<&str>,
+    warm_prefix_messages: &[SessionMessage],
 ) -> Result<String, String> {
-    run_compaction_with_retry(config, settings, focus, |focus_override| {
-        super::compaction_assembly::render_chunk_prompt(
-            plan,
-            chunk,
-            transcript,
-            facts,
-            previous_summary,
-            focus_override,
-        )
-    })
+    let warm_kind = compaction_warm::WarmCompactionKind::ChunkPrefix {
+        messages: warm_prefix_messages,
+        previous_summary,
+    };
+    run_compaction_with_retry(
+        config,
+        settings,
+        focus,
+        |focus_override| {
+            super::compaction_assembly::render_chunk_prompt(
+                plan,
+                chunk,
+                transcript,
+                facts,
+                previous_summary,
+                focus_override,
+            )
+        },
+        warm_kind,
+    )
     .await
 }
 
@@ -360,88 +392,63 @@ async fn summarize_middle_with_llm_once(
 ) -> Result<String, String> {
     // Merge path for chunk summaries (small `Vec<SessionMessage>`): reuse
     // the existing `compaction_user_prompt` renderer directly so the
-    // 6-section prompt structure stays byte-equal with the prior flow.
-    run_compaction_with_retry(config, settings, focus, |focus_override| {
-        compaction_user_prompt(previous_summary, messages, focus_override)
-    })
+    // 6-section prompt structure stays byte-equal with the prior cold flow.
+    // Warm merge path folds the chunk summaries into the directive text
+    // (they're all `assistant` role and would break Anthropic's user-first /
+    // alternating-role rule if sent as a multi-message prefix); see
+    // `WarmCompactionKind::MergeDirect` for the rationale.
+    let warm_kind = compaction_warm::WarmCompactionKind::MergeDirect {
+        chunk_summaries: messages,
+        previous_summary,
+    };
+    run_compaction_with_retry(
+        config,
+        settings,
+        focus,
+        |focus_override| compaction_user_prompt(previous_summary, messages, focus_override),
+        warm_kind,
+    )
     .await
 }
 
 /// Shared retry-with-required-sections driver for both the lazy-per-chunk
 /// path (`render_chunk_prompt` closure) and the merge path
-/// (`compaction_user_prompt` closure). Both paths:
-///   1. clone the LLM config + swap system prompt + cap `max_tokens` +
-///      override the model;
-///   2. render the prompt with the caller-supplied focus;
-///   3. if the result misses the required section headings, render again
-///      with an injected `retry_focus` and retry once.
+/// (`compaction_user_prompt` closure).
+///
+/// Routing:
+/// - `compaction_model` non-empty → [`compaction_cold`]: swap system prompt
+///   to `compaction_system_prompt()`, override model, single user message
+///   via [`crate::llm::complete`] (legacy "cold summarizer", byte-equal with
+///   the prior flow).
+/// - `compaction_model` empty → [`compaction_warm`]: keep the session's
+///   `system_prompt` so the request shares the next normal turn's
+///   prompt-cache prefix, send warm prefix messages verbatim, append the
+///   directive as a trailing user message. Failure / retry semantics mirror
+///   the cold path exactly (timeout, empty summary, six-section check,
+///   single retry with `retry_focus` injected), so [`summarize_middle`]'s
+///   `local_summary_fallback` chain is unchanged.
 async fn run_compaction_with_retry<P>(
     config: &PlatformLlmConfig,
     settings: &ContextEngineConfig,
     focus: Option<&str>,
     render_prompt: P,
+    warm_kind: compaction_warm::WarmCompactionKind<'_>,
 ) -> Result<String, String>
 where
     P: Fn(Option<&str>) -> String,
 {
-    let mut summary_config = config.clone();
-    summary_config.system_prompt = compaction_system_prompt();
-    summary_config.max_tokens = compaction_max_tokens(config, settings);
-    if let Some(model) = settings
+    let compaction_model_set = settings
         .compaction_model
         .as_deref()
         .map(str::trim)
-        .filter(|model| !model.is_empty())
-    {
-        summary_config.model = model.to_string();
+        .map(|model| !model.is_empty())
+        .unwrap_or(false);
+    if compaction_model_set {
+        compaction_cold::run_cold_compaction_with_retry(config, settings, focus, render_prompt)
+            .await
+    } else {
+        compaction_warm::run_warm_compaction_with_retry(config, settings, focus, warm_kind).await
     }
-    let prompt = render_prompt(focus);
-    let summary = run_compaction_llm(&summary_config, settings, &prompt).await?;
-    if summary_has_required_sections(&summary) {
-        return Ok(summary);
-    }
-    let retry_focus = focus
-        .map(|value| {
-            format!(
-                "{value}\nThe previous attempt missed required section headings. Retry with exactly these headings: Decisions, Open TODOs, Constraints/Rules, Pending user asks, Exact identifiers, Tool outcomes."
-            )
-        })
-        .unwrap_or_else(|| {
-            "Retry with exactly these headings: Decisions, Open TODOs, Constraints/Rules, Pending user asks, Exact identifiers, Tool outcomes.".to_string()
-        });
-    let retry_prompt = render_prompt(Some(&retry_focus));
-    let retry_summary = run_compaction_llm(&summary_config, settings, &retry_prompt).await?;
-    if !summary_has_required_sections(&retry_summary) {
-        return Err(
-            "Context compaction LLM did not return the required summary sections".to_string(),
-        );
-    }
-    Ok(retry_summary)
-}
-
-async fn run_compaction_llm(
-    summary_config: &PlatformLlmConfig,
-    settings: &ContextEngineConfig,
-    prompt: &str,
-) -> Result<String, String> {
-    let timeout = Duration::from_millis(settings.compaction_timeout_ms.max(1));
-    let result = tokio::time::timeout(timeout, crate::llm::complete(summary_config, prompt))
-        .await
-        .map_err(|_| {
-            format!(
-                "Context compaction timed out after {} ms",
-                settings.compaction_timeout_ms
-            )
-        })?
-        .map_err(|error| format!("Context compaction LLM call failed: {error}"))?;
-    let summary = result.trim();
-    if summary.is_empty() {
-        return Err("Context compaction LLM returned an empty summary".to_string());
-    }
-    // Redact credentials before the summary leaves this layer so neither the
-    // required-section check nor the returned content can persist raw secrets
-    // (covers both the first attempt and the retry path).
-    Ok(redact_credentials_in_text(summary))
 }
 
 /// Effective oversized threshold used by both the legacy sanitize path and
@@ -978,3 +985,15 @@ mod credential_redaction_tests;
 #[cfg(test)]
 #[path = "compaction_assembly_parity_tests.rs"]
 mod compaction_assembly_parity_tests;
+
+// Warm-prefix tests for the `compaction_model`-empty branch of
+// `run_compaction_with_retry`. Verify the routing invariant (warm taken
+// when `compaction_model` is empty, cold taken when set), the directive
+// builder's required-section headings + previous-summary / focus / chunk
+// folding, and the fallback chain when the warm LLM response misses the
+// required sections at both attempts. Mirrors the cold-path
+// `llm_summary_compaction_falls_back_to_local_summary` behavior by routing
+// through the same `summarize_middle` -> `local_summary_fallback` chain.
+#[cfg(test)]
+#[path = "compaction_warm_tests.rs"]
+mod compaction_warm_tests;
