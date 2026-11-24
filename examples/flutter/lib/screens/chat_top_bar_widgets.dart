@@ -95,21 +95,25 @@ class _ChatTopBar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
       child: Row(
         children: [
-          SizedBox.square(
-            dimension: 40,
-            child: IconButton(
-              key: Key(
-                showBackButton
-                    ? 'project_chat_back_button'
-                    : 'session_history_button',
-              ),
-              tooltip: showBackButton
-                  ? MaterialLocalizations.of(context).backButtonTooltip
-                  : strings.sessionsTooltip,
-              padding: EdgeInsets.zero,
-              onPressed: onSessionsTap,
-              icon: Icon(
-                showBackButton ? Icons.arrow_back_rounded : Icons.menu_rounded,
+          Semantics(
+            container: true,
+            label: 'dk.session.listButton',
+            child: SizedBox.square(
+              dimension: 40,
+              child: IconButton(
+                key: Key(
+                  showBackButton
+                      ? 'project_chat_back_button'
+                      : 'session_history_button',
+                ),
+                tooltip: showBackButton
+                    ? MaterialLocalizations.of(context).backButtonTooltip
+                    : strings.sessionsTooltip,
+                padding: EdgeInsets.zero,
+                onPressed: onSessionsTap,
+                icon: Icon(
+                  showBackButton ? Icons.arrow_back_rounded : Icons.menu_rounded,
+                ),
               ),
             ),
           ),
@@ -117,7 +121,10 @@ class _ChatTopBar extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: runtimeProfile.supportsAgents
-                  ? PopupMenuButton<String>(
+                  ? Semantics(
+                      container: true,
+                      label: 'dk.chat.agentEntry',
+                      child: PopupMenuButton<String>(
                       key: const Key('agent_selector_button'),
                       tooltip: '',
                       position: PopupMenuPosition.under,
@@ -141,10 +148,14 @@ class _ChatTopBar extends StatelessWidget {
                             value: agent.id,
                             height: _topBarMenuItemHeight,
                             padding: EdgeInsets.zero,
-                            child: _TopBarMenuRow(
-                              icon: agent.icon,
-                              label: agent.label(language),
-                              selected: agent.id == activeAgent.id,
+                            child: Semantics(
+                              container: true,
+                              label: 'dk.agent.popup.item.${agent.id}',
+                              child: _TopBarMenuRow(
+                                icon: agent.icon,
+                                label: agent.label(language),
+                                selected: agent.id == activeAgent.id,
+                              ),
                             ),
                           ),
                         const PopupMenuDivider(height: 8),
@@ -152,9 +163,13 @@ class _ChatTopBar extends StatelessWidget {
                           value: '__manage_agents__',
                           height: _topBarMenuItemHeight,
                           padding: EdgeInsets.zero,
-                          child: _TopBarMenuRow(
-                            icon: Icons.manage_accounts_rounded,
-                            label: strings.manageAgents,
+                          child: Semantics(
+                            container: true,
+                            label: 'dk.agent.popup.item.__manage_agents__',
+                            child: _TopBarMenuRow(
+                              icon: Icons.manage_accounts_rounded,
+                              label: strings.manageAgents,
+                            ),
                           ),
                         ),
                       ],
@@ -162,8 +177,12 @@ class _ChatTopBar extends StatelessWidget {
                         icon: activeAgent.icon,
                         label: activeAgent.label(language),
                       ),
-                    )
-                  : PopupMenuButton<String>(
+                    ),
+                  )
+                  : Semantics(
+                      container: true,
+                      label: 'dk.chat.engineEntry',
+                      child: PopupMenuButton<String>(
                       key: const Key('engine_selector_button'),
                       tooltip: '',
                       position: PopupMenuPosition.under,
@@ -182,14 +201,18 @@ class _ChatTopBar extends StatelessWidget {
                             enabled: engine.enabled,
                             height: _topBarMenuItemHeight,
                             padding: EdgeInsets.zero,
-                            child: _TopBarMenuRow(
-                              label: engine.label,
-                              selected:
-                                  engine.id == runtimeProfile.activeEngineId,
-                              trailing: !engine.enabled
-                                  ? strings.developerEngineUnavailable
-                                  : null,
-                              muted: !engine.enabled,
+                            child: Semantics(
+                              container: true,
+                              label: 'dk.engine.popup.item.${engine.id}',
+                              child: _TopBarMenuRow(
+                                label: engine.label,
+                                selected:
+                                    engine.id == runtimeProfile.activeEngineId,
+                                trailing: !engine.enabled
+                                    ? strings.developerEngineUnavailable
+                                    : null,
+                                muted: !engine.enabled,
+                              ),
                             ),
                           ),
                       ],
@@ -197,6 +220,7 @@ class _ChatTopBar extends StatelessWidget {
                         label: runtimeProfile.activeEngine.label,
                       ),
                     ),
+                  ),
             ),
           ),
           SizedBox.square(

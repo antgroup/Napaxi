@@ -1322,15 +1322,19 @@ class _SessionHistorySheetState extends State<_SessionHistorySheet> {
               Positioned(
                 right: 20,
                 bottom: 20,
-                child: FloatingActionButton.extended(
-                  key: const Key('new_session_button'),
-                  onPressed: widget.onNewSession,
-                  backgroundColor: const Color(0xFF333333),
-                  foregroundColor: const Color(0xFFFFFFFF),
-                  elevation: 0,
-                  shape: const StadiumBorder(),
-                  icon: const Icon(Icons.add_comment_rounded),
-                  label: Text(strings.newChat),
+                child: Semantics(
+                  container: true,
+                  label: 'dk.session.newButton',
+                  child: FloatingActionButton.extended(
+                    key: const Key('new_session_button'),
+                    onPressed: widget.onNewSession,
+                    backgroundColor: const Color(0xFF333333),
+                    foregroundColor: const Color(0xFFFFFFFF),
+                    elevation: 0,
+                    shape: const StadiumBorder(),
+                    icon: const Icon(Icons.add_comment_rounded),
+                    label: Text(strings.newChat),
+                  ),
                 ),
               ),
           ],
@@ -8508,7 +8512,10 @@ class _SessionHistoryTile extends StatelessWidget {
               ? const Color(0xFFF4F4F4)
               : const Color(0xFFF0F0F0)
         : Colors.transparent;
-    return Material(
+    return Semantics(
+      container: true,
+      label: 'dk.session.item',
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         key: Key('session_tile_${session.id}'),
@@ -8569,6 +8576,7 @@ class _SessionHistoryTile extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }
