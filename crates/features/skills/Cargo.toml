@@ -41,7 +41,7 @@ async-trait = "0.1"
 # is pinned to 1.92 (rust-toolchain.toml) with no committed Cargo.lock. Cap the
 # major to keep cargo selecting 0.12.x (rustc-1.92-compatible) regardless of the
 # resolver's msrv handling. Drop this cap once the toolchain advances to 1.95+.
-parking_lot = { version = "<0.13" }
+parking_lot = { version = "<0.14" }
 
 
 # Optional (catalog feature)
