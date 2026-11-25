@@ -208,3 +208,25 @@ daemon 族" 条目互锚；#200823 互锚文件 A §6 #200249 簇续记。
 
 仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT vs Napaxi
 GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。
+
+### 11-13 续记（DIMA 工单 2026111300120606307 / OpenClaw 巡检 2026-11-13）
+
+Source: DIMA 工单 2026111300120606307（OpenClaw 巡检 2026-11-13 窗口）。续接
+11-12 / 11-16 / 11-17 / 11-18 §4 同族，本窗 OpenClaw daemon 资源族新增两条
+daemon-fork 备备忘：
+
+- **#195369 embedding-cache exact-dup 退役**：clean publication 后退役 exact
+  embedding-cache duplicates（保留 failed-run / disabled-cache /
+  ambiguous-vector / session-only 行；SQLite + PostgreSQL 双 worker owner）。
+- **#198128 atomic workspace snapshot 免冗余 freeze**：btrfs checkpoint
+  export 被既有 probe 选中时跳过冗余 container freeze，paused live-tree
+  fallback、pending-result recovery 保留。
+
+**Napaxi 现状**延续不撞结论：无 memory-core embedding 持久缓存、无 btrfs
+sandbox 快照路径，**非现状缺口**。归 daemon 资源退役族（承 11-12
+#197230/#195369、11-16 #199873/#7de99f0419、11-17 §4、11-18 §4）。完整
+4 条「对 Napaxi 的启发」(prompt-cache prefix append-only / system-prompt pin /
+compaction×skill-snapshot / OAuth 单 owner / 本两条) 落于
+`docs/compaction-deterministic-floor-roadmap.md` §6 11-13 新增条目；此处仅
+互锚，不重复定义。仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT
+vs Napaxi GPL-3.0-or-later，见 THIRD-PARTY-LICENSES.md）。

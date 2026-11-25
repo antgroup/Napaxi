@@ -29,6 +29,19 @@
 > tool-surface-in-trigger 结构性观察）。4/5 多进程/持久族单进程不撞，1 项
 > #203008 映射仅落前瞻复检记录。仍不引入生产改动，未修改任何 Napaxi 源码
 > （连注释也不改）。
+>
+> 11-13 更新（DIMA 工单 2026111300120606307，OpenClaw 巡检 2026-11-13）：
+> 增补 11-13 窗口 compaction 正确性族延续性（§5 line 105 既有 "11-13 prefix
+> append-only / OAuth 单 owner" 一行保留不变），并新增 §6 子节「11-13 新增条目」
+> ——含四条「对 Napaxi 的启发」：(1) provider 端 prompt-cache prefix append-only
+> + system prompt pin 设计参照（#198100/#197925 映射）；(2) compaction ×
+> skill-snapshot 不替换当前已加载 copy 设计参照（#198029 映射）；(3) OAuth
+> token refresh 单 owner 仲裁基线（#198214 映射 + 11-04/11-06/11-10 monotonic
+> 续）；(4) memory 嵌入缓存 exact-dup 退役 / sandbox 原子快照免冗余 freeze
+> （#195369/#198128 映射，承 11-12 daemon 资源族，与
+> `docs/process-hosting-roadmap.md` §4 互锚）。本轮三处均当前不撞 OpenClaw bug、
+> 无新立项归档、无现状缺口需立刻补，仍不引入生产改动，未修改任何 Napaxi 源码
+> （连注释也不改）。
 
 ## 1. OpenClaw 修复语义
 
@@ -161,6 +174,99 @@ facts" 在 cold-path 成本不可接受而被回退，**反向验证 Napaxi 单�
   无 SQLite 文件 lifetime admission / POSIX-lock-bound descriptor retention 概念，不构成
   现状缺口。设计参照：若 daemon 化引入 shadow/template/临时 DB 文件，须在删文件前显式
   退役 admission 避免残 inode——与 sandbox template 跨 restart 复用同族资源卫生。仅备忘。
+
+### 11-13 新增条目（DIMA 工单 2026111300120606307）
+
+- **#1 #198100 + #197925 prompt-cache prefix append-only / system-prompt pin
+  — 设计参照（provider 端 prompt-cache 协同族）**
+  - OpenClaw 形态：compaction 重建 session 窗口后，anthropic prompt-cache prefix
+    只追加不改（append-only on every route），系统提示在每条 Anthropic Messages
+    路由 pin（transcript-policy 增 system-prompt pin 语义，paraphrase 系统
+    prompt 在尾部 turn 触发缓存全失效）；prompt-cache-observability 重写带
+    history 模块（+134 行）。
+  - **Napaxi ground check（HEAD 复核）**：`rg -ni 'prefix.*append\|prompt.?cache
+    \|cache.*prefix\|prompt.*stable' crates/core/src/context/` **零命中** ——
+    Napaxi **不在 provider 端做显式 prompt-cache prefix 管理**，每次请求重建
+    prefix，无 prefix identity 追踪。
+  - **设计参照 / 备备忘**：当前不撞 #198100/#197925 的缓存前缀失效 bug；
+    未来若启用 provider 端 prompt cache 做降本，compaction/turn 重建须保证
+    prefix append-only（不重排历史）+ system prompt 严格 pin（不在 turn 边界
+    paraphrase、不尾部移位），与 compaction 产物保真线同向。与既有 §6 #198730
+    条目内 "11-13 prefix append-only / system-prompt pin 同处 prompt-cache
+    prefix 协同线" 互锚。仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw
+    MIT vs Napaxi GPL-3.0-or-later，见 `THIRD-PARTY-LICENSES.md`）。
+
+- **#2 #198029 compaction × skill-snapshot 不替换当前已加载 copy — 设计参照**
+  - OpenClaw 形态：sandboxed session + 已选 skill 时 compaction 用 saved skill
+    snapshot（不含 runtime catalogs）**替换**本 turn 已加载 snapshot →
+    "Selected skill snapshot must be hydrated before sandbox delivery" →
+    自动 compaction 放弃 → 下一 turn context overflow。fix：自动 compaction
+    用 turn 已加载 skills；direct path 通过既有 loader 在内存重载 saved copy；
+    无文本/schema 变更。
+  - **Napaxi ground check（HEAD 复核，行号以 worktree HEAD 为准）**：
+    `crates/core/src/context/compaction.rs:753` 仅在工具名过滤中以
+    `if crate::skills::is_hidden_skill_tool(name)` 处理 skills——**compaction
+    不加载/不替换 skill snapshot**，因此**不撞 #198029 的 snapshot 替换 bug**
+    （Napaxi compaction 不接管 skill hydration state，是 Napaxi 当前"不固化
+    skill 入 session-internal-snapshot"架构的优点）。
+  - **设计参照 / 备备忘**：若未来 Napaxi 引入 sandbox 交付 + skill snapshot
+    固化进 session-internal 状态（与 OpenClaw 对齐），compaction 须用当前已
+    加载 snapshot 而非 cold saved copy，避免 hydration 漏配 → context
+    overflow。仅借鉴设计思路与边界规则，不直接移植代码（OpenClaw MIT vs
+    Napaxi GPL-3.0-or-later，见 `THIRD-PARTY-LICENSES.md`）。
+
+- **#3 #198214 OAuth token refresh 单 owner 仲裁 — 基线（承 11-04/11-06/11-10
+  monotonic 族，对齐 §6 11-17 #200538）**
+  - OpenClaw 形态：共享 OAuth signin token 的 refresh 之前可被任意旁路命令刷新
+    → running Gateway 的旧 copy 失配，后续 turn 报 `No credentials found
+    for profile` 直到重启。fix：把 refresh 作为唯一 choke point；state-owner
+    判断：本进程持 state → 不变；Gateway 持 token 仍有效 → 用现成；Gateway
+    持 token 过期 → **写入前 refuse**。NoGateway protocol/config/schema 变更。
+  - **Napaxi ground check（HEAD 复核）**：`crates/core/src/mcp/oauth.rs:598
+    refresh_server_oauth_if_needed` → `oauth_token_needs_refresh`（:512）
+    → `refresh_oauth_tokens`（:523）——**MCP server OAuth refresh 无
+    single-owner 仲裁**。Napaxi 当前为**单进程**，故无多 owner 冲突，**当前
+    不撞 #198214**。与 `crates/core/src/mcp/oauth.rs:20-38` 已记 11-10
+    monotonic-vs-wallclock 不变量（`McpOAuthTokens::expires_at` 等 persisted
+    时间戳须留在 `chrono::Utc::now()`，relative timer 须走
+    `std::time::Instant`）同处一治理面。
+  - **设计参照 / 备备忘**：若 Napaxi 未来实现 (a) 并发多 worker 各持
+    MCP server 句柄或 (b) 命令旁路在 agent 进程外 refresh token，须引入
+    state-owner 判断、refuse-before-write 防止旁路刷新令主 copy 失配、后续
+    turn `No credentials`。与既有 §6 11-17 `#200538 OAuth MCP 在线 sign-in /
+    running-Gateway 为 single owner` 条目内 "保留 11-13 备忘：未来若引入并发
+    worker / 进程外旁路刷新，须加 state-owner 仲裁" 互锚，承 11-04/11-06/
+    11-10 monotonic 族归档。仅借鉴设计思路与边界规则，不直接移植代码
+    （OpenClaw MIT vs Napaxi GPL-3.0-or-later，见 `THIRD-PARTY-LICENSES.md`）。
+
+- **#4 #195369 + #198128 memory 嵌入缓存 exact-dup 退役 / sandbox 原子快照免
+  冗余 freeze — daemon 资源族备备忘（与 process-hosting-roadmap §4 互锚）**
+  - OpenClaw 形态 #195369：clean publication 后退役 exact embedding-cache
+    duplicates（含新发布与 rebuild 后旧 dup），保留 failed-run /
+    disabled-cache / ambiguous-vector / session-only 行；SQLite + PostgreSQL
+    双 worker owner。#198128：btrfs checkpoint export 被既有 probe 选中时
+    跳过冗余 container freeze，per-command canonical visibility、paused
+    live-tree fallback、pending-result recovery 保留。
+  - **Napaxi ground check（HEAD 复核）**：`rg -ni 'memory.?core\|embedding.?
+    cache\|btrfs\|checkpoint.*export\|atomic.*snapshot' crates/` **零相关
+    命中**——Napaxi 现无 memory-core embedding 持久缓存、无 btrfs sandbox
+    快照路径，**不撞**。
+  - **设计参照 / 备备忘**：若 daemon 化引入 embedding 缓存，clean publication
+    后退役 exact dup 保留 failed-run/disabled-cache/ambiguous-vector/
+    session-only 行；若引入 atomic snapshot，被 probe 选中的 clean
+    checkpoint 跳过冗余 freeze 保 agent 不被打断。承 11-12 daemon 资源族
+    （#197230/#195369）+ 11-16 restart 资源退役族（#199873/#7de99f0419），
+    与 `docs/process-hosting-roadmap.md` §4 末 11-13 锚点条目互锚，与 §6
+    "restart 资源生命周期 daemon 族" 条目（11-17 / 11-18 已记）同簇。仅借鉴
+    设计思路与边界规则，不直接移植代码（OpenClaw MIT vs Napaxi
+    GPL-3.0-or-later，见 `THIRD-PARTY-LICENSES.md`）。
+
+- **本轮无新立项归档 — 显式声明**：承工单「⚪ 本轮无新立项归档」一节
+  显式记一行：本轮三处（prompt-cache prefix / compaction×skill-snapshot /
+  OAuth 单 owner）均落在"设计参照/备备忘"层，compaction 主线本周从产物
+  保真→安全→prompt-cache 协同的演变属 "update-architectural-direction"
+  线索，不立项；gateway/cron owner-retirement + Ctrl+C 取消族延续
+  11-04~11-12 monotonic 线，本轮无独立新立项增量。
 
 ### 11-17 新增条目（DIMA 工单 2026111700120722148）
 
