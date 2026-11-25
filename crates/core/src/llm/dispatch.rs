@@ -105,6 +105,19 @@ pub async fn complete_with_history(
 ) -> Result<String> {
     #[cfg(test)]
     if is_test_noop(config) {
+        // Honor a scoped scripted-turn queue if present so tests that drive
+        // the warm compaction path through `complete_with_history` (rather
+        // than the raw-message turn entrypoints) can still inject a
+        // scripted reply. Without this, the warm path's LLM call would
+        // always return an empty string and always fall back to
+        // `local_summary`, making the warm-vs-cold routing untestable
+        // offline. Existing scripted-turn tests drive the tool loop via
+        // `complete_turn_with_raw_messages`/`stream_turn_with_raw_messages`
+        // and never trigger `complete_with_history`, so this consumption
+        // arm stays inert for them.
+        if let Some(turn) = next_scripted_turn() {
+            return Ok(turn.content);
+        }
         return Ok(String::new());
     }
     if config.api_key.trim().is_empty() {
