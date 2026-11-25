@@ -787,30 +787,34 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                           onSelected: _selectSlashCommand,
                         ),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 156),
-                        child: Scrollbar(
-                          controller: _inputScrollController,
-                          child: TextField(
-                            key: widget.inputFieldKey,
-                            controller: widget.controller,
-                            focusNode: widget.focusNode,
-                            scrollController: _inputScrollController,
-                            maxLines: null,
-                            minLines: 1,
-                            textInputAction: TextInputAction.newline,
-                            onTapOutside: (_) => widget.focusNode.unfocus(),
-                            decoration: InputDecoration(
-                              hintText:
-                                  widget.messageHint ?? strings.messageHint,
-                              hintStyle: const TextStyle(
-                                color: Color(0xFF9CA3AF),
+                    Semantics(
+                      container: true,
+                      label: 'dk.chat.composer',
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 156),
+                          child: Scrollbar(
+                            controller: _inputScrollController,
+                            child: TextField(
+                              key: widget.inputFieldKey,
+                              controller: widget.controller,
+                              focusNode: widget.focusNode,
+                              scrollController: _inputScrollController,
+                              maxLines: null,
+                              minLines: 1,
+                              textInputAction: TextInputAction.newline,
+                              onTapOutside: (_) => widget.focusNode.unfocus(),
+                              decoration: InputDecoration(
+                                hintText:
+                                    widget.messageHint ?? strings.messageHint,
+                                hintStyle: const TextStyle(
+                                  color: Color(0xFF9CA3AF),
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                                isDense: true,
                               ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                              isDense: true,
                             ),
                           ),
                         ),
@@ -850,7 +854,10 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                             ),
                             const SizedBox(width: 6),
                           ],
-                          SizedBox(
+                          Semantics(
+                            container: true,
+                            label: 'dk.chat.sendButton',
+                            child: SizedBox(
                             width: 40,
                             height: 40,
                             child: IconButton.filled(
@@ -891,6 +898,7 @@ class _ChatInputBarState extends State<_ChatInputBar> {
                                   Icons.undo_rounded,
                               }, size: 18),
                             ),
+                          ),
                           ),
                         ],
                       ),

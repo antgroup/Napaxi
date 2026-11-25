@@ -185,30 +185,38 @@ class _ChatBubbleState extends State<_ChatBubble> {
     if (!isUser) {
       return Align(
         alignment: alignment,
-        child: Container(
-          constraints: BoxConstraints(maxWidth: maxWidth),
-          margin: const EdgeInsets.only(bottom: 14),
-          padding: const EdgeInsets.fromLTRB(2, 4, 2, 8),
-          child: content,
+        child: Semantics(
+          container: true,
+          label: 'dk.chat.messageBubble.assistant',
+          child: Container(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.fromLTRB(2, 4, 2, 8),
+            child: content,
+          ),
         ),
       );
     }
 
-    final bubble = Container(
-      constraints: BoxConstraints(maxWidth: maxWidth),
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE5E7EB),
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-          bottomLeft: Radius.circular(16),
-          bottomRight: Radius.circular(4),
+    final bubble = Semantics(
+      container: true,
+      label: 'dk.chat.messageBubble.user',
+      child: Container(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE5E7EB),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(16),
+            bottomRight: Radius.circular(4),
+          ),
+          border: Border.all(color: const Color(0xFFE5E7EB)),
         ),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        child: content,
       ),
-      child: content,
     );
 
     return Align(

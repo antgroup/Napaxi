@@ -1,0 +1,67 @@
+# DIMA 2026112400120926796
+# Flutter 聊天主链路设备测试语义标识注册表（dk.* = device-test key）
+# 通过 Semantics(container: true, label: 'dk.<page>.<widget>') 注入，
+# uiautomator2 经 Android content-description 匹配。
+# 新增 key 必须先在此登记再使用。
+#
+# 模板化键（不单列 numbered 条目）：popup item 类标签按运行时 id 拼接
+#   - dk.engine.popup.item.<engine.id>  : examples/flutter/lib/screens/chat_top_bar_widgets.dart
+#                                          引擎选择弹窗每个 PopupMenuItem 的 child 外层
+#   - dk.agent.popup.item.<agent.id>     : 同文件 agent 选择弹窗每个 PopupMenuItem 的 child 外层
+#                                          （含 manage agents 入口：id 取 '__manage_agents__'）
+# 这些模板标签随代码同步注入但不在主链路 9 项注册清单内（见 plan.md「假设与裁断 3」）。
+
+keys:
+  - logical_name: chat_composer
+    dk: dk.chat.composer
+    page: examples/flutter/lib/widgets/chat_input.dart
+    location: ~L790 输入框 TextField 外层 Padding
+    description: 聊天输入框（chat composer）
+
+  - logical_name: chat_send_button
+    dk: dk.chat.sendButton
+    page: examples/flutter/lib/widgets/chat_input.dart
+    location: ~L853 IconButton.filled 发送按钮 SizedBox 外层
+    description: 发送消息按钮
+
+  - logical_name: session_list_button
+    dk: dk.session.listButton
+    page: examples/flutter/lib/screens/chat_top_bar_widgets.dart
+    location: ~L98 会话历史 IconButton SizedBox.square 外层
+    description: 顶栏打开会话历史的入口按钮
+
+  - logical_name: chat_agent_entry
+    dk: dk.chat.agentEntry
+    page: examples/flutter/lib/screens/chat_top_bar_widgets.dart
+    location: ~L120 agent PopupMenuButton 外层
+    description: 顶栏 agent 选择器入口（多 agent 场景渲染，与 engineEntry 互斥）
+
+  - logical_name: chat_engine_entry
+    dk: dk.chat.engineEntry
+    page: examples/flutter/lib/screens/chat_top_bar_widgets.dart
+    location: ~L166 engine PopupMenuButton 外层
+    description: 顶栏 engine 选择器入口（默认单 agent 场景渲染）
+
+  - logical_name: chat_message_bubble_user
+    dk: dk.chat.messageBubble.user
+    page: examples/flutter/lib/widgets/chat_message.dart
+    location: _ChatBubbleState.build 用户消息分支 ~L197 Container 外层
+    description: 用户消息气泡容器
+
+  - logical_name: chat_message_bubble_assistant
+    dk: dk.chat.messageBubble.assistant
+    page: examples/flutter/lib/widgets/chat_message.dart
+    location: _ChatBubbleState.build 助手消息分支 ~L185 Container 外层
+    description: 助手消息气泡容器
+
+  - logical_name: session_item
+    dk: dk.session.item
+    page: examples/flutter/lib/panels/session_history.dart
+    location: _SessionHistoryTile.build ~L8502 Material 外层
+    description: 会话历史条目
+
+  - logical_name: session_new_button
+    dk: dk.session.newButton
+    page: examples/flutter/lib/panels/session_history.dart
+    location: ~L1326 FloatingActionButton.extended 外层
+    description: 新建会话按钮
