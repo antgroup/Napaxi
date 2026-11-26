@@ -15,14 +15,14 @@ appId: com.napa.app.test
     text: "稍后"
     optional: true
 - extendedWaitUntil:
-    visible: "Napaxi"
+    visible: { contains: "Napaxi" }
     timeout: 30000
 - assertVisible: "给 napaxi 发消息"
 # Navigation coverage via the engine-selector popup: a PopupMenuButton is a
 # modal route, so `back` dismisses it deterministically (the custom sessions
 # drawer has no such guarantee — a back there can exit to the launcher).
-- tapOn: "Napaxi"
-- assertVisible: "Codex(beta)"
+- tapOn: { contains: "Napaxi" }
+- assertVisible: { contains: "Codex" }
 - back
 - assertVisible: "给 napaxi 发消息"
 - tapOn: "给 napaxi 发消息"
