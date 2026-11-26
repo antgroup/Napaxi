@@ -210,6 +210,16 @@ class EnvError(Exception):
 
 # --- step primitives -------------------------------------------------------
 
+def _xpath_literal(s):
+    """Quote `s` as an XPath 1.0 string literal (no escaping exists, so pick
+    a delimiter that does not appear, else concat the parts)."""
+    if '"' not in s:
+        return '"%s"' % s
+    if "'" not in s:
+        return "'%s'" % s
+    return "concat(%s)" % ", '\"', ".join('"%s"' % p for p in s.split('"'))
+
+
 def _bind(d, spec, timeout):
     """Translate a resolve_selector() result into a waited UiObject, or None."""
     kind = spec["kind"]
@@ -219,27 +229,35 @@ def _bind(d, spec, timeout):
             return el
         return None
     if kind == "description_prefix":
-        # content-desc is `dk.<key>\n<label>`; regex-match the dk prefix and an
-        # optional `\n<label>` suffix. Fall back to descriptionContains (tolerate
-        # `\n<label>`) then exact description=dk, so a u2/atx-agent version that
-        # doesn't support descriptionMatches still resolves.
-        pat = r"^%s(\n.*)?$" % re.escape(spec["value"])
-        try:
-            el = d(descriptionMatches=pat)
-            if el.wait(timeout=timeout):
-                return el
-        except Exception:  # noqa: BLE001 — unsupported kw, fall through
-            pass
-        try:
-            el = d(descriptionContains=spec["value"])
-            if el.wait(timeout=timeout):
-                return el
-        except Exception:  # noqa: BLE001
-            pass
-        el = d(description=spec["value"])
-        if el.wait(timeout=timeout):
-            return el
-        return None
+        # `dk.<key>` lands in two different places depending on the widget:
+        #   * plain Semantics widgets -> content-desc `dk.<key>\n<label>`
+        #   * Flutter text fields      -> the `hint` attribute (content-desc
+        #     empty), e.g. hint=`dk.chat.composer\n给 napaxi 发消息`
+        # u2's Selector has no `hint` kw, so xpath is the escape hatch (same
+        # trick as text_or_desc below). Probe every candidate inside one
+        # deadline, so a miss costs a single timeout instead of one per probe.
+        dk = spec["value"]
+        pat = r"^%s(\n.*)?$" % re.escape(dk)
+        hint_q = "//*[starts-with(@hint, %s)]" % _xpath_literal(dk)
+        desc_q = "//*[starts-with(@content-desc, %s)]" % _xpath_literal(dk)
+        deadline = time.time() + timeout
+        while True:
+            for probe in (
+                lambda: d(descriptionMatches=pat),
+                lambda: d(descriptionContains=dk),
+                lambda: d(description=dk),
+                lambda: d.xpath(hint_q),
+                lambda: d.xpath(desc_q),
+            ):
+                try:
+                    el = probe()
+                    if el.exists:
+                        return el
+                except Exception:  # noqa: BLE001 — unsupported kw/selector, next probe
+                    continue
+            if time.time() >= deadline:
+                return None
+            time.sleep(0.3)
     if kind == "textContains":
         el = d(textContains=spec["value"])
         return el if el.wait(timeout=timeout) else None
@@ -255,7 +273,7 @@ def _bind(d, spec, timeout):
                     return el
                 # Flutter TextField hints land in `hint`, which u2 Selector
                 # rejects; xpath is the supported escape hatch (u2_smoke L35).
-                x = d.xpath('//*[@hint="%s"]' % val)
+                x = d.xpath("//*[@hint=%s]" % _xpath_literal(val))
                 if x.exists:
                     return x
             time.sleep(0.5)

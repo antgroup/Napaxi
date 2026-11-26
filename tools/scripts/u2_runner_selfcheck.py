@@ -56,6 +56,33 @@ def main():
     _assert(dc.get("value") == "dk.engine.popup.item.codex",
             "descriptionContains value should be preserved, got %r" % dc)
 
+    # (2b) `_bind` for a key must also resolve when the dk lives in the `hint`
+    # attribute (Flutter text fields) instead of content-desc.
+    class _Missing:
+        exists = False
+
+        def wait(self, timeout=0):
+            return False
+
+    class _Found:
+        exists = True
+
+        def wait(self, timeout=0):
+            return True
+
+    class HintOnlyD:
+        def __call__(self, **kwargs):
+            return _Missing()
+
+        def xpath(self, q):
+            return _Found() if "hint" in q else _Missing()
+
+    el = u._bind(HintOnlyD(), {"kind": "description_prefix",
+                               "value": "dk.chat.composer"}, 0.5)
+    _assert(el is not None,
+            "description_prefix should fall back to //*[@hint=...] when the dk "
+            "is a Flutter hint (composer case)")
+
     # (3) optional skip: _require_or_skip with optional=True, no element found,
     # must return None and not raise.
     class _NoEl:
