@@ -1,10 +1,14 @@
-# Maestro smoke: launch the app, verify the chat screen renders, type into
-# the composer (without sending), open and close the session history drawer.
+# Maestro smoke: launch the app and navigate the engine-selector popup.
 #
 # Selectors are text-based (Flutter does not expose widget Keys to the
-# accessibility tree). The demo app defaults to Chinese UI on a fresh
-# install; the composer hint and tooltips below come from
-# examples/flutter/lib/app/strings.dart (chinese).
+# accessibility tree). Two constraints shaped this flow:
+#   * `contains:` / legacy selector maps are not understood by every installed
+#     maestro build -> plain regex strings only. maestro matches `text` with a
+#     full-string regex, hence the `[\s\S]*` wrappers around newline-bearing
+#     accessibility labels such as `dk.chat.engineEntry\nNapaxi`.
+#   * a Flutter TextField publishes its semantics key in the `hint` attribute,
+#     which maestro cannot select -> the composer typing steps live in the u2
+#     cases (L0 smoke / L1) instead of here.
 appId: com.napa.app.test
 ---
 - launchApp:
@@ -15,17 +19,13 @@ appId: com.napa.app.test
     text: "稍后"
     optional: true
 - extendedWaitUntil:
-    visible: { contains: "Napaxi" }
+    visible: '[\s\S]*Napaxi[\s\S]*'
     timeout: 30000
-- assertVisible: "给 napaxi 发消息"
+- assertVisible: '[\s\S]*dk\.chat\.engineEntry[\s\S]*'
 # Navigation coverage via the engine-selector popup: a PopupMenuButton is a
 # modal route, so `back` dismisses it deterministically (the custom sessions
 # drawer has no such guarantee — a back there can exit to the launcher).
-- tapOn: { contains: "Napaxi" }
-- assertVisible: { contains: "Codex" }
+- tapOn: '[\s\S]*Napaxi[\s\S]*'
+- assertVisible: '[\s\S]*Codex[\s\S]*'
 - back
-- assertVisible: "给 napaxi 发消息"
-- tapOn: "给 napaxi 发消息"
-- inputText: "冒烟测试 hello"
-- assertVisible: "冒烟测试 hello"
-- hideKeyboard
+- assertVisible: '[\s\S]*dk\.chat\.engineEntry[\s\S]*'

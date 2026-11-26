@@ -90,7 +90,7 @@ selector:
 
 **优先级**：
 
-1. `key` → `keys.yaml` 查 `dk` → `d(descriptionMatches=^<dk-escaped>(\n.*)?$)`（兼容 content-desc `dk.<key>\n<label>` 格式）；`descriptionMatches` 不支持时回退 `d(descriptionContains=dk)`，再回退 `d(description=dk)` exact；key 不在 keys.yaml → `failure_class=case`
+1. `key` → `keys.yaml` 查 `dk` → 在同一个 timeout 内轮询 5 个候选：`d(descriptionMatches=^<dk-escaped>(\n.*)?$)`（content-desc `dk.<key>\n<label>` 格式）→ `d(descriptionContains=dk)` → `d(description=dk)` → `xpath //*[starts-with(@hint, "<dk>")]` → `xpath //*[starts-with(@content-desc, "<dk>")]`。**Flutter TextField 的语义 key 落在 `hint` 属性**（content-desc 为空，如 `hint="dk.chat.composer\n给 napaxi 发消息"`），必须靠 hint 分支命中；key 不在 keys.yaml → `failure_class=case`
 2. `textContains` → `d(textContains=v)` 子串匹配（u2 API，容忍 `\n<label>` 后缀），`descriptionContains` 同义对 description
 3. `text` 或 `description`（可单独或同时给；均为 string 或双语数组）：按出现顺序逐 variant 逐 keyword 试 `d(text=v)`/`d(description=v)`，再试 `d.xpath('//*[@hint=v]')`（端口 u2_smoke.py `_sel`）
 4. `xpath` → `d.xpath(...)`
