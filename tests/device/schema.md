@@ -80,7 +80,7 @@ steps:
 selector:
   key: chat_composer                 # 1️⃣ 优先：查 keys.yaml → descriptionMatches ^<dk>(\n.*)?$
   # 或
-  text: ["稍后", "Later"]            # 2️⃣ 双语数组，逐项试 d(text=v) → d(description=v) → d.xpath('//*[@hint=v']
+  text: ["稍后", "Later"]            # 2️⃣ 双语数组，逐项试 d(text=v) → d(description=v) → d.xpath('//*[@hint=v]')
   description: "dk.engine.popup.item.codex"
   textContains: "Codex"              # 子串匹配，容忍 \n<label> 后缀
   descriptionContains: "dk.engine.popup.item.codex"
@@ -92,7 +92,7 @@ selector:
 
 1. `key` → `keys.yaml` 查 `dk` → `d(descriptionMatches=^<dk-escaped>(\n.*)?$)`（兼容 content-desc `dk.<key>\n<label>` 格式）；`descriptionMatches` 不支持时回退 `d(descriptionContains=dk)`，再回退 `d(description=dk)` exact；key 不在 keys.yaml → `failure_class=case`
 2. `textContains` → `d(textContains=v)` 子串匹配（u2 API，容忍 `\n<label>` 后缀），`descriptionContains` 同义对 description
-3. `text` 或 `description`（可单独或同时给；均为 string 或双语数组）：按出现顺序逐 variant 逐 keyword 试 `d(text=v)`/`d(description=v)`，再试 `d.xpath('//*[@hint=v])`（端口 u2_smoke.py `_sel`）
+3. `text` 或 `description`（可单独或同时给；均为 string 或双语数组）：按出现顺序逐 variant 逐 keyword 试 `d(text=v)`/`d(description=v)`，再试 `d.xpath('//*[@hint=v]')`（端口 u2_smoke.py `_sel`）
 4. `xpath` → `d.xpath(...)`
 
 同一步里只应给一种；同时给 `key` 时优先 `key`；`textContains`/`descriptionContains` 与 `text`/`description` 互斥（同一步勿混用）。
