@@ -1,17 +1,21 @@
 id: chat_switch_engine
 suite: L1
-title: 切换引擎——打开 engine 选择器、切到非默认项、确认 composer 仍在、可输入
+title: 引擎选择器——打开列表、确认 Codex 项可见、取消退出、composer 仍在可输入
 timeout: 180
 # TODO: 步骤语义待附稿 §11 原文校准；引擎项用 dk.engine.popup.item.<engine.id> 模板键
 # （运行时 engine.id 由 keys.yaml 模板化，devpool 真机校准）。
+#
+# 不真选中 Codex：Android 上选中 engine.codex 会走 _ensureCodexEnvironmentReady
+# （preflight → 安装提示），测试设备没装 codex CLI → 选中被中止；随后用例的
+# `back` 在已无弹窗的根路由上会直接退出 app 到桌面（20261126 重跑 D2 实测，
+# 模拟器/真机同现象）。这里只验证 popup 打开→back 关闭这条确定性路径。
 steps:
   - launch: { pkg: com.napa.app.test }
   - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
   - assert_visible: { selector: { key: chat_engine_entry }, timeout: 30 }
   - tap: { selector: { key: chat_engine_entry } }
   - assert_visible: { selector: { descriptionContains: "Codex" }, timeout: 10 }
-  # 切到列表中第一个非默认引擎；具体 engine.id 在 devpool 真机校准，schema 留 TODO。
-  - tap: { selector: { descriptionContains: "dk.engine.popup.item.codex" }, timeout: 10 }
+  # popup 是 modal route，back 关闭它；不真选中（选中会触发 Codex 环境安装预检）。
   - back: {}
   - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
   - tap: { selector: { key: chat_composer } }
