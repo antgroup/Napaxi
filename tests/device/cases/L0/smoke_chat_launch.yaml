@@ -1,0 +1,19 @@
+id: smoke_chat_launch
+suite: L0
+title: 聊天主链路冒烟（12 步等价 u2_smoke.py）
+timeout: 120
+# 1 号用例：将 u2_smoke.py 的 12 步冒烟改写为声明式 case。
+# 步骤语义与 u2_smoke.py L82-161 一致；composer 优先用 key=chat_composer（PR#150）。
+steps:
+  - launch: { pkg: com.napa.app.test }
+  - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
+  - assert_visible: { selector: { text: ["Napaxi"] }, timeout: 30 }
+  - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
+  - tap: { selector: { text: ["Napaxi"] } }
+  - assert_visible: { selector: { text: ["Codex(beta)"] }, timeout: 10 }
+  - back: {}
+  - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
+  - tap: { selector: { key: chat_composer } }
+  - set_text: { selector: { key: chat_composer }, text: "冒烟测试 hello" }
+  - assert_visible: { selector: { text: ["冒烟测试 hello"] }, timeout: 10 }
+  - press_key: { keycode: 111 }

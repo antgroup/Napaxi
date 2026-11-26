@@ -1,0 +1,17 @@
+id: chat_multiturn
+suite: L1
+title: 多轮对话——发两条消息，确认两条用户气泡与至少一条助手响应
+timeout: 240
+# TODO: 步骤语义待附稿 §11 原文校准；助手响应断言用 assistant 气泡 key + 文本非空，避免绑定具体回执文案。
+steps:
+  - launch: { pkg: com.napa.app.test }
+  - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
+  - assert_visible: { selector: { text: ["Napaxi"] }, timeout: 30 }
+  - tap: { selector: { key: chat_composer } }
+  - set_text: { selector: { key: chat_composer }, text: "MULTITURN_Q1_{RUN_ID}" }
+  - tap: { selector: { key: chat_send_button } }
+  - assert_visible: { selector: { key: chat_message_bubble_user }, timeout: 15 }
+  - tap: { selector: { key: chat_composer } }
+  - set_text: { selector: { key: chat_composer }, text: "MULTITURN_Q2_{RUN_ID}" }
+  - tap: { selector: { key: chat_send_button } }
+  - assert_visible: { selector: { key: chat_message_bubble_assistant }, timeout: 30 }

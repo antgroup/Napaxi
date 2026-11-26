@@ -1,0 +1,11 @@
+# 隔离清单：被列出的 case id 在执行时跳过，并在报告中标记 quarantined。
+# 临时隔离某用例时在此追加一行 `- <case_id>`，验证后务必还原。
+#
+# Schema (canonical, per plan 交付物 3):
+#   quarantined:
+#     - <case_id>
+#     - ...
+#
+# 也兼容 legacy bare-list 形式：
+#   - <case_id>
+quarantined: []
