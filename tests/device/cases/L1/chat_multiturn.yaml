@@ -6,7 +6,7 @@ timeout: 240
 steps:
   - launch: { pkg: com.napa.app.test }
   - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
-  - assert_visible: { selector: { text: ["Napaxi"] }, timeout: 30 }
+  - assert_visible: { selector: { key: chat_engine_entry }, timeout: 30 }
   - tap: { selector: { key: chat_composer } }
   - set_text: { selector: { key: chat_composer }, text: "MULTITURN_Q1_{RUN_ID}" }
   - tap: { selector: { key: chat_send_button } }

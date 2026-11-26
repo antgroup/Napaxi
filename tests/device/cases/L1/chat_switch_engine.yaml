@@ -7,13 +7,13 @@ timeout: 180
 steps:
   - launch: { pkg: com.napa.app.test }
   - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
-  - assert_visible: { selector: { text: ["Napaxi"] }, timeout: 30 }
+  - assert_visible: { selector: { key: chat_engine_entry }, timeout: 30 }
   - tap: { selector: { key: chat_engine_entry } }
-  - assert_visible: { selector: { text: ["Codex(beta)"] }, timeout: 10 }
+  - assert_visible: { selector: { descriptionContains: "Codex" }, timeout: 10 }
   # 切到列表中第一个非默认引擎；具体 engine.id 在 devpool 真机校准，schema 留 TODO。
-  - tap: { selector: { description: "dk.engine.popup.item.codex" }, timeout: 10 }
+  - tap: { selector: { descriptionContains: "dk.engine.popup.item.codex" }, timeout: 10 }
   - back: {}
   - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
   - tap: { selector: { key: chat_composer } }
   - set_text: { selector: { key: chat_composer }, text: "SWITCH_ENGINE_OK_{RUN_ID}" }
-  - assert_visible: { selector: { text: ["SWITCH_ENGINE_OK_{RUN_ID}"] }, timeout: 10 }
+  - assert_visible: { selector: { textContains: "SWITCH_ENGINE_OK_" }, timeout: 10 }

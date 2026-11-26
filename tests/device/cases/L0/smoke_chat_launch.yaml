@@ -7,13 +7,13 @@ timeout: 120
 steps:
   - launch: { pkg: com.napa.app.test }
   - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
-  - assert_visible: { selector: { text: ["Napaxi"] }, timeout: 30 }
+  - assert_visible: { selector: { key: chat_engine_entry }, timeout: 30 }
   - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
-  - tap: { selector: { text: ["Napaxi"] } }
-  - assert_visible: { selector: { text: ["Codex(beta)"] }, timeout: 10 }
+  - tap: { selector: { key: chat_engine_entry } }
+  - assert_visible: { selector: { descriptionContains: "Codex" }, timeout: 10 }
   - back: {}
   - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
   - tap: { selector: { key: chat_composer } }
   - set_text: { selector: { key: chat_composer }, text: "冒烟测试 hello" }
-  - assert_visible: { selector: { text: ["冒烟测试 hello"] }, timeout: 10 }
+  - assert_visible: { selector: { textContains: "冒烟测试 hello" }, timeout: 10 }
   - press_key: { keycode: 111 }

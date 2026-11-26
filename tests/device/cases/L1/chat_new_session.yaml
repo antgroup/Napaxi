@@ -6,7 +6,7 @@ timeout: 180
 steps:
   - launch: { pkg: com.napa.app.test }
   - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
-  - assert_visible: { selector: { text: ["Napaxi"] }, timeout: 30 }
+  - assert_visible: { selector: { key: chat_engine_entry }, timeout: 30 }
   - tap: { selector: { key: session_list_button } }
   - assert_visible: { selector: { key: session_new_button }, timeout: 15 }
   - tap: { selector: { key: session_new_button } }

@@ -61,11 +61,11 @@ steps:
 | 原语 | 必填字段 | 可选字段 | 行为 |
 |---|---|---|---|
 | `launch`   | — | `pkg` (默认 `com.napa.app.test`), `timeout` (秒, 默认 60) | `app_stop`+`app_start` 然后 60s 前台守卫；+10s 后 `am start` 兜底（端口 u2_smoke.py L82-107）。**无 clearState**。 |
-| `tap`      | `selector` | `timeout` (默认 15) | 选择器解析后 `el.click()` |
-| `set_text` | `selector`, `text` | `timeout` (默认 15) | 三级回退：focused.set_text → `//EditText`.set_text → `d.send_keys`（端口 u2_smoke.py L140-155） |
-| `assert_visible` | `selector` | `timeout` (默认 30) | 等待至元素可见，超时 → `failure_class=product` |
-| `assert_absent` | `selector` | `timeout` (默认 10) | 等待至元素确认缺席；`timeout` 秒内仍出现则 product 失败 |
-| `wait`     | — | `selector`, `timeout` (默认 30) | 只等待不 assert；若无 `selector` 则纯 `sleep(timeout)` |
+| `tap`      | `selector` | `timeout` (默认 15), `optional` (bool, 默认 false) | 选择器解析后 `el.click()`。`optional: true` 且元素在 timeout 内未出现 → 记一行日志并跳过本步，不抛错 |
+| `set_text` | `selector`, `text` | `timeout` (默认 15), `optional` (bool, 默认 false) | 三级回退：focused.set_text → `//EditText`.set_text → `d.send_keys`（端口 u2_smoke.py L140-155）。`optional: true` 且元素未出现 → 跳过整步（不写文字、不抛错） |
+| `assert_visible` | `selector` | `timeout` (默认 30), `optional` (bool, 默认 false) | 等待至元素可见，超时 → `failure_class=product`。`optional: true` 且超时未见 → 记日志并跳过，**不**翻红（与 product fail 区分） |
+| `assert_absent` | `selector` | `timeout` (默认 10) | 等待至元素确认缺席；`timeout` 秒内仍出现则 product 失败。`optional` 在 absent 上无方向意义（仍`见即 fail`），4 用例未在 absent 上使用 |
+| `wait`     | — | `selector`, `timeout` (默认 30), `optional` (bool, 默认 false) | 只等待不 assert；若无 `selector` 则纯 `sleep(timeout)`。`optional: true` 且 `selector` 在 timeout 内仍未见 → 记日志并跳过（非失败） |
 | `back`     | — | — | `d.press("back")` |
 | `press_key`| — | `keycode` (默认 111) | `d.shell("input keyevent <k>")`，111=KEYCODE_ESCAPE（hideKeyboard） |
 | `screenshot`| — | `name` | 落盘到 `<out_dir>/cases/<id>.<label>.png`；失败自动调用 product/env 失败路径 |
@@ -78,21 +78,24 @@ steps:
 
 ```yaml
 selector:
-  key: chat_composer                 # 1️⃣ 优先：查 keys.yaml → description
+  key: chat_composer                 # 1️⃣ 优先：查 keys.yaml → descriptionMatches ^<dk>(\n.*)?$
   # 或
-  text: ["稍后", "Later"]            # 2️⃣ 双语数组，逐项试 d(text=v) → d(description=v) → d.xpath('//*[@hint=v]')
+  text: ["稍后", "Later"]            # 2️⃣ 双语数组，逐项试 d(text=v) → d(description=v) → d.xpath('//*[@hint=v']
   description: "dk.engine.popup.item.codex"
+  textContains: "Codex"              # 子串匹配，容忍 \n<label> 后缀
+  descriptionContains: "dk.engine.popup.item.codex"
   # 或
   xpath: "//android.widget.EditText"  # 3️⃣ 最后兜底
 ```
 
 **优先级**：
 
-1. `key` → `keys.yaml` 查 `dk` → `d(description=dk)`；key 不在 keys.yaml → `failure_class=case`
-2. `text` 或 `description`（可单独或同时给；均为 string 或双语数组）：按出现顺序逐 variant 逐 keyword 试 `d(text=v)`/`d(description=v)`，再试 `d.xpath('//*[@hint=v'])`（端口 u2_smoke.py `_sel`）
-3. `xpath` → `d.xpath(...)`
+1. `key` → `keys.yaml` 查 `dk` → `d(descriptionMatches=^<dk-escaped>(\n.*)?$)`（兼容 content-desc `dk.<key>\n<label>` 格式）；`descriptionMatches` 不支持时回退 `d(descriptionContains=dk)`，再回退 `d(description=dk)` exact；key 不在 keys.yaml → `failure_class=case`
+2. `textContains` → `d(textContains=v)` 子串匹配（u2 API，容忍 `\n<label>` 后缀），`descriptionContains` 同义对 description
+3. `text` 或 `description`（可单独或同时给；均为 string 或双语数组）：按出现顺序逐 variant 逐 keyword 试 `d(text=v)`/`d(description=v)`，再试 `d.xpath('//*[@hint=v])`（端口 u2_smoke.py `_sel`）
+4. `xpath` → `d.xpath(...)`
 
-同一步里只应给一种；同时给 `key` 时优先 `key`。
+同一步里只应给一种；同时给 `key` 时优先 `key`；`textContains`/`descriptionContains` 与 `text`/`description` 互斥（同一步勿混用）。
 
 ---
 
@@ -167,6 +170,7 @@ selector:
 | `product` | 步骤 `assert_visible`/`tap`/`set_text` 等元素断言或可见性失败；`assert_absent` 仍存在 |
 | `case` | YAML 语法/选择器无法解析（unknown key、step 无 action、selector 字段类型错误等） |
 | `env` | 连接超时、前台守卫超时、`per-case timeout` watchdog、usb/u2 异常 |
+| (不翻红) | `optional: true` 步骤的元素在 timeout 内未出现 → runner 记一行 `optional step skipped` 日志并跳过该步；不计 failure_class，case 级 verdict 不因此翻红 |
 
 失败路径会自动 `d.screenshot()` + `d.dump_hierarchy()` 落盘到 `<out_dir>/cases/<id>.<ext>`。
 

@@ -19,6 +19,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import signal
 import sys
 import time
@@ -151,7 +152,6 @@ def resolve_selector(selector, keys, run_id):
     Returns the bound element (calling .wait(timeout) is the caller's job) and
     a small spec string for error messages.
     """
-    import uiautomator2 as u2  # noqa: F401  — establishes d below in caller
     # selector is a dict like {"key": "..."} / {"text": ["a","b"]} / {"xpath": "..."}
     if not isinstance(selector, dict):
         raise CaseError("selector must be a dict, got %r" % type(selector).__name__)
@@ -161,7 +161,16 @@ def resolve_selector(selector, keys, run_id):
         if name not in keys:
             raise CaseError("unknown key %r (not in keys.yaml)" % name)
         dk = keys[name]
-        return {"kind": "description", "value": dk}, "key=%s->description=%s" % (name, dk)
+        return ({"kind": "description_prefix", "value": dk},
+                "key=%s->descriptionMatches=^%s(\\n.*)?$" % (name, dk))
+
+    if "textContains" in selector and selector["textContains"] is not None:
+        v = _interp(selector["textContains"], run_id)
+        return {"kind": "textContains", "value": v}, "textContains=%r" % v
+
+    if "descriptionContains" in selector and selector["descriptionContains"] is not None:
+        v = _interp(selector["descriptionContains"], run_id)
+        return {"kind": "descriptionContains", "value": v}, "descriptionContains=%r" % v
 
     if "text" in selector or "description" in selector:
         variants = []
@@ -181,7 +190,8 @@ def resolve_selector(selector, keys, run_id):
         xq = _interp(selector["xpath"], run_id)
         return {"kind": "xpath", "value": xq}, "xpath=%s" % xq
 
-    raise CaseError("selector must define key | text | description | xpath")
+    raise CaseError("selector must define key | text | description | "
+                    "textContains | descriptionContains | xpath")
 
 
 # --- error types -----------------------------------------------------------
@@ -208,6 +218,34 @@ def _bind(d, spec, timeout):
         if el.wait(timeout=timeout):
             return el
         return None
+    if kind == "description_prefix":
+        # content-desc is `dk.<key>\n<label>`; regex-match the dk prefix and an
+        # optional `\n<label>` suffix. Fall back to descriptionContains (tolerate
+        # `\n<label>`) then exact description=dk, so a u2/atx-agent version that
+        # doesn't support descriptionMatches still resolves.
+        pat = r"^%s(\n.*)?$" % re.escape(spec["value"])
+        try:
+            el = d(descriptionMatches=pat)
+            if el.wait(timeout=timeout):
+                return el
+        except Exception:  # noqa: BLE001 — unsupported kw, fall through
+            pass
+        try:
+            el = d(descriptionContains=spec["value"])
+            if el.wait(timeout=timeout):
+                return el
+        except Exception:  # noqa: BLE001
+            pass
+        el = d(description=spec["value"])
+        if el.wait(timeout=timeout):
+            return el
+        return None
+    if kind == "textContains":
+        el = d(textContains=spec["value"])
+        return el if el.wait(timeout=timeout) else None
+    if kind == "descriptionContains":
+        el = d(descriptionContains=spec["value"])
+        return el if el.wait(timeout=timeout) else None
     if kind == "text_or_desc":
         deadline = time.time() + timeout
         while time.time() < deadline:
@@ -288,27 +326,44 @@ def step_launch(d, step, ctx):
     print("  [launch] foreground=%s" % cur, flush=True)
 
 
-def _require(d, sel_spec, label, sel_desc, timeout):
+def _require_or_skip(d, sel_spec, label, sel_desc, timeout, optional=False):
+    """Bind via _bind and either return the element or skip / raise.
+
+    optional=True and element not found within timeout → log a skip line and
+    return None (caller must check for None and treat as no-op). optional=False
+    (default) preserves the old ProductError behavior.
+    """
     el = _bind(d, sel_spec, timeout)
     if el is None:
-        raise ProductError("%s selector(%s) not found within %ss" % (label, sel_desc, timeout))
+        if optional:
+            print("  [%s] optional step skipped (not found within %ss)"
+                   % (label, timeout), flush=True)
+            return None
+        raise ProductError("%s selector(%s) not found within %ss"
+                           % (label, sel_desc, timeout))
     return el
 
 
 def step_tap(d, step, ctx):
+    optional = step.get("optional", False)
     sel = step.get("selector") or {}
     timeout = step.get("timeout", 15)
     spec, desc = resolve_selector(sel, ctx["keys"], ctx["run_id"])
-    el = _require(d, spec, "tap", desc, timeout)
+    el = _require_or_skip(d, spec, "tap", desc, timeout, optional=optional)
+    if el is None:
+        return  # optional skip — no click
     el.click()
 
 
 def step_set_text(d, step, ctx):
+    optional = step.get("optional", False)
     sel = step.get("selector") or {}
     timeout = step.get("timeout", 15)
     text = _interp(step.get("text", ""), ctx["run_id"])
     spec, desc = resolve_selector(sel, ctx["keys"], ctx["run_id"])
-    el = _require(d, spec, "set_text", desc, timeout)
+    el = _require_or_skip(d, spec, "set_text", desc, timeout, optional=optional)
+    if el is None:
+        return  # optional skip — no text typed
     # Three-tier fallback from u2_smoke.py L140-155:
     # 1. if el has set_text, try focused.set_text; 2. xpath //EditText; 3. d.send_keys
     typed = False
@@ -338,15 +393,26 @@ def step_set_text(d, step, ctx):
 
 
 def step_assert_visible(d, step, ctx):
+    optional = step.get("optional", False)
     sel = step.get("selector") or {}
     timeout = step.get("timeout", 30)
     spec, desc = resolve_selector(sel, ctx["keys"], ctx["run_id"])
+    if optional:
+        # optional visible-not-found = skip (not a product fail)
+        el = _bind(d, spec, timeout)
+        if el is None:
+            print("  [assert_visible] optional step skipped (not found within %ss)"
+                   % timeout, flush=True)
+            return
+        return
     el = _bind(d, spec, timeout)
     if el is None:
         raise ProductError("assert_visible selector(%s) not found within %ss" % (desc, timeout))
 
 
 def step_assert_absent(d, step, ctx):
+    # optional has no direction meaning on assert_absent (still see-is-fail);
+    # 4 cases never use optional on absent; preserve old raise semantics.
     sel = step.get("selector") or {}
     timeout = step.get("timeout", 10)
     spec, desc = resolve_selector(sel, ctx["keys"], ctx["run_id"])
@@ -359,13 +425,19 @@ def step_assert_absent(d, step, ctx):
 
 
 def step_wait(d, step, ctx):
+    optional = step.get("optional", False)
     sel = step.get("selector") or {}
     timeout = step.get("timeout", 30)
     if not sel:
         time.sleep(timeout)
         return
     spec, desc = resolve_selector(sel, ctx["keys"], ctx["run_id"])
-    _bind(d, spec, timeout)
+    el = _bind(d, spec, timeout)
+    if optional and el is None:
+        print("  [wait] optional step skipped (not found within %ss)" % timeout, flush=True)
+        return
+    # even non-optional wait is not an assertion; swallow not-found (old behavior)
+    return
 
 
 def step_back(d, step, ctx):
