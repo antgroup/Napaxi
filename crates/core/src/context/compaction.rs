@@ -639,6 +639,7 @@ fn compaction_system_prompt() -> String {
         "Preserve exact identifiers, file paths, commands, decisions, constraints, pending asks, and tool outcomes.",
         "Do not invent facts. Prefer concrete bullets over prose.",
         "Output exactly these Markdown sections: Decisions, Open TODOs, Constraints/Rules, Pending user asks, Exact identifiers, Tool outcomes.",
+        "Decisions and tool outcomes that the user already approved or that are observed-completed must stay under ## Decisions and ## Tool outcomes; only unfinished user-requested work or unresolved execution failures belong under ## Open TODOs. Do not re-open settled approvals.",
     ]
     .join("\n")
 }
