@@ -16,6 +16,8 @@
 #   AUTOCLICK_TIMEOUT     autoclick lifetime seconds (default 600)
 #   UI_FRAMEWORK          android smoke driver: u2 (uiautomator2, default) | maestro (legacy)
 #   U2_VENV_PY            python venv for u2 mode (default: $HOME/testing/u2env/bin/python)
+#   UI_SUITE              u2 suite: L0|L1|all (default L0); ignored under maestro
+#   DEVPOOL_JOB_ID        short id forwarded as --run-id to u2_runner.py
 #
 # Prerequisites (manual, one-time):
 #   Android: USB debugging enabled, `adb devices` shows the phone authorized.
@@ -77,6 +79,13 @@ case "$UI_FRAMEWORK" in
     *) echo "unknown UI_FRAMEWORK: $UI_FRAMEWORK (expected u2|maestro)" >&2; exit 2 ;;
 esac
 U2_VENV_PY="${U2_VENV_PY:-$HOME/testing/u2env/bin/python}"
+
+# u2 suite scope (plan 交付物 8 §2): L0|L1|all; ignored under maestro branch.
+UI_SUITE="${UI_SUITE:-L0}"
+case "$UI_SUITE" in
+    L0|L1|all) ;;
+    *) echo "unknown UI_SUITE: $UI_SUITE (expected L0|L1|all)" >&2; exit 2 ;;
+esac
 
 MAESTRO_BIN="$(command -v maestro || true)"
 [ -n "$MAESTRO_BIN" ] || MAESTRO_BIN="$HOME/.maestro/bin/maestro"
@@ -141,6 +150,9 @@ detect_ios() {
 # --- Android ----------------------------------------------------------------
 
 A_BUILD="skipped"; A_INSTALL="skipped"; A_MAESTRO="skipped"
+# Per-case records harvested from u2_runner.py summary.json (plan 交付物 8 §4).
+# Empty list when maestro branch ran (no cases) or u2 failed before writing summary.
+A_CASES="[]"
 
 run_android() {
     detect_android
@@ -213,17 +225,36 @@ run_android() {
         if [ ! -x "$U2_VENV_PY" ]; then
             step "android: u2 venv missing ($U2_VENV_PY) -> blocked"
             A_MAESTRO="blocked"
-        elif "$U2_VENV_PY" "$ROOT_DIR/tools/scripts/u2_smoke.py" "$ANDROID_SERIAL" \
-                > "$RESULT_DIR/android-maestro.log" 2>&1; then
-            A_MAESTRO="passed"
+            A_CASES="[]"
+        elif [ ! -d "$ROOT_DIR/tests/device/cases" ]; then
+            step "android: u2 cases dir missing ($ROOT_DIR/tests/device/cases) -> blocked"
+            A_MAESTRO="blocked"
+            A_CASES="[]"
         else
-            A_MAESTRO="failed"
+            "$U2_VENV_PY" "$ROOT_DIR/tools/scripts/u2_runner.py" \
+                --serial "$ANDROID_SERIAL" \
+                --suite "$UI_SUITE" \
+                --run-id "${DEVPOOL_JOB_ID:-local}" \
+                --out-dir "$RESULT_DIR" \
+                > "$RESULT_DIR/android-maestro.log" 2>&1
+            rc=$?
+            case "$rc" in
+                0) A_MAESTRO="passed" ;;
+                1) A_MAESTRO="failed" ;;
+                *) A_MAESTRO="blocked" ;;
+            esac
+            if [ -f "$RESULT_DIR/summary.json" ]; then
+                A_CASES="$(python3 -c "import json,sys; print(json.dumps(json.load(open('$RESULT_DIR/summary.json')).get('cases',[])))" 2>/dev/null || echo '[]')"
+            else
+                A_CASES="[]"
+            fi
         fi
     else
         if "$MAESTRO_BIN" test --device "$ANDROID_SERIAL" "$FLOW_DIR" --format junit \
             --output "$RESULT_DIR/android-maestro.xml" > "$RESULT_DIR/android-maestro.log" 2>&1; then
             A_MAESTRO="passed"
         fi
+        A_CASES="[]"
     fi
 
     # Stop the auto-clicker and harvest its summary. Any auto-clicker
@@ -405,6 +436,7 @@ write_platform_json() {
   "platform": "$platform",
   "steps": { "build": "$build", "install": "$install", "maestro": "$maestro" },
   $autoclick_block
+  "cases": $A_CASES,
   "verdict": "$verdict"
 }
 EOF

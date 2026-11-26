@@ -1,0 +1,14 @@
+id: chat_new_session
+suite: L1
+title: 新建会话——打开会话历史、点新建、确认进入空会话
+timeout: 180
+# TODO: 步骤语义待附稿 §11 原文校准；选择器暂用 keys.yaml 已注入 dk.* 优先，未注入处用 text/desc 过渡。
+steps:
+  - launch: { pkg: com.napa.app.test }
+  - tap: { selector: { text: ["稍后", "Later"] }, timeout: 3, optional: true }
+  - assert_visible: { selector: { text: ["Napaxi"] }, timeout: 30 }
+  - tap: { selector: { key: session_list_button } }
+  - assert_visible: { selector: { key: session_new_button }, timeout: 15 }
+  - tap: { selector: { key: session_new_button } }
+  - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
+  - assert_absent: { selector: { key: chat_message_bubble_user }, timeout: 5 }
