@@ -102,7 +102,13 @@ check_android_runtime_assets() {
 
     for asset in "$android_main/assets/alpine-rootfs.bin" "$android_main/assets/libtalloc.so.2"; do
         [ -f "$asset" ] || err "Missing Android sandbox asset: $asset"
+        [ ! -L "$asset" ] || err "Android sandbox asset must be a packaged file, not a symlink: $asset"
+        if head -n 1 "$asset" | grep -qx 'version https://git-lfs.github.com/spec/v1'; then
+            err "Android sandbox asset is a Git LFS pointer, not a packaged binary: $asset (run git lfs pull or tools/scripts/bake_android_rootfs.sh)"
+        fi
     done
+    gzip -t "$android_main/assets/alpine-rootfs.bin" >/dev/null 2>&1 || \
+        err "Android rootfs asset is not a valid gzip archive: $android_main/assets/alpine-rootfs.bin"
 
     for runtime_lib in libproot.so libldmusl.so libloader.so; do
         [ -f "$jni_arm64/$runtime_lib" ] || err "Missing Android sandbox runtime: $jni_arm64/$runtime_lib"
