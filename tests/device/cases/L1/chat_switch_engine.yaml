@@ -1,7 +1,7 @@
 id: chat_switch_engine
 suite: L1
 title: 切换引擎——打开 engine 选择器、切到非默认项、确认 composer 仍在、可输入
-timeout: 180
+timeout: 240
 # TODO: 步骤语义待附稿 §11 原文校准；引擎项用 dk.engine.popup.item.<engine.id> 模板键
 # （运行时 engine.id 由 keys.yaml 模板化，devpool 真机校准）。
 steps:
@@ -12,7 +12,11 @@ steps:
   - assert_visible: { selector: { descriptionContains: "Codex" }, timeout: 10 }
   # 切到列表中第一个非默认引擎；具体 engine.id 在 devpool 真机校准，schema 留 TODO。
   - tap: { selector: { descriptionContains: "dk.engine.popup.item.codex" }, timeout: 10 }
-  - back: {}
+  # codex 预检是异步 shell（chat_screen.dart _runCodexEnvironmentPreflight, timeoutSeconds: 30），
+  # 失败后才弹「安装 Codex 后即可使用」；此前绝不能 back——back 会抢在预检结论前落在根路由
+  # 把 App 退到桌面（v2 C/D 组实证）。等提示框出现则取消；不弹（预检通过/已切换）则 optional 跳过。
+  - wait: { selector: { text: "安装 Codex 后即可使用" }, timeout: 45, optional: true }
+  - tap: { selector: { text: "取消" }, timeout: 3, optional: true }
   - assert_visible: { selector: { key: chat_composer }, timeout: 15 }
   - tap: { selector: { key: chat_composer } }
   - set_text: { selector: { key: chat_composer }, text: "SWITCH_ENGINE_OK_{RUN_ID}" }
